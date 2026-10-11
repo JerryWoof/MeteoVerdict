@@ -17,7 +17,16 @@ MAX_LEAD_DAY = 5
 #: Forecast variables we verify (Open-Meteo names).
 VARIABLES = ("temperature_2m", "precipitation", "wind_speed_10m")
 
-_FIELDS = {"id", "name", "provider", "grid", "step_hours", "forecast_days", "archive_from"}
+_FIELDS = {
+    "id",
+    "name",
+    "provider",
+    "grid",
+    "step_hours",
+    "forecast_days",
+    "max_lead_day",
+    "archive_from",
+}
 _OPTIONAL = {"enabled", "note", "variable_from"}
 
 
@@ -33,6 +42,7 @@ class Model:
     grid: str
     step_hours: int
     forecast_days: float
+    max_lead_day: int
     archive_from: date
     enabled: bool = True
     note: str = ""
@@ -46,8 +56,8 @@ class Model:
 
     @property
     def lead_days(self) -> tuple[int, ...]:
-        """Lead days (``_previous_dayN``) that can exist within the forecast length."""
-        return tuple(range(1, min(MAX_LEAD_DAY, math.floor(self.forecast_days)) + 1))
+        """Lead days (``_previous_dayN``) the archive fills for this model."""
+        return tuple(range(1, self.max_lead_day + 1))
 
 
 def _parse(entry: Any, index: int) -> Model:
@@ -77,6 +87,9 @@ def _parse(entry: Any, index: int) -> Model:
     model = Model(**{**entry, "variable_from": variable_from})
     if model.step_hours not in (1, 3, 6) or model.forecast_days < 1:
         raise ModelCatalogError(f"{model.id}: implausible step_hours or forecast_days")
+    longest = min(MAX_LEAD_DAY, math.floor(model.forecast_days))
+    if isinstance(model.max_lead_day, bool) or model.max_lead_day not in range(1, longest + 1):
+        raise ModelCatalogError(f"{model.id}: max_lead_day must be 1..{longest}")
     return model
 
 

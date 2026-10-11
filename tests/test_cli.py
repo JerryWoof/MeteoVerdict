@@ -135,7 +135,7 @@ def test_models_lists_enabled_models_with_lead_days():
     assert result.exit_code == 0
     lines = result.stdout.splitlines()
     icon_d2 = next(line for line in lines if line.startswith("dwd_icon_d2 "))
-    assert "D+1..D+2" in icon_d2
+    assert "D+1..D+1" in icon_d2
     assert "archive from 2024-01-19" in icon_d2
     arpege = next(line for line in lines if line.startswith("meteofrance_arpege_europe "))
     assert "wind_speed_10m from 2026-08-07" in arpege
