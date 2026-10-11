@@ -36,8 +36,8 @@ SCHEMA = {
     "active": pl.Boolean,
 }
 
-#: Coarse bounding box of Czechia (lon, lat). It drops foreign stations such as
-#: Reykjavik; exact borders come with the kraj polygons (roadmap 1.4).
+#: Coarse bounding box of Czechia (lon, lat). It drops far-away stations such as
+#: Reykjavik; exact borders are applied by regions.add_regions.
 CZ_BBOX = (12.0, 48.5, 18.9, 51.1)
 
 #: Start of the backfill window (ROADMAP: history since January 2024).
