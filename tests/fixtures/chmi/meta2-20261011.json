@@ -1,0 +1,69 @@
+{
+ "zaznamID": "060e5158-ca56-8780-4be9-1f5fae98d7fa",
+ "datovyZdrojID": "meteorologie",
+ "datovyTokID": "Open.Data.Metadata",
+ "datumVytvoreni": "2026-10-11T00:01:00.678Z",
+ "verzeDat": "1.0",
+ "data": {
+  "type": "DataCollection",
+  "data": {
+   "header": "OBS_TYPE,WSI,EG_EL_ABBREVIATION,NAME,UN_DESCRIPTION,HEIGHT,SCHEDULE",
+   "values": [
+    [
+     "1H",
+     "0-20000-0-11406",
+     "C-C1Av",
+     "Ceilometr CLOUD_1 AVG",
+     "m",
+     2.0,
+     "1H"
+    ],
+    [
+     "1H",
+     "0-20000-0-11406",
+     "E",
+     "Tlak páry",
+     "hPa",
+     2.08,
+     "1H"
+    ],
+    [
+     "1H",
+     "0-20000-0-11406",
+     "P",
+     "Tlak vzduchu",
+     "hPa",
+     7.0,
+     "1H"
+    ],
+    [
+     "1H",
+     "0-20000-0-11406",
+     "SRA1H",
+     "Srážka-1H",
+     "mm",
+     1.02,
+     "1H"
+    ],
+    [
+     "1H",
+     "0-20000-0-11406",
+     "SSV1H",
+     "Sluneční svit",
+     " 0.1 hod",
+     2.3,
+     "1H"
+    ],
+    [
+     "1H",
+     "0-20000-0-11406",
+     "Td",
+     "Rosný bod",
+     "°C",
+     2.08,
+     "1H"
+    ]
+   ]
+  }
+ }
+}
