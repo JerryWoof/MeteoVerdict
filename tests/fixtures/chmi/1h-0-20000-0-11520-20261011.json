@@ -1,0 +1,39 @@
+{
+ "zaznamID": "07c58d22-a8b8-690a-2a95-d820a2558c25",
+ "datovyZdrojID": "meteorologie",
+ "datovyTokID": "Open.Data.1H",
+ "datumVytvoreni": "2026-10-11T23:11:29.159Z",
+ "verzeDat": "1.0",
+ "data": {
+  "type": "DataCollection",
+  "data": {
+   "header": "STATION,ELEMENT,DT,VAL,FLAG,QUALITY",
+   "values": [
+    [
+     "0-20000-0-11520",
+     "C-C1Av",
+     "2026-10-11T00:00:00Z",
+     9074.0,
+     "",
+     5.0
+    ],
+    [
+     "0-20000-0-11520",
+     "C-C1Av",
+     "2026-10-11T01:00:00Z",
+     8987.0,
+     "",
+     5.0
+    ],
+    [
+     "0-20000-0-11520",
+     "C-C1Av",
+     "2026-10-11T02:00:00Z",
+     2760.0,
+     "",
+     5.0
+    ]
+   ]
+  }
+ }
+}
