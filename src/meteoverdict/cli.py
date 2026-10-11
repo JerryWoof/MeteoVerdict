@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from typing import Annotated, NoReturn
 
+import httpx
 import typer
 
-from meteoverdict import __version__
+from meteoverdict import __version__, stations
+from meteoverdict.chmi import ChmiFormatError
 
 app = typer.Typer(
     name="mvd",
@@ -60,6 +63,33 @@ def _not_implemented(command: str, roadmap_item: str, detail: str) -> NoReturn:
         err=True,
     )
     raise typer.Exit(code=1)
+
+
+@app.command("stations")
+def stations_cmd(
+    out: Annotated[Path, typer.Option(help="Where to write the station table.")] = Path(
+        "data/stations.parquet"
+    ),
+) -> None:
+    """Download ČHMÚ station metadata and write the station table (Parquet)."""
+    transport = httpx.HTTPTransport(retries=3)
+    try:
+        with httpx.Client(timeout=60, transport=transport, follow_redirects=True) as client:
+            current, historical = stations.fetch_station_tables(client, datetime.now(UTC).date())
+    except httpx.HTTPError as exc:
+        typer.echo(f"mvd stations: could not download ČHMÚ metadata: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except ValueError as exc:  # invalid JSON or not the documented envelope
+        typer.echo(f"mvd stations: unexpected ČHMÚ metadata format: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    try:
+        table = stations.build_stations(current, historical)
+    except ChmiFormatError as exc:
+        typer.echo(f"mvd stations: unexpected ČHMÚ metadata format: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    stations.write_stations(table, out)
+    active = int(table["active"].sum())
+    typer.echo(f"Wrote {table.height} stations ({active} active) to {out}")
 
 
 @app.command("fetch-obs")

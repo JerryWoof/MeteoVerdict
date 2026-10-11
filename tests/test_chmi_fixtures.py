@@ -17,6 +17,7 @@ HEADERS = {
     "meta1-20261011.json": "WSI,GH_ID,FULL_NAME,GEOGR1,GEOGR2,ELEVATION,BEGIN_DATE",
     "meta2-20261011.json": "OBS_TYPE,WSI,EG_EL_ABBREVIATION,NAME,UN_DESCRIPTION,HEIGHT,SCHEDULE",
     "1h-0-20000-0-11520-20261011.json": "STATION,ELEMENT,DT,VAL,FLAG,QUALITY",
+    "meta1-historical.json": "WSI,GH_ID,BEGIN_DATE,END_DATE,FULL_NAME,GEOGR1,GEOGR2,ELEVATION",
 }
 
 
@@ -54,3 +55,12 @@ def test_data_rows_are_long_format_with_utc_timestamps():
         assert isinstance(row["VAL"], float)
         assert isinstance(row["FLAG"], str)
     assert {r["STATION"] for r in data} == {"0-20000-0-11520"}
+
+
+def test_historical_meta1_marks_open_periods_with_year_3999():
+    periods = rows("meta1-historical.json")
+    libus = [r for r in periods if r["WSI"] == "0-20000-0-11520"]
+    assert [r["END_DATE"] for r in libus][-1] == "3999-12-31T23:59:00Z"
+    # one row per validity period; the station's position can change between them
+    cheb = [r for r in periods if r["FULL_NAME"] == "Cheb"]
+    assert len({(r["GEOGR1"], r["GEOGR2"], r["ELEVATION"]) for r in cheb}) > 1

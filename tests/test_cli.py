@@ -1,10 +1,15 @@
+import json
 import re
 from datetime import date
+from pathlib import Path
 
+import httpx
+import polars as pl
 import pytest
 from typer.testing import CliRunner
 
-from meteoverdict import cli
+from meteoverdict import cli, stations
+from meteoverdict.chmi import parse_collection
 from meteoverdict.cli import app
 
 runner = CliRunner()
@@ -17,7 +22,7 @@ def plain(text: str) -> str:
     return ANSI.sub("", text)
 
 
-COMMANDS = ["fetch-obs", "fetch-fc", "score", "report", "daily", "backfill"]
+COMMANDS = ["stations", "fetch-obs", "fetch-fc", "score", "report", "daily", "backfill"]
 
 
 def test_no_args_shows_help_with_all_commands():
@@ -88,3 +93,36 @@ def test_malformed_date_is_rejected():
 def test_required_dates_are_enforced():
     assert runner.invoke(app, ["fetch-obs"]).exit_code == 2
     assert runner.invoke(app, ["backfill"]).exit_code == 2
+
+
+def test_stations_writes_parquet(monkeypatch, tmp_path):
+    fixtures = Path(__file__).parent / "fixtures" / "chmi"
+    tables = tuple(
+        parse_collection(json.loads((fixtures / name).read_text(encoding="utf-8")))
+        for name in ("meta1-20261011.json", "meta1-historical.json")
+    )
+    monkeypatch.setattr(stations, "fetch_station_tables", lambda client, today: tables)
+    out = tmp_path / "stations.parquet"
+    result = runner.invoke(app, ["stations", "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    assert "Wrote 3 stations (3 active)" in result.stdout
+    assert pl.read_parquet(out).height == 3
+
+
+def test_stations_reports_download_errors(monkeypatch, tmp_path):
+    def fail(client, today):
+        raise httpx.ConnectError("boom")
+
+    monkeypatch.setattr(stations, "fetch_station_tables", fail)
+    result = runner.invoke(app, ["stations", "--out", str(tmp_path / "s.parquet")])
+    assert result.exit_code == 1
+    assert "could not download" in result.stderr
+
+
+def test_stations_reports_unexpected_format(monkeypatch, tmp_path):
+    bad = pl.DataFrame({"WSI": ["x"]})
+    monkeypatch.setattr(stations, "fetch_station_tables", lambda client, today: (bad, bad))
+    result = runner.invoke(app, ["stations", "--out", str(tmp_path / "s.parquet")])
+    assert result.exit_code == 1
+    assert "unexpected ČHMÚ metadata format" in result.stderr
+    assert not (tmp_path / "s.parquet").exists()
