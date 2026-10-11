@@ -1,25 +1,47 @@
-"""Command-line entry point for ``mvd``.
-
-This is a minimal placeholder; the real command set (``fetch-obs``, ``fetch-fc``,
-``score``, ...) arrives with roadmap item 0.3.
-"""
+"""Command-line interface for meteoverdict (``mvd``)."""
 
 from __future__ import annotations
 
-import sys
-from collections.abc import Sequence
+from typing import Annotated
+
+import typer
 
 from meteoverdict import __version__
 
+app = typer.Typer(
+    name="mvd",
+    help="Verify weather models against ČHMÚ station observations, ranked per Czech region.",
+    no_args_is_help=True,
+    add_completion=False,
+)
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args = list(sys.argv[1:] if argv is None else argv)
-    if args in (["--version"], ["-V"]):
-        print(f"mvd {__version__}")
-        return 0
-    print("mvd: no commands yet (see ROADMAP.md, item 0.3). Try `mvd --version`.")
-    return 0 if not args else 2
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"mvd {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _root(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            "-V",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show the version and exit.",
+        ),
+    ] = False,
+) -> None:
+    """Which weather model gets Czechia right?"""
+
+
+def main() -> None:
+    """Console-script entry point."""
+    app()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
