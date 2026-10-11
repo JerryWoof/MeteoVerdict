@@ -9,7 +9,7 @@ from typing import Annotated, NoReturn
 import httpx
 import typer
 
-from meteoverdict import __version__, stations
+from meteoverdict import __version__, regions, stations
 from meteoverdict import models as catalogue
 from meteoverdict.chmi import ChmiFormatError
 
@@ -72,7 +72,7 @@ def stations_cmd(
         "data/stations.parquet"
     ),
 ) -> None:
-    """Download ČHMÚ station metadata and write the station table (Parquet)."""
+    """Download ČHMÚ station metadata, map stations to kraje, write the table (Parquet)."""
     transport = httpx.HTTPTransport(retries=3)
     try:
         with httpx.Client(timeout=60, transport=transport, follow_redirects=True) as client:
@@ -88,9 +88,11 @@ def stations_cmd(
     except ChmiFormatError as exc:
         typer.echo(f"mvd stations: unexpected ČHMÚ metadata format: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+    table = regions.add_regions(table)
     stations.write_stations(table, out)
     active = int(table["active"].sum())
-    typer.echo(f"Wrote {table.height} stations ({active} active) to {out}")
+    kraje = table["kraj"].n_unique()
+    typer.echo(f"Wrote {table.height} stations ({active} active) in {kraje} kraje to {out}")
 
 
 @app.command("models")
