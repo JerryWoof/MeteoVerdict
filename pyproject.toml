@@ -1,0 +1,29 @@
+[project]
+name = "meteoverdict"
+version = "0.1.0"
+description = "Verify weather models against ČHMÚ station observations and rank them per Czech region."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Vojtech Kraus" }]
+requires-python = ">=3.12"
+dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+]
+
+[project.urls]
+Homepage = "https://github.com/JerryLion/meteoverdict"
+Issues = "https://github.com/JerryLion/meteoverdict/issues"
+
+[project.scripts]
+mvd = "meteoverdict.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/meteoverdict"]
