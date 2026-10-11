@@ -22,7 +22,7 @@ def plain(text: str) -> str:
     return ANSI.sub("", text)
 
 
-COMMANDS = ["stations", "fetch-obs", "fetch-fc", "score", "report", "daily", "backfill"]
+COMMANDS = ["stations", "models", "fetch-obs", "fetch-fc", "score", "report", "daily", "backfill"]
 
 
 def test_no_args_shows_help_with_all_commands():
@@ -45,9 +45,9 @@ def test_every_command_has_help(command):
     [
         (["fetch-obs", "--start", "2024-01-01", "--end", "2024-01-31"], "1.5", "2024-01-31"),
         (
-            ["fetch-fc", "--start", "2024-01-01", "--end", "2024-01-02", "--model", "icon_d2"],
+            ["fetch-fc", "--start", "2024-01-01", "--end", "2024-01-02", "--model", "dwd_icon_d2"],
             "1.6",
-            "icon_d2",
+            "dwd_icon_d2",
         ),
         (["fetch-fc", "--start", "2024-01-01", "--end", "2024-01-02"], "1.6", "all models"),
         (["score", "--start", "2024-01-01", "--end", "2024-01-01"], "2.3", "2024-01-01"),
@@ -126,3 +126,26 @@ def test_stations_reports_unexpected_format(monkeypatch, tmp_path):
     assert result.exit_code == 1
     assert "unexpected ČHMÚ metadata format" in result.stderr
     assert not (tmp_path / "s.parquet").exists()
+
+
+def test_models_lists_enabled_models_with_lead_days():
+    result = runner.invoke(app, ["models"])
+    assert result.exit_code == 0
+    lines = result.stdout.splitlines()
+    icon_d2 = next(line for line in lines if line.startswith("dwd_icon_d2 "))
+    assert "D+1..D+2" in icon_d2
+    assert "archive from 2024-01-01" in icon_d2
+    assert not any("knmi_harmonie_arome_europe" in line for line in lines)
+
+
+def test_models_all_includes_disabled():
+    result = runner.invoke(app, ["models", "--all"])
+    assert "knmi_harmonie_arome_europe" in result.stdout
+    assert "(disabled)" in result.stdout
+
+
+def test_fetch_fc_rejects_unknown_model():
+    args = ["fetch-fc", "--start", "2024-01-01", "--end", "2024-01-02", "--model", "icon_d3"]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 2
+    assert "icon_d3" in plain(result.output)
