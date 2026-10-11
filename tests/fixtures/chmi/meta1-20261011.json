@@ -1,0 +1,51 @@
+{
+ "zaznamID": "e6f81545-015c-a7df-54fe-bacd5433ea13",
+ "datovyZdrojID": "meteorologie",
+ "datovyTokID": "Open.Data.Metadata",
+ "datumVytvoreni": "2026-10-11T00:01:00.649Z",
+ "verzeDat": "1.0",
+ "data": {
+  "type": "DataCollection",
+  "data": {
+   "header": "WSI,GH_ID,FULL_NAME,GEOGR1,GEOGR2,ELEVATION,BEGIN_DATE",
+   "values": [
+    [
+     "0-20000-0-04030",
+     "ZIS04030",
+     "Reykjavik",
+     -21.903905,
+     64.127653,
+     51.0,
+     "2015-01-01T00:00:00Z"
+    ],
+    [
+     "0-20000-0-11406",
+     "L3CHEB01",
+     "Cheb",
+     12.391389,
+     50.068333,
+     483.0,
+     "1863-10-01T00:00:00Z"
+    ],
+    [
+     "0-20000-0-11414",
+     "L3KVAL01",
+     "Karlovy Vary, Olšová Vrata",
+     12.914167,
+     50.201667,
+     603.0,
+     "1950-06-01T00:00:00Z"
+    ],
+    [
+     "0-20000-0-11520",
+     "P1PLIB01",
+     "Praha, Libuš",
+     14.446944,
+     50.007778,
+     302.04,
+     "1971-01-01T00:00:00Z"
+    ]
+   ]
+  }
+ }
+}
