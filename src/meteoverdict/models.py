@@ -51,6 +51,11 @@ def _parse(entry: Any, index: int) -> Model:
         )
     if not isinstance(entry["archive_from"], date):
         raise ModelCatalogError(f"models[{index}]: archive_from must be a YYYY-MM-DD date")
+    numbers = (entry["step_hours"], entry["forecast_days"])
+    if any(isinstance(n, bool) or not isinstance(n, int | float) for n in numbers):
+        raise ModelCatalogError(f"models[{index}]: step_hours and forecast_days must be numbers")
+    if not isinstance(entry.get("enabled", True), bool):
+        raise ModelCatalogError(f"models[{index}]: enabled must be true or false")
     model = Model(**entry)
     if model.step_hours not in (1, 3, 6) or model.forecast_days < 1:
         raise ModelCatalogError(f"{model.id}: implausible step_hours or forecast_days")

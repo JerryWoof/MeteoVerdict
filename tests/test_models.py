@@ -74,6 +74,8 @@ def test_custom_catalogue_defaults_to_enabled(tmp_path):
         (VALID + "    colour: red\n", "unknown \\['colour'\\]"),
         (VALID.replace("2024-01-01", "January 2024"), "YYYY-MM-DD"),
         (VALID.replace("step_hours: 1", "step_hours: 2"), "implausible"),
+        (VALID.replace("forecast_days: 2", "forecast_days: 2 days"), "must be numbers"),
+        (VALID + "    enabled: maybe\n", "true or false"),
         (VALID.replace("forecast_days: 2", "forecast_days: 0.5"), "implausible"),
         (VALID + VALID.replace("models:\n", ""), "duplicate model ids: \\['a'\\]"),
     ],
