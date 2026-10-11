@@ -10,6 +10,7 @@ import httpx
 import typer
 
 from meteoverdict import __version__, stations
+from meteoverdict.chmi import ChmiFormatError
 
 app = typer.Typer(
     name="mvd",
@@ -71,13 +72,21 @@ def stations_cmd(
     ),
 ) -> None:
     """Download ČHMÚ station metadata and write the station table (Parquet)."""
+    transport = httpx.HTTPTransport(retries=3)
     try:
-        with httpx.Client(timeout=60, transport=httpx.HTTPTransport(retries=3)) as client:
+        with httpx.Client(timeout=60, transport=transport, follow_redirects=True) as client:
             current, historical = stations.fetch_station_tables(client, datetime.now(UTC).date())
     except httpx.HTTPError as exc:
         typer.echo(f"mvd stations: could not download ČHMÚ metadata: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    table = stations.build_stations(current, historical)
+    except ValueError as exc:  # invalid JSON or not the documented envelope
+        typer.echo(f"mvd stations: unexpected ČHMÚ metadata format: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    try:
+        table = stations.build_stations(current, historical)
+    except ChmiFormatError as exc:
+        typer.echo(f"mvd stations: unexpected ČHMÚ metadata format: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
     stations.write_stations(table, out)
     active = int(table["active"].sum())
     typer.echo(f"Wrote {table.height} stations ({active} active) to {out}")

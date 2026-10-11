@@ -117,3 +117,12 @@ def test_stations_reports_download_errors(monkeypatch, tmp_path):
     result = runner.invoke(app, ["stations", "--out", str(tmp_path / "s.parquet")])
     assert result.exit_code == 1
     assert "could not download" in result.stderr
+
+
+def test_stations_reports_unexpected_format(monkeypatch, tmp_path):
+    bad = pl.DataFrame({"WSI": ["x"]})
+    monkeypatch.setattr(stations, "fetch_station_tables", lambda client, today: (bad, bad))
+    result = runner.invoke(app, ["stations", "--out", str(tmp_path / "s.parquet")])
+    assert result.exit_code == 1
+    assert "unexpected ČHMÚ metadata format" in result.stderr
+    assert not (tmp_path / "s.parquet").exists()
