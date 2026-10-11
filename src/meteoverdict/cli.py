@@ -10,6 +10,7 @@ import httpx
 import typer
 
 from meteoverdict import __version__, stations
+from meteoverdict import models as catalogue
 from meteoverdict.chmi import ChmiFormatError
 
 app = typer.Typer(
@@ -92,6 +93,21 @@ def stations_cmd(
     typer.echo(f"Wrote {table.height} stations ({active} active) to {out}")
 
 
+@app.command("models")
+def models_cmd(
+    show_all: Annotated[
+        bool, typer.Option("--all", help="Also list models that are disabled in models.yaml.")
+    ] = False,
+) -> None:
+    """List the weather models from models.yaml."""
+    for m in catalogue.load_models():
+        if not (m.enabled or show_all):
+            continue
+        leads = f"D+1..D+{m.lead_days[-1]}"
+        flag = "" if m.enabled else "  (disabled)"
+        typer.echo(f"{m.id:32} {m.name:36} {leads:9} archive from {m.archive_from}{flag}")
+
+
 @app.command("fetch-obs")
 def fetch_obs(start: DateOption, end: DateOption) -> None:
     """Fetch hourly ČHMÚ station observations (T2m, precipitation, wind) for a date range."""
@@ -110,6 +126,12 @@ def fetch_fc(
 ) -> None:
     """Fetch archived forecasts from the Open-Meteo Previous Runs API for a date range."""
     _check_range(start.date(), end.date())
+    known = {m.id for m in catalogue.load_models()}
+    unknown = sorted(set(model or []) - known)
+    if unknown:
+        raise typer.BadParameter(
+            f"unknown model(s) {', '.join(unknown)}; see `mvd models --all`", param_hint="--model"
+        )
     models = ", ".join(model) if model else "all models"
     _not_implemented("fetch-fc", "1.6", f"fetch {models} for {start:%Y-%m-%d}..{end:%Y-%m-%d}")
 
