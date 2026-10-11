@@ -69,10 +69,16 @@ def build_stations(
     closed_since: date = DEFAULT_CLOSED_SINCE,
 ) -> pl.DataFrame:
     """Combine current and historical ``meta1`` tables into one row per station."""
-    now = _select(current, active=True)
-    duplicated = now.filter(pl.col("id").is_duplicated())["id"].unique().sort().to_list()
-    if duplicated:
-        raise ChmiFormatError(f"current meta1 lists stations more than once: {duplicated}")
+    if "BEGIN_DATE" not in current.columns:
+        raise ChmiFormatError("current meta1 needs BEGIN_DATE")
+    # A WSI can appear twice, e.g. when a station gets new equipment (new GH_ID, new
+    # BEGIN_DATE) or with two slightly different positions. Keep the newest row.
+    now = _select(
+        current.with_row_index("_order")
+        .sort("BEGIN_DATE", "_order", descending=[True, False])
+        .unique("WSI", keep="first", maintain_order=True),
+        active=True,
+    )
 
     parts = [now]
     if historical is not None:

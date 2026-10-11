@@ -83,12 +83,31 @@ def test_station_missing_from_current_list_is_inactive_at_its_last_position(curr
     assert (row["lon"], row["active"]) == (14.5, False)
 
 
-def test_duplicate_current_station_is_an_error(current):
-    with pytest.raises(ChmiFormatError, match="more than once"):
-        build_stations(pl.concat([current, current.head(2)]))
+def test_duplicate_station_keeps_the_newest_row(current):
+    # real rows from now/metadata/meta1-20261011.json
+    columns = ["WSI", "GH_ID", "FULL_NAME", "GEOGR1", "GEOGR2", "ELEVATION", "BEGIN_DATE"]
+    rows = [
+        ["0-203-0-11502020001", "U1PEKL01", "Petrovice, Krásný Les", 13.937667, 50.767361,
+         631.0, "1963-11-01T00:00:00Z"],
+        ["0-203-0-11502020001", "U7PEKL01", "Petrovice, Krásný Les", 13.937667, 50.767361,
+         631.0, "2026-08-20T11:00:00Z"],
+        ["0-203-0-41003091001", "O2OLKL01", "Olomouc, Klášterní Hradisko", 17.264465,
+         49.608795, 215.0, "1876-01-01T00:00:00Z"],
+        ["0-203-0-41003091001", "O2OLKL01", "Olomouc, Klášterní Hradisko", 17.26413,
+         49.6076625, 215.0, "1876-01-01T00:00:00Z"],
+    ]  # fmt: skip
+    duplicated = pl.DataFrame(rows, schema=columns, orient="row")
+    stations = build_stations(pl.concat([current, duplicated]))
+    assert stations["id"].is_unique().all()
+    petrovice = stations.filter(pl.col("id") == "0-203-0-11502020001").row(0, named=True)
+    assert petrovice["gh_id"] == "U7PEKL01"  # the newer configuration
+    olomouc = stations.filter(pl.col("id") == "0-203-0-41003091001").row(0, named=True)
+    assert olomouc["lon"] == 17.264465  # same BEGIN_DATE: first listed row wins
 
 
 def test_missing_columns_are_an_error(current, historical):
+    with pytest.raises(ChmiFormatError, match="BEGIN_DATE"):
+        build_stations(current.drop("BEGIN_DATE"))
     with pytest.raises(ChmiFormatError, match="GEOGR1"):
         build_stations(current.drop("GEOGR1"))
     with pytest.raises(ChmiFormatError, match="END_DATE"):

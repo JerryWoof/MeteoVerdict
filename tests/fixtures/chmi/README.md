@@ -11,7 +11,6 @@ read on 2026-10-11 (see `docs/data-sources.md`).
 | `meta1-historical.json` | `historical/metadata/meta1.json` (created 2026-02-12): all periods of Cheb and Praha-Libuš, Reykjavik, and two closed stations (Marambio, Svatý Petr). Karlovy Vary is left out on purpose, to test a station that is only in the current list. |
 
 The envelope, header strings, field order and value types are as served. The rows
-are a subset, and the `values` arrays are shortened. opendata.chmi.cz is not reachable
-from the development sandbox, so these were transcribed through a web reader rather
-than downloaded byte for byte. Re-record them verbatim once a fetcher runs with network
-access (roadmap 3.2), and keep them small.
+are a subset, and the `values` arrays are shortened. They were first transcribed
+through a web reader; on 2026-10-11 every row, header and envelope field was checked
+against the downloaded files and matched exactly. Keep them small.
