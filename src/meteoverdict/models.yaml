@@ -5,9 +5,10 @@
 # grid             spatial resolution, per the Open-Meteo model docs
 # step_hours       finest output step; some models get coarser at longer lead times (see note)
 # forecast_days    forecast length per the Open-Meteo docs; limits which `_previous_dayN` exist
-# archive_from     earliest day the Previous Runs archive can cover: the docs say "most models
-#                  are archived from January 2024", and models added to Open-Meteo later cannot
-#                  have older runs. A lower bound, NOT verified per model (to be probed live).
+# archive_from     first day with D+1 forecasts of the verified variables, measured live with
+#                  scripts/probe_archive.py (2026-10-11, Praha-Libuš)
+# variable_from    optional per-variable start when one variable starts later than the rest
+# note             known gaps (also measured with the probe script)
 # enabled          false = covers Czechia but is not part of the v1 comparison
 
 models:
@@ -17,7 +18,7 @@ models:
     grid: 1 km
     step_hours: 1
     forecast_days: 3
-    archive_from: 2026-06-10
+    archive_from: 2026-06-24
     enabled: true
 
   - id: chmi_aladin_central_europe_2km
@@ -35,7 +36,7 @@ models:
     grid: 0.02° (~2 km)
     step_hours: 1
     forecast_days: 2
-    archive_from: 2024-01-01
+    archive_from: 2024-01-19
     enabled: true
 
   - id: dwd_icon_eu
@@ -44,7 +45,7 @@ models:
     grid: 0.0625° (~7 km)
     step_hours: 1
     forecast_days: 5
-    archive_from: 2024-01-01
+    archive_from: 2024-01-19
     enabled: true
     note: hourly up to 78 h, then 3-hourly
 
@@ -54,9 +55,9 @@ models:
     grid: 9 km
     step_hours: 1
     forecast_days: 15
-    archive_from: 2025-09-30
+    archive_from: 2025-10-01
     enabled: true
-    note: hourly up to 90 h
+    note: hourly up to 90 h; T2m only ~70-80 % filled in 2026-03/04, wind 81-83 % in 2026-04/05
 
   - id: ecmwf_ifs025
     name: ECMWF IFS 0.25°
@@ -74,7 +75,7 @@ models:
     grid: 0.25° (~28 km)
     step_hours: 6
     forecast_days: 15
-    archive_from: 2024-02-28
+    archive_from: 2025-02-18
     enabled: true
     note: 6-hourly output only
 
@@ -84,9 +85,9 @@ models:
     grid: 0.11° (~13 km)
     step_hours: 1
     forecast_days: 16
-    archive_from: 2024-01-01
+    archive_from: 2024-01-19
     enabled: true
-    note: 2 m temperature is archived from March 2021
+    note: 2 m temperature alone goes back to 2021-03-24
 
   - id: ukmo_global_deterministic_10km
     name: UK Met Office Global 10 km
@@ -94,9 +95,9 @@ models:
     grid: 0.09° (~10 km)
     step_hours: 1
     forecast_days: 7
-    archive_from: 2024-08-12
+    archive_from: 2024-08-08
     enabled: true
-    note: hourly up to 54 h, then 3-hourly
+    note: hourly up to 54 h, then 3-hourly; large gaps, only 75-84 % of hours filled
 
   - id: meteofrance_arpege_europe
     name: Météo-France ARPEGE Europe
@@ -104,8 +105,10 @@ models:
     grid: 0.1° (~11 km)
     step_hours: 1
     forecast_days: 4
-    archive_from: 2024-01-01
+    archive_from: 2024-01-19
     enabled: true
+    variable_from:
+      wind_speed_10m: 2026-08-07
 
   - id: geosphere_arome_austria
     name: GeoSphere Austria AROME 2.5 km
@@ -113,8 +116,9 @@ models:
     grid: 2.5 km
     step_hours: 1
     forecast_days: 2.5
-    archive_from: 2026-03-24
+    archive_from: 2026-03-26
     enabled: true
+    note: T2m and precipitation only 60-80 % filled in 2026-03 to 2026-05
 
   - id: knmi_harmonie_arome_europe
     name: KNMI HARMONIE-AROME Europe
@@ -122,8 +126,10 @@ models:
     grid: 5.5 km
     step_hours: 1
     forecast_days: 2.5
-    archive_from: 2024-07-04
+    archive_from: 2024-06-29
     enabled: false
+    variable_from:
+      precipitation: 2024-10-10
 
   - id: dmi_harmonie_arome_europe
     name: DMI HARMONIE-AROME DINI
@@ -131,5 +137,5 @@ models:
     grid: 2 km
     step_hours: 1
     forecast_days: 2.5
-    archive_from: 2024-07-04
+    archive_from: 2024-06-29
     enabled: false

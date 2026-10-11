@@ -106,8 +106,9 @@ def models_cmd(
         if not (m.enabled or show_all):
             continue
         leads = f"D+1..D+{m.lead_days[-1]}"
+        later = "".join(f", {var} from {day}" for var, day in m.variable_from.items())
         flag = "" if m.enabled else "  (disabled)"
-        typer.echo(f"{m.id:32} {m.name:36} {leads:9} archive from {m.archive_from}{flag}")
+        typer.echo(f"{m.id:32} {m.name:36} {leads:9} archive from {m.archive_from}{later}{flag}")
 
 
 @app.command("fetch-obs")
