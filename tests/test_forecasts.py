@@ -182,3 +182,43 @@ def test_estimate_matches_what_fetch_spends():
     budget = no_wait_budget()
     fc.fetch_forecasts(client, STATIONS, [ALADIN], date(2026, 9, 1), date(2026, 10, 9), budget)
     assert fc.estimate_calls(2, [ALADIN], date(2026, 9, 1), date(2026, 10, 9)) == budget.used
+
+
+NO_DATA = '{"error":true,"reason":"No data is available for this location"}'
+
+
+def five_stations():
+    return pl.DataFrame(
+        {
+            "id": [f"s{i}" for i in range(5)],
+            "lat": [50.0] * 5,
+            "lon": [14.0, 15.0, 16.0, 18.7, 18.8],
+            "elevation": [300.0] * 5,
+        }
+    )
+
+
+def answer_unless_far_east(params):
+    lons = [float(x) for x in params["longitude"].split(",")]
+    if any(lon > 18.6 for lon in lons):
+        return 400, NO_DATA
+    one = ALADIN_RESPONSE[0]
+    return 200, json.dumps([one] * len(lons) if len(lons) > 1 else one)
+
+
+def test_stations_without_data_are_found_skipped_and_remembered():
+    client, seen = open_meteo(answer_unless_far_east)
+    uncovered: dict[str, set[str]] = {}
+    rows = fc.fetch_forecasts(
+        client, five_stations(), [ALADIN], date(2026, 10, 9), date(2026, 10, 9),
+        no_wait_budget(), uncovered=uncovered,
+    )  # fmt: skip
+    assert uncovered == {ALADIN.id: {"s3", "s4"}}
+    assert sorted(set(rows["station_id"])) == ["s0", "s1", "s2"]
+
+    client, seen = open_meteo(answer_unless_far_east)
+    fc.fetch_forecasts(
+        client, five_stations(), [ALADIN], date(2026, 10, 9), date(2026, 10, 9),
+        no_wait_budget(), uncovered=uncovered,
+    )  # fmt: skip
+    assert len(seen) == 1 and "18.7" not in seen[0]["longitude"]  # no second search
