@@ -66,6 +66,34 @@ def common_days(scores: pl.LazyFrame) -> pl.LazyFrame:
     return scores.join(present, on=[*group, "station_id", "date"], how="semi")
 
 
+def station_info(stations: pl.DataFrame) -> pl.LazyFrame:
+    return stations.select(
+        pl.col("id").alias("station_id"),
+        pl.col("name").alias("station_name"),
+        "okres_code",
+        "okres",
+        "kraj_code",
+        "kraj",
+        "elevation_class",
+    ).lazy()
+
+
+def region_columns(level: str) -> list[pl.Expr]:
+    """``region`` and ``region_name`` for a level (needs the station_info columns)."""
+    code, name = _REGION.get(level, (None, None))
+    if code:
+        return [pl.col(code).alias("region"), pl.col(name).alias("region_name")]
+    return [pl.lit("cz").alias("region"), pl.lit("Česko").alias("region_name")]
+
+
+def date_span(scores: pl.LazyFrame) -> tuple[date, date]:
+    span = scores.select(pl.col("date").min().alias("first"), pl.col("date").max().alias("last"))
+    first_day, last_day = span.collect().row(0)
+    if first_day is None:
+        raise ValueError("no scores to aggregate")
+    return first_day, last_day
+
+
 def _sum_columns(columns: list[str]) -> list[pl.Expr]:
     counts = [c for t in metrics.PRECIPITATION_THRESHOLDS for c in metrics.counts_columns(t)]
     return [pl.col(c).sum() for c in (*metrics.SUMS, *counts) if c in columns]
@@ -88,20 +116,9 @@ def aggregate(
 ) -> pl.DataFrame:
     """One row per level, region, window, variable, lead day and model."""
     scores = scores.lazy()
-    span = scores.select(pl.col("date").min().alias("first"), pl.col("date").max().alias("last"))
-    first_day, last_day = span.collect().row(0)
-    if first_day is None:
-        raise ValueError("no scores to aggregate")
+    first_day, last_day = date_span(scores)
     as_of = as_of or last_day
-    info = stations.select(
-        pl.col("id").alias("station_id"),
-        pl.col("name").alias("station_name"),
-        "okres_code",
-        "okres",
-        "kraj_code",
-        "kraj",
-        "elevation_class",
-    ).lazy()
+    info = station_info(stations)
     columns = scores.collect_schema().names()
     frames = []
     for window in windows:
@@ -109,14 +126,8 @@ def aggregate(
         fair = common_days(scores.filter(pl.col("date").is_between(start, as_of)))
         fair = fair.join(info, on="station_id", how="inner")
         for level in LEVELS:
-            code, name = _REGION.get(level, (None, None))
-            region = (
-                [pl.col(code).alias("region"), pl.col(name).alias("region_name")]
-                if code
-                else [pl.lit("cz").alias("region"), pl.lit("Česko").alias("region_name")]
-            )
             frames.append(
-                fair.with_columns(region)
+                fair.with_columns(region_columns(level))
                 .group_by("region", "region_name", "variable", "lead_day", "model")
                 .agg(
                     *_sum_columns(columns),
