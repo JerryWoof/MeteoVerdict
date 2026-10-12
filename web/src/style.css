@@ -171,47 +171,110 @@ body.tv {
 body.tv #map {
   min-height: 70vh;
 }
+/* grid items may shrink below their content (the day tabs scroll instead) */
+body.tv > * {
+  min-width: 0;
+}
+.glyph {
+  flex: none;
+  vertical-align: -0.15em;
+}
+/* when: day tabs, then the parts of the day as one segmented control */
 #ribbon {
+  padding: 0 1rem 0.5rem;
+}
+.daytabs {
+  display: flex;
+  overflow-x: auto;
+  border-bottom: 2px solid #ddd8cc;
+}
+.daytab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 6.5rem;
+  padding: 0.35rem 0.9rem 0.3rem;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  background: none;
+  font: inherit;
+  color: #5b6670;
+  cursor: pointer;
+}
+.daytab strong {
+  font-size: 1rem;
+  color: #1d2329;
+  white-space: nowrap;
+}
+.daytab small {
+  font-size: 0.75rem;
+}
+.daytab[aria-pressed="true"] {
+  border-bottom-color: #c0392b;
+  background: #ffffff;
+}
+.when-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 1rem;
   align-items: center;
-  padding: 0.3rem 1rem 0.5rem;
+  gap: 0.5rem 1rem;
+  margin-top: 0.5rem;
 }
-.tabs {
+.segmented {
+  display: inline-flex;
+  border: 1px solid #9aa7b1;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #ffffff;
+}
+.segmented button {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-.tabs button,
-.play {
+  flex-direction: column;
+  align-items: center;
+  padding: 0.25rem 0.8rem;
+  border: none;
+  border-left: 1px solid #ddd8cc;
+  background: none;
   font: inherit;
   font-size: 0.85rem;
-  padding: 0.25rem 0.65rem;
-  border: 1px solid #9aa7b1;
-  border-radius: 999px;
-  background: #ffffff;
   color: #1d2329;
   cursor: pointer;
 }
-.tabs button[aria-pressed="true"],
-.play[aria-pressed="true"] {
+.segmented button:first-child {
+  border-left: none;
+}
+.segmented button small {
+  font-size: 0.7rem;
+  color: #5b6670;
+}
+.segmented button[aria-pressed="true"] {
   background: #1d2329;
-  border-color: #1d2329;
   color: #ffffff;
 }
-#days button[aria-pressed="true"] {
-  font-weight: 600;
+.segmented button[aria-pressed="true"] small {
+  color: #c9ced3;
 }
 .play {
-  margin-left: auto;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid #9aa7b1;
+  border-radius: 999px;
+  background: #ffffff;
+  cursor: pointer;
 }
+.play[aria-pressed="true"] {
+  background: #1d2329;
+  color: #ffffff;
+}
+/* boxes on the map */
 #headline,
-#scale,
+#show-box,
 #okres-panel {
   position: absolute;
   z-index: 2;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.95);
   border-radius: 6px;
   box-shadow: 0 1px 4px rgba(29, 35, 41, 0.18);
   font-size: 0.85rem;
@@ -220,25 +283,63 @@ body.tv #map {
   left: 0.75rem;
   top: 0.75rem;
   padding: 0.5rem 0.8rem;
-  max-width: 20rem;
+  max-width: 21rem;
 }
 #headline h2 {
   font-size: 1.05rem;
   margin: 0 0 0.25rem;
 }
-#headline p {
-  margin: 0.1rem 0;
+#headline .line {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin: 0.15rem 0;
 }
-#scale {
+#show-box {
   left: 0.75rem;
   bottom: 1.6rem;
-  padding: 0.4rem 0.7rem;
-  width: 14rem;
+  width: 15rem;
+  padding: 0.4rem 0.7rem 0.5rem;
+}
+#show summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+#show fieldset {
+  border: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+}
+#show legend {
+  padding: 0;
+  font-size: 0.75rem;
+  color: #5b6670;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+#values,
+#colours {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.15rem 0.5rem;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+}
+.check input {
+  margin: 0;
 }
 #scale .bar {
   height: 0.6rem;
   border-radius: 3px;
-  margin: 0.3rem 0 0.15rem;
+  margin: 0.4rem 0 0.15rem;
+}
+#scale .scale-title {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
 }
 #scale .scale-ends {
   color: #5b6670;
@@ -336,8 +437,6 @@ body.tv #map {
   background: none;
   cursor: pointer;
   font: inherit;
-  font-weight: 700;
-  font-size: 0.95rem;
   color: #1d2329;
   text-shadow:
     0 0 3px #ffffff,
@@ -347,10 +446,46 @@ body.tv #map {
 .wx-marker[hidden] {
   display: none;
 }
-.wx-marker span {
-  margin-top: -0.2rem;
+.wx-top {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
 }
-.wx-marker.selected span {
+.wx-temp {
+  font-weight: 700;
+  font-size: 1rem;
+}
+.wx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.1rem 0.15rem;
+  max-width: 7.2rem;
+  margin-top: -0.1rem;
+}
+.wx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-shadow: none;
+  white-space: nowrap;
+}
+.wx-chip.precipitation {
+  color: #1f5fa8;
+}
+.wx-chip.wind {
+  color: #23703a;
+}
+.wx-chip.cloud {
+  color: #4f5961;
+}
+.wx-marker.selected .wx-temp,
+.wx-marker.selected .wx-top {
   text-decoration: underline;
 }
 @media (max-width: 700px) {
@@ -369,7 +504,26 @@ body.tv #map {
     max-width: calc(100% - 4rem);
     font-size: 0.8rem;
   }
-  #scale {
+  #show-box {
+    left: 0.5rem;
+    bottom: 1.8rem;
+    width: auto;
+    max-width: calc(100% - 1rem);
+  }
+  /* pinch to zoom */
+  body.tv .maplibregl-ctrl-top-right {
     display: none;
+  }
+  #headline {
+    left: 0.5rem;
+    right: 0.5rem;
+    max-width: none;
+  }
+  .daytab {
+    min-width: 5rem;
+    padding: 0.3rem 0.5rem;
+  }
+  .segmented button {
+    padding: 0.25rem 0.45rem;
   }
 }
