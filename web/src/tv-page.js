@@ -3,12 +3,12 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
-import { glyph, iconCanvas } from "./icons.js";
+import { drawIcon, glyph, iconCanvas } from "./icons.js";
 import { setUpLanguage } from "./i18n.js";
 import {
-  COLOURS, LAYERS, PARTS, RAMPS, colorFor, currentPart, dayLabel, displayName, fillExpression,
-  iconName, labelFor, parseOutlook, parseView, placeMarkers, pointFeatures, rowFor, sequence,
-  summary, today, viewHash,
+  COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, colorFor, currentPart, dayLabel, displayName, ease,
+  iconName, labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView,
+  placeMarkers, playSequence, rowFor, summary, today, viewHash,
 } from "./tv.js";
 
 setWorkerUrl(workerUrl);
@@ -59,7 +59,7 @@ const symbolText = (symbol) => (symbol ? t(`symbol.${symbol}`) : "");
 
 // --- state, kept in the URL (tv.js parseView / viewHash) ----------------------------
 let state = { day: null, part: null, colour: "temperature", shown: [], okres: null };
-let playing = null;
+let playing = false;
 
 function dayText(day) {
   const label = dayLabel(day, today(Date.now()), language);
@@ -158,51 +158,79 @@ function renderScale() {
   );
 }
 
-// --- markers ----------------------------------------------------------------------
-const markers = new Map(); // okres → {marker, el, lngLat}
+// --- markers: built once, their content updated in place (also between two states) --
+const markers = new Map(); // okres → {marker, el, lngLat, canvas, icon, temp, chips}
 
-function markerElement(feature) {
-  const box = element("button", null, "wx-marker");
-  box.type = "button";
-  box.title = displayName(feature.properties.name);
+function markerElement(o) {
+  const el = element("button", null, "wx-marker");
+  el.type = "button";
+  el.title = displayName(o.name);
   const top = element("span", null, "wx-top");
-  top.append(iconCanvas(feature.properties.icon, 30));
-  const chips = element("span", null, "wx-chips");
-  for (const { layer, text } of feature.properties.values) {
-    if (layer === "temperature") {
-      top.append(element("span", text, "wx-temp"));
-    } else {
-      const chip = element("span", null, `wx-chip ${layer}`);
-      chip.append(glyph(layer, 11), element("span", text));
-      chips.append(chip);
-    }
+  const canvas = iconCanvas("", 30);
+  const temp = element("span", "", "wx-temp");
+  top.append(canvas, temp);
+  const chipBox = element("span", null, "wx-chips");
+  const chips = {};
+  for (const layer of LAYERS.filter((l) => l !== "temperature")) {
+    const chip = element("span", null, `wx-chip ${layer}`);
+    const text = element("span", "");
+    chip.append(glyph(layer, 11), text);
+    chipBox.append(chip);
+    chips[layer] = { chip, text };
   }
-  box.append(top);
-  if (chips.childElementCount) box.append(chips);
-  box.addEventListener("click", (event) => {
+  el.append(top, chipBox);
+  el.addEventListener("click", (event) => {
     event.stopPropagation();
-    update({ okres: feature.properties.code });
+    update({ okres: o.code });
   });
-  return box;
+  return { el, canvas, temp, chips, chipBox, icon: null };
 }
 
-function renderMarkers(outlook) {
-  for (const { marker } of markers.values()) marker.remove();
-  markers.clear();
-  for (const feature of pointFeatures(outlook, state.day, state.part, state.shown).features) {
-    const el = markerElement(feature);
-    const marker = new Marker({ element: el }).setLngLat(feature.geometry.coordinates).addTo(map);
-    markers.set(feature.properties.code, { marker, el, lngLat: feature.geometry.coordinates });
+/** Show a row (possibly between two states) in a marker. */
+function setMarker(entry, row, part, shown) {
+  entry.el.style.display = row ? "" : "none";
+  if (!row) return;
+  const icon = iconName(row.symbol, part);
+  if (icon !== entry.icon) {
+    entry.icon = icon;
+    const ctx = entry.canvas.getContext("2d");
+    if (icon) drawIcon(ctx, icon, entry.canvas.width);
+    else ctx.clearRect(0, 0, entry.canvas.width, entry.canvas.height);
+  }
+  entry.temp.hidden = !shown.includes("temperature");
+  entry.temp.textContent = labelFor(row, "temperature", part);
+  let any = false;
+  for (const [layer, { chip, text }] of Object.entries(entry.chips)) {
+    chip.hidden = !shown.includes(layer);
+    any ||= !chip.hidden;
+    text.textContent = labelFor(row, layer, part);
+  }
+  entry.chipBox.hidden = !any;
+}
+
+function buildMarkers(outlook) {
+  for (const o of outlook.okresy) {
+    const parts = markerElement(o);
+    const marker = new Marker({ element: parts.el }).setLngLat([o.lon, o.lat]).addTo(map);
+    markers.set(o.code, { ...parts, marker, lngLat: [o.lon, o.lat] });
+  }
+}
+
+function paintMarkers(outlook) {
+  for (const [code, entry] of markers) {
+    setMarker(entry, rowFor(outlook, code, state.day, state.part), state.part, state.shown);
   }
   declutter();
 }
 
 function declutter() {
-  const boxes = [...markers].map(([code, m]) => {
-    m.el.hidden = false;
-    const p = map.project(m.lngLat);
-    return { code, x: p.x, y: p.y, w: m.el.offsetWidth, h: m.el.offsetHeight };
-  });
+  const boxes = [...markers]
+    .filter(([, m]) => m.el.style.display !== "none")
+    .map(([code, m]) => {
+      m.el.hidden = false;
+      const p = map.project(m.lngLat);
+      return { code, x: p.x, y: p.y, w: m.el.offsetWidth, h: m.el.offsetHeight };
+    });
   const shown = placeMarkers(boxes, 4, state.okres);
   for (const [code, m] of markers) {
     m.el.hidden = !shown.has(code);
@@ -325,37 +353,93 @@ function fitView() {
   map.fitBounds(BOUNDS, { padding, duration: first ? 0 : 400 });
 }
 
+function paintFill(colours) {
+  const pairs = [...colours].flat();
+  map.setPaintProperty("okresy-fill", "fill-color", pairs.length ? ["match", ["get", "code"], ...pairs, NEUTRAL] : NEUTRAL);
+}
+
+/** Draw the current state at once (after a click, or at the end of a transition). */
 function update(change = {}, fromPlay = false) {
-  if (playing && !fromPlay) {
-    clearInterval(playing);
-    playing = null;
-  }
+  if (!fromPlay) stopPlay();
   state = { ...state, ...change };
   window.history.replaceState(null, "", viewHash(state));
   renderWhen(outlook);
   renderShow();
-  map.setPaintProperty("okresy-fill", "fill-color", fillExpression(outlook, state.day, state.part, state.colour));
+  paintFill(okresColours(outlook, state.day, state.part, state.colour));
   map.setFilter("okres-selected", ["==", ["get", "code"], state.okres ?? ""]);
-  renderMarkers(outlook);
+  paintMarkers(outlook);
   renderHeadline(outlook);
   renderPanel(outlook);
   fitView();
 }
 
-function togglePlay() {
-  if (playing) {
-    clearInterval(playing);
-    playing = null;
-    renderWhen(outlook);
-    return;
-  }
-  const steps = sequence(outlook, state.day, state.part);
-  let i = 0;
-  playing = setInterval(() => {
-    i = (i + 1) % steps.length;
-    update(steps[i], true);
-  }, 1600);
+// --- play: smooth transitions, morning to evening, day after day ---------------------
+const TRANSITION_MS = 1100;
+const HOLD_MS = 1300;
+let playToken = 0;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function stopPlay() {
+  if (!playing) return;
+  playing = false;
+  playToken += 1;
   renderWhen(outlook);
+}
+
+/** Move to `target` (a part of state), interpolating colours and values; false if stopped. */
+async function transition(target, token) {
+  const from = { ...state };
+  const to = { ...state, ...target };
+  const coloursFrom = okresColours(outlook, from.day, from.part, from.colour);
+  const coloursTo = okresColours(outlook, to.day, to.part, to.colour);
+  // the labels and boxes already show where we are going
+  state = to;
+  renderWhen(outlook);
+  renderShow();
+  renderHeadline(outlook);
+  const start = performance.now();
+  for (;;) {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    if (token !== playToken) return false;
+    const f = ease(Math.min(1, (performance.now() - start) / TRANSITION_MS));
+    paintFill(new Map([...coloursTo].map(([code, c]) => [code, mixColor(coloursFrom.get(code) ?? c, c, f)])));
+    for (const [code, entry] of markers) {
+      const row = lerpRow(rowFor(outlook, code, from.day, from.part), rowFor(outlook, code, to.day, to.part), f);
+      setMarker(entry, row, f < 0.5 ? from.part : to.part, to.shown);
+    }
+    if (f >= 1) break;
+  }
+  update({}, true);
+  return true;
+}
+
+async function play() {
+  playing = true;
+  const token = ++playToken;
+  renderWhen(outlook);
+  const chosen = state.shown;
+  let steps = playSequence(outlook, state.day, state.part);
+  if (steps.length < 2) steps = playSequence(outlook, outlook.days[0], "morning");
+  if (!(await transition(steps[0], token))) return;
+  for (;;) {
+    for (const step of steps.slice(1)) {
+      await sleep(HOLD_MS);
+      if (token !== playToken || !(await transition(step, token))) return;
+    }
+    // a round is over: start again, the map coloured by the next value, which is also
+    // shown at the okresy
+    await sleep(HOLD_MS);
+    steps = playSequence(outlook, outlook.days[0], "morning");
+    const colour = nextColour(state.colour);
+    const shown = LAYERS.filter((l) => chosen.includes(l) || l === colour);
+    if (token !== playToken || !(await transition({ ...steps[0], colour, shown }, token))) return;
+  }
+}
+
+function togglePlay() {
+  if (playing) stopPlay();
+  else play();
 }
 
 function addLayers() {
@@ -401,6 +485,7 @@ async function main() {
   document.getElementById("play").addEventListener("click", togglePlay);
   await mapLoaded;
   addLayers();
+  buildMarkers(outlook);
   update();
 }
 
