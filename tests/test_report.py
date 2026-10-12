@@ -110,3 +110,28 @@ def test_leaderboard_says_when_it_was_updated():
         updated=datetime(2026, 10, 12, 5, 30, tzinfo=UTC),
     )
     assert "_Last updated 2026-10-12 05:30 UTC; scores up to 2026-09-30._" in block
+
+
+def test_the_blend_is_summarised_below_the_table_not_ranked_in_it():
+    def blend(region, diff, high, level="kraj"):
+        r = row(region, "temperature_2m", "blend", None, 1.0, level=level)
+        return {**r, "diff_to_best": diff, "diff_ci_high": high}
+
+    rows = [
+        {**row("cz", "temperature_2m", "a", 1, 1.2, level="cz"), "diff_to_best": 0.0},
+        blend("cz", -0.2, -0.1, level="cz"),
+        {**row("CZ064", "temperature_2m", "a", 1, 1.0), "diff_to_best": 0.0},
+        blend("CZ064", -0.05, 0.02),
+        blend("CZ010", 0.1, 0.2),
+    ]
+    block = report.leaderboard(table(rows), NAMES)
+    assert "| **Česko** | **Model A** (1.20) |" in block
+    assert (
+        "The mean of all models beats the best single model in: temperature (2 m) 2 of 3 "
+        "(1 significantly)." in block
+    )
+
+
+def test_no_blend_line_without_blend_rows():
+    block = report.leaderboard(table([row("cz", "temperature_2m", "a", 1, 1.2, level="cz")]), NAMES)
+    assert "mean of all models" not in block

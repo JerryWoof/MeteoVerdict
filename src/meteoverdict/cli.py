@@ -16,6 +16,7 @@ from meteoverdict import (
     __version__,
     aggregate,
     aladin,
+    blend,
     forecasts,
     gauges,
     observations,
@@ -381,6 +382,11 @@ def score(
     )
 
 
+def _model_names() -> dict[str, str]:
+    """Display names of the models and of the blend (their mean)."""
+    return {m.id: m.name for m in [*catalogue.load_models(), blend.MODEL]}
+
+
 def _publish_aggregates(
     files: list[Path],
     station_table: pl.DataFrame,
@@ -395,7 +401,7 @@ def _publish_aggregates(
     ranks = ranking.rank(scores, station_table, as_of, resamples=resamples)
     table = table.join(ranks, on=[*ranking.GROUP, "model"], how="left")
     table.write_parquet(data_dir / "aggregates.parquet", compression="zstd")
-    names = {m.id: m.name for m in catalogue.load_models()}
+    names = _model_names()
     meta = aggregate.metadata(table, names, datetime.now(UTC))
     written = aggregate.write_json(table, out, meta)
     typer.echo(f"{table.height} rows, as of {meta['as_of']} → {len(written)} JSON files in {out}")
@@ -404,7 +410,7 @@ def _publish_aggregates(
 
 def _update_readme(aggregates_table: pl.DataFrame, readme_path: Path, site: Path) -> None:
     """Rewrite the README leaderboard and write ``site/badge.json``."""
-    names = {m.id: m.name for m in catalogue.load_models()}
+    names = _model_names()
     now = datetime.now(UTC)
     block = report_mod.leaderboard(aggregates_table, names, updated=now)
     # the windows end on the last scored day
@@ -465,7 +471,7 @@ def report(
         raise typer.Exit(code=1)
     table = pl.read_parquet(path)
     if not readme:
-        names = {m.id: m.name for m in catalogue.load_models()}
+        names = _model_names()
         typer.echo(report_mod.leaderboard(table, names))
         return
     _update_readme(table, readme_path, out)

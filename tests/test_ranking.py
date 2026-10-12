@@ -128,3 +128,19 @@ def test_both_daily_precipitation_totals_are_ranked():
         "precipitation_daily",
         "precipitation_24h",
     }
+
+
+def test_the_blend_is_compared_with_the_best_model_but_not_ranked():
+    data = scores(
+        {
+            "a": [1.0, 1.1, 0.9, 1.0, 1.2, 1.0],
+            "b": [2.0, 2.1, 1.9, 2.0, 2.2, 2.0],
+            "blend": [0.5, 0.6, 0.4, 0.5, 0.7, 0.5],
+        }
+    )
+    got = cz(ranking.rank(data, STATIONS, resamples=200))
+    assert got.select("model", "rank").rows() == [("a", 1), ("b", 2), ("blend", None)]
+    a, mean = got.row(0, named=True), got.row(2, named=True)
+    assert a["clear_winner"]  # the blend does not take the win from the best model
+    assert mean["diff_to_best"] == pytest.approx(-0.5)
+    assert mean["diff_ci_high"] < 0 and not mean["clear_winner"]
