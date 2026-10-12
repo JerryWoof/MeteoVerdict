@@ -129,3 +129,13 @@ header h1 a {
   color: #5b6670;
   font-style: italic;
 }
+#language {
+  margin-left: auto;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid #9aa7b1;
+  border-radius: 3px;
+  background: #ffffff;
+  cursor: pointer;
+}
