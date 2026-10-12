@@ -2,7 +2,7 @@
   "name": "meteoverdict-web",
   "private": true,
   "version": "0.1.0",
-  "description": "Web map of meteoverdict: which weather model forecasts Czechia best",
+  "description": "Web map of MeteoVerdict: which weather model forecasts Czechia best",
   "license": "MIT",
   "type": "module",
   "scripts": {
