@@ -8,7 +8,8 @@ import { setUpLanguage } from "./i18n.js";
 import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, colorFor, currentPart, dayLabel, displayName, ease,
   iconName, labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView,
-  placeMarkers, playSteps, rowFor, startIndex, switchColours, summary, today, viewHash,
+  placeMarkers, playSteps, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary, today,
+  viewHash,
 } from "./tv.js";
 
 setWorkerUrl(workerUrl);
@@ -72,6 +73,15 @@ function dayText(day) {
   return `${dayName(day)} ${dayLabel(day, today(Date.now()), language).short}`;
 }
 
+// sunrise and sunset with their glyphs: "↑ 07:03–07:28 ↓ 17:59–18:23" (a range or a time)
+// (`key` the tooltip's text)
+function sunLine(rise, set, key) {
+  const line = element("span", null, "sun");
+  line.append(glyph("sunrise", 13), element("span", rise), glyph("sunset", 13), element("span", set));
+  line.title = t(key, { rise, set });
+  return line;
+}
+
 // --- when: days and parts of the day (above the map) --------------------------------
 function renderWhen(outlook) {
   const days = document.getElementById("days");
@@ -83,6 +93,9 @@ function renderWhen(outlook) {
       button.setAttribute("aria-pressed", String(day === state.day));
       // always two lines: "Today" / "Mon, 10/12", "Wednesday" / "Wed, 10/14"
       button.append(element("strong", dayName(day)), element("small", dayLabel(day, today(Date.now()), language).date));
+      // and the sun: earliest to latest over the okresy (about 25 minutes apart)
+      const sun = sunRange(outlook, day);
+      if (sun) button.append(sunLine(rangeText(sun.sunrise), rangeText(sun.sunset), "tv.sunRange"));
       button.addEventListener("click", () => update({ day }));
       return button;
     }),
@@ -316,6 +329,13 @@ function renderPanel(outlook) {
     ]) {
       facts.append(element("li", text));
     }
+  }
+  const sun = sunFor(outlook, state.okres, state.day);
+  if (sun) {
+    // the whole day's, whatever part is shown
+    const li = element("li");
+    li.append(sunLine(sun.sunrise, sun.sunset, "tv.sun"));
+    facts.append(li);
   }
   const strip = element("div", null, "strip");
   strip.append(...PARTS.slice(0, 4).map((p) => partCell(rowFor(outlook, state.okres, state.day, p), p)));
