@@ -222,3 +222,31 @@ def test_stations_without_data_are_found_skipped_and_remembered():
         no_wait_budget(), uncovered=uncovered,
     )  # fmt: skip
     assert len(seen) == 1 and "18.7" not in seen[0]["longitude"]  # no second search
+
+
+PRECIPITATION_RESPONSE = json.loads(
+    (FIXTURES / "aladin-precipitation-2-stations-20261009.json").read_text()
+)
+
+
+def test_rain_gauges_ask_for_precipitation_only_in_28_day_requests():
+    client, seen = open_meteo(lambda p: (200, json.dumps(PRECIPITATION_RESPONSE)))
+    budget = no_wait_budget()
+    first, last = date(2026, 9, 12), date(2026, 10, 9)  # 28 days
+    ask = {"variables": ("precipitation",), "max_days": fc.GAUGE_DAYS}
+    rows = fc.fetch_forecasts(client, STATIONS, [ALADIN], first, last, budget, **ask)
+    assert [(p["start_date"], p["end_date"]) for p in seen] == [("2026-09-12", "2026-10-09")]
+    assert seen[0]["hourly"] == "precipitation_previous_day1,precipitation_previous_day2"
+    assert budget.used == 2  # still one call per location
+    assert fc.estimate_calls(2, [ALADIN], first, last, **ask) == budget.used
+    assert rows.height == 2 * 2 * 24
+    assert rows["temperature_2m"].null_count() == rows.height
+    cheb = rows.filter(pl.col("station_id") == "0-20000-0-11406", pl.col("lead_day") == 2)
+    second = PRECIPITATION_RESPONSE[1]["hourly"]["precipitation_previous_day2"]
+    assert cheb["precipitation"].to_list() == pytest.approx(second)
+
+
+def test_the_longest_model_still_costs_one_call_per_gauge_and_28_days():
+    longest = max(MODELS.values(), key=lambda m: len(m.lead_days))
+    names = fc.hourly_names(longest, ("precipitation",))
+    assert fc.call_weight(100, len(names), fc.GAUGE_DAYS) == 100

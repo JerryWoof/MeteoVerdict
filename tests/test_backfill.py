@@ -30,6 +30,8 @@ class Fake:
     def __init__(self, quota_after: int | None = None, now_month: str | None = None):
         self.obs_calls: list[tuple[date, date]] = []
         self.fc_calls: list[tuple[str, date, date]] = []
+        self.gauge_fc_calls: list[tuple[str, date, date]] = []
+        self.gauge_obs_calls: list[tuple[date, date]] = []
         self.quota_after = quota_after
         self.now_month = now_month
 
@@ -39,15 +41,37 @@ class Fake:
         rows = [("s", t, "temperature_2m", 10.0, 0, source) for t in hourly(start, end)]
         return pl.DataFrame(rows, schema=observations.SCHEMA, orient="row")
 
-    def forecasts(self, client, points, models, start, end, budget, uncovered=None):
+    def forecasts(self, client, points, models, start, end, budget, uncovered=None, **ask):
         (model,) = models
         if self.quota_after is not None and len(self.fc_calls) >= self.quota_after:
             error = forecasts.QuotaError("Daily API request limit exceeded.")
             error.partial = pl.DataFrame(schema=forecasts.SCHEMA)
             raise error
+        if ask:  # rain gauges: precipitation only, 28-day requests
+            assert ask == {"variables": ("precipitation",), "max_days": forecasts.GAUGE_DAYS}
+            self.gauge_fc_calls.append((model.id, start, end))
+            rows = [("g", t, model.id, 1, None, 0.5, None) for t in hourly(start, end)]
+            return pl.DataFrame(rows, schema=forecasts.SCHEMA, orient="row")
         self.fc_calls.append((model.id, start, end))
         rows = [("s", t, model.id, 1, 11.0, None, None) for t in hourly(start, end)]
         return pl.DataFrame(rows, schema=forecasts.SCHEMA, orient="row")
+
+    def gauges(self, client, ids, start, end, historical=True):
+        assert not historical  # the 2.5 MB historical files are imported once, not here
+        self.gauge_obs_calls.append((start, end))
+        days = [start + timedelta(days=i) for i in range((end - start).days + 1)]
+        rows = [
+            (
+                "g",
+                datetime.combine(d, datetime.min.time(), UTC) + timedelta(days=1, hours=6),
+                "precipitation_24h",
+                10.0,
+                0,
+                "recent",
+            )
+            for d in days
+        ]
+        return pl.DataFrame(rows, schema=observations.SCHEMA, orient="row")
 
 
 @pytest.fixture
@@ -56,14 +80,19 @@ def fake(monkeypatch):
         f = Fake(**kwargs)
         monkeypatch.setattr(backfill.observations, "fetch_observations", f.observations)
         monkeypatch.setattr(backfill.forecasts, "fetch_forecasts", f.forecasts)
+        monkeypatch.setattr(backfill.gauges, "fetch_gauge_precipitation", f.gauges)
         return f
 
     return install
 
 
-def run(tmp_path, sync=None):
+GAUGES = pl.DataFrame({"id": ["g"], "lat": [49.0], "lon": [16.0], "elevation": [250.0]})
+
+
+def run(tmp_path, sync=None, gauges=None, last=LAST):
+    budget = forecasts.Budget(max_calls=1e9)
     return backfill.run(
-        None, POINTS, MODELS, FIRST, LAST, tmp_path, forecasts.Budget(max_calls=1e9), sync
+        None, POINTS, MODELS, FIRST, last, tmp_path, budget, sync, gauge_points=gauges
     )
 
 
@@ -139,3 +168,63 @@ def test_a_window_seen_while_incomplete_is_done_again_once_complete(tmp_path, fa
     f = fake()
     run(tmp_path)
     assert ("dwd_icon_d2", date(2026, 9, 12), date(2026, 9, 25)) in f.fc_calls
+
+
+def test_gauge_forecasts_come_in_28_day_windows(tmp_path, fake):
+    f = fake()
+    assert run(tmp_path, gauges=GAUGES).windows_done == 4
+    # 1-28 Aug and 29 Aug-25 Sep; each fetched once for both 14-day windows in it
+    assert sorted(f.gauge_fc_calls) == sorted(
+        (m.id, s, e)
+        for m in MODELS
+        for s, e in [(date(2026, 8, 1), date(2026, 8, 28)), (date(2026, 8, 29), date(2026, 9, 25))]
+    )
+    # gauge totals have their own month files, next to the hourly observations
+    stored = pl.concat([pl.read_parquet(p) for p in (tmp_path / "gauges").iterdir()])
+    assert set(stored["station_id"]) == {"g"}
+    hourly = pl.concat([pl.read_parquet(p) for p in (tmp_path / "obs").iterdir()])
+    assert set(hourly["station_id"]) == {"s"}
+    scores = pl.concat([pl.read_parquet(p) for p in (tmp_path / "scores").iterdir()])
+    gauge = scores.filter(pl.col("station_id") == "g")
+    assert set(gauge["variable"]) == {"precipitation_24h"}
+    # 24 hours of 0.5 mm forecast against 10 mm measured
+    assert gauge["sum_err"].to_list() == pytest.approx([2.0] * gauge.height)
+    # 1 Aug … 24 Sep: 25 Sep would need forecasts up to 26 Sep 06:00
+    assert gauge.height == len(MODELS) * 55
+
+
+def test_gauge_months_are_final_only_after_the_publication_delay(tmp_path, fake):
+    fake()
+    run(tmp_path, gauges=GAUGES, last=date(2026, 11, 15))
+    state = backfill.State.load(tmp_path / "backfill-state.json")
+    assert "2026-08" in state.gauge_months  # ended 76 days before the last day
+    assert "2026-09" not in state.gauge_months  # 46 days: the daily run keeps updating it
+
+
+def test_windows_scored_before_the_gauges_get_their_gauge_forecasts(tmp_path, fake):
+    fake()
+    run(tmp_path)
+    f = fake()
+    # the newer window of each 28-day gauge window fetches it and re-scores both halves
+    assert run(tmp_path, gauges=GAUGES).windows_done == 2
+    assert f.fc_calls == []  # station forecasts are not fetched again
+    assert len(f.gauge_fc_calls) == 2 * len(MODELS)
+    assert run(tmp_path, gauges=GAUGES).windows_done == 0
+    scores = pl.concat([pl.read_parquet(p) for p in (tmp_path / "scores").iterdir()])
+    gauge = scores.filter(pl.col("station_id") == "g")
+    assert gauge["date"].min() == FIRST and gauge["date"].max() == date(2026, 9, 24)
+
+
+def test_sync_covers_the_months_of_the_gauge_window(tmp_path, fake):
+    fake()
+    pulls = []
+
+    class Recorder:
+        def pull(self, months):
+            pulls.append(tuple(months))
+
+        def push(self, months):
+            pass
+
+    run(tmp_path, Recorder(), gauges=GAUGES)
+    assert pulls[0] == ("2026-08", "2026-09")  # 12-25 Sep is in the window 29 Aug-25 Sep

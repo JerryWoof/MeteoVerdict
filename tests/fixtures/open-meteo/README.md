@@ -6,6 +6,7 @@ downloaded on 2026-10-12, re-indented only.
 | File | Request |
 |---|---|
 | `aladin-2-stations-20261009.json` | Praha-Libuš and Cheb (lat, lon, station elevation), `models=chmi_aladin_cz_1km`, temperature, precipitation and wind for `previous_day1` and `previous_day2`, `wind_speed_unit=ms`, 2026-10-09 |
+| `aladin-precipitation-2-stations-20261009.json` | the same two stations and day, `hourly=precipitation_previous_day1,precipitation_previous_day2` only (as asked for the rain gauges) |
 | `error-invalid-model.json` | `models=nonexistent_model` (HTTP 400) |
 
 The daily-limit answer used in the tests (HTTP 429,
