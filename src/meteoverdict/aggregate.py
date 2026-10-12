@@ -116,7 +116,7 @@ def date_span(scores: pl.LazyFrame) -> tuple[date, date]:
 
 def _sum_columns(columns: list[str]) -> list[pl.Expr]:
     counts = [c for t in metrics.THRESHOLDS for c in metrics.counts_columns(t)]
-    return [pl.col(c).sum() for c in (*metrics.SUMS, *counts) if c in columns]
+    return [metrics.total(c) for c in (*metrics.SUMS, *counts) if c in columns]
 
 
 def _metrics(frame: pl.LazyFrame) -> pl.LazyFrame:
