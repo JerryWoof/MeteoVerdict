@@ -209,15 +209,16 @@ def outlook_cmd(
     aggregates_path: Annotated[
         Path, typer.Option("--aggregates", help="aggregates.parquet from `mvd aggregate`.")
     ] = Path("data/aggregates.parquet"),
-    out: Annotated[Path, typer.Option(help="The JSON file to write.")] = Path(
-        "site/data/outlook.json"
-    ),
+    out: Annotated[
+        Path, typer.Option(help="The JSON file to write; outlook-hourly.json goes beside it.")
+    ] = Path("site/data/outlook.json"),
     github_release: Annotated[
         bool,
         typer.Option(
             "--github-release",
-            help="Take aggregates.parquet from and put outlook.json into the release "
-            "data-latest (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+            help="Take aggregates.parquet from and put outlook.json and "
+            "outlook-hourly.json into the release data-latest (GITHUB_TOKEN, "
+            "GITHUB_REPOSITORY).",
         ),
     ] = False,
 ) -> None:
@@ -233,10 +234,13 @@ def outlook_cmd(
             typer.echo("mvd outlook: no okres weights yet", err=True)
             raise typer.Exit(code=1)
         points = combine.okres_points()
-        table = outlook.outlook(client, weights, points, sleep=time.sleep)
-        path = outlook.write(table, points, out, datetime.now(UTC))
+        table, hourly = outlook.outlook(client, weights, points, sleep=time.sleep)
+        now = datetime.now(UTC)
+        path = outlook.write(table, points, out, now)
+        hourly_path = outlook.write_hourly(hourly, out.with_name("outlook-hourly.json"), now)
         if releases:
             releases.put(store.LATEST_TAG, "outlook.json", path)
+            releases.put(store.LATEST_TAG, "outlook-hourly.json", hourly_path)
     typer.echo(f"{table['okres'].n_unique()} okresy, {table.height} rows → {path}")
 
 
