@@ -39,6 +39,8 @@ def test_one_row_per_day_station_model_lead_and_variable():
         observations(times), forecasts(times), MODELS, date(2026, 9, 1), date(2026, 9, 2)
     )
     assert table.select(scoring.KEYS).is_duplicated().sum() == 0
+    assert table.schema["n"] == pl.UInt16 and table.schema["sum_abs_err"] == pl.Float32
+    assert table.schema["a_5"] == pl.UInt8
     got = {(r["date"], r["variable"]): r for r in table.iter_rows(named=True)}
     first = date(2026, 9, 1)
     # temperature: 00:00 … 23:00 belong to 1 September
