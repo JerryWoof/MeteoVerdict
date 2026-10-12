@@ -459,23 +459,12 @@ def _publish_aggregates(
     return table
 
 
-def _update_readme(aggregates_table: pl.DataFrame, readme_path: Path, site: Path) -> None:
-    """Rewrite the README leaderboard and write ``site/badge.json``."""
-    names = _model_names()
-    now = datetime.now(UTC)
-    block = report_mod.leaderboard(aggregates_table, names, updated=now)
-    # the windows end on the last scored day
+def _write_badge(aggregates_table: pl.DataFrame, site: Path) -> None:
+    """``site/badge.json``: when the scores were last updated, for the README badge."""
     scored = aggregates_table["to"].max() if aggregates_table.height else None
     site.mkdir(parents=True, exist_ok=True)
-    (site / "badge.json").write_text(json.dumps(report_mod.badge(now, scored)), encoding="utf-8")
-    text = readme_path.read_text(encoding="utf-8")
-    try:
-        updated = report_mod.replace_block(text, block)
-    except ValueError as exc:
-        typer.echo(f"mvd report: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-    readme_path.write_text(updated, encoding="utf-8")
-    typer.echo(f"updated the leaderboard in {readme_path}")
+    badge = report_mod.badge(datetime.now(UTC), scored)
+    (site / "badge.json").write_text(json.dumps(badge), encoding="utf-8")
 
 
 @app.command("aggregate")
@@ -506,26 +495,14 @@ def aggregate_cmd(
 
 @app.command()
 def report(
-    readme: Annotated[
-        bool, typer.Option("--readme", help="Rewrite the leaderboard block in README.md.")
-    ] = False,
     data_dir: Annotated[Path, typer.Option(help="Folder with aggregates.parquet.")] = Path("data"),
-    readme_path: Annotated[Path, typer.Option("--readme-path", help="README to update.")] = Path(
-        "README.md"
-    ),
-    out: Annotated[Path, typer.Option(help="Folder for badge.json.")] = Path("site/data"),
 ) -> None:
-    """Build the leaderboard from aggregated scores."""
+    """Print the best model per kraj from aggregated scores (a Markdown table)."""
     path = data_dir / "aggregates.parquet"
     if not path.exists():
         typer.echo(f"mvd report: {path} not found; run `mvd aggregate`", err=True)
         raise typer.Exit(code=1)
-    table = pl.read_parquet(path)
-    if not readme:
-        names = _model_names()
-        typer.echo(report_mod.leaderboard(table, names))
-        return
-    _update_readme(table, readme_path, out)
+    typer.echo(report_mod.leaderboard(pl.read_parquet(path), _model_names()))
 
 
 @app.command()
@@ -543,9 +520,6 @@ def daily(
         "data"
     ),
     out: Annotated[Path, typer.Option(help="Folder for the web map JSON.")] = Path("site/data"),
-    readme_path: Annotated[Path, typer.Option("--readme-path", help="README to update.")] = Path(
-        "README.md"
-    ),
     resamples: Annotated[int, typer.Option(help="Bootstrap resamples for the ranking.")] = 1000,
     github_release: Annotated[
         bool,
@@ -555,7 +529,7 @@ def daily(
         ),
     ] = False,
 ) -> None:
-    """Daily pipeline: capture observations, re-score, aggregate, update README and JSON."""
+    """Daily pipeline: capture observations, re-score, aggregate, write the JSON and badge."""
     target = day.date() if day else _yesterday()
     if not stations_path.exists():
         raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
@@ -585,10 +559,10 @@ def daily(
             store.download(sync.store, data_dir, remote, typer.echo, kinds=("scores",))
     files = sorted((data_dir / "scores").glob("*.parquet"))
     if not files:
-        typer.echo("no scores yet; the leaderboard stays empty")
+        typer.echo("no scores yet")
         return
     aggregates_table = _publish_aggregates(files, table, data_dir, out, None, resamples)
-    _update_readme(aggregates_table, readme_path, out)
+    _write_badge(aggregates_table, out)
     if github_release:
         with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
             store.publish_latest(_release_store(client), data_dir, out)
