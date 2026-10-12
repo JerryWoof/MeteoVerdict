@@ -50,22 +50,26 @@ def test_every_command_has_help(command):
     assert "Usage" in plain(result.output)
 
 
-@pytest.mark.parametrize(
-    ("args", "item", "detail"),
-    [
-        (["daily", "--date", "2024-03-05"], "3.2", "2024-03-05"),
-    ],
-)
-def test_stub_commands_exit_1_and_name_roadmap_item(args, item, detail):
-    result = runner.invoke(app, args)
-    assert result.exit_code == 1
-    assert f"roadmap {item}" in result.stderr
-    assert detail in result.stderr
+def test_daily_without_scores_leaves_the_leaderboard(monkeypatch, tmp_path):
+    from meteoverdict import daily
 
-
-def test_daily_defaults_to_yesterday(monkeypatch):
+    stations_file = tmp_path / "s.parquet"
+    pl.DataFrame({"id": ["a"], "active": [True]}).write_parquet(stations_file)
+    meta2 = pl.DataFrame({"OBS_TYPE": ["10M"], "WSI": ["a"], "EG_EL_ABBREVIATION": ["T"]})
+    monkeypatch.setattr(cli, "fetch_current_meta", lambda client, n, today: meta2)
     monkeypatch.setattr(cli, "_yesterday", lambda: date(2025, 6, 30))
-    assert "2025-06-30" in runner.invoke(app, ["daily"]).stderr
+    seen = {}
+
+    def fake_run(client, points, models, day, data_dir, log):
+        seen["day"], seen["points"] = day, points["id"].to_list()
+        return ["2025-06"]
+
+    monkeypatch.setattr(daily, "run", fake_run)
+    args = ["daily", "--stations", str(stations_file), "--data-dir", str(tmp_path)]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    assert seen == {"day": date(2025, 6, 30), "points": ["a"]}
+    assert "no scores yet" in result.stdout
 
 
 def test_backfill_needs_the_station_table(tmp_path):

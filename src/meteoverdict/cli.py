@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, NoReturn
+from typing import Annotated
 
 import httpx
 import polars as pl
@@ -25,6 +25,7 @@ from meteoverdict import (
     store,
 )
 from meteoverdict import backfill as backfill_mod
+from meteoverdict import daily as daily_mod
 from meteoverdict import models as catalogue
 from meteoverdict import report as report_mod
 from meteoverdict.chmi import ChmiFormatError, fetch_current_meta
@@ -73,14 +74,6 @@ def _yesterday() -> date:
 def _check_range(start: date, end: date, hint: str = "--start/--end") -> None:
     if start > end:
         raise typer.BadParameter(f"start {start} is after end {end}", param_hint=hint)
-
-
-def _not_implemented(command: str, roadmap_item: str, detail: str) -> NoReturn:
-    typer.echo(
-        f"mvd {command}: not implemented yet (roadmap {roadmap_item}). Would {detail}.",
-        err=True,
-    )
-    raise typer.Exit(code=1)
 
 
 @app.command("stations")
@@ -349,6 +342,40 @@ def score(
     )
 
 
+def _publish_aggregates(
+    files: list[Path],
+    station_table: pl.DataFrame,
+    data_dir: Path,
+    out: Path,
+    as_of: date | None,
+    resamples: int,
+) -> pl.DataFrame:
+    """Aggregate and rank all score files; write aggregates.parquet and the JSON."""
+    scores = pl.scan_parquet(files)
+    table = aggregate.aggregate(scores, station_table, as_of)
+    ranks = ranking.rank(scores, station_table, as_of, resamples=resamples)
+    table = table.join(ranks, on=[*ranking.GROUP, "model"], how="left")
+    table.write_parquet(data_dir / "aggregates.parquet", compression="zstd")
+    names = {m.id: m.name for m in catalogue.load_models()}
+    meta = aggregate.metadata(table, names, datetime.now(UTC))
+    written = aggregate.write_json(table, out, meta)
+    typer.echo(f"{table.height} rows, as of {meta['as_of']} → {len(written)} JSON files in {out}")
+    return table
+
+
+def _update_readme(aggregates_table: pl.DataFrame, readme_path: Path) -> None:
+    names = {m.id: m.name for m in catalogue.load_models()}
+    block = report_mod.leaderboard(aggregates_table, names)
+    text = readme_path.read_text(encoding="utf-8")
+    try:
+        updated = report_mod.replace_block(text, block)
+    except ValueError as exc:
+        typer.echo(f"mvd report: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    readme_path.write_text(updated, encoding="utf-8")
+    typer.echo(f"updated the leaderboard in {readme_path}")
+
+
 @app.command("aggregate")
 def aggregate_cmd(
     data_dir: Annotated[Path, typer.Option(help="Folder with scores/.")] = Path("data"),
@@ -371,16 +398,8 @@ def aggregate_cmd(
         raise typer.Exit(code=1)
     if not stations_path.exists():
         raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
-    scores, station_table = pl.scan_parquet(files), pl.read_parquet(stations_path)
     day = as_of.date() if as_of else None
-    table = aggregate.aggregate(scores, station_table, day)
-    ranks = ranking.rank(scores, station_table, day, resamples=resamples)
-    table = table.join(ranks, on=[*ranking.GROUP, "model"], how="left")
-    table.write_parquet(data_dir / "aggregates.parquet", compression="zstd")
-    names = {m.id: m.name for m in catalogue.load_models()}
-    meta = aggregate.metadata(table, names, datetime.now(UTC))
-    written = aggregate.write_json(table, out, meta)
-    typer.echo(f"{table.height} rows, as of {meta['as_of']} → {len(written)} JSON files in {out}")
+    _publish_aggregates(files, pl.read_parquet(stations_path), data_dir, out, day, resamples)
 
 
 @app.command()
@@ -398,19 +417,12 @@ def report(
     if not path.exists():
         typer.echo(f"mvd report: {path} not found; run `mvd aggregate`", err=True)
         raise typer.Exit(code=1)
-    names = {m.id: m.name for m in catalogue.load_models()}
-    block = report_mod.leaderboard(pl.read_parquet(path), names)
+    table = pl.read_parquet(path)
     if not readme:
-        typer.echo(block)
+        names = {m.id: m.name for m in catalogue.load_models()}
+        typer.echo(report_mod.leaderboard(table, names))
         return
-    text = readme_path.read_text(encoding="utf-8")
-    try:
-        updated = report_mod.replace_block(text, block)
-    except ValueError as exc:
-        typer.echo(f"mvd report: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-    readme_path.write_text(updated, encoding="utf-8")
-    typer.echo(f"updated the leaderboard in {readme_path}")
+    _update_readme(table, readme_path)
 
 
 @app.command()
@@ -421,10 +433,55 @@ def daily(
             "--date", formats=["%Y-%m-%d"], help="Day to process (UTC). Default: yesterday."
         ),
     ] = None,
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    data_dir: Annotated[Path, typer.Option(help="Folder for obs/, fc/ and scores/.")] = Path(
+        "data"
+    ),
+    out: Annotated[Path, typer.Option(help="Folder for the web map JSON.")] = Path("site/data"),
+    readme_path: Annotated[Path, typer.Option("--readme-path", help="README to update.")] = Path(
+        "README.md"
+    ),
+    resamples: Annotated[int, typer.Option(help="Bootstrap resamples for the ranking.")] = 1000,
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Sync data with GitHub Releases (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+        ),
+    ] = False,
 ) -> None:
-    """Run the daily pipeline: fetch-obs, fetch-fc, score and report for one day."""
+    """Daily pipeline: capture observations, re-score, aggregate, update README and JSON."""
     target = day.date() if day else _yesterday()
-    _not_implemented("daily", "3.2", f"run the pipeline for {target}")
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    table = pl.read_parquet(stations_path)
+    models = [m for m in catalogue.load_models() if m.enabled]
+    window = partitions.months(target - timedelta(days=daily_mod.RESCORE_DAYS), target)
+    transport = httpx.HTTPTransport(retries=3)
+    with httpx.Client(timeout=300, transport=transport, follow_redirects=True) as client:
+        sync = None
+        if github_release:
+            sync = store.ReleaseSync(_release_store(client), data_dir, log=typer.echo)
+            sync.pull(window)
+        meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
+        points = observations.verification_stations(table, meta2)
+        months = daily_mod.run(client, points, models, target, data_dir, log=typer.echo)
+        if sync:
+            sync.push(months)
+            remote = store.remote_months(sync.store)
+            store.download(sync.store, data_dir, remote, typer.echo, kinds=("scores",))
+    files = sorted((data_dir / "scores").glob("*.parquet"))
+    if not files:
+        typer.echo("no scores yet; the leaderboard stays empty")
+        return
+    aggregates_table = _publish_aggregates(files, table, data_dir, out, None, resamples)
+    _update_readme(aggregates_table, readme_path)
+    if github_release:
+        with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+            store.publish_latest(_release_store(client), data_dir, out)
+        typer.echo(f"published aggregates and site data to the release {store.LATEST_TAG}")
 
 
 @app.command()
