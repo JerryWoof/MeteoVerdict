@@ -155,9 +155,13 @@ const GLYPHS = {
   precipitation: { color: "#2b7bd1", paths: ["M12 3c3 4.5 5.5 7.6 5.5 11a5.5 5.5 0 0 1-11 0C6.5 10.6 9 7.5 12 3z"] },
   wind: { color: "#2f8a4a", paths: ["M3 9h11a3 3 0 1 0-3-3", "M3 14h15a3 3 0 1 1-3 3", "M3 19h7"] },
   cloud: { color: "#6f7a83", paths: ["M7 18h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.4 1.5A3.3 3.3 0 0 0 7 18z"] },
+  // half a sun on the horizon, with an arrow up or down
+  sunrise: { color: "#d98a0b", paths: ["M2 20h20", "M6.5 20a5.5 5.5 0 0 1 11 0", "M12 11V3", "M9 6l3-3 3 3"] },
+  sunset: { color: "#c0632b", paths: ["M2 20h20", "M6.5 20a5.5 5.5 0 0 1 11 0", "M12 3v8", "M9 8l3 3 3-3"] },
 };
 
-/** An inline SVG glyph for a value ("temperature", "precipitation", "wind", "cloud"). */
+/** An inline SVG glyph for a value ("temperature", "precipitation", "wind", "cloud"),
+ * or for "sunrise" and "sunset". */
 export function glyph(layer, size = 14) {
   const spec = GLYPHS[layer];
   const ns = "http://www.w3.org/2000/svg";
