@@ -516,7 +516,8 @@ body.tv [hidden] {
     left: 0.5rem;
     right: 0.5rem;
     top: auto;
-    bottom: 0.5rem;
+    /* above the map attribution, like the "on the map" box */
+    bottom: 1.8rem;
     width: auto;
     max-height: 45%;
   }
@@ -542,12 +543,38 @@ body.tv [hidden] {
     right: 0.5rem;
     max-width: none;
   }
+  /* phones: day tabs and parts of the day each take a full row (the tabs scroll),
+     both play buttons share the row below at their natural width */
+  #ribbon .when {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .day-row,
+  .when-row {
+    display: contents;
+  }
+  .daytabs {
+    flex: 1 0 100%;
+    border-bottom: 2px solid #ddd8cc;
+  }
+  .segmented {
+    flex: 1 0 100%;
+  }
+  .day-row .play {
+    margin-bottom: 0;
+  }
+  .play {
+    order: 1;
+  }
   .daytab {
     min-width: 5rem;
     padding: 0.3rem 0.5rem;
   }
   .segmented button {
-    padding: 0.25rem 0.45rem;
+    flex: 1 1 auto;
+    padding: 0.25rem 0.3rem;
+    white-space: nowrap;
   }
 }
 
