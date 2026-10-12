@@ -4,7 +4,12 @@
 import { records } from "./data.js";
 
 export const PARTS = ["night", "morning", "afternoon", "evening", "day"];
+// the four forecast values; any of them can be shown at the okres markers, and one (or
+// none) colours the map
 export const LAYERS = ["temperature", "precipitation", "wind", "cloud"];
+export const COLOURS = [...LAYERS, "none"];
+export const DEFAULT_SHOWN = ["temperature", "precipitation"];
+const SHORT = { temperature: "t", precipitation: "p", wind: "w", cloud: "c" };
 export const TIME_ZONE = "Europe/Prague";
 
 // okresy whose seat is a kraj capital (and Praha): their labels win when markers collide
@@ -19,17 +24,18 @@ export function displayName(name) {
 }
 
 /**
- * Which markers to show without overlaps: capitals first, then the rest in the given
- * order; `boxes` are {code, x, y} screen centres, `width`/`height` a marker's size.
+ * Which markers to show without overlaps: `first` (the selected okres), then the kraj
+ * capitals, then the rest in the given order. `boxes` are {code, x, y, w, h}: screen
+ * centre and size of each marker.
  */
-export function placeMarkers(boxes, width, height) {
-  const order = [...boxes].sort(
-    (a, b) => Number(!CAPITALS.includes(a.code)) - Number(!CAPITALS.includes(b.code)),
-  );
+export function placeMarkers(boxes, gap = 4, first = null) {
+  const priority = (box) => (box.code === first ? 0 : CAPITALS.includes(box.code) ? 1 : 2);
+  const order = [...boxes].sort((a, b) => priority(a) - priority(b));
   const placed = [];
+  const overlaps = (a, b) =>
+    Math.abs(a.x - b.x) < (a.w + b.w) / 2 + gap && Math.abs(a.y - b.y) < (a.h + b.h) / 2 + gap;
   for (const box of order) {
-    const free = placed.every((p) => Math.abs(p.x - box.x) >= width || Math.abs(p.y - box.y) >= height);
-    if (free) placed.push(box);
+    if (!placed.some((p) => overlaps(p, box))) placed.push(box);
   }
   return new Set(placed.map((p) => p.code));
 }
@@ -80,6 +86,8 @@ export const RAMPS = {
   cloud: [[0, [254, 240, 180]], [50, [220, 220, 215]], [100, [150, 150, 150]]],
 };
 
+export const NEUTRAL = "#e9e5db";
+
 const hex = (rgb) => `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
 
 /** Linear interpolation in a ramp, clamped at its ends. */
@@ -100,11 +108,24 @@ export function colorFor(value, layer) {
 
 /** MapLibre "match" expression colouring okresy for a day, part and layer. */
 export function fillExpression(outlook, day, part, layer) {
+  if (!RAMPS[layer]) return NEUTRAL;
   const pairs = outlook.okresy.flatMap((o) => [
     o.code,
     colorFor(valueFor(rowFor(outlook, o.code, day, part), layer, part), layer),
   ]);
   return pairs.length ? ["match", ["get", "code"], ...pairs, "#ececec"] : "#ececec";
+}
+
+/**
+ * What a marker shows for the chosen values, in a fixed order: the temperature as the
+ * big number, the others as small chips: [{layer, text}].
+ */
+export function markerValues(row, part, shown) {
+  if (!row) return [];
+  return LAYERS.filter((layer) => shown.includes(layer)).map((layer) => ({
+    layer,
+    text: labelFor(row, layer, part),
+  }));
 }
 
 /** Symbol image name: clear and partly cloudy skies get a moon at night. */
@@ -116,7 +137,7 @@ export function iconName(symbol, part) {
 }
 
 /** Points at the okres forecast points with their symbol and label (map markers). */
-export function pointFeatures(outlook, day, part, layer) {
+export function pointFeatures(outlook, day, part, shown) {
   return {
     type: "FeatureCollection",
     features: outlook.okresy
@@ -129,7 +150,7 @@ export function pointFeatures(outlook, day, part, layer) {
           code: o.code,
           name: o.name,
           icon: iconName(row.symbol, part),
-          label: labelFor(row, layer, part),
+          values: markerValues(row, part, shown),
         },
       })),
   };
@@ -148,6 +169,11 @@ export function summary(outlook, day, part) {
     warmest: { name: warmest.o.name, value: temp(warmest) },
     coldest: { name: coldest.o.name, value: temp(coldest) },
     rainy: rows.filter(({ row }) => (row.rain_probability ?? 0) >= 0.5).length,
+    windiest: (() => {
+      const w = rows.reduce((a, b) => ((b.row.wind ?? -1) > (a.row.wind ?? -1) ? b : a));
+      return { name: w.o.name, value: w.row.wind };
+    })(),
+    clear: rows.filter(({ row }) => (row.cloud ?? 100) < 25).length,
     okresy: rows.length,
   };
 }
@@ -188,4 +214,30 @@ export function sequence(outlook, fromDay, fromPart) {
   }
   const start = steps.findIndex((s) => s.day === fromDay && s.part === fromPart);
   return start > 0 ? [...steps.slice(start), ...steps.slice(0, start)] : steps;
+}
+
+/**
+ * The view in the URL: "#day/part/colour/values/okres", values as letters
+ * ("tp" = temperature and rain). Older links "#day/part/layer/okres" still work.
+ * Unknown parts fall back to `fallback` ({day, part}).
+ */
+export function parseView(hash, outlook, fallback) {
+  const parts = hash.replace(/^#/, "").split("/");
+  const [day, part, colour] = parts;
+  let [, , , values, okres] = parts;
+  if (values && /^CZ/.test(values)) [values, okres] = [undefined, values];
+  const letters = Object.fromEntries(Object.entries(SHORT).map(([k, v]) => [v, k]));
+  const shown = values === undefined ? DEFAULT_SHOWN : [...values].map((c) => letters[c]).filter(Boolean);
+  return {
+    day: outlook.days.includes(day) ? day : fallback.day,
+    part: PARTS.includes(part) ? part : fallback.part,
+    colour: COLOURS.includes(colour) ? colour : "temperature",
+    shown: LAYERS.filter((l) => shown.includes(l)),
+    okres: outlook.okresy.some((o) => o.code === okres) ? okres : null,
+  };
+}
+
+export function viewHash(view) {
+  const values = LAYERS.filter((l) => view.shown.includes(l)).map((l) => SHORT[l]).join("") || "-";
+  return `#${[view.day, view.part, view.colour, values, view.okres].filter(Boolean).join("/")}`;
 }
