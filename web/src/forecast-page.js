@@ -4,12 +4,13 @@ import "./style.css";
 
 import { modelColors, records } from "./data.js";
 import {
-  MAX_LEAD_DAY, VARIABLES, bestPerLeadDay, combine, dailySummary, forecastUrl, parseForecast,
+  MAX_LEAD_DAY, VARIABLES, bestPerLeadDay, combine, dailySummary, forecastUrl, nightBands, parseForecast,
   weightTable, weightedModels, weightsAt, winnersByLeadDay,
 } from "./forecast.js";
 import { setUpLanguage } from "./i18n.js";
+import { glyph } from "./icons.js";
 import { statusText } from "./status.js";
-import { dayLabel, today } from "./tv.js";
+import { dayLabel, parseOutlook, sunFor, today } from "./tv.js";
 
 const t = setUpLanguage();
 const TIME_ZONE = "Europe/Prague";
@@ -47,11 +48,28 @@ function timeTick(date) {
 
 const fmt = (v, digits = 1) => (v == null ? "–" : v.toFixed(digits));
 
-function renderDays(days) {
+// sunrise and sunset as on the forecast map: the glyphs with the local times
+function sunCell(sun) {
+  const td = document.createElement("td");
+  if (!sun) {
+    td.textContent = "–";
+    return td;
+  }
+  const line = cell("span", null, "sun");
+  line.append(glyph("sunrise", 13), cell("span", sun.sunrise), glyph("sunset", 13), cell("span", sun.sunset));
+  line.title = t("tv.sun", { rise: sun.sunrise, set: sun.sunset });
+  td.append(line);
+  return td;
+}
+
+function renderDays(days, sunOf) {
   const table = document.getElementById("days");
   const head = document.createElement("tr");
-  for (const key of ["day", "tmin", "tmax", "precipitation", "wind"]) {
-    head.append(cell("th", t(`forecast.col.${key}`), key === "day" ? "" : "num"));
+  // older outlook files have no sun times: then no column at all
+  const withSun = days.some((d) => sunOf(d.day));
+  const columns = ["day", "tmin", "tmax", "precipitation", "wind", ...(withSun ? ["sun"] : [])];
+  for (const key of columns) {
+    head.append(cell("th", t(`forecast.col.${key}`), key === "day" || key === "sun" ? "" : "num"));
   }
   // "Today 10/12", "Tomorrow 10/13", "Wednesday 10/14", as on the forecast map
   const language = document.documentElement.lang;
@@ -68,12 +86,13 @@ function renderDays(days) {
       cell("td", fmt(d.precipitation), "num"),
       cell("td", fmt(d.wind), "num"),
     );
+    if (withSun) tr.append(sunCell(sunOf(d.day)));
     return tr;
   });
   table.replaceChildren(head, ...rows);
 }
 
-function chart(forecast, combined, table, variable, colors, names) {
+function chart(forecast, combined, table, variable, colors, names, nights) {
   const now = Date.now();
   const rows = [];
   for (const [model, values] of Object.entries(forecast.values[variable])) {
@@ -115,6 +134,10 @@ function chart(forecast, combined, table, variable, colors, names) {
       },
       y: { label: null, grid: true, zero: step },
       marks: [
+        // night, sunset to sunrise, behind everything; the full height of the chart
+        Plot.rectX(nights, {
+          x1: (n) => new Date(n.start), x2: (n) => new Date(n.end), fill: "#1d2329", fillOpacity: 0.06,
+        }),
         Plot.lineY(rows, { x: "time", y: "value", z: "model", stroke: "#b7bec4", strokeWidth: 0.8, curve }),
         Plot.lineY(best, {
           x: "time", y: "value", z: "segment", stroke: (r) => colors[r.model] ?? "#1f78b4", strokeWidth: 1.6, curve,
@@ -129,7 +152,7 @@ function chart(forecast, combined, table, variable, colors, names) {
     .join(" · ");
   const legend = document.createElement("p");
   legend.className = "note";
-  legend.textContent = t("forecast.legend", { best: winners || "–" });
+  legend.textContent = t("forecast.legend", { best: winners || "–" }) + (nights.length ? ` ${t("forecast.night")}` : "");
   figure.append(legend);
   return figure;
 }
@@ -161,7 +184,7 @@ function renderWeights(table, names) {
   target.replaceChildren(head, ...rows);
 }
 
-async function show(point, names, colors) {
+async function show(point, names, colors, outlook) {
   const message = document.getElementById("message");
   document.getElementById("title").textContent = t("forecast.titleFor", { okres: point.name });
   for (const id of ["days", "charts", "weights"]) document.getElementById(id).replaceChildren();
@@ -184,19 +207,24 @@ async function show(point, names, colors) {
   const forecast = parseForecast(doc, models);
   const now = Date.now();
   const combined = Object.fromEntries(VARIABLES.map((v) => [v, combine(forecast, table, v, now)]));
-  renderDays(dailySummary(forecast.times, combined, TIME_ZONE));
+  const sunOf = (day) => sunFor(outlook, point.code, day);
+  renderDays(dailySummary(forecast.times, combined, TIME_ZONE), sunOf);
+  const nights = nightBands(sunOf, forecast.times[0], forecast.times.at(-1), TIME_ZONE);
   document.getElementById("charts").replaceChildren(
-    ...VARIABLES.map((v) => chart(forecast, combined[v], table, v, colors, names)),
+    ...VARIABLES.map((v) => chart(forecast, combined[v], table, v, colors, names, nights)),
   );
   renderWeights(table, names);
   message.textContent = "";
 }
 
 async function main() {
-  const [meta, index] = await Promise.all([
+  const [meta, index, outlookDoc] = await Promise.all([
     getJson("data/scores/meta.json"),
     getJson("data/scores/forecast/okresy.json"),
+    // only for sunrise and sunset; without it (or in older files) the page shows neither
+    getJson("data/scores/outlook.json"),
   ]);
+  const outlook = parseOutlook(outlookDoc);
   document.getElementById("status").textContent = statusText(meta, t);
   const names = { ...meta?.models };
   const colors = modelColors(names);
@@ -220,10 +248,10 @@ async function main() {
   select.addEventListener("change", () => {
     const point = points.find((p) => p.code === select.value);
     window.history.replaceState(null, "", `#${point.code}`);
-    show(point, names, colors);
+    show(point, names, colors, outlook);
   });
   window.history.replaceState(null, "", `#${current.code}`);
-  await show(current, names, colors);
+  await show(current, names, colors, outlook);
 }
 
 main();
