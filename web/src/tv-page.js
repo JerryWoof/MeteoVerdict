@@ -93,9 +93,6 @@ function renderWhen(outlook) {
       button.setAttribute("aria-pressed", String(day === state.day));
       // always two lines: "Today" / "Mon, 10/12", "Wednesday" / "Wed, 10/14"
       button.append(element("strong", dayName(day)), element("small", dayLabel(day, today(Date.now()), language).date));
-      // and the sun: earliest to latest over the okresy (about 25 minutes apart)
-      const sun = sunRange(outlook, day);
-      if (sun) button.append(sunLine(rangeText(sun.sunrise), rangeText(sun.sunset), "tv.sunRange"));
       button.addEventListener("click", () => update({ day }));
       return button;
     }),
@@ -278,6 +275,15 @@ function renderHeadline(outlook) {
   if (shown("precipitation")) lines.push(line("precipitation", t("tv.rainy", { n: s.rainy, of: s.okresy })));
   if (shown("wind")) lines.push(line("wind", t("tv.windiest", { okres: displayName(s.windiest.name), value: fmt(s.windiest.value) })));
   if (shown("cloud")) lines.push(line("cloud", t("tv.clearIn", { n: s.clear, of: s.okresy })));
+  // the day's sunrise and sunset, earliest to latest over the okresy (about 25 minutes apart)
+  const sun = sunRange(outlook, state.day);
+  if (sun) {
+    for (const [key, times] of [["sunrise", sun.sunrise], ["sunset", sun.sunset]]) {
+      const p = line(key, t(`tv.${key}`, { time: rangeText(times) }));
+      p.title = t("tv.sunRange", { rise: rangeText(sun.sunrise), set: rangeText(sun.sunset) });
+      lines.push(p);
+    }
+  }
   const heading = element("h2", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`);
   const children = [heading, ...lines];
   if (playing && RAMPS[state.colour]) {

@@ -203,7 +203,7 @@ body.tv > * {
   font-size: 0.75rem;
   white-space: nowrap;
 }
-/* sunrise and sunset: in the day tabs and the okres panel */
+/* sunrise and sunset in the okres panel (the headline box has them as lines) */
 .sun {
   display: inline-flex;
   align-items: center;
@@ -215,16 +215,6 @@ body.tv > * {
 }
 .sun .glyph + span + .glyph {
   margin-left: 0.35rem;
-}
-/* in a day tab sunrise and sunset each get a line */
-.daytab .sun {
-  display: grid;
-  grid-template-columns: auto auto;
-  gap: 0 0.2rem;
-  margin-top: 0.1rem;
-}
-.daytab .sun .glyph + span + .glyph {
-  margin-left: 0;
 }
 #okres-panel .facts .sun {
   font-size: 0.85rem;
