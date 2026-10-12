@@ -183,10 +183,20 @@ body.tv > * {
 #ribbon {
   padding: 0 1rem 0.5rem;
 }
+.day-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  border-bottom: 2px solid #ddd8cc;
+}
+.day-row .play {
+  margin-bottom: 0.3rem;
+  white-space: nowrap;
+}
 .daytabs {
   display: flex;
   overflow-x: auto;
-  border-bottom: 2px solid #ddd8cc;
+  min-width: 0;
 }
 .daytab {
   display: flex;
@@ -256,6 +266,7 @@ body.tv > * {
   color: #c9ced3;
 }
 .play {
+  white-space: nowrap;
   font: inherit;
   font-size: 0.85rem;
   padding: 0.35rem 0.8rem;
@@ -288,6 +299,17 @@ body.tv > * {
 #headline h2 {
   font-size: 1.05rem;
   margin: 0 0 0.25rem;
+}
+#headline .playing {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  margin: 0.1rem 0 0.3rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  background: #1d2329;
+  color: #ffffff;
+  font-weight: 600;
 }
 #headline .line {
   display: flex;

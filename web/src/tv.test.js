@@ -5,7 +5,7 @@ import { test } from "node:test";
 import {
   CAPITALS, DEFAULT_SHOWN, NEUTRAL, colorFor, currentPart, dayLabel, displayName, ease, iconName,
   labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView, placeMarkers,
-  playSequence, rowFor, summary, today, valueFor, viewHash,
+  playSteps, rowFor, startIndex, summary, today, valueFor, viewHash,
 } from "./tv.js";
 
 // the real outlook.json of the first run of the Outlook workflow (12 Oct 2026, 08:31 UTC)
@@ -110,17 +110,19 @@ test("the view in the URL, including old links", () => {
   });
 });
 
-test("play: morning, afternoon, evening of each day, from the current part on", () => {
-  const steps = playSequence(OUTLOOK, DAY, "afternoon");
-  assert.deepEqual(steps.slice(0, 4), [
+test("play: the four parts of one day, or of every day of the week", () => {
+  assert.deepEqual(playSteps(OUTLOOK, "day", DAY), [
+    { day: DAY, part: "night" },
+    { day: DAY, part: "morning" },
     { day: DAY, part: "afternoon" },
     { day: DAY, part: "evening" },
-    { day: "2026-10-14", part: "morning" },
-    { day: "2026-10-14", part: "afternoon" },
   ]);
-  assert.ok(!steps.some((s) => s.part === "night" || s.part === "day"));
-  assert.equal(playSequence(OUTLOOK, DAY, "night")[0].day, DAY); // from that day's morning
-  assert.equal(playSequence(OUTLOOK, OUTLOOK.days[0], "morning").length, 6 * 3);
+  const week = playSteps(OUTLOOK, "week", DAY);
+  assert.equal(week.length, 6 * 4);
+  assert.deepEqual(week[0], { day: OUTLOOK.days[0], part: "night" });
+  assert.ok(!week.some((s) => s.part === "day"));
+  assert.equal(startIndex(week, DAY, "afternoon"), 4 + 2);
+  assert.equal(startIndex(week, DAY, "day"), 0); // "whole day" shown: start from the beginning
 });
 
 test("each round colours the map with the next value", () => {

@@ -191,22 +191,27 @@ export function viewHash(view) {
 
 // --- "play": a TV-style run through the next days ------------------------------------
 
-export const PLAY_PARTS = ["morning", "afternoon", "evening"];
+// one round of "play" goes through the four parts of the day, night included
+export const PLAY_PARTS = ["night", "morning", "afternoon", "evening"];
 
 /**
- * The play order: morning, afternoon and evening of every day, starting with the part
- * of `fromDay` that is shown now (or that day's morning). Only steps with data.
+ * The steps of one round of "play": the four parts of `day` (scope "day"), or the four
+ * parts of every day (scope "week"). Only steps with data.
  */
-export function playSequence(outlook, fromDay, fromPart) {
+export function playSteps(outlook, scope, day) {
+  const days = scope === "week" ? outlook.days : [day];
   const steps = [];
-  for (const day of outlook.days) {
+  for (const d of days) {
     for (const part of PLAY_PARTS) {
-      if (outlook.okresy.some((o) => rowFor(outlook, o.code, day, part))) steps.push({ day, part });
+      if (outlook.okresy.some((o) => rowFor(outlook, o.code, d, part))) steps.push({ day: d, part });
     }
   }
-  let start = steps.findIndex((s) => s.day === fromDay && s.part === fromPart);
-  if (start < 0) start = Math.max(0, steps.findIndex((s) => s.day === fromDay));
-  return steps.slice(start);
+  return steps;
+}
+
+/** Where a round starts: at the step shown now, or at the beginning. */
+export function startIndex(steps, day, part) {
+  return Math.max(0, steps.findIndex((s) => s.day === day && s.part === part));
 }
 
 /** The next map colour after a round: temperature → rain → wind → cloud → temperature. */
