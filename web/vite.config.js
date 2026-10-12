@@ -4,5 +4,11 @@ import { defineConfig } from "vite";
 export default defineConfig({
   base: "./",
   // MapLibre alone is about 1 MB minified (280 kB gzipped)
-  build: { outDir: "dist", emptyOutDir: true, chunkSizeWarningLimit: 1200 },
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+    chunkSizeWarningLimit: 1200,
+    // two pages: the map and the model comparison
+    rollupOptions: { input: { map: "index.html", compare: "compare.html" } },
+  },
 });
