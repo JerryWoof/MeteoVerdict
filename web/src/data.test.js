@@ -5,6 +5,9 @@ import {
   NO_DATA, TOO_FEW, bestByRegion, describe, fillExpression, modelColors, records,
   regionColor, stationFeatures,
 } from "./data.js";
+import { translator } from "./i18n.js";
+
+const t = translator("en");
 
 // the layout `mvd aggregate` writes (aggregate.JSON_COLUMNS, a subset)
 const DOC = {
@@ -58,11 +61,11 @@ test("station dots only where there are scores", () => {
 test("popup text", () => {
   const best = bestByRegion(records(DOC), 1);
   assert.equal(
-    describe(best.get("CZ020"), MODELS),
+    describe(best.get("CZ020"), MODELS, t),
     "best: DWD ICON-D2 (MAE 1.20); not significantly worse: ECMWF IFS",
   );
-  assert.equal(describe(best.get("CZ010"), MODELS), "too few stations to rank");
-  assert.equal(describe(undefined, MODELS), "no data");
+  assert.equal(describe(best.get("CZ010"), MODELS, t), "too few stations to rank");
+  assert.equal(describe(undefined, MODELS, t), "no data");
 });
 
 test("unranked variables show the lowest MAE, never the blend", () => {
@@ -76,5 +79,13 @@ test("unranked variables show the lowest MAE, never the blend", () => {
   };
   const entry = bestByRegion(records(doc), 1).get("CZ020");
   assert.equal(entry.model, "ifs");
-  assert.equal(describe(entry, MODELS), "best: ECMWF IFS (MAE 1.30, lowest MAE, no significance test)");
+  assert.equal(describe(entry, MODELS, t), "best: ECMWF IFS (MAE 1.30, lowest MAE, no significance test)");
+});
+
+test("popup text in Czech", () => {
+  const best = bestByRegion(records(DOC), 1);
+  assert.equal(
+    describe(best.get("CZ020"), MODELS, translator("cs")),
+    "nejlepší: DWD ICON-D2 (MAE 1.20); ne významně horší: ECMWF IFS",
+  );
 });
