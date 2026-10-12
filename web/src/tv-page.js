@@ -8,7 +8,7 @@ import { setUpLanguage } from "./i18n.js";
 import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, colorFor, currentPart, dayLabel, displayName, ease,
   iconName, labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView,
-  placeMarkers, playSteps, rowFor, startIndex, summary, today, viewHash,
+  placeMarkers, playSteps, rowFor, startIndex, switchColours, summary, today, viewHash,
 } from "./tv.js";
 
 setWorkerUrl(workerUrl);
@@ -387,6 +387,8 @@ function update(change = {}, fromPlay = false) {
 // --- play: smooth transitions through the parts of a day (or of every day), each
 // round with the next map colour -----------------------------------------------------
 const TRANSITION_MS = 1100;
+// a change of the map colour (another value) is quicker
+const SWITCH_MS = 500;
 const HOLD_MS = 1400;
 let playToken = 0;
 
@@ -415,12 +417,14 @@ async function transition(target, token) {
   for (;;) {
     await new Promise((resolve) => requestAnimationFrame(resolve));
     if (token !== playToken) return false;
-    const f = ease(Math.min(1, (performance.now() - start) / TRANSITION_MS));
-    // colours of two different values are never blended: a new map colour switches at once
+    const elapsed = performance.now() - start;
+    const f = ease(Math.min(1, elapsed / TRANSITION_MS));
+    // the same value: colours move smoothly; another value: a quick fade through the
+    // background, so the two are never mixed
     paintFill(
       from.colour === to.colour
         ? new Map([...coloursTo].map(([code, c]) => [code, mixColor(coloursFrom.get(code) ?? c, c, f)]))
-        : coloursTo,
+        : switchColours(coloursFrom, coloursTo, Math.min(1, elapsed / SWITCH_MS)),
     );
     for (const [code, entry] of markers) {
       const row = lerpRow(rowFor(outlook, code, from.day, from.part), rowFor(outlook, code, to.day, to.part), f);
