@@ -61,10 +61,15 @@ const symbolText = (symbol) => (symbol ? t(`symbol.${symbol}`) : "");
 let state = { day: null, part: null, colour: "temperature", shown: [], okres: null };
 let playing = null; // "day" or "week" while playing
 
-// "Tuesday 10/13" (headings, the week in the okres panel)
+// the first line of a day tab: "Today", "Tomorrow", "Wednesday"
+function dayName(day) {
+  const label = dayLabel(day, today(Date.now()), language);
+  return label.key ? t(label.key) : label.name;
+}
+
+// "Today 10/12", "Wednesday 10/14" (headings, the week in the okres panel)
 function dayText(day) {
-  const label = dayLabel(day, language);
-  return `${label.name} ${label.short}`;
+  return `${dayName(day)} ${dayLabel(day, today(Date.now()), language).short}`;
 }
 
 // --- when: days and parts of the day (above the map) --------------------------------
@@ -76,9 +81,8 @@ function renderWhen(outlook) {
       const button = element("button", null, "daytab");
       button.type = "button";
       button.setAttribute("aria-pressed", String(day === state.day));
-      // always two lines: "Tuesday" / "Tue, 10/13"
-      const label = dayLabel(day, language);
-      button.append(element("strong", label.name), element("small", label.date));
+      // always two lines: "Today" / "Mon, 10/12", "Wednesday" / "Wed, 10/14"
+      button.append(element("strong", dayName(day)), element("small", dayLabel(day, today(Date.now()), language).date));
       button.addEventListener("click", () => update({ day }));
       return button;
     }),
