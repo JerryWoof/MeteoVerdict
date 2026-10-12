@@ -134,7 +134,7 @@ function renderShow() {
       radio.name = "colour";
       radio.checked = colour === state.colour;
       radio.addEventListener("change", () => update({ colour }));
-      label.append(radio, element("span", t(colour === "none" ? "tv.noColour" : `layer.${colour}`)));
+      label.append(radio, element("span", t(`layer.${colour}`)));
       return label;
     }),
   );
@@ -416,7 +416,12 @@ async function transition(target, token) {
     await new Promise((resolve) => requestAnimationFrame(resolve));
     if (token !== playToken) return false;
     const f = ease(Math.min(1, (performance.now() - start) / TRANSITION_MS));
-    paintFill(new Map([...coloursTo].map(([code, c]) => [code, mixColor(coloursFrom.get(code) ?? c, c, f)])));
+    // colours of two different values are never blended: a new map colour switches at once
+    paintFill(
+      from.colour === to.colour
+        ? new Map([...coloursTo].map(([code, c]) => [code, mixColor(coloursFrom.get(code) ?? c, c, f)]))
+        : coloursTo,
+    );
     for (const [code, entry] of markers) {
       const row = lerpRow(rowFor(outlook, code, from.day, from.part), rowFor(outlook, code, to.day, to.part), f);
       setMarker(entry, row, f < 0.5 ? from.part : to.part, to.shown);
