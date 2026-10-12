@@ -256,10 +256,14 @@ def fetch_gauges(
         Path, typer.Option("--stations", help="Station table from `mvd stations`.")
     ] = Path("data/stations.parquet"),
     out_dir: Annotated[Path, typer.Option(help="Monthly Parquet files go here.")] = Path(
-        "data/obs"
+        "data/gauges"
     ),
 ) -> None:
-    """Fetch daily precipitation of the manual rain gauges (06-06 UTC windows)."""
+    """Fetch daily precipitation of the manual rain gauges (06-06 UTC windows).
+
+    Also reads ČHMÚ's historical file (2.5 MB per gauge) for months older than
+    ``recent/``: run it once for the history, the scheduled runs keep it current.
+    """
     _check_range(start.date(), end.date())
     if not stations_path.exists():
         raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
@@ -362,7 +366,7 @@ def score(
     first, last = start.date(), end.date()
     _check_range(first, last)
     # daily precipitation of the last day ends at 24:00 = next day 00:00
-    obs = partitions.scan_months(data_dir / "obs", first, last + timedelta(days=1))
+    obs = observations.scan(data_dir, first, last + timedelta(days=1))
     fc = partitions.scan_months(data_dir / "fc", first, last + timedelta(days=1))
     if obs is None or fc is None:
         missing = "observations (mvd fetch-obs)" if obs is None else "forecasts (mvd fetch-fc)"
@@ -509,7 +513,15 @@ def daily(
             sync.pull(window)
         meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
         points = observations.verification_stations(table, meta2)
-        months = daily_mod.run(client, points, models, target, data_dir, log=typer.echo)
+        months = daily_mod.run(
+            client,
+            points,
+            models,
+            target,
+            data_dir,
+            log=typer.echo,
+            gauge_points=_gauge_points(table, meta2, points),
+        )
         if sync:
             sync.push(months)
             remote = store.remote_months(sync.store)
@@ -542,6 +554,12 @@ def check(
             f.write("## Data quality\n\n" + text.replace("\n", "\n\n") + "\n")
     if any(f.level == "error" for f in findings):
         raise typer.Exit(code=1)
+
+
+def _gauge_points(table: pl.DataFrame, meta2: pl.DataFrame, points: pl.DataFrame):
+    """Rain gauges that are not verified hourly (closed stations are both)."""
+    found = gauges.gauge_stations(table, meta2)
+    return found.filter(~pl.col("id").is_in(points["id"].to_list()))
 
 
 @app.command()
@@ -589,7 +607,16 @@ def backfill(
         points = observations.verification_stations(table, meta2)
         budget = forecasts.Budget(max_calls=max_calls)
         result = backfill_mod.run(
-            client, points, models, first, last, data_dir, budget, sync, log=typer.echo
+            client,
+            points,
+            models,
+            first,
+            last,
+            data_dir,
+            budget,
+            sync,
+            log=typer.echo,
+            gauge_points=_gauge_points(table, meta2, points),
         )
     typer.echo(
         f"{result.windows_done} windows done, {budget.used:g} calls used"

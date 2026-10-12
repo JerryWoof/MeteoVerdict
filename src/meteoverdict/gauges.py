@@ -88,19 +88,28 @@ def _historical(client: httpx.Client, wsi: str) -> pl.DataFrame | None:
 
 
 def fetch_gauge_precipitation(
-    client: httpx.Client, station_ids: Iterable[str], start: date, end: date, workers: int = 8
+    client: httpx.Client,
+    station_ids: Iterable[str],
+    start: date,
+    end: date,
+    workers: int = 8,
+    historical: bool = True,
 ) -> pl.DataFrame:
-    """``precipitation_24h`` for windows starting on ``start`` … ``end`` (06:00 UTC each)."""
+    """``precipitation_24h`` for windows starting on ``start`` … ``end`` (06:00 UTC each).
+
+    Months missing in ``recent/`` come from the ``historical_csv/`` file (2.5 MB per
+    station, so the scheduled runs pass ``historical=False`` and read only ``recent/``).
+    """
 
     def one(wsi: str) -> pl.DataFrame:
-        parts, historical = [], None
+        parts, older = [], None
         y, m = start.year, start.month
         while (y, m) <= (end.year, end.month):
             got = _recent(client, wsi, y, m)
-            if got is None or got.height == 0:
-                if historical is None:  # one CSV covers every closed year
-                    historical = _historical(client, wsi)
-                got = historical
+            if (got is None or got.height == 0) and historical:
+                if older is None:  # one CSV covers every closed year
+                    older = _historical(client, wsi)
+                got = older
             if got is not None:
                 first = date(y, m, 1)
                 last = date(y, m, calendar.monthrange(y, m)[1])

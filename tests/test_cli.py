@@ -54,21 +54,24 @@ def test_daily_without_scores_leaves_the_leaderboard(monkeypatch, tmp_path):
     from meteoverdict import daily
 
     stations_file = tmp_path / "s.parquet"
-    pl.DataFrame({"id": ["a"], "active": [True]}).write_parquet(stations_file)
+    # a: automatic, g: manual rain gauge, x: closed (verified hourly, so not a gauge here)
+    stations = {"id": ["a", "g", "x"], "active": [True, True, False]}
+    pl.DataFrame(stations).write_parquet(stations_file)
     meta2 = pl.DataFrame({"OBS_TYPE": ["10M"], "WSI": ["a"], "EG_EL_ABBREVIATION": ["T"]})
     monkeypatch.setattr(cli, "fetch_current_meta", lambda client, n, today: meta2)
     monkeypatch.setattr(cli, "_yesterday", lambda: date(2025, 6, 30))
     seen = {}
 
-    def fake_run(client, points, models, day, data_dir, log):
+    def fake_run(client, points, models, day, data_dir, log, gauge_points):
         seen["day"], seen["points"] = day, points["id"].to_list()
+        seen["gauges"] = gauge_points["id"].to_list()
         return ["2025-06"]
 
     monkeypatch.setattr(daily, "run", fake_run)
     args = ["daily", "--stations", str(stations_file), "--data-dir", str(tmp_path)]
     result = runner.invoke(app, args)
     assert result.exit_code == 0, result.output
-    assert seen == {"day": date(2025, 6, 30), "points": ["a"]}
+    assert seen == {"day": date(2025, 6, 30), "points": ["a", "x"], "gauges": ["g"]}
     assert "no scores yet" in result.stdout
 
 
