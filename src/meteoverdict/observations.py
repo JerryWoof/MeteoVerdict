@@ -24,6 +24,7 @@ from pathlib import Path
 import httpx
 import polars as pl
 
+from meteoverdict import partitions
 from meteoverdict.chmi import BASE_URL, parse_collection
 
 ELEMENTS = {"T": "temperature_2m", "F": "wind_speed_10m", "SRA10M": "precipitation"}
@@ -190,19 +191,14 @@ def automatic_station_ids(meta2: pl.DataFrame) -> set[str]:
     )
 
 
+def verification_stations(stations: pl.DataFrame, meta2: pl.DataFrame) -> pl.DataFrame:
+    """Stations we verify hourly: automatic ones in today's ``meta2``, plus inactive ones
+    (which are not in today's ``meta2``, so their elements are unknown)."""
+    automatic = automatic_station_ids(meta2)
+    return stations.filter(pl.col("id").is_in(list(automatic)) | ~pl.col("active"))
+
+
 def write_monthly(observations: pl.DataFrame, out_dir: Path) -> list[Path]:
     """Merge into ``out_dir/YYYY-MM.parquet``: new rows replace old ones with the same
     station, time and variable (e.g. checked ``recent/`` data replacing ``now/`` data)."""
-    keys = ["station_id", "time", "variable"]
-    out_dir.mkdir(parents=True, exist_ok=True)
-    written = []
-    by_month = observations.with_columns(pl.col("time").dt.strftime("%Y-%m").alias("_month"))
-    for (month,), rows in by_month.group_by("_month", maintain_order=True):
-        path = out_dir / f"{month}.parquet"
-        rows = rows.drop("_month")
-        if path.exists():
-            old = pl.read_parquet(path)
-            rows = pl.concat([old.join(rows.select(keys), on=keys, how="anti"), rows])
-        rows.sort(keys).write_parquet(path, compression="zstd")
-        written.append(path)
-    return written
+    return partitions.write_monthly(observations, out_dir, ["station_id", "time", "variable"])

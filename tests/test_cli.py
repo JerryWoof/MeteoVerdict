@@ -53,12 +53,6 @@ def test_every_command_has_help(command):
 @pytest.mark.parametrize(
     ("args", "item", "detail"),
     [
-        (
-            ["fetch-fc", "--start", "2024-01-01", "--end", "2024-01-02", "--model", "dwd_icon_d2"],
-            "1.6",
-            "dwd_icon_d2",
-        ),
-        (["fetch-fc", "--start", "2024-01-01", "--end", "2024-01-02"], "1.6", "all models"),
         (["score", "--start", "2024-01-01", "--end", "2024-01-01"], "2.3", "2024-01-01"),
         (["report"], "3.1", "print the leaderboard"),
         (["report", "--readme"], "3.1", "README.md"),
@@ -226,3 +220,52 @@ def test_fetch_obs_selects_automatic_and_inactive_stations(monkeypatch, tmp_path
     assert result.exit_code == 0, result.output
     assert asked["ids"] == ["auto", "closed"]
     assert "0 hourly values from 0 of 2 stations" in result.stdout
+
+
+def fc_setup(monkeypatch, tmp_path):
+    from meteoverdict import forecasts
+
+    stations_file = tmp_path / "s.parquet"
+    pl.DataFrame(
+        {"id": ["a"], "active": [True], "lat": [50.0], "lon": [14.4], "elevation": [300.0]}
+    ).write_parquet(stations_file)
+    meta2 = pl.DataFrame({"OBS_TYPE": ["10M"], "WSI": ["a"], "EG_EL_ABBREVIATION": ["T"]})
+    monkeypatch.setattr(cli, "fetch_current_meta", lambda client, n, today: meta2)
+    base = ["fetch-fc", "--start", "2026-10-09", "--end", "2026-10-09"]
+    return forecasts, [*base, "--stations", str(stations_file), "--out-dir", str(tmp_path / "fc")]
+
+
+def test_fetch_fc_dry_run_prints_the_estimate(monkeypatch, tmp_path):
+    forecasts, args = fc_setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(forecasts, "fetch_forecasts", lambda *a, **k: pytest.fail("no fetch"))
+    result = runner.invoke(app, [*args, "--model", "chmi_aladin_cz_1km", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert (
+        "1 models x 1 stations, 2026-10-09..2026-10-09: about 1 Open-Meteo calls" in result.stdout
+    )
+
+
+def test_fetch_fc_saves_partial_results_when_the_quota_ends(monkeypatch, tmp_path):
+    from datetime import UTC, datetime
+
+    forecasts, args = fc_setup(monkeypatch, tmp_path)
+    row = {
+        "station_id": "a",
+        "time": datetime(2026, 10, 9, tzinfo=UTC),
+        "model": "chmi_aladin_cz_1km",
+        "lead_day": 1,
+        "temperature_2m": 9.0,
+        "precipitation": 0.0,
+        "wind_speed_10m": 2.0,
+    }
+
+    def quota(*args, **kwargs):
+        error = forecasts.QuotaError("Daily API request limit exceeded.")
+        error.partial = pl.DataFrame([row], schema=forecasts.SCHEMA)
+        raise error
+
+    monkeypatch.setattr(forecasts, "fetch_forecasts", quota)
+    result = runner.invoke(app, args)
+    assert result.exit_code == 3
+    assert "Daily API request limit" in result.stderr
+    assert pl.read_parquet(tmp_path / "fc" / "2026-10.parquet").height == 1
