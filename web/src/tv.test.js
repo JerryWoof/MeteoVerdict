@@ -5,7 +5,8 @@ import { test } from "node:test";
 import {
   CAPITALS, DEFAULT_SHOWN, NEUTRAL, colorFor, currentPart, dayLabel, displayName, ease, iconName,
   labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView, placeMarkers,
-  playSteps, rowFor, startIndex, switchColours, summary, today, valueFor, viewHash,
+  playSteps, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary, today, valueFor,
+  viewHash,
 } from "./tv.js";
 
 // the real outlook.json of the first run of the Outlook workflow (12 Oct 2026, 08:31 UTC)
@@ -19,6 +20,34 @@ test("parsing outlook.json", () => {
   assert.equal(row.okres, "CZ0100");
   assert.ok(row.tmin <= row.tmax);
   assert.equal(rowFor(OUTLOOK, "CZ0100", "1999-01-01", "day"), undefined);
+});
+
+test("sunrise and sunset: per okres, and earliest to latest over all okresy", () => {
+  // Benešov, from the fixture
+  assert.deepEqual(sunFor(OUTLOOK, "CZ0201", DAY), { sunrise: "07:19", sunset: "18:14" });
+  assert.equal(sunFor(OUTLOOK, "CZ0201", "1999-01-01"), null);
+  const range = sunRange(OUTLOOK, DAY);
+  assert.deepEqual(range, { sunrise: ["07:03", "07:28"], sunset: ["17:59", "18:23"] });
+  const all = OUTLOOK.okresy.map((o) => sunFor(OUTLOOK, o.code, DAY));
+  assert.ok(all.every((s) => s.sunrise >= range.sunrise[0] && s.sunrise <= range.sunrise[1]));
+  assert.ok(all.every((s) => s.sunset >= range.sunset[0] && s.sunset <= range.sunset[1]));
+  // days get shorter in October
+  assert.ok(sunRange(OUTLOOK, "2026-10-17").sunset[1] < range.sunset[1]);
+  assert.equal(sunRange(OUTLOOK, "1999-01-01"), null);
+  assert.equal(rangeText(["07:03", "07:28"]), "07:03–07:28");
+  assert.equal(rangeText(["07:03", "07:03"]), "07:03");
+});
+
+test("older outlook files without sunrise and sunset", () => {
+  const doc = JSON.parse(readFileSync(new URL("./fixtures/outlook.json", import.meta.url)));
+  const keep = doc.columns.map((c, i) => (c === "sunrise" || c === "sunset" ? -1 : i)).filter((i) => i >= 0);
+  const old = parseOutlook({ ...doc, columns: keep.map((i) => doc.columns[i]), rows: doc.rows.map((r) => keep.map((i) => r[i])) });
+  assert.equal(sunFor(old, "CZ0201", DAY), null);
+  assert.equal(sunRange(old, DAY), null);
+  // a day where the sun does not rise or set (null) is skipped too
+  const rows = [{ okres: "A", day: DAY, part: "day", sunrise: null, sunset: null }];
+  const polar = { okresy: [{ code: "A" }], rows: new Map(rows.map((r) => [`A|${DAY}|day`, r])) };
+  assert.equal(sunRange(polar, DAY), null);
 });
 
 test("values and labels per layer", () => {
