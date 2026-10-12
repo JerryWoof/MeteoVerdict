@@ -1,12 +1,12 @@
 """Rank models with bootstrap confidence intervals (roadmap 2.5).
 
 For every level, region, window, variable and lead day (on the same fair station-days
-as ``meteoverdict.aggregate``), models are ranked by MAE. To tell real differences from
-luck we resample **whole days** with replacement (all stations and models of a day stay
-together, because forecast errors on one day are correlated across stations) and
-recompute every model's MAE. A model is ``tied_with_best`` when the 95 % interval of
-its MAE minus the best model's MAE includes 0. The best model is a clear winner only
-when no other model is tied with it.
+and okres pools as ``meteoverdict.aggregate``), models are ranked by MAE. To tell real
+differences from luck we resample **whole days** with replacement (all stations and
+models of a day stay together, because forecast errors on one day are correlated across
+stations) and recompute every model's MAE. A model is ``tied_with_best`` when the 95 %
+interval of its MAE minus the best model's MAE includes 0. The best model is a clear
+winner only when no other model is tied with it.
 
 The mean of all models (``blend``, roadmap 5.3) is not ranked (``rank`` null): its
 difference and interval are relative to the best single model, so a ``diff_ci_high``
@@ -94,12 +94,13 @@ def rank(
     first_day, last_day = aggregate.date_span(scores)
     as_of = as_of or last_day
     info = aggregate.station_info(stations)
+    distance = aggregate.okres_distances(stations)
     rows = []
     for window in windows:
         _, days = aggregate.window_days(window, as_of, first_day)
         in_window = scores.filter(days).join(info, on="station_id", how="inner")
         for level in aggregate.LEVELS:
-            regions = in_window.with_columns(aggregate.region_columns(level))
+            regions = aggregate.with_regions(in_window, level, distance)
             daily = (
                 aggregate.common_days(regions, by="region")
                 .group_by("region", "variable", "lead_day", "date", "model")
