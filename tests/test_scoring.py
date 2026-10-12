@@ -75,3 +75,28 @@ def test_scores_add_up_to_the_metrics_of_all_pairs():
     )
     # hours ending 01:00 … 24:00: observed 1, 2, 0, 1, 2, 0, …; forecast 1 → |errors| 0, 1, 1
     assert rain["mae"][0] == pytest.approx(16 / 24)
+
+
+def test_climatological_day_includes_rain_gauges():
+    times = hours(49)  # automatic station "s": complete 06-06 window of 1 September
+    gauge_end = START + timedelta(days=1, hours=6)
+    gauge = pl.DataFrame(
+        [("g", gauge_end, "precipitation_24h", 6.0, 0, "recent")], schema=OBS_SCHEMA, orient="row"
+    )
+    fc = pl.concat(
+        [
+            forecasts(times, rain=0.25),
+            forecasts(times, rain=0.25).with_columns(station_id=pl.lit("g")),
+        ]
+    )
+    table = scoring.daily_scores(
+        pl.concat([observations(times), gauge]), fc, MODELS, date(2026, 9, 1), date(2026, 9, 2)
+    )
+    rows = table.filter(pl.col("variable") == "precipitation_24h").sort("station_id")
+    assert rows["date"].to_list() == [date(2026, 9, 1)] * 2
+    assert rows["station_id"].to_list() == ["g", "s"]
+    assert set(rows["period_h"]) == {24} and set(rows["n"]) == {1}
+    # forecast 6 mm everywhere; gauge observed 6 mm, station 24 mm
+    assert rows["sum_err"].to_list() == pytest.approx([0.0, -18.0])
+    assert [rows[c][0] for c in metrics.counts_columns(5.0)] == [1, 0, 0, 0]
+    assert [rows[c][1] for c in metrics.counts_columns(5.0)] == [1, 0, 0, 0]
