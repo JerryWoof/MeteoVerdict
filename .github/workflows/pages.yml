@@ -1,0 +1,80 @@
+name: Pages
+
+# Build the web map (web/) with the latest scores and publish it on GitHub Pages.
+# Runs after the daily update, on changes to the map, and by hand. Until Pages is
+# enabled for the repository (Settings → Pages → Source: GitHub Actions) it only
+# builds and says so, instead of failing.
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", "src/meteoverdict/data/*.geojson", ".github/workflows/pages.yml"]
+  workflow_run:
+    workflows: [Daily]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build the map
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    outputs:
+      enabled: ${{ steps.pages.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Is GitHub Pages enabled?
+        id: pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" --silent 2>/dev/null; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::GitHub Pages is not enabled (Settings → Pages → Source: GitHub Actions); building without deploying."
+          fi
+      - name: Full scores (okres and station levels) from the release data-latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release download data-latest --pattern site-data.zip --dir /tmp 2>/dev/null; then
+            unzip -o -q /tmp/site-data.zip -d site/data
+          else
+            echo "no published scores yet; the map shows the boundaries only"
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+          npm run build
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.pages.outputs.enabled == 'true'
+        with:
+          path: web/dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    if: needs.build.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
