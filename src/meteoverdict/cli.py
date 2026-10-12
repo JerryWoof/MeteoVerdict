@@ -17,6 +17,7 @@ from meteoverdict import (
     aggregate,
     aladin,
     blend,
+    combine,
     forecasts,
     gauges,
     observations,
@@ -407,6 +408,7 @@ def _publish_aggregates(
     written = [
         *aggregate.write_json(table, out, meta),
         aggregate.write_stations(station_table, out),
+        *combine.write_forecast(table, out),
     ]
     if table.height:
         last = table["to"].max()
