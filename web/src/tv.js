@@ -106,10 +106,38 @@ export function colorFor(value, layer) {
   return hex(ramp.at(-1)[1]);
 }
 
-/** Symbol image name: clear and partly cloudy skies get a moon at night. */
-export function iconName(symbol, part) {
+// the hours of each part of the day, Prague time
+const PART_HOURS = { night: [0, 6], morning: [6, 12], afternoon: [12, 18], evening: [18, 24] };
+
+const minutes = (hhmm) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm ?? "");
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+};
+
+/**
+ * Whether a part of the day is dark: more than half of its hours between sunset and
+ * sunrise ("HH:MM" from sun, e.g. a row). In October the evening is dark, in June it
+ * is not. Without sun times only "night" is; the whole "day" never is.
+ */
+export function isNightPart(part, sun) {
+  const hours = PART_HOURS[part];
+  if (!hours) return false;
+  const rise = minutes(sun?.sunrise);
+  const set = minutes(sun?.sunset);
+  if (rise == null || set == null || rise >= set) return part === "night";
+  const [start, end] = hours.map((h) => h * 60);
+  const overlap = (a, b) => Math.max(0, Math.min(end, b) - Math.max(start, a));
+  const dark = overlap(0, rise) + overlap(set, 24 * 60);
+  return dark > (end - start) / 2;
+}
+
+/**
+ * Symbol image name: clear and partly cloudy skies and showers get a moon when the part
+ * is dark (see isNightPart; sun is {sunrise, sunset}, e.g. the row itself).
+ */
+export function iconName(symbol, part, sun) {
   if (!symbol) return "";
-  const dark = part === "night";
+  const dark = isNightPart(part, sun);
   if (dark && (symbol === "clear" || symbol === "partly" || symbol === "showers")) return `${symbol}-night`;
   return symbol;
 }
