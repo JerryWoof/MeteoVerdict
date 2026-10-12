@@ -65,17 +65,32 @@ def test_windows():
         agg.window_start("year", DAY, DAY)
 
 
-def test_only_days_every_model_has_are_compared():
+def test_only_days_every_covering_model_has_are_compared():
+    yesterday = DAY - timedelta(days=1)
+    scores = score_rows(
+        [
+            (yesterday, "s1", "a", 1, 1.0),
+            (yesterday, "s1", "b", 1, 2.0),
+            (DAY, "s1", "a", 1, 9.0),  # model b covers s1 but lacks this day: dropped for a too
+        ]
+    )
+    table = agg.aggregate(scores, STATIONS, windows=("all",))
+    cz = table.filter(pl.col("level") == "cz").select("model", "n", "mae", "days").rows()
+    assert cz == [("a", 24, 1.0, 1), ("b", 24, 2.0, 1)]
+
+
+def test_a_model_that_never_reaches_a_station_does_not_remove_it():
+    # like ICON-D2 at the eastern tip: model b has no score at s3 at all
     scores = score_rows(
         [
             (DAY, "s1", "a", 1, 1.0),
             (DAY, "s1", "b", 1, 2.0),
-            (DAY, "s2", "a", 1, 9.0),  # model b has no score here: dropped for a too
+            (DAY, "s3", "a", 1, 3.0),
         ]
     )
     table = agg.aggregate(scores, STATIONS, windows=("all",))
-    cz = table.filter(pl.col("level") == "cz").select("model", "n", "mae", "stations").rows()
-    assert cz == [("a", 24, 1.0, 1), ("b", 24, 2.0, 1)]
+    cz = table.filter(pl.col("level") == "cz").select("model", "stations", "mae").rows()
+    assert cz == [("a", 2, 2.0), ("b", 1, 2.0)]
 
 
 def test_common_days_are_per_lead_day():
