@@ -8,7 +8,7 @@ import { setUpLanguage } from "./i18n.js";
 import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, colorFor, currentPart, dayLabel, displayName, ease,
   iconName, labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView,
-  placeMarkers, playSequence, rowFor, summary, today, viewHash,
+  placeMarkers, playSteps, rowFor, startIndex, summary, today, viewHash,
 } from "./tv.js";
 
 setWorkerUrl(workerUrl);
@@ -59,7 +59,7 @@ const symbolText = (symbol) => (symbol ? t(`symbol.${symbol}`) : "");
 
 // --- state, kept in the URL (tv.js parseView / viewHash) ----------------------------
 let state = { day: null, part: null, colour: "temperature", shown: [], okres: null };
-let playing = false;
+let playing = null; // "day" or "week" while playing
 
 function dayText(day) {
   const label = dayLabel(day, today(Date.now()), language);
@@ -100,9 +100,12 @@ function renderWhen(outlook) {
       return button;
     }),
   );
-  const play = document.getElementById("play");
-  play.textContent = playing ? t("tv.pause") : t("tv.play");
-  play.setAttribute("aria-pressed", String(Boolean(playing)));
+  for (const scope of ["day", "week"]) {
+    const button = document.getElementById(`play-${scope}`);
+    button.textContent = playing === scope ? t("tv.pause") : t(`tv.play.${scope}`);
+    button.setAttribute("aria-pressed", String(playing === scope));
+    button.title = t(`tv.playHint.${scope}`);
+  }
 }
 
 // --- what: values at the markers and the map colour (box on the map) ------------------
@@ -263,7 +266,15 @@ function renderHeadline(outlook) {
   if (shown("precipitation")) lines.push(line("precipitation", t("tv.rainy", { n: s.rainy, of: s.okresy })));
   if (shown("wind")) lines.push(line("wind", t("tv.windiest", { okres: displayName(s.windiest.name), value: fmt(s.windiest.value) })));
   if (shown("cloud")) lines.push(line("cloud", t("tv.clearIn", { n: s.clear, of: s.okresy })));
-  box.replaceChildren(element("h2", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`), ...lines);
+  const heading = element("h2", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`);
+  const children = [heading, ...lines];
+  if (playing && RAMPS[state.colour]) {
+    // while playing the map colour changes every round: say which one it is
+    const badge = element("p", null, "playing");
+    badge.append(glyph(state.colour), element("span", t("tv.mapShows", { layer: t(`layer.${state.colour}`) })));
+    children.splice(1, 0, badge);
+  }
+  box.replaceChildren(...children);
 }
 
 // --- okres panel ------------------------------------------------------------------
@@ -373,18 +384,20 @@ function update(change = {}, fromPlay = false) {
   fitView();
 }
 
-// --- play: smooth transitions, morning to evening, day after day ---------------------
+// --- play: smooth transitions through the parts of a day (or of every day), each
+// round with the next map colour -----------------------------------------------------
 const TRANSITION_MS = 1100;
-const HOLD_MS = 1300;
+const HOLD_MS = 1400;
 let playToken = 0;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function stopPlay() {
   if (!playing) return;
-  playing = false;
+  playing = null;
   playToken += 1;
   renderWhen(outlook);
+  renderHeadline(outlook);
 }
 
 /** Move to `target` (a part of state), interpolating colours and values; false if stopped. */
@@ -414,32 +427,37 @@ async function transition(target, token) {
   return true;
 }
 
-async function play() {
-  playing = true;
+/**
+ * Play the parts of the shown day ("day") or of every day ("week"), from the part shown
+ * now; after each round start again with the next map colour (temperature → rain →
+ * wind → cloud → temperature), which is then also shown at the okresy.
+ */
+async function play(scope) {
+  stopPlay();
+  playing = scope;
   const token = ++playToken;
-  renderWhen(outlook);
   const chosen = state.shown;
-  let steps = playSequence(outlook, state.day, state.part);
-  if (steps.length < 2) steps = playSequence(outlook, outlook.days[0], "morning");
-  if (!(await transition(steps[0], token))) return;
+  const steps = playSteps(outlook, scope, state.day);
+  if (steps.length === 0) return stopPlay();
+  let i = startIndex(steps, state.day, state.part);
+  renderWhen(outlook);
+  if (!(await transition(steps[i], token))) return;
   for (;;) {
-    for (const step of steps.slice(1)) {
-      await sleep(HOLD_MS);
-      if (token !== playToken || !(await transition(step, token))) return;
-    }
-    // a round is over: start again, the map coloured by the next value, which is also
-    // shown at the okresy
     await sleep(HOLD_MS);
-    steps = playSequence(outlook, outlook.days[0], "morning");
-    const colour = nextColour(state.colour);
-    const shown = LAYERS.filter((l) => chosen.includes(l) || l === colour);
-    if (token !== playToken || !(await transition({ ...steps[0], colour, shown }, token))) return;
+    if (token !== playToken) return;
+    i += 1;
+    let target = steps[i % steps.length];
+    if (i % steps.length === 0) {
+      const colour = nextColour(state.colour);
+      target = { ...target, colour, shown: LAYERS.filter((l) => chosen.includes(l) || l === colour) };
+    }
+    if (!(await transition(target, token))) return;
   }
 }
 
-function togglePlay() {
-  if (playing) stopPlay();
-  else play();
+function togglePlay(scope) {
+  if (playing === scope) stopPlay();
+  else play(scope);
 }
 
 function addLayers() {
@@ -482,7 +500,8 @@ async function main() {
   // phones: the box starts folded so the map stays visible
   const show = document.getElementById("show");
   if (window.innerWidth <= 700) show.open = false;
-  document.getElementById("play").addEventListener("click", togglePlay);
+  document.getElementById("play-day").addEventListener("click", () => togglePlay("day"));
+  document.getElementById("play-week").addEventListener("click", () => togglePlay("week"));
   await mapLoaded;
   addLayers();
   buildMarkers(outlook);
