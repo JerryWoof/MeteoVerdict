@@ -1,7 +1,7 @@
 """Data quality checks that fail loudly (roadmap 3.3).
 
 ``mvd check`` runs after the daily pipeline; any error makes the workflow fail (GitHub
-then notifies the owner) and stops the leaderboard commit. Warnings are reported only.
+then notifies the owner) and stops the daily commit. Warnings are reported only.
 
 * stale data: newest observation older than ``MAX_OBS_AGE_H`` hours, newest forecast or
   score older than ``MAX_FC_AGE_DAYS`` days (complete backfill windows lag up to 14);
