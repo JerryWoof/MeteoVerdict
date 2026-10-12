@@ -9,6 +9,7 @@ import {
 } from "./forecast.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
+import { dayLabel, today } from "./tv.js";
 
 const t = setUpLanguage();
 const TIME_ZONE = "Europe/Prague";
@@ -52,13 +53,16 @@ function renderDays(days) {
   for (const key of ["day", "tmin", "tmax", "precipitation", "wind"]) {
     head.append(cell("th", t(`forecast.col.${key}`), key === "day" ? "" : "num"));
   }
-  const dateFormat = new Intl.DateTimeFormat(document.documentElement.lang, {
-    weekday: "short", day: "numeric", month: "numeric", timeZone: "UTC",
-  });
+  // "Today 10/12", "Tomorrow 10/13", "Wednesday 10/14", as on the forecast map
+  const language = document.documentElement.lang;
+  const dayText = (day) => {
+    const label = dayLabel(day, today(Date.now()), language);
+    return `${label.key ? t(label.key) : label.name} ${label.short}`;
+  };
   const rows = days.map((d) => {
     const tr = document.createElement("tr");
     tr.append(
-      cell("td", dateFormat.format(Date.parse(`${d.day}T12:00Z`))),
+      cell("td", dayText(d.day)),
       cell("td", fmt(d.tmin), "num"),
       cell("td", fmt(d.tmax), "num"),
       cell("td", fmt(d.precipitation), "num"),
