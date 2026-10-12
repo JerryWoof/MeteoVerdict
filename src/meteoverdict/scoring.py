@@ -13,6 +13,8 @@ One row per day, station, model, lead day and variable with the additive sums of
 * ``precipitation_24h``: the 06-06 UTC total (``period_h`` 24) of ČHMÚ's climatological
   day, from the manual rain gauges and the automatic stations; ``date`` is the day the
   window starts. Same sums and counts as ``precipitation_daily``.
+
+The mean of all models (``meteoverdict.blend``) is scored as one more model, ``blend``.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ from datetime import date, timedelta
 
 import polars as pl
 
-from meteoverdict import align, metrics
+from meteoverdict import align, blend, metrics
 from meteoverdict.models import Model
 
 KEYS = ["date", "station_id", "model", "lead_day", "variable"]
@@ -34,7 +36,12 @@ def daily_scores(
     start: date,
     end: date,
     exclude_estimated: bool = False,
+    with_blend: bool = True,
 ) -> pl.DataFrame:
+    """Scores of ``models`` and, with ``with_blend``, of their mean (``blend``)."""
+    if with_blend:
+        forecasts = pl.concat([forecasts.lazy(), blend.forecasts(forecasts, models)])
+        models = [*models, blend.MODEL]
     pairs = align.pairs(observations, forecasts, models, exclude_estimated)
     one_hour = timedelta(hours=1)
     day = (
