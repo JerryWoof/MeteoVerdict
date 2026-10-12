@@ -115,6 +115,9 @@ header h1 a {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+#days .sun {
+  font-size: inherit;
+}
 #charts figure {
   margin: 1rem 0 0;
 }

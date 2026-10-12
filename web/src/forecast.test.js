@@ -3,9 +3,10 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  bestModel, bestPerLeadDay, combine, taper, winnersByLeadDay, dailySummary, forecastUrl, leadDay, localDay, parseForecast,
-  weightTable, weightedModels, weightsAt,
+  bestModel, bestPerLeadDay, combine, taper, winnersByLeadDay, dailySummary, forecastUrl, leadDay, localDay, localTime,
+  nightBands, parseForecast, weightTable, weightedModels, weightsAt,
 } from "./forecast.js";
+import { parseOutlook, sunFor } from "./tv.js";
 
 // real samples: the Open-Meteo Forecast API at Benešov's point (12 Oct 2026) and the
 // weights `mvd aggregate` wrote for okres Benešov from the published September scores
@@ -126,4 +127,36 @@ test("the best model can differ per lead day", () => {
   });
   const models = new Set(best.map((b) => b.model));
   assert.ok(models.size >= 2, "more than one model wins over six days");
+});
+
+test("local wall-clock time to UTC, across the end of summer time", () => {
+  assert.equal(localTime("2026-10-12", "07:17"), Date.parse("2026-10-12T05:17Z"));
+  assert.equal(localTime("2026-10-24", "18:00"), Date.parse("2026-10-24T16:00Z"));
+  // summer time ends at 03:00 on 25 Oct 2026
+  assert.equal(localTime("2026-10-25", "07:00"), Date.parse("2026-10-25T06:00Z"));
+  assert.equal(localTime("2026-01-05", "23:30"), Date.parse("2026-01-05T22:30Z"));
+});
+
+test("nights on the chart from the okres's sunrise and sunset in outlook.json", () => {
+  const outlook = parseOutlook(JSON.parse(readFileSync(new URL("./fixtures/outlook.json", import.meta.url))));
+  const start = FORECAST.times[0];
+  const end = FORECAST.times.at(-1);
+  const nights = nightBands((day) => sunFor(outlook, "CZ0201", day), start, end);
+  // the chart starts and ends at night: 6 days of outlook give 7 night bands
+  assert.equal(nights.length, 7);
+  assert.deepEqual(nights[0], { start, end: Date.parse("2026-10-12T05:17Z") });
+  assert.deepEqual(nights[1], { start: Date.parse("2026-10-12T16:16Z"), end: Date.parse("2026-10-13T05:19Z") });
+  assert.deepEqual(nights[6], { start: Date.parse("2026-10-17T16:06Z"), end });
+  for (const n of nights) assert.ok(n.start < n.end && n.start >= start && n.end <= end);
+});
+
+test("no sun times (older outlook files): no nights; one known day: its nights estimated", () => {
+  const start = Date.parse("2026-10-12T00:00Z");
+  const end = Date.parse("2026-10-14T23:00Z");
+  assert.deepEqual(nightBands(() => null, start, end), []);
+  const one = (day) => (day === "2026-10-13" ? { sunrise: "07:19", sunset: "18:14" } : null);
+  assert.deepEqual(nightBands(one, start, end), [
+    { start: Date.parse("2026-10-12T16:14Z"), end: Date.parse("2026-10-13T05:19Z") },
+    { start: Date.parse("2026-10-13T16:14Z"), end: Date.parse("2026-10-14T05:19Z") },
+  ]);
 });
