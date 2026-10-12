@@ -53,6 +53,7 @@ def test_one_row_per_day_station_model_lead_and_variable():
     # 24 mm observed, 0 forecast: a miss for both thresholds
     assert [daily[c] for c in metrics.counts_columns(5.0)] == [0, 0, 1, 0]
     assert [daily[c] for c in metrics.counts_columns(0.1)] == [0, 0, 1, 0]
+    assert [daily[c] for c in metrics.counts_columns(20.0)] == [0, 0, 1, 0]  # heavy rain
     # hourly rows carry no contingency counts
     assert got[(first, "temperature_2m")]["a_5"] is None
 
