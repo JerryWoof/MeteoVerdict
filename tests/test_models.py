@@ -109,3 +109,26 @@ def test_available_from_uses_per_variable_starts():
 def test_bad_variable_from_is_rejected(tmp_path, variable_from):
     with pytest.raises(ModelCatalogError, match="variable_from"):
         load_models(write(tmp_path, VALID + variable_from))
+
+
+@pytest.mark.parametrize(
+    ("model_id", "steps"),
+    [
+        ("chmi_aladin_cz_1km", [1, 1]),
+        ("dwd_icon_eu", [1, 1, 1, 3]),  # 3-hourly after 78 h
+        ("ecmwf_ifs", [1, 1, 1, 3, 3]),  # after 90 h
+        ("ncep_gfs_global", [1, 1, 1, 1, 3]),  # after 120 h
+        ("ukmo_global_deterministic_10km", [1, 1, 3, 3, 3]),  # after 54 h
+        ("ecmwf_aifs025_single", [6] * 5),
+    ],
+)
+def test_native_step_per_lead_day(model_id, steps):
+    model = next(m for m in load_models() if m.id == model_id)
+    assert [model.native_step(n) for n in model.lead_days] == steps
+
+
+def test_coarser_fields_go_together(tmp_path):
+    with pytest.raises(ModelCatalogError, match="go together"):
+        load_models(write(tmp_path, VALID + "    coarser_after_h: 24\n"))
+    with pytest.raises(ModelCatalogError, match="go together"):
+        load_models(write(tmp_path, VALID + "    coarser_after_h: 24\n    coarser_step_h: 2\n"))
