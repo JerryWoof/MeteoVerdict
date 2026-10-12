@@ -196,7 +196,13 @@ body.tv > * {
 .daytabs {
   display: flex;
   overflow-x: auto;
+  overflow-y: hidden;
   min-width: 0;
+  /* scrolls on narrow screens, without a scroll bar */
+  scrollbar-width: none;
+}
+.daytabs::-webkit-scrollbar {
+  display: none;
 }
 .daytab {
   display: flex;
@@ -206,7 +212,6 @@ body.tv > * {
   padding: 0.35rem 0.9rem 0.3rem;
   border: none;
   border-bottom: 3px solid transparent;
-  margin-bottom: -2px;
   background: none;
   font: inherit;
   color: #5b6670;
