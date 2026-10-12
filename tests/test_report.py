@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 
 import polars as pl
 import pytest
@@ -88,3 +88,25 @@ def test_replace_block_keeps_the_rest():
         report.replace_block("no markers", "new")
     with pytest.raises(ValueError):
         report.replace_block(f"{report.END}{report.START}", "new")
+
+
+def test_badge_turns_orange_when_scores_are_stale():
+    now = datetime(2026, 10, 12, 5, 30, tzinfo=UTC)
+    fresh = report.badge(now, date(2026, 10, 1))
+    assert fresh == {
+        "schemaVersion": 1,
+        "label": "last updated",
+        "message": "2026-10-12, scores to 2026-10-01",
+        "color": "brightgreen",
+    }
+    assert report.badge(now, date(2026, 9, 1))["color"] == "orange"
+    assert report.badge(now, None)["message"] == "2026-10-12"
+
+
+def test_leaderboard_says_when_it_was_updated():
+    block = report.leaderboard(
+        table([row("cz", "temperature_2m", "a", 1, 1.0, level="cz")]),
+        NAMES,
+        updated=datetime(2026, 10, 12, 5, 30, tzinfo=UTC),
+    )
+    assert "_Last updated 2026-10-12 05:30 UTC; scores up to 2026-09-30._" in block

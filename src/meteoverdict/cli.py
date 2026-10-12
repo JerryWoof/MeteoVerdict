@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -364,9 +365,15 @@ def _publish_aggregates(
     return table
 
 
-def _update_readme(aggregates_table: pl.DataFrame, readme_path: Path) -> None:
+def _update_readme(aggregates_table: pl.DataFrame, readme_path: Path, site: Path) -> None:
+    """Rewrite the README leaderboard and write ``site/badge.json``."""
     names = {m.id: m.name for m in catalogue.load_models()}
-    block = report_mod.leaderboard(aggregates_table, names)
+    now = datetime.now(UTC)
+    block = report_mod.leaderboard(aggregates_table, names, updated=now)
+    # the windows end on the last scored day
+    scored = aggregates_table["to"].max() if aggregates_table.height else None
+    site.mkdir(parents=True, exist_ok=True)
+    (site / "badge.json").write_text(json.dumps(report_mod.badge(now, scored)), encoding="utf-8")
     text = readme_path.read_text(encoding="utf-8")
     try:
         updated = report_mod.replace_block(text, block)
@@ -412,6 +419,7 @@ def report(
     readme_path: Annotated[Path, typer.Option("--readme-path", help="README to update.")] = Path(
         "README.md"
     ),
+    out: Annotated[Path, typer.Option(help="Folder for badge.json.")] = Path("site/data"),
 ) -> None:
     """Build the leaderboard from aggregated scores."""
     path = data_dir / "aggregates.parquet"
@@ -423,7 +431,7 @@ def report(
         names = {m.id: m.name for m in catalogue.load_models()}
         typer.echo(report_mod.leaderboard(table, names))
         return
-    _update_readme(table, readme_path)
+    _update_readme(table, readme_path, out)
 
 
 @app.command()
@@ -478,7 +486,7 @@ def daily(
         typer.echo("no scores yet; the leaderboard stays empty")
         return
     aggregates_table = _publish_aggregates(files, table, data_dir, out, None, resamples)
-    _update_readme(aggregates_table, readme_path)
+    _update_readme(aggregates_table, readme_path, out)
     if github_release:
         with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
             store.publish_latest(_release_store(client), data_dir, out)
