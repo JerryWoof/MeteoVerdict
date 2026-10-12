@@ -13,6 +13,7 @@ import typer
 
 from meteoverdict import (
     __version__,
+    aggregate,
     aladin,
     forecasts,
     observations,
@@ -343,6 +344,37 @@ def score(
         f"{table.height} score rows for {table['station_id'].n_unique()} stations and "
         f"{table['model'].n_unique()} models → {', '.join(str(p) for p in written) or 'nothing'}"
     )
+
+
+@app.command("aggregate")
+def aggregate_cmd(
+    data_dir: Annotated[Path, typer.Option(help="Folder with scores/.")] = Path("data"),
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    out: Annotated[Path, typer.Option(help="Folder for the JSON files.")] = Path("site/data"),
+    as_of: Annotated[
+        datetime | None,
+        typer.Option(
+            formats=["%Y-%m-%d"], help="Last day of the windows. Default: last scored day."
+        ),
+    ] = None,
+) -> None:
+    """Aggregate daily scores per station, okres, kraj, elevation class and Czechia."""
+    files = sorted((data_dir / "scores").glob("*.parquet"))
+    if not files:
+        typer.echo(f"mvd aggregate: no scores in {data_dir / 'scores'}; run `mvd score`", err=True)
+        raise typer.Exit(code=1)
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    table = aggregate.aggregate(
+        pl.scan_parquet(files), pl.read_parquet(stations_path), as_of.date() if as_of else None
+    )
+    table.write_parquet(data_dir / "aggregates.parquet", compression="zstd")
+    names = {m.id: m.name for m in catalogue.load_models()}
+    meta = aggregate.metadata(table, names, datetime.now(UTC))
+    written = aggregate.write_json(table, out, meta)
+    typer.echo(f"{table.height} rows, as of {meta['as_of']} → {len(written)} JSON files in {out}")
 
 
 @app.command()
