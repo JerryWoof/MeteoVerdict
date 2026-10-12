@@ -103,14 +103,14 @@ def date_span(scores: pl.LazyFrame) -> tuple[date, date]:
 
 
 def _sum_columns(columns: list[str]) -> list[pl.Expr]:
-    counts = [c for t in metrics.PRECIPITATION_THRESHOLDS for c in metrics.counts_columns(t)]
+    counts = [c for t in metrics.THRESHOLDS for c in metrics.counts_columns(t)]
     return [pl.col(c).sum() for c in (*metrics.SUMS, *counts) if c in columns]
 
 
 def _metrics(frame: pl.LazyFrame) -> pl.LazyFrame:
     frame = metrics.continuous_scores(frame)
     columns = set(frame.collect_schema().names())
-    for threshold in metrics.PRECIPITATION_THRESHOLDS:
+    for threshold in metrics.THRESHOLDS:
         if set(metrics.counts_columns(threshold)) <= columns:  # no daily rows, no counts
             frame = metrics.categorical_scores(frame, threshold)
     return frame
@@ -224,6 +224,7 @@ def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -
         "models": models,
         "min_stations": MIN_STATIONS,
         "precipitation_thresholds_mm": list(metrics.PRECIPITATION_THRESHOLDS),
+        "heat_thresholds_c": list(metrics.HEAT_THRESHOLDS),
         "fair_comparison": "per window, variable and lead day only station-days all models cover",
         "ranking": (
             "by MAE; tied_with_best when the 95 % bootstrap interval (days resampled) of the "
