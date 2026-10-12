@@ -1,7 +1,6 @@
 from datetime import UTC, date, datetime
 
 import polars as pl
-import pytest
 
 from meteoverdict import report
 
@@ -77,17 +76,6 @@ def test_too_few_stations_and_every_kraj_in_code_order():
 def test_no_scores_yet():
     empty = table([row("cz", "temperature_2m", "a", 1, 1.0)]).filter(pl.lit(False))
     assert "No scores yet" in report.leaderboard(empty, NAMES)
-
-
-def test_replace_block_keeps_the_rest():
-    readme = f"intro\n{report.START}\nold\n{report.END}\noutro\n"
-    assert (
-        report.replace_block(readme, "new") == f"intro\n{report.START}\nnew\n{report.END}\noutro\n"
-    )
-    with pytest.raises(ValueError):
-        report.replace_block("no markers", "new")
-    with pytest.raises(ValueError):
-        report.replace_block(f"{report.END}{report.START}", "new")
 
 
 def test_badge_turns_orange_when_scores_are_stale():

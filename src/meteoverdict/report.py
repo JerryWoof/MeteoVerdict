@@ -1,7 +1,6 @@
-"""README leaderboard (roadmap 3.1).
+"""Leaderboard as a Markdown table (roadmap 3.1; `mvd report`) and the README badge.
 
-The block between ``<!-- LEADERBOARD:START -->`` and ``<!-- LEADERBOARD:END -->`` in
-README.md is generated from ``data/aggregates.parquet``: one row per kraj (and Czechia),
+The table is built from ``data/aggregates.parquet``: one row per kraj (and Czechia),
 the best model per variable at one lead day over one window. Models that are not
 significantly worse than the best (``tied_with_best``) are listed with "≈".
 """
@@ -15,8 +14,6 @@ import polars as pl
 from meteoverdict import blend
 from meteoverdict.regions import load_kraje
 
-START = "<!-- LEADERBOARD:START -->"
-END = "<!-- LEADERBOARD:END -->"
 COLUMNS = {
     "temperature_2m": "Temperature (2 m)",
     "wind_speed_10m": "Wind (10 m)",
@@ -131,16 +128,3 @@ def leaderboard(
         "Table: CC BY-SA 4.0.",
     ]
     return "\n".join(lines)
-
-
-def replace_block(readme: str, block: str) -> str:
-    """Put ``block`` between the leaderboard markers, leaving the rest unchanged."""
-    if (
-        readme.count(START) != 1
-        or readme.count(END) != 1
-        or readme.index(START) > readme.index(END)
-    ):
-        raise ValueError("README must contain the leaderboard markers once, in order")
-    head, rest = readme.split(START)
-    _, tail = rest.split(END)
-    return f"{head}{START}\n{block}\n{END}{tail}"

@@ -1,8 +1,9 @@
+import json
 from datetime import UTC, date, datetime, timedelta
 
 import polars as pl
 
-from meteoverdict import daily, forecasts, observations, partitions, report
+from meteoverdict import daily, forecasts, observations, partitions
 from meteoverdict.cli import app
 from meteoverdict.models import load_models
 
@@ -46,7 +47,7 @@ def test_run_captures_observations_and_rescores(tmp_path, monkeypatch):
     assert months[-1] == "2026-10" and len(months) >= 4
 
 
-def test_daily_command_publishes_the_leaderboard(tmp_path, monkeypatch):
+def test_daily_command_publishes_the_scores_and_the_badge(tmp_path, monkeypatch):
     from typer.testing import CliRunner
 
     from meteoverdict import cli
@@ -74,17 +75,15 @@ def test_daily_command_publishes_the_leaderboard(tmp_path, monkeypatch):
         lambda client, ids, start, end: obs_rows(hours(start, (end - start).days + 1)),
     )
     write_forecasts(tmp_path, DAY - timedelta(days=5), 6)
-    readme = tmp_path / "README.md"
-    readme.write_text(f"# t\n{report.START}\nsoon\n{report.END}\n", encoding="utf-8")
     args = [
         "daily", "--date", "2026-10-11", "--stations", str(stations_file),
         "--data-dir", str(tmp_path), "--out", str(tmp_path / "site"),
-        "--readme-path", str(readme), "--resamples", "50",
+        "--resamples", "50",
     ]  # fmt: skip
     result = CliRunner().invoke(app, args)
     assert result.exit_code == 0, result.output
-    text = readme.read_text(encoding="utf-8")
-    assert "soon" not in text and "DWD ICON-D2" in text
+    badge = json.loads((tmp_path / "site" / "badge.json").read_text())
+    assert badge["label"] == "last updated"
     assert (tmp_path / "site" / "meta.json").exists()
     assert (tmp_path / "aggregates.parquet").exists()
 
