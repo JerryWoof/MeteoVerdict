@@ -120,3 +120,56 @@ def test_daily_precipitation_from_six_hour_periods():
     p = align.pairs(observations(times), forecasts(aifs.id, 2, times), [aifs])
     daily = align.daily_precipitation(p).collect()
     assert daily.select("date", "lead_day", "observed").rows() == [(date(2026, 9, 1), 2, 24.0)]
+
+
+# hours ending 07:00 on 1 Sept … 06:00 on 2 Sept: ČHMÚ's climatological day of 1 Sept
+WINDOW = hours(24, START + timedelta(hours=7))
+GAUGE_END = START + timedelta(days=1, hours=6)
+
+
+def gauge(value: float, time: datetime = GAUGE_END, quality: int = 0) -> pl.DataFrame:
+    row = ("s", time, "precipitation_24h", value, quality, "recent")
+    return pl.DataFrame([row], schema=OBS_SCHEMA, orient="row")
+
+
+def test_precipitation_24h_compares_a_gauge_with_the_06_06_forecast_sum():
+    icon = MODELS["dwd_icon_d2"]
+    fc = forecasts(icon.id, 1, hours(48))  # 0.5 mm every hour, more than the window
+    got = align.precipitation_24h(gauge(7.0), fc, [icon]).collect()
+    assert got.rows() == [("s", date(2026, 9, 1), icon.id, 1, 12.0, 7.0, 0)]
+
+
+def test_precipitation_24h_sums_hourly_observations_without_a_gauge():
+    icon = MODELS["dwd_icon_d2"]
+    obs = observations(hours(48))  # 1 mm every hour
+    got = align.precipitation_24h(obs, forecasts(icon.id, 1, hours(48)), [icon]).collect()
+    assert got.filter(pl.col("date") == date(2026, 9, 1))["observed"].to_list() == [24.0]
+    # 31 Aug and 2 Sept are incomplete within these 48 hours
+    assert got["date"].to_list() == [date(2026, 9, 1)]
+
+
+def test_precipitation_24h_prefers_the_gauge_value():
+    icon = MODELS["dwd_icon_d2"]
+    obs = pl.concat([observations(WINDOW), gauge(3.0)])
+    got = align.precipitation_24h(obs, forecasts(icon.id, 1, WINDOW), [icon]).collect()
+    assert got["observed"].to_list() == [3.0]
+
+
+def test_precipitation_24h_needs_all_24_forecast_hours():
+    icon = MODELS["dwd_icon_d2"]
+    fc = forecasts(icon.id, 1, WINDOW[1:])
+    assert align.precipitation_24h(gauge(7.0), fc, [icon]).collect().height == 0
+
+
+def test_precipitation_24h_works_for_six_hourly_models_and_listed_lead_days():
+    aifs = MODELS["ecmwf_aifs025_single"]
+    fc = pl.concat([forecasts(aifs.id, 2, WINDOW), forecasts(aifs.id, 9, WINDOW)])
+    got = align.precipitation_24h(gauge(7.0), fc, [aifs]).collect()
+    assert got.select("lead_day", "forecast").rows() == [(2, 12.0)]
+
+
+def test_precipitation_24h_can_exclude_estimated_values():
+    icon = MODELS["dwd_icon_d2"]
+    fc = forecasts(icon.id, 1, WINDOW)
+    got = align.precipitation_24h(gauge(7.0, quality=3), fc, [icon], exclude_estimated=True)
+    assert got.collect().height == 0
