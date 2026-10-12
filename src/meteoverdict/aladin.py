@@ -238,7 +238,13 @@ def archive(
     """Archive every run on the server that is not in ``store`` yet, oldest first."""
     result = ArchiveResult([], 0, [])
     for domain in domains:
-        for run in available_runs(client, domain):
+        try:
+            runs = available_runs(client, domain)
+        except httpx.HTTPError as exc:  # the other domain may still work
+            log(f"failed to list {domain.model} runs: {exc}")
+            result.failed.append(f"{domain.model} listing")
+            continue
+        for run in runs:
             tag, name = release_tag(run), archive_name(domain, run)
             if name in store.names(tag):
                 result.skipped += 1

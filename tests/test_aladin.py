@@ -154,3 +154,20 @@ def test_archive_skips_existing_and_keeps_going_on_failure(tmp_path, server_file
     failed = aladin.archive(broken, other, STATIONS, domains=(CZ,), log=lambda _: None)
     assert failed.failed == ["chmi_aladin_cz_1km_2026101100.parquet"]
     assert other.names("aladin-2026-10") == set()
+
+
+def test_listing_failure_of_one_domain_does_not_stop_the_other(tmp_path, server_files):
+    lambert = aladin.DOMAINS[1]
+    client, _ = mock_server(server_files)
+    broken = aladin.Domain(lambert.model, "Missing_Folder", lambert.prefix)
+
+    def handler(request):
+        if "Missing_Folder" in request.url.path:
+            return httpx.Response(503)
+        return client._transport.handle_request(request)
+
+    flaky = httpx.Client(transport=httpx.MockTransport(handler))
+    store = aladin.LocalStore(tmp_path)
+    result = aladin.archive(flaky, store, STATIONS, domains=(broken, CZ), log=lambda _: None)
+    assert result.failed == ["chmi_aladin_central_europe_2km listing"]
+    assert result.archived == ["chmi_aladin_cz_1km_2026101100.parquet"]
