@@ -8,7 +8,9 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     chunkSizeWarningLimit: 1200,
-    // two pages: the map and the model comparison
-    rollupOptions: { input: { map: "index.html", compare: "compare.html" } },
+    // three pages: the map, the model comparison and the forecast per okres
+    rollupOptions: {
+      input: { map: "index.html", compare: "compare.html", forecast: "forecast.html" },
+    },
   },
 });

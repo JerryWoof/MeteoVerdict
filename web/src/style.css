@@ -110,20 +110,35 @@ header h1 a {
   color: #5b6670;
   margin: 0 0 0.6rem;
 }
-#ranking {
+#ranking,
+#days,
+#weights {
   border-collapse: collapse;
   font-size: 0.85rem;
   width: 100%;
 }
 #ranking th,
-#ranking td {
+#ranking td,
+#days th,
+#days td,
+#weights th,
+#weights td {
   text-align: left;
   padding: 0.25rem 0.5rem;
   border-bottom: 1px solid #ddd8cc;
 }
-#ranking .num {
+#ranking .num,
+#days .num,
+#days th.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+#charts figure {
+  margin: 1rem 0 0;
+}
+#charts figcaption {
+  font-weight: 600;
+  font-size: 0.9rem;
 }
 #ranking tr.baseline {
   color: #5b6670;
