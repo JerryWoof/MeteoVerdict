@@ -136,6 +136,33 @@ export function summary(outlook, day, part) {
   };
 }
 
+// --- sunrise and sunset ("HH:MM", Prague time, the same on every row of a day; older
+// outlook files have neither) --------------------------------------------------------
+
+/** Sunrise and sunset of an okres on a day: {sunrise, sunset}, or null without them. */
+export function sunFor(outlook, okres, day) {
+  const row = PARTS.map((part) => rowFor(outlook, okres, day, part)).find((r) => r?.sunrise && r?.sunset);
+  return row ? { sunrise: row.sunrise, sunset: row.sunset } : null;
+}
+
+/**
+ * Sunrise and sunset over all okresy on a day, earliest and latest:
+ * {sunrise: ["07:03", "07:28"], sunset: ["17:59", "18:23"]}, or null without them.
+ * "HH:MM" strings sort as times.
+ */
+export function sunRange(outlook, day) {
+  const times = outlook.okresy.map((o) => sunFor(outlook, o.code, day)).filter(Boolean);
+  if (times.length === 0) return null;
+  const range = (key) => {
+    const sorted = times.map((s) => s[key]).sort();
+    return [sorted[0], sorted.at(-1)];
+  };
+  return { sunrise: range("sunrise"), sunset: range("sunset") };
+}
+
+/** "07:03–07:28", or one time when earliest and latest are the same. */
+export const rangeText = ([first, last]) => (first === last ? first : `${first}–${last}`);
+
 /** The part of day it is now in Prague ("night" before 6, …). */
 export function currentPart(now) {
   const hour = Number.parseInt(

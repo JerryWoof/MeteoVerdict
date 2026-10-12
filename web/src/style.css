@@ -180,6 +180,8 @@ body.tv > * {
   display: none;
 }
 .daytab {
+  /* never squeezed: the row scrolls instead */
+  flex: none;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -200,6 +202,33 @@ body.tv > * {
 .daytab small {
   font-size: 0.75rem;
   white-space: nowrap;
+}
+/* sunrise and sunset: in the day tabs and the okres panel */
+.sun {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #5b6670;
+}
+.sun .glyph + span + .glyph {
+  margin-left: 0.35rem;
+}
+/* in a day tab sunrise and sunset each get a line */
+.daytab .sun {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0 0.2rem;
+  margin-top: 0.1rem;
+}
+.daytab .sun .glyph + span + .glyph {
+  margin-left: 0;
+}
+#okres-panel .facts .sun {
+  font-size: 0.85rem;
+  vertical-align: -0.1em;
 }
 .daytab[aria-pressed="true"] {
   border-bottom-color: #c0392b;
