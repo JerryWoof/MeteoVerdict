@@ -3,7 +3,10 @@
 #
 # id               value for the Open-Meteo `models=` parameter
 # grid             spatial resolution, per the Open-Meteo model docs
-# step_hours       finest output step; some models get coarser at longer lead times (see note)
+# step_hours       finest output step
+# coarser_after_h  optional: after this forecast hour the output step becomes coarser_step_h
+# coarser_step_h   (both from the Open-Meteo model docs). Open-Meteo interpolates the
+#                  hours in between, so scoring uses only native hours (meteoverdict.align).
 # forecast_days    forecast length per the Open-Meteo docs
 # max_lead_day     last N with `_previous_dayN` filled, measured live (Sept 2026); capped at 5.
 #                  Usually one day less than the forecast length.
@@ -49,22 +52,25 @@ models:
     provider: DWD
     grid: 0.0625° (~7 km)
     step_hours: 1
+    coarser_after_h: 78
+    coarser_step_h: 3
     forecast_days: 5
     max_lead_day: 4
     archive_from: 2024-01-19
     enabled: true
-    note: hourly up to 78 h, then 3-hourly
 
   - id: ecmwf_ifs
     name: ECMWF IFS HRES 9 km
     provider: ECMWF
     grid: 9 km
     step_hours: 1
+    coarser_after_h: 90
+    coarser_step_h: 3
     forecast_days: 15
     max_lead_day: 5
     archive_from: 2025-10-01
     enabled: true
-    note: hourly up to 90 h; T2m only ~70-80 % filled in 2026-03/04, wind 81-83 % in 2026-04/05
+    note: T2m only ~70-80 % filled in 2026-03/04, wind 81-83 % in 2026-04/05
 
   - id: ecmwf_ifs025
     name: ECMWF IFS 0.25°
@@ -93,6 +99,8 @@ models:
     provider: NOAA NCEP
     grid: 0.11° (~13 km)
     step_hours: 1
+    coarser_after_h: 120
+    coarser_step_h: 3
     forecast_days: 16
     max_lead_day: 5
     archive_from: 2024-01-19
@@ -104,11 +112,13 @@ models:
     provider: UK Met Office
     grid: 0.09° (~10 km)
     step_hours: 1
+    coarser_after_h: 54
+    coarser_step_h: 3
     forecast_days: 7
     max_lead_day: 5
     archive_from: 2024-08-08
     enabled: true
-    note: hourly up to 54 h, then 3-hourly; large gaps, only 75-84 % of hours filled
+    note: large gaps, only 75-84 % of hours filled
 
   - id: meteofrance_arpege_europe
     name: Météo-France ARPEGE Europe
