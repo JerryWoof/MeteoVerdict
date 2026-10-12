@@ -19,6 +19,7 @@ from meteoverdict import (
     partitions,
     regions,
     stations,
+    store,
 )
 from meteoverdict import models as catalogue
 from meteoverdict.chmi import ChmiFormatError, fetch_current_meta
@@ -160,6 +161,42 @@ def archive_aladin(
     )
     if result.failed:
         raise typer.Exit(code=1)
+
+
+store_app = typer.Typer(help="Raw data store in GitHub Releases (data-YYYY-MM).")
+app.add_typer(store_app, name="store")
+DataDir = Annotated[Path, typer.Option(help="Folder with obs/ and fc/ subfolders.")]
+
+
+def _release_store(client: httpx.Client) -> GitHubReleaseStore:
+    token, repo = os.environ.get("GITHUB_TOKEN"), os.environ.get("GITHUB_REPOSITORY")
+    if not token or not repo:
+        raise typer.BadParameter("needs GITHUB_TOKEN and GITHUB_REPOSITORY in the environment")
+    return GitHubReleaseStore(client, repo, token, notes=store.RELEASE_NOTES)
+
+
+@store_app.command("upload")
+def store_upload(data_dir: DataDir = Path("data")) -> None:
+    """Upload monthly obs/fc files that differ from what is stored."""
+    with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
+        done = store.upload(_release_store(client), data_dir, log=typer.echo)
+    typer.echo(f"uploaded {len(done)} files")
+
+
+@store_app.command("download")
+def store_download(
+    first: Annotated[str, typer.Option("--from", help="First month, YYYY-MM.")],
+    last: Annotated[str | None, typer.Option("--to", help="Last month. Default: --from.")] = None,
+    data_dir: DataDir = Path("data"),
+) -> None:
+    """Download stored monthly obs/fc files that are missing or different locally."""
+    try:
+        months = store.month_range(first, last or first)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
+        done = store.download(_release_store(client), data_dir, months, log=typer.echo)
+    typer.echo(f"downloaded {len(done)} files")
 
 
 @app.command("models")
