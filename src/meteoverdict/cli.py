@@ -635,6 +635,11 @@ def backfill(
         f"{result.windows_done} windows done, {budget.used:g} calls used"
         + (f"; stopped: {result.stopped} (run again to continue)" if result.stopped else "")
     )
+    job_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if job_summary:  # shown on the workflow run page
+        text = backfill_mod.summary(result, budget.used, data_dir, first, last)
+        with open(job_summary, "a", encoding="utf-8") as f:
+            f.write(text)
 
 
 def main() -> None:
