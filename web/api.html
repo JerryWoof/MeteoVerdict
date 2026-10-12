@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>meteoverdict: open data</title>
+    <meta name="description" content="Free JSON and CSV files per okres: our combined forecast and the ranking of the weather models." />
+  </head>
+  <body class="page">
+    <header>
+      <h1><a href="./">meteoverdict</a></h1>
+      <p id="status">Loading…</p>
+      <a href="./" data-i18n="page.map">Map</a>
+      <a href="tv.html" data-i18n="page.tv">Forecast</a>
+      <a href="compare.html" data-i18n="page.compare">Compare models</a>
+      <button type="button" id="language">Česky</button>
+    </header>
+    <main class="content">
+      <h2 data-i18n="api.title">Open data</h2>
+      <p data-i18n="api.intro"></p>
+      <p data-i18n="api.when"></p>
+
+      <h2 data-i18n="api.try">Your okres</h2>
+      <p><label><span data-i18n="control.okres">Okres</span> <select id="okres"></select></label></p>
+      <ul id="links"></ul>
+      <pre id="preview" class="code"></pre>
+
+      <h2 data-i18n="api.files">Files</h2>
+      <div class="scroll">
+        <table id="files" class="doc-table">
+          <tr><th data-i18n="api.file">File</th><th data-i18n="api.contains">Contains</th></tr>
+          <tr><td><code>api/v1/index.json</code></td><td data-i18n="api.fileIndex"></td></tr>
+          <tr><td><code>api/v1/okresy/{code}.json</code></td><td data-i18n="api.fileJson"></td></tr>
+          <tr><td><code>api/v1/okresy/{code}.csv</code></td><td data-i18n="api.fileCsv"></td></tr>
+        </table>
+      </div>
+
+      <h2 data-i18n="api.fields">What is in an okres file</h2>
+      <div class="scroll">
+        <table class="doc-table">
+          <tr><th data-i18n="api.field">Field</th><th data-i18n="api.meaning">Meaning</th></tr>
+          <tr><td><code>okres</code></td><td data-i18n="api.fOkres"></td></tr>
+          <tr><td><code>forecast.hourly</code></td><td data-i18n="api.fHourly"></td></tr>
+          <tr><td><code>forecast.parts</code></td><td data-i18n="api.fParts"></td></tr>
+          <tr><td><code>models.variables</code></td><td data-i18n="api.fModels"></td></tr>
+          <tr><td><code>licence</code>, <code>attribution</code></td><td data-i18n="api.fLicence"></td></tr>
+        </table>
+      </div>
+
+      <h2 data-i18n="api.examples">Examples</h2>
+      <pre class="code">curl -s https://jerrywoof.github.io/meteoverdict/api/v1/okresy/CZ0201.json</pre>
+      <pre class="code">import json, urllib.request
+
+url = "https://jerrywoof.github.io/meteoverdict/api/v1/okresy/CZ0201.json"
+okres = json.load(urllib.request.urlopen(url))
+hourly = okres["forecast"]["hourly"]
+for time, temp in zip(hourly["time"][:6], hourly["temperature_2m"][:6]):
+    print(time, temp, "°C")</pre>
+      <pre class="code">const url = "https://jerrywoof.github.io/meteoverdict/api/v1/okresy/CZ0201.json";
+const okres = await (await fetch(url)).json();
+const best = okres.models.variables.temperature_2m.lead_days[1][0];
+console.log(`best model for tomorrow's temperature: ${best.name}`);</pre>
+      <pre class="code">=IMPORTDATA("https://jerrywoof.github.io/meteoverdict/api/v1/okresy/CZ0201.csv")</pre>
+
+      <h2 data-i18n="api.terms">Terms</h2>
+      <p data-i18n="api.licence"></p>
+      <p data-i18n="api.fair"></p>
+      <p data-i18n="api.caveats"></p>
+    </main>
+    <footer>
+      <span data-i18n="footer.observations">Observations</span>:
+      <a href="https://opendata.chmi.cz/">ČHMÚ</a> (CC BY 4.0) ·
+      <span data-i18n="footer.forecasts">Forecasts</span>:
+      <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0; UK Met Office CC BY-SA 4.0) ·
+      <span data-i18n="footer.boundaries">Boundaries</span>: ČÚZK (CC BY 4.0) ·
+      <span data-i18n="footer.scores">Scores</span>: CC BY-SA 4.0 ·
+      <a href="https://github.com/JerryWoof/meteoverdict/blob/main/docs/open-data.md" data-i18n="footer.method">Source and method</a>
+    </footer>
+    <script type="module" src="/src/api-page.js"></script>
+  </body>
+</html>
