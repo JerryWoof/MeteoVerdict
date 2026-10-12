@@ -227,7 +227,9 @@ def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -
         "fair_comparison": "per window, variable and lead day only station-days all models cover",
         "ranking": (
             "by MAE; tied_with_best when the 95 % bootstrap interval (days resampled) of the "
-            "MAE difference to the best model contains 0; clear_winner when nobody is tied"
+            "MAE difference to the best model contains 0; clear_winner when nobody is tied; "
+            "the blend (mean of all models) is not ranked, its difference and interval are "
+            "relative to the best single model"
         ),
         "licence": "CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/",
         "attribution": (

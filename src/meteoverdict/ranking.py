@@ -8,6 +8,10 @@ recompute every model's MAE. A model is ``tied_with_best`` when the 95 % interva
 its MAE minus the best model's MAE includes 0. The best model is a clear winner only
 when no other model is tied with it.
 
+The mean of all models (``blend``, roadmap 5.3) is not ranked (``rank`` null): its
+difference and interval are relative to the best single model, so a ``diff_ci_high``
+below 0 means the blend beats every model in that group.
+
 Ranked variables: ``temperature_2m``, ``wind_speed_10m``, ``precipitation_daily`` and
 ``precipitation_24h`` (hourly precipitation is left out because its periods differ
 between models).
@@ -21,7 +25,7 @@ from datetime import date
 import numpy as np
 import polars as pl
 
-from meteoverdict import aggregate
+from meteoverdict import aggregate, blend
 
 RANKED_VARIABLES = (
     "temperature_2m",
@@ -50,17 +54,23 @@ RANK_SCHEMA = {
 
 
 def bootstrap_group(
-    abs_err: np.ndarray, n: np.ndarray, rng: np.random.Generator, resamples: int = RESAMPLES
+    abs_err: np.ndarray,
+    n: np.ndarray,
+    rng: np.random.Generator,
+    resamples: int = RESAMPLES,
+    ranked: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """MAE ranking with intervals for one group.
 
     ``abs_err`` and ``n`` are days x models (sums over the group's stations per day).
     Returns per model: the order (0 = best), the MAE difference to the best and the
-    lower/upper bounds of its interval as a 2 x models array.
+    lower/upper bounds of its interval as a 2 x models array. Columns where ``ranked``
+    is false (the blend) are compared with the best ranked model and ordered last.
     """
     days = abs_err.shape[0]
     mae = abs_err.sum(axis=0) / n.sum(axis=0)
-    order = np.argsort(mae, kind="stable")
+    ranked = np.ones(mae.shape, dtype=bool) if ranked is None else ranked
+    order = np.argsort(np.where(ranked, mae, np.inf), kind="stable")
     best = order[0]
     weights = rng.multinomial(days, np.full(days, 1 / days), size=resamples)  # resamples x days
     boot = (weights @ abs_err) / (weights @ n)  # resamples x models
@@ -101,6 +111,9 @@ def rank(
                 abs_err = part.pivot(on="model", index="date", values="sum_abs_err").sort("date")
                 n = part.pivot(on="model", index="date", values="n").sort("date")
                 models = [c for c in abs_err.columns if c != "date"]
+                ranked = np.array([m != blend.ID for m in models])
+                if not ranked.any():
+                    continue
                 a = abs_err.select(models).to_numpy().astype(float)
                 m = n.select(models).to_numpy().astype(float)
                 if len(models) == 1:
@@ -109,17 +122,18 @@ def rank(
                     # a group's resamples depend only on the seed and the group itself
                     key = f"{level}|{region}|{window}|{variable}|{lead_day}".encode()
                     rng = np.random.default_rng([seed, zlib.crc32(key)])
-                    order, diff, bounds = bootstrap_group(a, m, rng, resamples)
+                    order, diff, bounds = bootstrap_group(a, m, rng, resamples, ranked)
                 # interval of (model - best) contains 0; the best model is not "tied"
                 tied = (bounds[0] <= 0) & (bounds[1] >= 0) & (order.argsort() > 0)
-                clear = len(models) > 1 and not tied.any()
+                clear = ranked.sum() > 1 and not (tied & ranked).any()
                 for position, index in enumerate(order):
                     rows.append(
                         (
                             level, region, window, variable, lead_day, models[index],
-                            position + 1, float(diff[index]), float(bounds[0][index]),
-                            float(bounds[1][index]), bool(tied[index]),
-                            bool(position == 0 and clear),
+                            position + 1 if ranked[index] else None, float(diff[index]),
+                            float(bounds[0][index]), float(bounds[1][index]),
+                            bool(tied[index]), bool(position == 0 and clear),
                         )
                     )  # fmt: skip
-    return pl.DataFrame(rows, schema=RANK_SCHEMA, orient="row").sort([*GROUP, "rank"])
+    table = pl.DataFrame(rows, schema=RANK_SCHEMA, orient="row")
+    return table.sort([*GROUP, "rank"], nulls_last=True)
