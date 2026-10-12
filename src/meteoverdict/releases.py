@@ -42,6 +42,23 @@ class GitHubReleaseStore:
         self._ids[tag] = response.json()["id"]
         return self._ids[tag]
 
+    def tags(self, prefix: str = "") -> list[str]:
+        """Tags of all releases starting with ``prefix``."""
+        found: list[str] = []
+        page = 1
+        while True:
+            response = self.client.get(
+                f"{API}/repos/{self.repo}/releases",
+                headers=self.headers,
+                params={"per_page": 100, "page": page},
+            )
+            response.raise_for_status()
+            batch = response.json()
+            found += [r["tag_name"] for r in batch if r["tag_name"].startswith(prefix)]
+            if len(batch) < 100:
+                return sorted(found)
+            page += 1
+
     def assets(self, tag: str) -> dict[str, dict]:
         """Assets of the release ``tag`` by name (``id``, ``size``, ``label``, …)."""
         release = self._release_id(tag, create=False)

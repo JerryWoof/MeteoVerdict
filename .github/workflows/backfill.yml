@@ -17,7 +17,7 @@ permissions:
   contents: write # release assets
 
 concurrency:
-  group: backfill
+  group: data-pipeline # backfill and daily write the same release assets
   cancel-in-progress: false
 
 env:

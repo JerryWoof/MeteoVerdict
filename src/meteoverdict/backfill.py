@@ -1,9 +1,11 @@
 """Backfill history (roadmap 2.6): resumable, newest first, within the Open-Meteo quota.
 
 Work is split into 14-day windows counted from the first day (a window costs the same
-as a single day, so windows run across month boundaries). Windows are processed newest
-first. For each window: observations of its months (once per month), forecasts per
-model (``model|window start`` is the unit of progress), then the window's daily scores.
+as a single day, so windows run across month boundaries). Only complete windows (all 14
+days within the range) are processed, newest first; the newest, still incomplete window
+is picked up once its last day has passed. For each window: observations of its months
+(once per month), forecasts per model (``model|start|end`` is the unit of progress), then
+the window's daily scores.
 Progress is kept in a small JSON state file, so a run that stops at its call budget
 (or Open-Meteo's daily limit) continues where it left off next time.
 """
@@ -62,8 +64,19 @@ class Result:
     stopped: str = ""  # why the run stopped early, if it did
 
 
-def fc_key(model: Model, start: date) -> str:
-    return f"{model.id}|{start}"
+def fc_key(model: Model, start: date, end: date) -> str:
+    return f"{model.id}|{start}|{end}"
+
+
+def window_key(start: date, end: date) -> str:
+    return f"{start}|{end}"
+
+
+def complete_windows(first: date, last: date) -> list[tuple[date, date]]:
+    """14-day windows counted from ``first`` that end on or before ``last``."""
+    return [
+        (s, e) for s, e in forecasts.windows(first, last) if (e - s).days + 1 == forecasts.MAX_DAYS
+    ]
 
 
 def run(
@@ -79,8 +92,8 @@ def run(
 ) -> Result:
     state = State.load(data_dir / "backfill-state.json")
     result = Result()
-    for start, end in reversed(list(forecasts.windows(first, last))):
-        if str(start) in state.scored:
+    for start, end in reversed(complete_windows(first, last)):
+        if window_key(start, end) in state.scored:
             continue
         months = partitions.months(start, end)
         # the last day's daily precipitation also needs the next day's observations
@@ -107,7 +120,7 @@ def run(
             state.save()
         for model in models:
             model_start = max(start, model.archive_from)
-            if model_start > end or fc_key(model, start) in state.fc_done:
+            if model_start > end or fc_key(model, start, end) in state.fc_done:
                 continue
             try:
                 fc = forecasts.fetch_forecasts(client, points, [model], model_start, end, budget)
@@ -118,7 +131,7 @@ def run(
                 result.stopped = str(exc)
                 return result
             partitions.write_monthly(fc, data_dir / "fc", forecasts.KEYS)
-            state.fc_done.add(fc_key(model, start))
+            state.fc_done.add(fc_key(model, start, end))
             state.save()
         if all(m in state.obs_months for m in months):
             obs_scan = partitions.scan_months(data_dir / "obs", start, end + timedelta(days=1))
@@ -126,7 +139,7 @@ def run(
             if obs_scan is not None and fc_scan is not None:
                 table = scoring.daily_scores(obs_scan, fc_scan, models, start, end)
                 partitions.write_monthly(table, data_dir / "scores", scoring.KEYS, "date")
-            state.scored.add(str(start))
+            state.scored.add(window_key(start, end))
             state.save()
         if sync:
             sync.push(months)
