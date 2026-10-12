@@ -149,3 +149,29 @@ export function dailySummary(times, series, timeZone = "Europe/Prague") {
       wind: d.w.length ? Math.max(...d.w) : null,
     }));
 }
+
+/**
+ * The forecast of the model ranked best at each hour's lead day: a different model can
+ * win D+1, D+2, …; where the winner has no value for the hour (it ended), the next
+ * ranked model with one. Returns [{value, model}] per hour ({null, null} without any).
+ */
+export function bestPerLeadDay(forecast, table, variable, now) {
+  const series = forecast.values[variable] ?? {};
+  return forecast.times.map((time, i) => {
+    const ranked = weightsAt(table, variable, leadDay(time, now))
+      .filter((r) => r.rank != null)
+      .sort((a, b) => a.rank - b.rank);
+    const hit = ranked.find((r) => series[r.model]?.[i] != null);
+    return hit ? { value: series[hit.model][i], model: hit.model } : { value: null, model: null };
+  });
+}
+
+/** The ranked-first model per lead day 1..MAX_LEAD_DAY: [{lead, model}]. */
+export function winnersByLeadDay(table, variable) {
+  const out = [];
+  for (let lead = 1; lead <= MAX_LEAD_DAY; lead += 1) {
+    const rows = table.get(`${variable}|${lead}`);
+    if (rows?.length) out.push({ lead, model: rows.find((r) => r.rank === 1)?.model ?? null });
+  }
+  return out;
+}

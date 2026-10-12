@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  bestModel, combine, taper, dailySummary, forecastUrl, leadDay, localDay, parseForecast,
+  bestModel, bestPerLeadDay, combine, taper, winnersByLeadDay, dailySummary, forecastUrl, leadDay, localDay, parseForecast,
   weightTable, weightedModels, weightsAt,
 } from "./forecast.js";
 
@@ -108,4 +108,22 @@ test("a model that ends early fades out over its last three hours", () => {
   // the combined curve has no jump where ICON-D2 ends: neighbouring hours stay close
   const combined = combine(FORECAST, TABLE, "temperature_2m", NOW);
   assert.ok(Math.abs(combined[last + 1] - combined[last]) < 1.5);
+});
+
+test("the best model can differ per lead day", () => {
+  const winners = winnersByLeadDay(TABLE, "temperature_2m");
+  assert.deepEqual(winners.map((w) => w.lead), [1, 2, 3, 4, 5]);
+  for (const w of winners) assert.equal(w.model, bestModel(TABLE, "temperature_2m", w.lead));
+  const best = bestPerLeadDay(FORECAST, TABLE, "temperature_2m", NOW);
+  assert.equal(best.length, FORECAST.times.length);
+  // each hour takes the winner of its own lead day, or the next ranked model if it ended
+  FORECAST.times.forEach((time, i) => {
+    const ranked = weightsAt(TABLE, "temperature_2m", leadDay(time, NOW))
+      .filter((r) => r.rank != null)
+      .sort((a, b) => a.rank - b.rank);
+    const expected = ranked.find((r) => FORECAST.values.temperature_2m[r.model]?.[i] != null);
+    assert.equal(best[i].model, expected?.model ?? null);
+  });
+  const models = new Set(best.map((b) => b.model));
+  assert.ok(models.size >= 2, "more than one model wins over six days");
 });
