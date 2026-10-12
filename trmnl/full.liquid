@@ -1,0 +1,247 @@
+{%- comment -%}
+  MeteoVerdict for TRMNL (OG, 800x480, black and white), full screen layout.
+  Private plugin, strategy "Polling", URL:
+    https://jerrywoof.github.io/MeteoVerdict/api/v1/okresy/CZ0423.json
+  Sunrise, sunset and sunshine come with the forecast. Until the open data has them, add a
+  second line with Open-Meteo for them (TRMNL then names the answers IDX_0 and IDX_1):
+    https://api.open-meteo.com/v1/forecast?latitude=50.08&longitude=14.44&daily=sunrise,sunset,sunshine_duration&timezone=Europe%2FPrague&forecast_days=3
+  Setup: trmnl/README.md.
+{%- endcomment -%}
+
+{%- assign place = "Praha" -%}
+
+{%- if IDX_0 -%}{%- assign okres = IDX_0.okres -%}{%- assign forecast = IDX_0.forecast -%}{%- endif -%}
+{%- assign astro = IDX_1.daily -%}
+{%- assign offset = trmnl.user.utc_offset | default: 7200 -%}
+{%- assign now_s = "now" | date: "%s" | plus: offset -%}
+{%- assign today = now_s | date: "%Y-%m-%d" -%}
+{%- assign tomorrow = now_s | plus: 86400 | date: "%Y-%m-%d" -%}
+{%- assign now_x = now_s | date: "%H" | times: 10 -%}
+{%- assign now_x = now_s | date: "%M" | divided_by: 6.0 | plus: now_x -%}
+{%- assign today_rows = forecast.parts | where: "day", today -%}
+{%- if today_rows.size == 0 -%}
+  {%- comment -%} clock and data disagree: fall back to the first two days of the forecast {%- endcomment -%}
+  {%- assign today = forecast.parts[0].day -%}
+  {%- assign now_x = -1 -%}
+  {%- assign later = forecast.parts | where: "part", "day" | map: "day" | uniq -%}
+  {%- for d in later -%}{%- if d > today -%}{%- assign tomorrow = d -%}{%- break -%}{%- endif -%}{%- endfor -%}
+{%- endif -%}
+{%- assign days = today | append: "," | append: tomorrow | split: "," -%}
+
+{%- comment -%} one temperature scale for both curves, so the days compare at a glance {%- endcomment -%}
+{%- assign H = forecast.hourly -%}
+{%- assign lo = 99 -%}{%- assign hi = -99 -%}
+{%- for t in H.time -%}
+  {%- assign d = t | date: "%s" | plus: offset | date: "%Y-%m-%d" -%}
+  {%- if d == today or d == tomorrow -%}
+    {%- assign v = H.temperature_2m[forloop.index0] -%}
+    {%- if v != nil -%}
+      {%- if v < lo -%}{%- assign lo = v -%}{%- endif -%}
+      {%- if v > hi -%}{%- assign hi = v -%}{%- endif -%}
+    {%- endif -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- assign span = hi | minus: lo | at_least: 4 -%}
+
+{%- comment -%} weather symbols as inline SVG (64x64), black on white for e-ink {%- endcomment -%}
+{%- capture sun -%}<g stroke="#000" stroke-width="4" stroke-linecap="round"><circle cx="32" cy="32" r="11"/><path d="M32 6v7M32 51v7M6 32h7M51 32h7M13.6 13.6l5 5M45.4 45.4l5 5M13.6 50.4l5-5M45.4 18.6l5-5"/></g>{%- endcapture -%}
+{%- capture moon -%}<path d="M38 8a24 24 0 1 0 18 36A19 19 0 0 1 38 8z"/>{%- endcapture -%}
+{%- capture cloud_svg -%}<path d="M18 50H46A9 9 0 0 0 46 32A13 13 0 0 0 21 30A10 10 0 0 0 18 50Z" fill="#fff" stroke="#000" stroke-width="3.5" stroke-linejoin="round"/>{%- endcapture -%}
+{%- capture drops -%}<path d="M24 48l-3 8M33 48l-3 8M42 48l-3 8" stroke="#000" stroke-width="3.5" stroke-linecap="round"/>{%- endcapture -%}
+{%- capture drop1 -%}<path d="M30 48l-3 8M40 48l-3 8" stroke="#000" stroke-width="3.5" stroke-linecap="round"/>{%- endcapture -%}
+{%- capture flakes -%}<g stroke="#000" stroke-width="2.5" stroke-linecap="round"><path d="M22 47v10M17.7 49.5l8.6 5M17.7 54.5l8.6-5M42 47v10M37.7 49.5l8.6 5M37.7 54.5l8.6-5"/></g>{%- endcapture -%}
+{%- capture sleet -%}<path d="M24 47l-3 8" stroke="#000" stroke-width="3.5" stroke-linecap="round"/><g stroke="#000" stroke-width="2.5" stroke-linecap="round"><path d="M40 47v10M35.7 49.5l8.6 5M35.7 54.5l8.6-5"/></g>{%- endcapture -%}
+
+<style>
+  .mv { display: flex; width: 100%; height: 100%; gap: 22px; font-family: "Inter", "Helvetica Neue", Arial, sans-serif; color: #000; }
+  .mv-day { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .mv-head { display: flex; justify-content: space-between; align-items: center; background: #000; color: #fff; border-radius: 8px; padding: 3px 12px; white-space: nowrap; }
+  .mv-when { font-size: 21px; font-weight: 800; letter-spacing: 2px; }
+  .mv-date { font-size: 17px; font-weight: 600; }
+  .mv-hero { display: flex; align-items: center; gap: 6px; height: 96px; }
+  .mv-hero > svg { width: 92px; height: 92px; flex: none; }
+  .mv-temps { display: flex; flex-direction: column; line-height: 1; flex: none; }
+  .mv-max { font-size: 72px; font-weight: 800; letter-spacing: -3px; }
+  .mv-min { font-size: 20px; font-weight: 600; margin-top: 2px; }
+  .mv-side { margin-left: auto; text-align: right; line-height: 1.3; }
+  .mv-what { font-size: 18px; font-weight: 800; margin-bottom: 4px; white-space: nowrap; }
+  .mv-sun { font-size: 18px; font-weight: 700; white-space: nowrap; }
+  .mv-sun svg { width: 22px; height: 22px; vertical-align: -5px; }
+  .mv-facts { display: grid; grid-template-columns: repeat(4, 1fr); border: 2px solid #000; border-radius: 8px; padding: 3px 0; text-align: center; }
+  .mv-fact + .mv-fact { border-left: 1px solid #000; }
+  .mv-fact span { display: block; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .mv-fact b { display: block; font-size: 20px; font-weight: 800; line-height: 1.15; }
+  .mv-fact i { display: block; font-size: 11px; font-style: normal; }
+  .mv-parts { display: grid; grid-template-columns: repeat(4, 1fr); text-align: center; }
+  .mv-part .n { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .mv-part svg { width: 38px; height: 38px; display: block; margin: 0 auto; }
+  .mv-part .t { font-size: 19px; font-weight: 800; line-height: 1; }
+  .mv-chart { width: 100%; flex: 1; min-height: 70px; display: block; }
+  .mv-empty { font-size: 16px; }
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs><pattern id="mv-night" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.4" height="5" fill="#000"/></pattern></defs>
+</svg>
+
+<div class="view view--full">
+  <div class="layout">
+    <div class="mv">
+      {%- for day in days -%}
+        {%- assign rows = forecast.parts | where: "day", day -%}
+        {%- assign whole = rows | where: "part", "day" | first -%}
+        {%- assign tmin = 999 -%}{%- assign tmax = -999 -%}{%- assign rain = 0 -%}{%- assign chance = 0 -%}{%- assign wind = 0 -%}{%- assign cloud = nil -%}{%- assign shine = nil -%}
+        {%- for r in rows -%}
+          {%- if r.part == "day" -%}{%- continue -%}{%- endif -%}
+          {%- if r.tmin != nil and r.tmin < tmin -%}{%- assign tmin = r.tmin -%}{%- endif -%}
+          {%- if r.tmax != nil and r.tmax > tmax -%}{%- assign tmax = r.tmax -%}{%- endif -%}
+          {%- assign rain = rain | plus: r.precipitation -%}
+          {%- if r.rain_probability > chance -%}{%- assign chance = r.rain_probability -%}{%- endif -%}
+          {%- if r.wind > wind -%}{%- assign wind = r.wind -%}{%- endif -%}
+          {%- if r.sunshine != nil -%}{%- assign shine = shine | plus: r.sunshine -%}{%- endif -%}
+        {%- endfor -%}
+        {%- if whole -%}
+          {%- assign tmin = whole.tmin -%}{%- assign tmax = whole.tmax -%}{%- assign rain = whole.precipitation -%}
+          {%- assign chance = whole.rain_probability -%}{%- assign wind = whole.wind -%}{%- assign cloud = whole.cloud -%}
+          {%- assign sym = whole.symbol -%}
+          {%- if whole.sunshine != nil -%}{%- assign shine = whole.sunshine -%}{%- endif -%}
+        {%- else -%}
+          {%- comment -%} today's whole day is left out when the forecast is a few hours short {%- endcomment -%}
+          {%- assign pm = rows | where: "part", "afternoon" | first | default: rows.last -%}
+          {%- assign sym = pm.symbol -%}{%- assign cloud = pm.cloud -%}
+        {%- endif -%}
+
+        {%- comment -%} sunrise, sunset and sunshine: from MeteoVerdict, else from Open-Meteo (IDX_1) {%- endcomment -%}
+        {%- assign rise = rows.first.sunrise -%}{%- assign set = rows.first.sunset -%}
+        {%- for d in astro.time -%}
+          {%- if d == day -%}
+            {%- assign i = forloop.index0 -%}
+            {%- if rise == nil -%}{%- assign rise = astro.sunrise[i] | slice: 11, 5 -%}{%- assign set = astro.sunset[i] | slice: 11, 5 -%}{%- endif -%}
+            {%- if shine == nil and astro.sunshine_duration -%}{%- assign shine = astro.sunshine_duration[i] | divided_by: 3600.0 -%}{%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if rise -%}
+          {%- assign rise_min = rise | slice: 0, 2 | times: 60 -%}{%- assign rise_min = rise | slice: 3, 2 | plus: rise_min -%}
+          {%- assign set_min = set | slice: 0, 2 | times: 60 -%}{%- assign set_min = set | slice: 3, 2 | plus: set_min -%}
+          {%- assign light = set_min | minus: rise_min -%}
+        {%- endif -%}
+
+        {%- comment -%} the day's curve: x = 10 per hour (0-240), temperature in y 8-48, rain bars up from 70 {%- endcomment -%}
+        {%- assign pts = "" -%}{%- assign bars = "" -%}
+        {%- for t in H.time -%}
+          {%- assign ls = t | date: "%s" | plus: offset -%}
+          {%- assign d = ls | date: "%Y-%m-%d" -%}
+          {%- if d != day -%}{%- continue -%}{%- endif -%}
+          {%- assign i = forloop.index0 -%}
+          {%- assign x = ls | date: "%H" | times: 10 | plus: 5 -%}
+          {%- assign v = H.temperature_2m[i] -%}
+          {%- if v != nil -%}
+            {%- assign y = hi | minus: v | times: 40.0 | divided_by: span | plus: 8 | round: 1 -%}
+            {%- assign pts = pts | append: x | append: "," | append: y | append: " " -%}
+          {%- endif -%}
+          {%- assign p = H.precipitation[i] | default: 0 -%}
+          {%- if p >= 0.1 -%}
+            {%- assign bh = p | at_most: 3 | times: 7 | plus: 3 | round: 1 -%}
+            {%- assign by = 70 | minus: bh -%}
+            {%- capture bar -%}<rect x="{{ x | minus: 8.5 }}" y="{{ by }}" width="7" height="{{ bh }}"/>{%- endcapture -%}
+            {%- assign bars = bars | append: bar -%}
+          {%- endif -%}
+        {%- endfor -%}
+
+        <div class="mv-day">
+          <div class="mv-head">
+            <span class="mv-when">{% if forloop.first %}TODAY{% else %}TOMORROW{% endif %}</span>
+            <span class="mv-date">{{ day | append: "T12:00:00Z" | date: "%A %-d %B" }}</span>
+          </div>
+
+          {%- if rows.size == 0 -%}
+            <p class="mv-empty">No forecast for {{ day }} yet.</p>
+          {%- else -%}
+          <div class="mv-hero">
+            {%- assign orb = sun -%}
+            <svg viewBox="0 0 64 64">
+              {%- case sym -%}
+              {%- when "clear" -%}{{ orb }}
+              {%- when "partly" -%}<g transform="translate(2 0) scale(.62)">{{ orb }}</g>{{ cloud_svg }}
+              {%- when "cloudy" -%}<g transform="translate(-8 -12)">{{ cloud_svg | replace: '#fff', '#000' }}</g>{{ cloud_svg }}
+              {%- when "showers" -%}<g transform="translate(2 -6) scale(.62)">{{ orb }}</g><g transform="translate(0 -8)">{{ cloud_svg }}</g>{{ drop1 }}
+              {%- when "rain" -%}<g transform="translate(0 -8)">{{ cloud_svg }}</g>{{ drops }}
+              {%- when "sleet" -%}<g transform="translate(0 -8)">{{ cloud_svg }}</g>{{ sleet }}
+              {%- when "snow" -%}<g transform="translate(0 -8)">{{ cloud_svg }}</g>{{ flakes }}
+              {%- else -%}<text x="32" y="44" font-size="34" text-anchor="middle">?</text>
+              {%- endcase -%}
+            </svg>
+            <div class="mv-temps">
+              <span class="mv-max">{{ tmax | round }}°</span>
+              <span class="mv-min">min {{ tmin | round }}°</span>
+            </div>
+            <div class="mv-side">
+              <div class="mv-what">{% case sym %}{% when "clear" %}Sunny{% when "partly" %}Partly cloudy{% when "cloudy" %}Cloudy{% when "showers" %}Showers{% when "rain" %}Rain{% when "sleet" %}Sleet{% when "snow" %}Snow{% endcase %}</div>
+              {%- if rise -%}
+              <div class="mv-sun"><svg viewBox="0 0 24 24"><path d="M2 19h20M6.5 19a5.5 5.5 0 0 1 11 0M12 3v7M8.5 6.5 12 3l3.5 3.5" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg> {{ rise }}</div>
+              <div class="mv-sun"><svg viewBox="0 0 24 24"><path d="M2 19h20M6.5 19a5.5 5.5 0 0 1 11 0M12 3v7M8.5 6.5 12 10l3.5-3.5" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg> {{ set }}</div>
+              {%- endif -%}
+            </div>
+          </div>
+
+          <div class="mv-facts">
+            <div class="mv-fact"><span>Rain</span><b>{{ rain | round: 1 }} mm</b><i>{{ chance | times: 100 | round }} % chance</i></div>
+            <div class="mv-fact"><span>Sunshine</span><b>{% if shine != nil %}{{ shine | round: 1 }} h{% else %}–{% endif %}</b><i>{% if light %}of {{ light | divided_by: 60 | floor }} h {{ light | modulo: 60 }} min{% endif %}</i></div>
+            <div class="mv-fact"><span>Clouds</span><b>{% if cloud != nil %}{{ cloud | round }} %{% else %}–{% endif %}</b><i>daytime</i></div>
+            <div class="mv-fact"><span>Wind</span><b>{{ wind | round }} m/s</b><i>strongest</i></div>
+          </div>
+
+          <div class="mv-parts">
+            {%- assign part_names = "night,morning,afternoon,evening" | split: "," -%}
+            {%- for part in part_names -%}
+              {%- assign p = rows | where: "part", part | first -%}
+              <div class="mv-part">
+                <div class="n">{% case part %}{% when "night" %}Night{% when "morning" %}Morning{% when "afternoon" %}Afternoon{% else %}Evening{% endcase %}</div>
+                {%- if p -%}
+                  {%- if part == "night" or part == "evening" -%}{%- assign orb = moon -%}{%- else -%}{%- assign orb = sun -%}{%- endif -%}
+                  <svg viewBox="0 0 64 64">
+                    {%- case p.symbol -%}
+                    {%- when "clear" -%}{{ orb }}
+                    {%- when "partly" -%}<g transform="translate(2 0) scale(.62)">{{ orb }}</g>{{ cloud_svg }}
+                    {%- when "cloudy" -%}<g transform="translate(-8 -12)">{{ cloud_svg | replace: '#fff', '#000' }}</g>{{ cloud_svg }}
+                    {%- when "showers" -%}<g transform="translate(2 -6) scale(.62)">{{ orb }}</g><g transform="translate(0 -8)">{{ cloud_svg }}</g>{{ drop1 }}
+                    {%- when "rain" -%}<g transform="translate(0 -8)">{{ cloud_svg }}</g>{{ drops }}
+                    {%- when "sleet" -%}<g transform="translate(0 -8)">{{ cloud_svg }}</g>{{ sleet }}
+                    {%- when "snow" -%}<g transform="translate(0 -8)">{{ cloud_svg }}</g>{{ flakes }}
+                    {%- else -%}<text x="32" y="44" font-size="34" text-anchor="middle">?</text>
+                    {%- endcase -%}
+                  </svg>
+                  <div class="t">{% if part == "night" %}{{ p.tmin | round }}{% else %}{{ p.tmax | round }}{% endif %}°</div>
+                {%- else -%}
+                  <svg viewBox="0 0 64 64"></svg><div class="t">–</div>
+                {%- endif -%}
+              </div>
+            {%- endfor -%}
+          </div>
+
+          <svg class="mv-chart" viewBox="0 0 240 74" preserveAspectRatio="none">
+            {%- if rise -%}
+              {%- assign rx = rise_min | divided_by: 6.0 | round: 1 -%}{%- assign sx = set_min | divided_by: 6.0 | round: 1 -%}
+              <rect x="0" y="0" width="{{ rx }}" height="70" fill="url(#mv-night)"/>
+              <rect x="{{ sx }}" y="0" width="{{ 240 | minus: sx }}" height="70" fill="url(#mv-night)"/>
+            {%- endif -%}
+            <path d="M60 0v70M120 0v70M180 0v70" stroke="#000" stroke-width=".6" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>
+            <g fill="#000" stroke="#fff" stroke-width="1">{{ bars }}</g>
+            <polyline points="{{ pts }}" fill="none" stroke="#fff" stroke-width="8" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+            <polyline points="{{ pts }}" fill="none" stroke="#000" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+            {%- if forloop.first and now_x >= 0 -%}
+              <path d="M{{ now_x | round: 1 }} 0v70" stroke="#000" stroke-width="2" stroke-dasharray="4 2" vector-effect="non-scaling-stroke"/>
+            {%- endif -%}
+            <path d="M0 70.5h240" stroke="#000" stroke-width="2" vector-effect="non-scaling-stroke"/>
+          </svg>
+          {%- endif -%}
+        </div>
+      {%- endfor -%}
+    </div>
+  </div>
+
+  <div class="title_bar">
+    <span class="title">{{ place }} · okres {{ okres.name }}</span>
+    <span class="instance">MeteoVerdict · updated {{ forecast.generated | date: "%s" | plus: offset | date: "%-d %b %H:%M" }}</span>
+  </div>
+</div>
