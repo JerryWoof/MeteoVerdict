@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  CAPITALS, colorFor, currentPart, displayName, placeMarkers, dayLabel, fillExpression, iconName, labelFor, parseOutlook,
+  CAPITALS, DEFAULT_SHOWN, NEUTRAL, colorFor, markerValues, parseView, viewHash, currentPart, displayName, placeMarkers, dayLabel, fillExpression, iconName, labelFor, parseOutlook,
   pointFeatures, rowFor, sequence, summary, today, valueFor,
 } from "./tv.js";
 
@@ -37,6 +37,7 @@ test("colour ramps interpolate and clamp", () => {
   assert.equal(colorFor(12.5, "temperature"), colorFor(12.5, "temperature"));
   assert.notEqual(colorFor(10, "temperature"), colorFor(15, "temperature"));
   assert.equal(colorFor(null, "wind"), "#ececec");
+  assert.equal(fillExpression(OUTLOOK, DAY, "afternoon", "none"), NEUTRAL);
   const expression = fillExpression(OUTLOOK, DAY, "afternoon", "temperature");
   assert.equal(expression[0], "match");
   assert.equal(expression.length, 3 + 2 * 77);
@@ -49,12 +50,24 @@ test("symbols get a moon at night", () => {
   assert.equal(iconName(null, "day"), "");
 });
 
-test("points carry symbol and label for every okres", () => {
-  const points = pointFeatures(OUTLOOK, DAY, "afternoon", "temperature");
+test("points carry the symbol and the chosen values for every okres", () => {
+  const points = pointFeatures(OUTLOOK, DAY, "afternoon", ["temperature", "wind"]);
   assert.equal(points.features.length, 77);
   const praha = points.features.find((f) => f.properties.code === "CZ0100");
-  assert.match(praha.properties.label, /^-?\d+°$/);
+  assert.deepEqual(praha.properties.values.map((v) => v.layer), ["temperature", "wind"]);
+  assert.match(praha.properties.values[0].text, /^-?\d+°$/);
+  assert.match(praha.properties.values[1].text, /^\d+ m\/s$/);
   assert.ok(praha.properties.icon.length > 0);
+});
+
+test("marker values keep a fixed order and can be empty", () => {
+  const row = { tmin: 3, tmax: 12, rain_probability: 0.4, wind: 3, cloud: 80 };
+  assert.deepEqual(
+    markerValues(row, "afternoon", ["cloud", "temperature", "precipitation", "wind"]).map((v) => v.text),
+    ["12°", "40 %", "3 m/s", "80 %"],
+  );
+  assert.deepEqual(markerValues(row, "afternoon", []), []);
+  assert.deepEqual(markerValues(undefined, "afternoon", ["temperature"]), []);
 });
 
 test("headline: warmest, coldest, rain likely", () => {
@@ -64,6 +77,9 @@ test("headline: warmest, coldest, rain likely", () => {
   const all = OUTLOOK.okresy.map((o) => rowFor(OUTLOOK, o.code, DAY, "afternoon").tmax);
   assert.equal(s.warmest.value, Math.max(...all));
   assert.ok(s.rainy >= 0 && s.rainy <= 77);
+  const winds = OUTLOOK.okresy.map((o) => rowFor(OUTLOOK, o.code, DAY, "afternoon").wind);
+  assert.equal(s.windiest.value, Math.max(...winds));
+  assert.ok(s.clear >= 0 && s.clear <= 77);
   assert.equal(summary(OUTLOOK, "1999-01-01", "day"), null);
 });
 
@@ -87,15 +103,38 @@ test("play goes through every part of every day from the current one", () => {
   assert.equal(new Set(steps.map((s) => `${s.day}|${s.part}`)).size, steps.length);
 });
 
-test("markers: capitals first, no overlaps", () => {
+test("markers: capitals first, no overlaps, by each marker's own size", () => {
   const boxes = [
-    { code: "CZ0209", x: 100, y: 100 }, // Praha-východ, next to Praha
-    { code: "CZ0100", x: 110, y: 105 },
-    { code: "CZ0201", x: 100, y: 200 },
+    { code: "CZ0209", x: 100, y: 100, w: 40, h: 40 }, // Praha-východ, next to Praha
+    { code: "CZ0100", x: 110, y: 105, w: 40, h: 40 },
+    { code: "CZ0201", x: 100, y: 200, w: 40, h: 40 },
+    { code: "CZ0202", x: 100, y: 150, w: 40, h: 90 }, // a tall marker reaches Praha
   ];
-  const shown = placeMarkers(boxes, 50, 40);
+  const shown = placeMarkers(boxes);
   assert.deepEqual([...shown].sort(), ["CZ0100", "CZ0201"]);
+  // the selected okres goes first, and its neighbours make room for it
+  assert.deepEqual([...placeMarkers(boxes, 4, "CZ0209")].sort(), ["CZ0201", "CZ0209"]);
   assert.ok(CAPITALS.includes("CZ0100"));
   assert.equal(displayName("území Hlavního města Prahy"), "Praha");
   assert.equal(displayName("Benešov"), "Benešov");
+});
+
+test("the view in the URL, including old links", () => {
+  const fallback = { day: "2026-10-12", part: "morning" };
+  const view = parseView("#2026-10-13/night/precipitation/tw/CZ0201", OUTLOOK, fallback);
+  assert.deepEqual(view, {
+    day: "2026-10-13", part: "night", colour: "precipitation", shown: ["temperature", "wind"], okres: "CZ0201",
+  });
+  assert.equal(viewHash(view), "#2026-10-13/night/precipitation/tw/CZ0201");
+  // the first version of the page: #day/part/layer/okres
+  const old = parseView("#2026-10-13/afternoon/temperature/CZ0201", OUTLOOK, fallback);
+  assert.equal(old.okres, "CZ0201");
+  assert.deepEqual(old.shown, DEFAULT_SHOWN);
+  const none = parseView("#2026-10-13/day/none/-", OUTLOOK, fallback);
+  assert.deepEqual(none.shown, []);
+  assert.equal(none.colour, "none");
+  assert.equal(viewHash(none), "#2026-10-13/day/none/-");
+  assert.deepEqual(parseView("", OUTLOOK, fallback), {
+    day: "2026-10-12", part: "morning", colour: "temperature", shown: DEFAULT_SHOWN, okres: null,
+  });
 });
