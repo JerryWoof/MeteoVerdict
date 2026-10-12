@@ -262,3 +262,21 @@ def _gauge_forecasts(client, gauge_points, models, span, data_dir, budget, state
         state.fc_done.add(gauge_key(model, start, end))
         state.save()
     return ""
+
+
+def summary(result: Result, calls: float, data_dir: Path, first: date, last: date) -> str:
+    """Markdown for the workflow's job summary: this run and the overall progress."""
+    state = State.load(data_dir / "backfill-state.json")
+    windows = complete_windows(first, last)
+    scored = sum(window_key(s, e) in state.scored for s, e in windows)
+    lines = [
+        "## Backfill",
+        "",
+        f"- This run: {result.windows_done} windows, {calls:g} Open-Meteo calls",
+        f"- Progress: {scored} of {len(windows)} 14-day windows scored since {first}",
+        f"- Observation months final: {len(state.obs_months)}, rain-gauge months final: "
+        f"{len(state.gauge_months)}",
+    ]
+    if result.stopped:
+        lines.append(f"- Stopped: {result.stopped} (the next run continues)")
+    return "\n".join(lines) + "\n"
