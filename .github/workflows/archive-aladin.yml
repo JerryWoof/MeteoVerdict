@@ -1,0 +1,36 @@
+name: Archive ALADIN
+
+# ČHMÚ keeps ALADIN runs on opendata.chmi.cz for only about three days. Every three
+# hours, extract the station values of every run not archived yet and upload them as
+# assets of the monthly release "aladin-YYYY-MM". Runs that are already there are skipped,
+# so missed or failed schedules catch up on the next run.
+on:
+  schedule:
+    - cron: "23 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write # create releases and upload assets
+
+concurrency:
+  group: archive-aladin
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    name: Archive new ALADIN runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install project
+        run: uv sync --frozen
+      - name: Station table
+        run: uv run --frozen mvd stations --out data/stations.parquet
+      - name: Archive runs
+        run: uv run --frozen mvd archive-aladin --stations data/stations.parquet --github-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
