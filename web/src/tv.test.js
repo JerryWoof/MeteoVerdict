@@ -68,10 +68,13 @@ test("now in Prague: part of day and date", () => {
   assert.equal(today(Date.parse("2026-10-12T22:30Z")), "2026-10-13");
 });
 
-test("day tabs: today, tomorrow, then dates", () => {
-  assert.deepEqual(dayLabel("2026-10-12", "2026-10-12", "cs"), { key: "tv.today" });
-  assert.deepEqual(dayLabel("2026-10-13", "2026-10-12", "cs"), { key: "tv.tomorrow" });
-  assert.match(dayLabel("2026-10-15", "2026-10-12", "cs").text, /15\. ?10\./);
+test("day tabs: the same two lines for every day", () => {
+  assert.deepEqual(dayLabel("2026-10-12", "en"), { name: "Monday", date: "Mon, 10/12", short: "10/12" });
+  assert.deepEqual(dayLabel("2026-10-13", "en"), { name: "Tuesday", date: "Tue, 10/13", short: "10/13" });
+  const cs = dayLabel("2026-10-15", "cs");
+  assert.equal(cs.name, "Čtvrtek");
+  assert.match(cs.date, /^čt 15\. ?10\.$/);
+  assert.match(cs.short, /^15\. ?10\.$/);
 });
 
 test("markers: capitals first, no overlaps, by each marker's own size", () => {

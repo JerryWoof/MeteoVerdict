@@ -150,16 +150,19 @@ export function today(now) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
 
-/** Tab label: "today", "tomorrow" (as i18n keys) or a short weekday and date. */
-export function dayLabel(day, todayIso, language) {
-  const ms = Date.parse(`${day}T12:00Z`) - Date.parse(`${todayIso}T12:00Z`);
-  const offset = Math.round(ms / 86400000);
-  if (offset === 0) return { key: "tv.today" };
-  if (offset === 1) return { key: "tv.tomorrow" };
-  const text = new Intl.DateTimeFormat(language, { weekday: "short", day: "numeric", month: "numeric", timeZone: "UTC" }).format(
-    Date.parse(`${day}T12:00Z`),
-  );
-  return { text };
+/**
+ * Day labels, the same shape for every day: the full weekday ("Tuesday"), the short
+ * weekday with the date ("Tue, 10/13") and the date alone ("10/13").
+ */
+export function dayLabel(day, language) {
+  const at = Date.parse(`${day}T12:00Z`);
+  const format = (options) => new Intl.DateTimeFormat(language, { timeZone: "UTC", ...options }).format(at);
+  const name = format({ weekday: "long" });
+  return {
+    name: name.charAt(0).toLocaleUpperCase(language) + name.slice(1),
+    date: format({ weekday: "short", day: "numeric", month: "numeric" }),
+    short: format({ day: "numeric", month: "numeric" }),
+  };
 }
 
 
