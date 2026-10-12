@@ -115,3 +115,16 @@ def test_hourly_precipitation_is_not_ranked():
         ]
     )
     assert set(ranking.rank(data, STATIONS)["variable"]) == {"temperature_2m"}
+
+
+def test_both_daily_precipitation_totals_are_ranked():
+    data = pl.concat(
+        [
+            scores({"a": [1.0, 2.0], "b": [2.0, 3.0]}, variable=variable)
+            for variable in ("precipitation_daily", "precipitation_24h")
+        ]
+    )
+    assert set(ranking.rank(data, STATIONS)["variable"]) == {
+        "precipitation_daily",
+        "precipitation_24h",
+    }

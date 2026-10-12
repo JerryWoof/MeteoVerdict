@@ -19,7 +19,8 @@ END = "<!-- LEADERBOARD:END -->"
 COLUMNS = {
     "temperature_2m": "Temperature (2 m)",
     "wind_speed_10m": "Wind (10 m)",
-    "precipitation_daily": "Precipitation (daily)",
+    # the 06-06 UTC total also covers the manual rain gauges (about 750 stations)
+    "precipitation_24h": "Precipitation (24 h)",
 }
 MAX_TIED = 3
 WINDOW_TEXT = {"90d": "last 90 days", "season": "this season", "all": "all time"}
