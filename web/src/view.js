@@ -6,7 +6,9 @@ export const VARIABLES = [
   "temperature_2m_06utc",
   "temperature_2m_12utc",
   "temperature_max",
+  "temperature_2m_hourly",
   "wind_speed_10m",
+  "wind_speed_10m_hourly",
   "precipitation_24h",
   "precipitation_daily",
 ];
