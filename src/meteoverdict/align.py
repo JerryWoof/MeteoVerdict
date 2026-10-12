@@ -6,7 +6,8 @@ values at the hour, precipitation is the sum over the hour ending at ``time``.
 
 Open-Meteo fills every hour, also where a model's output is 3- or 6-hourly
 (Model.native_step); those in-between hours are interpolated. So for such a model and
-lead day we keep temperature and wind only at its native hours, and compare
+lead day we keep temperature and wind only at its native hours (``scoring`` ranks them
+at the synoptic hours, native for every model), and compare
 precipitation summed over its native periods (``period_h`` 3 or 6) instead of hourly.
 
 ``precipitation_24h`` compares 24-hour totals over ČHMÚ's climatological day, 06:00 to

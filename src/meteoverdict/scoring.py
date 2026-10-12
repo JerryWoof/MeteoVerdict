@@ -3,8 +3,13 @@
 One row per day, station, model, lead day and variable with the additive sums of
 ``meteoverdict.metrics``:
 
-* ``temperature_2m`` and ``wind_speed_10m``: hourly pairs at native hours
-  (``period_h`` 0); the day is the UTC date of the hour.
+* ``temperature_2m`` and ``wind_speed_10m``: pairs at the synoptic hours 00, 06, 12
+  and 18 UTC only (``period_h`` 0), where every model has native output, so all models
+  are compared over the same hours of the day; the day is the UTC date of the hour.
+  These are the ranked variables.
+* ``temperature_2m_hourly`` and ``wind_speed_10m_hourly``: pairs at every native hour
+  of the model (hourly for most), not ranked: their hours differ between models, and
+  errors differ by time of day (by about 0.04 °C in MAE, September 2026).
 * ``precipitation``: pairs over the model's native period (``period_h`` 1, 3 or 6); the
   day is the UTC date the period ends in (hours ending 01:00 … 24:00). MAEs of
   different periods are not comparable, so models are ranked on daily sums.
@@ -60,10 +65,25 @@ def daily_scores(
         .then((pl.col("time") - one_hour).dt.date())
         .otherwise(pl.col("time").dt.date())
     )
-    hourly = (
-        pairs.with_columns(day.alias("date")).group_by(*KEYS, "period_h").agg(metrics.error_sums())
-    )
     hour = pl.col("time").dt.hour()
+    instant = pl.col("variable").is_in(align.INSTANT)
+    hourly = (
+        pairs.with_columns(
+            day.alias("date"),
+            pl.when(instant)
+            .then(pl.col("variable") + "_hourly")
+            .otherwise(pl.col("variable"))
+            .alias("variable"),
+        )
+        .group_by(*KEYS, "period_h")
+        .agg(metrics.error_sums())
+    )
+    fair = (
+        pairs.filter(instant, hour.is_in(SYNOPTIC_HOURS))
+        .with_columns(day.alias("date"))
+        .group_by(*KEYS, "period_h")
+        .agg(metrics.error_sums())
+    )
     synoptic = (
         pairs.filter(pl.col("variable") == "temperature_2m", hour.is_in(SYNOPTIC_HOURS))
         .with_columns(
@@ -102,7 +122,7 @@ def daily_scores(
         )
     )
     table = (
-        pl.concat([hourly, synoptic, daily, climatological, maximum], how="diagonal_relaxed")
+        pl.concat([hourly, fair, synoptic, daily, climatological, maximum], how="diagonal_relaxed")
         .filter(pl.col("date").is_between(start, end))
         .sort(KEYS)
         .collect()
