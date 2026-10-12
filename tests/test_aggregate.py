@@ -165,3 +165,13 @@ def test_json_output(tmp_path):
     saved = json.loads((tmp_path / "meta.json").read_text())
     assert saved["as_of"] == "2026-09-30" and saved["min_stations"] == agg.MIN_STATIONS
     assert "CC BY-SA 4.0" in saved["licence"]
+
+
+def test_station_positions_for_the_map(tmp_path):
+    stations = STATIONS.with_columns(
+        lat=pl.Series([50.0077777, 49.1, 49.2]), lon=pl.lit(14.4), active=pl.lit(True)
+    )
+    path = agg.write_stations(stations, tmp_path)
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    assert doc["columns"] == ["id", "name", "lat", "lon", "okres_code", "kraj_code", "active"]
+    assert doc["rows"][0] == ["s1", "One", 50.00778, 14.4, "CZ0201", "CZ020", True]

@@ -402,3 +402,33 @@ def test_fetch_gauges_asks_for_manual_and_inactive_stations(monkeypatch, tmp_pat
     )
     assert result.exit_code == 0, result.output
     assert asked["ids"] == ["gauge"]
+
+
+def test_aggregate_reads_score_files_of_different_ages(tmp_path):
+    stations = {
+        "id": ["s1", "s2", "s3"], "name": ["A", "B", "C"], "lat": [50.0] * 3,
+        "lon": [14.4] * 3, "active": [True] * 3, "okres_code": ["CZ0201"] * 3,
+        "okres": ["Benešov"] * 3, "kraj_code": ["CZ020"] * 3,
+        "kraj": ["Středočeský kraj"] * 3, "elevation_class": ["lowland"] * 3,
+    }  # fmt: skip
+    pl.DataFrame(stations).write_parquet(tmp_path / "stations.parquet")
+    (tmp_path / "scores").mkdir()
+    for month, extra in (("2026-08", {}), ("2026-09", {"a_30": [0] * 6})):
+        pl.DataFrame(
+            {
+                "date": [date(int(month[:4]), int(month[5:]), 10)] * 6,
+                "station_id": ["s1", "s2", "s3"] * 2,
+                "model": ["a"] * 3 + ["b"] * 3,
+                "lead_day": [1] * 6, "variable": ["temperature_2m"] * 6, "period_h": [0] * 6,
+                "n": [24] * 6, "sum_err": [1.0] * 6, "sum_abs_err": [24.0] * 3 + [48.0] * 3,
+                "sum_sq_err": [30.0] * 6, **extra,
+            }
+        ).write_parquet(tmp_path / "scores" / f"{month}.parquet")  # fmt: skip
+    args = [
+        "aggregate", "--data-dir", str(tmp_path), "--stations", str(tmp_path / "stations.parquet"),
+        "--out", str(tmp_path / "site"), "--resamples", "20",
+    ]  # fmt: skip
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    doc = json.loads((tmp_path / "site" / "stations.json").read_text(encoding="utf-8"))
+    assert [r[0] for r in doc["rows"]] == ["s1", "s2", "s3"]

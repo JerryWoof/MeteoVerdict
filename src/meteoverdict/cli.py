@@ -396,14 +396,18 @@ def _publish_aggregates(
     resamples: int,
 ) -> pl.DataFrame:
     """Aggregate and rank all score files; write aggregates.parquet and the JSON."""
-    scores = pl.scan_parquet(files)
+    # files written before a column was added lack it (see partitions.scan_months)
+    scores = pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
     table = aggregate.aggregate(scores, station_table, as_of)
     ranks = ranking.rank(scores, station_table, as_of, resamples=resamples)
     table = table.join(ranks, on=[*ranking.GROUP, "model"], how="left")
     table.write_parquet(data_dir / "aggregates.parquet", compression="zstd")
     names = _model_names()
     meta = aggregate.metadata(table, names, datetime.now(UTC))
-    written = aggregate.write_json(table, out, meta)
+    written = [
+        *aggregate.write_json(table, out, meta),
+        aggregate.write_stations(station_table, out),
+    ]
     typer.echo(f"{table.height} rows, as of {meta['as_of']} → {len(written)} JSON files in {out}")
     return table
 
