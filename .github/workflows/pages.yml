@@ -1,15 +1,15 @@
 name: Pages
 
 # Build the web map (web/) with the latest scores and publish it on GitHub Pages.
-# Runs after the daily update, on changes to the map, and by hand. Until Pages is
-# enabled for the repository (Settings → Pages → Source: GitHub Actions) it only
-# builds and says so, instead of failing.
+# Runs after the daily update and the outlook, on changes to the map, and by hand.
+# Until Pages is enabled for the repository (Settings → Pages → Source: GitHub Actions)
+# it only builds and says so, instead of failing.
 on:
   push:
     branches: [main]
     paths: ["web/**", "src/meteoverdict/data/*.geojson", ".github/workflows/pages.yml"]
   workflow_run:
-    workflows: [Daily]
+    workflows: [Daily, Outlook]
     types: [completed]
   workflow_dispatch:
 
@@ -50,6 +50,11 @@ jobs:
             unzip -o -q /tmp/site-data.zip -d site/data
           else
             echo "no published scores yet; the map shows the boundaries only"
+          fi
+          if gh release download data-latest --pattern outlook.json --dir site/data --clobber 2>/dev/null; then
+            echo "outlook.json from data-latest"
+          else
+            echo "no outlook yet; the TV page says so"
           fi
       - uses: actions/setup-node@v4
         with:
