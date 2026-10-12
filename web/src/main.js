@@ -111,7 +111,7 @@ function popupOn(layer, key) {
     const heading = document.createElement("strong");
     heading.textContent = title;
     text.append(heading, document.createElement("br"), describe(entry, current.names, t));
-    if (key === "regions" && /^CZ\d{4}$/.test(feature.properties.code)) {
+    if (key === "regions" && /^CZ[0-9A-Z]{4}$/.test(feature.properties.code)) {
       const link = document.createElement("a");
       link.href = `forecast.html#${feature.properties.code}`;
       link.textContent = t("forecast.link");
