@@ -42,11 +42,12 @@ class GitHubReleaseStore:
         self._ids[tag] = response.json()["id"]
         return self._ids[tag]
 
-    def names(self, tag: str) -> set[str]:
+    def assets(self, tag: str) -> dict[str, dict]:
+        """Assets of the release ``tag`` by name (``id``, ``size``, ``label``, …)."""
         release = self._release_id(tag, create=False)
         if release is None:
-            return set()
-        names: set[str] = set()
+            return {}
+        found: dict[str, dict] = {}
         page = 1
         while True:
             response = self.client.get(
@@ -56,17 +57,41 @@ class GitHubReleaseStore:
             )
             response.raise_for_status()
             batch = response.json()
-            names |= {asset["name"] for asset in batch}
+            found |= {asset["name"]: asset for asset in batch}
             if len(batch) < 100:
-                return names
+                return found
             page += 1
 
-    def put(self, tag: str, name: str, path: Path) -> None:
+    def names(self, tag: str) -> set[str]:
+        return set(self.assets(tag))
+
+    def put(self, tag: str, name: str, path: Path, label: str = "") -> None:
+        """Upload ``path`` as ``name``, replacing an existing asset of that name."""
         release = self._release_id(tag, create=True)
+        old = self.assets(tag).get(name)
+        if old is not None:  # GitHub cannot overwrite an asset
+            response = self.client.delete(
+                f"{API}/repos/{self.repo}/releases/assets/{old['id']}", headers=self.headers
+            )
+            response.raise_for_status()
+        params = {"name": name, **({"label": label} if label else {})}
         response = self.client.post(
             f"{UPLOADS}/repos/{self.repo}/releases/{release}/assets",
             headers={**self.headers, "Content-Type": "application/octet-stream"},
-            params={"name": name},
+            params=params,
             content=path.read_bytes(),
         )
         response.raise_for_status()
+
+    def download(self, tag: str, name: str, dest: Path) -> Path:
+        asset = self.assets(tag)[name]
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        headers = {**self.headers, "Accept": "application/octet-stream"}
+        url = f"{API}/repos/{self.repo}/releases/assets/{asset['id']}"
+        # GitHub redirects to its storage host; httpx drops the token on that redirect
+        with self.client.stream("GET", url, headers=headers, follow_redirects=True) as response:
+            response.raise_for_status()
+            with dest.open("wb") as out:
+                for chunk in response.iter_bytes(1 << 20):
+                    out.write(chunk)
+        return dest
