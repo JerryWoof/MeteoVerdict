@@ -139,6 +139,10 @@ async function show(point, names, colors) {
   message.textContent = t("forecast.loading");
   const table = weightTable(await getJson(`data/scores/forecast/${point.code}.json`));
   const models = weightedModels(table);
+  if (models.length === 0) {
+    message.textContent = t("forecast.noWeights");
+    return;
+  }
   const doc = await getJson(forecastUrl(point, models));
   if (!doc?.hourly) {
     message.textContent = t("forecast.unavailable");
