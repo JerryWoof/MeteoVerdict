@@ -404,7 +404,10 @@ def _publish_aggregates(
     table.write_parquet(data_dir / "aggregates.parquet", compression="zstd")
     names = _model_names()
     meta = aggregate.metadata(table, names, datetime.now(UTC))
-    written = aggregate.write_json(table, out, meta)
+    written = [
+        *aggregate.write_json(table, out, meta),
+        aggregate.write_stations(station_table, out),
+    ]
     typer.echo(f"{table.height} rows, as of {meta['as_of']} → {len(written)} JSON files in {out}")
     return table
 
