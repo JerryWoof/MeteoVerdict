@@ -98,7 +98,9 @@ def test_fetch_uses_monthly_files_and_falls_back_to_now():
     assert table["time"].max() <= at(23, date(2026, 9, 5))
 
     client, seen = server({f"-{LIBUS}-20261010.json": OCT_10})
-    table = obs.fetch_observations(client, [LIBUS], date(2026, 10, 10), date(2026, 10, 10))
+    table = obs.fetch_observations(
+        client, [LIBUS], date(2026, 10, 10), date(2026, 10, 10), today=date(2026, 10, 12)
+    )
     assert set(table["source"]) == {"now"}
     assert values(table, "precipitation").keys() == {
         at(4, date(2026, 10, 10)),
@@ -114,7 +116,9 @@ def test_fetch_uses_monthly_files_and_falls_back_to_now():
 
 def test_partly_published_month_continues_with_now():
     client, seen = server({f"-{LIBUS}-202609.json": SEPTEMBER})
-    obs.fetch_observations(client, [LIBUS], date(2026, 9, 17), date(2026, 9, 18))
+    obs.fetch_observations(
+        client, [LIBUS], date(2026, 9, 17), date(2026, 9, 18), today=date(2026, 9, 19)
+    )
     # the September file ends on 2026-09-17, so only 18 September is asked for in now/
     assert [p for p in seen if "/now/" in p] == [
         f"/meteorology/climate/now/data/10m-{LIBUS}-20260918.json"
@@ -149,3 +153,20 @@ def test_write_monthly_replaces_matching_rows(tmp_path):
     merged = pl.read_parquet(tmp_path / "2026-09.parquet")
     assert merged.height == first.height
     assert merged.filter(pl.col("source") == "recent")["value"].to_list() == [99.0] * 3
+
+
+def test_old_days_are_not_looked_for_in_now():
+    client, seen = server({})
+    table = obs.fetch_observations(
+        client, ["closed"], date(2024, 3, 1), date(2024, 3, 31), today=date(2026, 10, 12)
+    )
+    assert table.height == 0
+    assert not [p for p in seen if "/now/" in p]
+    assert len(seen) == 4  # Feb (day before start) and March, recent + historical each
+
+
+def test_no_stations_gives_an_empty_table():
+    client, seen = server({})
+    table = obs.fetch_observations(client, [], date(2026, 9, 5), date(2026, 9, 5))
+    assert table.height == 0 and table.schema == pl.Schema(obs.SCHEMA)
+    assert seen == []
