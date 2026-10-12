@@ -53,7 +53,6 @@ def test_every_command_has_help(command):
 @pytest.mark.parametrize(
     ("args", "item", "detail"),
     [
-        (["score", "--start", "2024-01-01", "--end", "2024-01-01"], "2.3", "2024-01-01"),
         (["report"], "3.1", "print the leaderboard"),
         (["report", "--readme"], "3.1", "README.md"),
         (["daily", "--date", "2024-03-05"], "3.2", "2024-03-05"),
@@ -282,3 +281,43 @@ def test_store_download_rejects_a_bad_month():
     result = runner.invoke(app, ["store", "download", "--from", "2026-13"])
     assert result.exit_code == 2
     assert "bad month range" in plain(result.output)
+
+
+def test_score_needs_observations_and_forecasts(tmp_path):
+    result = runner.invoke(
+        app, ["score", "--start", "2026-09-01", "--end", "2026-09-01", "--data-dir", str(tmp_path)]
+    )
+    assert result.exit_code == 1
+    assert "no observations (mvd fetch-obs)" in result.stderr
+
+
+def test_score_writes_monthly_scores(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    from meteoverdict.forecasts import SCHEMA as FC_SCHEMA
+    from meteoverdict.observations import SCHEMA as OBS_SCHEMA
+
+    times = [datetime(2026, 9, 30, tzinfo=UTC) + timedelta(hours=h) for h in range(25)]
+    obs = pl.DataFrame(
+        [("s", t, "temperature_2m", 10.0, 0, "recent") for t in times],
+        schema=OBS_SCHEMA,
+        orient="row",
+    )
+    fc = pl.DataFrame(
+        [("s", t, "dwd_icon_d2", 1, 11.0, None, None) for t in times],
+        schema=FC_SCHEMA,
+        orient="row",
+    )
+    for kind, frame in (("obs", obs), ("fc", fc)):
+        (tmp_path / kind).mkdir()
+        frame.filter(pl.col("time").dt.month() == 9).write_parquet(
+            tmp_path / kind / "2026-09.parquet"
+        )
+        frame.filter(pl.col("time").dt.month() == 10).write_parquet(
+            tmp_path / kind / "2026-10.parquet"
+        )
+    args = ["score", "--start", "2026-09-30", "--end", "2026-09-30", "--data-dir", str(tmp_path)]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    scores = pl.read_parquet(tmp_path / "scores" / "2026-09.parquet")
+    assert scores.select("variable", "n").rows() == [("temperature_2m", 24)]
