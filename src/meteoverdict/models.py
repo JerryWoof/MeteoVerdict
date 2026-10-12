@@ -14,6 +14,9 @@ import yaml
 #: Lead days in scope (ROADMAP "Scope v1": D+1 to D+5).
 MAX_LEAD_DAY = 5
 
+#: Hours added to 24 x lead day when deciding a run's output step (see Model.native_step).
+LEAD_MARGIN_H = 6
+
 #: Forecast variables we verify (Open-Meteo names).
 VARIABLES = ("temperature_2m", "precipitation", "wind_speed_10m")
 
@@ -27,7 +30,7 @@ _FIELDS = {
     "max_lead_day",
     "archive_from",
 }
-_OPTIONAL = {"enabled", "note", "variable_from"}
+_OPTIONAL = {"enabled", "note", "variable_from", "coarser_after_h", "coarser_step_h"}
 
 
 class ModelCatalogError(ValueError):
@@ -47,12 +50,25 @@ class Model:
     enabled: bool = True
     note: str = ""
     variable_from: dict[str, date] = field(default_factory=dict)
+    coarser_after_h: int | None = None
+    coarser_step_h: int | None = None
 
     def available_from(self, variable: str) -> date:
         """First day with D+1 forecasts of ``variable`` in the Previous Runs archive."""
         if variable not in VARIABLES:
             raise KeyError(variable)
         return self.variable_from.get(variable, self.archive_from)
+
+    def native_step(self, lead_day: int) -> int:
+        """Output step (hours) of the runs behind ``_previous_day{lead_day}``.
+
+        The run used is at least 24 x lead_day hours old; allow 6 more hours for run
+        spacing and delivery delay before deciding that its output has become coarser.
+        """
+        lead_hours = 24 * lead_day + LEAD_MARGIN_H
+        if self.coarser_after_h is not None and lead_hours > self.coarser_after_h:
+            return self.coarser_step_h
+        return self.step_hours
 
     @property
     def lead_days(self) -> tuple[int, ...]:
@@ -87,6 +103,10 @@ def _parse(entry: Any, index: int) -> Model:
     model = Model(**{**entry, "variable_from": variable_from})
     if model.step_hours not in (1, 3, 6) or model.forecast_days < 1:
         raise ModelCatalogError(f"{model.id}: implausible step_hours or forecast_days")
+    if (model.coarser_after_h is None) != (model.coarser_step_h is None) or (
+        model.coarser_step_h is not None and model.coarser_step_h not in (3, 6)
+    ):
+        raise ModelCatalogError(f"{model.id}: coarser_after_h and coarser_step_h go together")
     longest = min(MAX_LEAD_DAY, math.floor(model.forecast_days))
     if isinstance(model.max_lead_day, bool) or model.max_lead_day not in range(1, longest + 1):
         raise ModelCatalogError(f"{model.id}: max_lead_day must be 1..{longest}")
