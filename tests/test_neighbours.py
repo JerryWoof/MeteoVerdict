@@ -1,6 +1,9 @@
+from datetime import date
+
 import polars as pl
 
-from meteoverdict import neighbours
+from meteoverdict import aggregate as agg
+from meteoverdict import neighbours, ranking
 
 # Real places: Benešov and Vlašim (okres Benešov, CZ0201); Mnichovice (3 km beyond its
 # border) and Říčany (9 km) in Praha-východ (CZ0209); Brno (CZ0642), 110 km away.
@@ -24,6 +27,30 @@ STATIONS = pl.DataFrame(
         "elevation_class": ["upland"] * 5,
     }
 )
+DAY = date(2026, 9, 30)
+
+
+def scores(missing=()):
+    """Temperature D+1 scores of models a and b at every station, except ``missing``
+    (station, model) pairs."""
+    rows = [
+        {
+            "date": DAY,
+            "station_id": s,
+            "model": m,
+            "lead_day": 1,
+            "variable": "temperature_2m",
+            "period_h": 0,
+            "n": 24,
+            "sum_err": 24.0,
+            "sum_abs_err": 24.0 * (1 if m == "a" else 2),
+            "sum_sq_err": 24.0,
+        }
+        for s in PLACES
+        for m in ("a", "b")
+        if (s, m) not in missing
+    ]
+    return pl.DataFrame(rows)
 
 
 def test_distance_to_an_okres_is_zero_inside_and_grows_outside():
@@ -87,3 +114,41 @@ def test_excluded_stations_are_replaced():
     pool = neighbours.pools(DISTANCE, available("t", ["a1", "b1", "b2"]), 2, exclude=exclude)
     assert members(pool, "A") == {"a1": False, "b1": True}
     assert members(pool, "B") == {"b1": False, "b2": False}
+
+
+def okres_rows(table, region):
+    part = table.filter(pl.col("level") == "okres", pl.col("region") == region)
+    return part.filter(pl.col("model") == "a").select("stations", "borrowed", "enough_stations")
+
+
+def test_aggregate_ranks_an_okres_with_borrowed_stations():
+    table = agg.aggregate(scores(), STATIONS, windows=("all",))
+    assert okres_rows(table, "CZ0201").row(0) == (3, 1, True)  # + Mnichovice
+    assert okres_rows(table, "CZ0642").row(0) == (1, 0, False)  # nothing within reach
+    # the other levels keep their own stations
+    kraj = table.filter(pl.col("level") == "kraj", pl.col("region") == "CZ020")
+    assert kraj["stations"].unique().to_list() == [4]
+    assert kraj["borrowed"].unique().to_list() == [0]
+
+
+def test_a_station_the_fair_comparison_drops_is_replaced_by_the_next():
+    # model b never reached Mnichovice, so Benešov borrows Říčany instead
+    table = agg.aggregate(scores(missing={("mnichovice", "b")}), STATIONS, windows=("all",))
+    assert okres_rows(table, "CZ0201").row(0) == (3, 1, True)
+    pool = agg.okres_pools(
+        scores(missing={("mnichovice", "b")})
+        .lazy()
+        .join(agg.station_info(STATIONS), on="station_id"),
+        neighbours.distances(STATIONS),
+    )
+    assert members(pool, "CZ0201", "temperature_2m") == {
+        "benesov": False,
+        "vlasim": False,
+        "ricany": True,
+    }
+
+
+def test_ranking_uses_the_same_pools():
+    ranks = ranking.rank(scores(), STATIONS, windows=("all",), resamples=10)
+    okres = ranks.filter(pl.col("level") == "okres", pl.col("region") == "CZ0201")
+    assert okres.select("model", "rank").rows() == [("a", 1), ("b", 2)]
