@@ -15,24 +15,15 @@ and 17:52 UTC.
 ## Set it up
 
 1. In TRMNL go to **Plugins → Private Plugin → Add new**.
-2. **Strategy:** Polling. **Polling URL** (Litoměřice; other okresy are listed in
-   [api/v1/index.json](https://jerrywoof.github.io/MeteoVerdict/api/v1/index.json)):
+2. **Strategy:** Polling. **Polling URL** (your okres instead of `CZ0100`, Prague; every
+   code is in [api/v1/index.json](https://jerrywoof.github.io/MeteoVerdict/api/v1/index.json)):
 
    ```
-   https://jerrywoof.github.io/MeteoVerdict/api/v1/okresy/CZ0423.json
+   https://jerrywoof.github.io/MeteoVerdict/api/v1/okresy/CZ0100.json
    ```
 
-   Until the open data carries `sunrise`, `sunset` and `sunshine` (branch
-   `feat/sun-in-outlook`), add a second line with Open-Meteo for your village:
-
-   ```
-   https://api.open-meteo.com/v1/forecast?latitude=50.08&longitude=14.44&daily=sunrise,sunset,sunshine_duration&timezone=Europe%2FPrague&forecast_days=3
-   ```
-
-   Once the open data has them, the second line can go; the screen uses MeteoVerdict's
-   values whenever they are there.
 3. **Refresh rate:** hourly (the curve's "now" line moves; the forecast changes twice a day).
-4. **Edit Markup → Full:** paste `full.liquid`, change `place` at the top if you like,
+4. **Edit Markup → Full:** paste `full.liquid`, put your town in `place` at the top if you like,
    save, and click **Force Refresh**.
 5. Add the plugin to a playlist.
 
@@ -42,11 +33,10 @@ that date yet, the screen shows the first two days of the forecast.
 ## Preview locally
 
 ```bash
-npm i liquidjs@10 && node preview.mjs full.liquid preview.html CZ0100 50.08 14.44 sun
+npm i liquidjs@10 && node preview.mjs full.liquid preview.html CZ0100
 ```
 
-The last argument: `open-meteo` (the open data as it is now, plus the second URL), `sun`
-(as after the outlook change) or `test` (every weather symbol, rain, and today without its
-whole-day row).
+Add `test` as the last argument to see every weather symbol, rain, and today without its
+whole-day row.
 
 Data: MeteoVerdict (CC BY-SA 4.0), Open-Meteo.com and ČHMÚ.
