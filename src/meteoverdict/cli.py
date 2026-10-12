@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, NoReturn
 
 import httpx
+import polars as pl
 import typer
 
-from meteoverdict import __version__, regions, stations
+from meteoverdict import __version__, aladin, regions, stations
 from meteoverdict import models as catalogue
 from meteoverdict.chmi import ChmiFormatError
+from meteoverdict.releases import GitHubReleaseStore
 
 app = typer.Typer(
     name="mvd",
@@ -93,6 +96,58 @@ def stations_cmd(
     active = int(table["active"].sum())
     kraje = table["kraj"].n_unique()
     typer.echo(f"Wrote {table.height} stations ({active} active) in {kraje} kraje to {out}")
+
+
+ALADIN_RELEASE_NOTES = (
+    "ČHMÚ ALADIN forecasts at ČHMÚ stations, one Parquet file per model run, archived by "
+    "`mvd archive-aladin`. Source: Czech Hydrometeorological Institute (ČHMÚ), "
+    "opendata.chmi.cz, licensed under CC BY 4.0 "
+    "(https://creativecommons.org/licenses/by/4.0/). Changes: values taken at the grid point "
+    "nearest to each station, temperature converted from K to °C. "
+    "Format: docs/data-sources.md#aladin-archive."
+)
+
+
+@app.command("archive-aladin")
+def archive_aladin(
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    out_dir: Annotated[
+        Path | None, typer.Option(help="Write the archive files to this folder.")
+    ] = None,
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Upload to GitHub Releases of $GITHUB_REPOSITORY using $GITHUB_TOKEN.",
+        ),
+    ] = False,
+) -> None:
+    """Archive ALADIN forecasts at the stations for every run still on the ČHMÚ server."""
+    if (out_dir is None) == (not github_release):
+        raise typer.BadParameter("use exactly one of --out-dir and --github-release")
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    table = pl.read_parquet(stations_path)
+    transport = httpx.HTTPTransport(retries=3)
+    with httpx.Client(timeout=300, transport=transport, follow_redirects=True) as client:
+        if github_release:
+            token, repo = os.environ.get("GITHUB_TOKEN"), os.environ.get("GITHUB_REPOSITORY")
+            if not token or not repo:
+                raise typer.BadParameter(
+                    "--github-release needs GITHUB_TOKEN and GITHUB_REPOSITORY"
+                )
+            store = GitHubReleaseStore(client, repo, token, notes=ALADIN_RELEASE_NOTES)
+        else:
+            store = aladin.LocalStore(out_dir)
+        result = aladin.archive(client, store, table, log=typer.echo)
+    typer.echo(
+        f"archived {len(result.archived)}, already there {result.skipped}, "
+        f"failed {len(result.failed)}"
+    )
+    if result.failed:
+        raise typer.Exit(code=1)
 
 
 @app.command("models")
