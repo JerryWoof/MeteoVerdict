@@ -89,3 +89,43 @@ footer {
   font-size: 1.1rem;
   cursor: pointer;
 }
+body.page {
+  height: auto;
+  min-height: 100vh;
+}
+header h1 a {
+  color: inherit;
+  text-decoration: none;
+}
+.content {
+  padding: 0 1rem 1rem;
+  max-width: 60rem;
+}
+.content h2 {
+  font-size: 1.05rem;
+  margin: 1.2rem 0 0.3rem;
+}
+.note {
+  font-size: 0.85rem;
+  color: #5b6670;
+  margin: 0 0 0.6rem;
+}
+#ranking {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  width: 100%;
+}
+#ranking th,
+#ranking td {
+  text-align: left;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid #ddd8cc;
+}
+#ranking .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+#ranking tr.baseline {
+  color: #5b6670;
+  font-style: italic;
+}
