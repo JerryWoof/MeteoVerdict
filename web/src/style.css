@@ -25,6 +25,29 @@ header p {
 }
 #map {
   min-height: 300px;
+  position: relative;
+}
+#legend {
+  position: absolute;
+  z-index: 1;
+  left: 0.75rem;
+  bottom: 1.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+#legend:empty {
+  display: none;
+}
+.swatch {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-right: 0.4rem;
+  vertical-align: -0.1rem;
+  border-radius: 2px;
 }
 footer {
   font-size: 0.75rem;
