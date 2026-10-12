@@ -11,9 +11,9 @@ import httpx
 import polars as pl
 import typer
 
-from meteoverdict import __version__, aladin, regions, stations
+from meteoverdict import __version__, aladin, observations, regions, stations
 from meteoverdict import models as catalogue
-from meteoverdict.chmi import ChmiFormatError
+from meteoverdict.chmi import ChmiFormatError, fetch_current_meta
 from meteoverdict.releases import GitHubReleaseStore
 
 app = typer.Typer(
@@ -171,10 +171,37 @@ def models_cmd(
 
 
 @app.command("fetch-obs")
-def fetch_obs(start: DateOption, end: DateOption) -> None:
+def fetch_obs(
+    start: DateOption,
+    end: DateOption,
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    out_dir: Annotated[Path, typer.Option(help="Monthly Parquet files go here.")] = Path(
+        "data/obs"
+    ),
+) -> None:
     """Fetch hourly ČHMÚ station observations (T2m, precipitation, wind) for a date range."""
     _check_range(start.date(), end.date())
-    _not_implemented("fetch-obs", "1.5", f"fetch observations {start:%Y-%m-%d}..{end:%Y-%m-%d}")
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    table = pl.read_parquet(stations_path)
+    transport = httpx.HTTPTransport(retries=3)
+    try:
+        with httpx.Client(timeout=120, transport=transport, follow_redirects=True) as client:
+            meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
+            automatic = observations.automatic_station_ids(meta2)
+            # inactive stations are not in today's meta2; try them anyway
+            ids = table.filter(pl.col("id").is_in(list(automatic)) | ~pl.col("active"))["id"]
+            obs = observations.fetch_observations(client, ids, start.date(), end.date())
+    except httpx.HTTPError as exc:
+        typer.echo(f"mvd fetch-obs: download failed: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    written = observations.write_monthly(obs, out_dir)
+    typer.echo(
+        f"{obs.height} hourly values from {obs['station_id'].n_unique()} of {len(ids)} "
+        f"stations → {', '.join(str(p) for p in written) or 'nothing'}"
+    )
 
 
 @app.command("fetch-fc")
