@@ -97,11 +97,11 @@ def rank(
     rows = []
     for window in windows:
         _, days = aggregate.window_days(window, as_of, first_day)
-        fair = aggregate.common_days(scores.filter(days))
-        fair = fair.join(info, on="station_id", how="inner")
+        in_window = scores.filter(days).join(info, on="station_id", how="inner")
         for level in aggregate.LEVELS:
+            regions = in_window.with_columns(aggregate.region_columns(level))
             daily = (
-                fair.with_columns(aggregate.region_columns(level))
+                aggregate.common_days(regions, by="region")
                 .group_by("region", "variable", "lead_day", "date", "model")
                 .agg(metrics.total("sum_abs_err"), metrics.total("n"))
                 .collect()

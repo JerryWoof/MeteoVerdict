@@ -144,3 +144,16 @@ def test_the_blend_is_compared_with_the_best_model_but_not_ranked():
     assert a["clear_winner"]  # the blend does not take the win from the best model
     assert mean["diff_to_best"] == pytest.approx(-0.5)
     assert mean["diff_ci_high"] < 0 and not mean["clear_winner"]
+
+
+def test_a_region_ranks_its_models_on_the_same_stations():
+    # model b has no scores at s3 (like ICON-D2 in the far east), where a is much worse
+    data = pl.concat(
+        [
+            scores({"a": [1.0, 1.1, 0.9], "b": [1.2, 1.3, 1.1]}, stations=("s1", "s2")),
+            scores({"a": [9.0, 9.0, 9.0]}, stations=("s3",)),
+        ]
+    )
+    got = cz(ranking.rank(data, STATIONS, resamples=100))
+    # without s3 for both, a stays ahead; counting s3 for a alone would put b first
+    assert got.select("model", "rank").rows() == [("a", 1), ("b", 2)]
