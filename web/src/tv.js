@@ -106,54 +106,12 @@ export function colorFor(value, layer) {
   return hex(ramp.at(-1)[1]);
 }
 
-/** MapLibre "match" expression colouring okresy for a day, part and layer. */
-export function fillExpression(outlook, day, part, layer) {
-  if (!RAMPS[layer]) return NEUTRAL;
-  const pairs = outlook.okresy.flatMap((o) => [
-    o.code,
-    colorFor(valueFor(rowFor(outlook, o.code, day, part), layer, part), layer),
-  ]);
-  return pairs.length ? ["match", ["get", "code"], ...pairs, "#ececec"] : "#ececec";
-}
-
-/**
- * What a marker shows for the chosen values, in a fixed order: the temperature as the
- * big number, the others as small chips: [{layer, text}].
- */
-export function markerValues(row, part, shown) {
-  if (!row) return [];
-  return LAYERS.filter((layer) => shown.includes(layer)).map((layer) => ({
-    layer,
-    text: labelFor(row, layer, part),
-  }));
-}
-
 /** Symbol image name: clear and partly cloudy skies get a moon at night. */
 export function iconName(symbol, part) {
   if (!symbol) return "";
   const dark = part === "night";
   if (dark && (symbol === "clear" || symbol === "partly" || symbol === "showers")) return `${symbol}-night`;
   return symbol;
-}
-
-/** Points at the okres forecast points with their symbol and label (map markers). */
-export function pointFeatures(outlook, day, part, shown) {
-  return {
-    type: "FeatureCollection",
-    features: outlook.okresy
-      .map((o) => ({ o, row: rowFor(outlook, o.code, day, part) }))
-      .filter(({ row }) => row)
-      .map(({ o, row }) => ({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [o.lon, o.lat] },
-        properties: {
-          code: o.code,
-          name: o.name,
-          icon: iconName(row.symbol, part),
-          values: markerValues(row, part, shown),
-        },
-      })),
-  };
 }
 
 /** Headline for a day and part: warmest and coldest okres, okresy where rain is likely. */
@@ -204,17 +162,6 @@ export function dayLabel(day, todayIso, language) {
   return { text };
 }
 
-/** The views a "play" cycles through: every part of every day, from (day, part) on. */
-export function sequence(outlook, fromDay, fromPart) {
-  const steps = [];
-  for (const day of outlook.days) {
-    for (const part of PARTS.slice(0, 4)) {
-      if (outlook.okresy.some((o) => rowFor(outlook, o.code, day, part))) steps.push({ day, part });
-    }
-  }
-  const start = steps.findIndex((s) => s.day === fromDay && s.part === fromPart);
-  return start > 0 ? [...steps.slice(start), ...steps.slice(0, start)] : steps;
-}
 
 /**
  * The view in the URL: "#day/part/colour/values/okres", values as letters
@@ -240,4 +187,63 @@ export function parseView(hash, outlook, fallback) {
 export function viewHash(view) {
   const values = LAYERS.filter((l) => view.shown.includes(l)).map((l) => SHORT[l]).join("") || "-";
   return `#${[view.day, view.part, view.colour, values, view.okres].filter(Boolean).join("/")}`;
+}
+
+// --- "play": a TV-style run through the next days ------------------------------------
+
+export const PLAY_PARTS = ["morning", "afternoon", "evening"];
+
+/**
+ * The play order: morning, afternoon and evening of every day, starting with the part
+ * of `fromDay` that is shown now (or that day's morning). Only steps with data.
+ */
+export function playSequence(outlook, fromDay, fromPart) {
+  const steps = [];
+  for (const day of outlook.days) {
+    for (const part of PLAY_PARTS) {
+      if (outlook.okresy.some((o) => rowFor(outlook, o.code, day, part))) steps.push({ day, part });
+    }
+  }
+  let start = steps.findIndex((s) => s.day === fromDay && s.part === fromPart);
+  if (start < 0) start = Math.max(0, steps.findIndex((s) => s.day === fromDay));
+  return steps.slice(start);
+}
+
+/** The next map colour after a round: temperature → rain → wind → cloud → temperature. */
+export function nextColour(colour) {
+  const i = LAYERS.indexOf(colour);
+  return LAYERS[(i + 1) % LAYERS.length];
+}
+
+const NUMERIC = ["tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud"];
+
+/** A row between `a` and `b` (f from 0 to 1): numbers interpolated, the symbol switching
+ * half-way; a missing side keeps the other. */
+export function lerpRow(a, b, f) {
+  if (!a || !b) return f < 0.5 ? (a ?? b) : (b ?? a);
+  const row = { ...(f < 0.5 ? a : b) };
+  for (const key of NUMERIC) {
+    if (a[key] != null && b[key] != null) row[key] = a[key] + (b[key] - a[key]) * f;
+  }
+  return row;
+}
+
+/** Mix two "#rrggbb" colours (f from 0 to 1). */
+export function mixColor(c1, c2, f) {
+  const p = (c, i) => Number.parseInt(c.slice(1 + 2 * i, 3 + 2 * i), 16);
+  const out = [0, 1, 2].map((i) => Math.round(p(c1, i) + (p(c2, i) - p(c1, i)) * f));
+  return `#${out.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Ease in and out, for transitions that start and end softly. */
+export const ease = (f) => (f < 0.5 ? 2 * f * f : 1 - (-2 * f + 2) ** 2 / 2);
+
+/** Okres → fill colour for a day, part and colour layer (what fillExpression draws). */
+export function okresColours(outlook, day, part, layer) {
+  return new Map(
+    outlook.okresy.map((o) => [
+      o.code,
+      RAMPS[layer] ? colorFor(valueFor(rowFor(outlook, o.code, day, part), layer, part), layer) : NEUTRAL,
+    ]),
+  );
 }
