@@ -11,3 +11,4 @@ Real data, downloaded, not typed:
 | `scores-90d-okres-temperature_2m.json` | the published `90d/okres/temperature_2m.json` of 12 Oct 2026, only Litoměřice and Benešov |
 | `meta.json` | the published `meta.json` of 12 Oct 2026 |
 | `outlook-hourly.json` | `outlook-hourly.json` written by `mvd outlook` on 12 Oct 2026 10:49 UTC, only Benešov and Litoměřice |
+| `scores-90d-okres-temperature_2m_{00,06,12,18}utc.json` | the published synoptic-hour temperature scores (`90d/okres`) of 12 Oct 2026, only Litoměřice and Benešov |
