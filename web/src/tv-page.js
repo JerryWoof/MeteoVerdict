@@ -3,12 +3,12 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
-import { iconCanvas } from "./icons.js";
+import { glyph, iconCanvas } from "./icons.js";
 import { setUpLanguage } from "./i18n.js";
 import {
-  LAYERS, PARTS, RAMPS, colorFor, currentPart, dayLabel, displayName, fillExpression,
-  iconName, labelFor, parseOutlook, placeMarkers, pointFeatures, rowFor, sequence, summary,
-  today,
+  COLOURS, LAYERS, PARTS, RAMPS, colorFor, currentPart, dayLabel, displayName, fillExpression,
+  iconName, labelFor, parseOutlook, parseView, placeMarkers, pointFeatures, rowFor, sequence,
+  summary, today, viewHash,
 } from "./tv.js";
 
 setWorkerUrl(workerUrl);
@@ -19,7 +19,8 @@ const BOUNDS = [
   [12.0, 48.5],
   [18.95, 51.1],
 ];
-const MARKER = { width: 64, height: 50 };
+// hours of each part of the day, shown under its name
+const HOURS = { night: "0–6", morning: "6–12", afternoon: "12–18", evening: "18–24", day: "0–24" };
 
 const map = new MapLibreMap({
   container: "map",
@@ -56,61 +57,128 @@ const fmt = (v, digits = 0) => (v == null ? "–" : v.toFixed(digits));
 const percent = (p) => (p == null ? "–" : `${Math.round(p * 100)} %`);
 const symbolText = (symbol) => (symbol ? t(`symbol.${symbol}`) : "");
 
-// --- state, kept in the URL: #day/part/layer/okres ---------------------------------
-const state = { day: null, part: null, layer: "temperature", okres: null, playing: null };
-
-function readHash(outlook) {
-  const [day, part, layer, okres] = window.location.hash.slice(1).split("/");
-  const now = Date.now();
-  const first = outlook.days.includes(today(now)) ? today(now) : outlook.days[0];
-  state.day = outlook.days.includes(day) ? day : first;
-  const nowPart = currentPart(now);
-  state.part = PARTS.includes(part) ? part : state.day === today(now) ? nowPart : "afternoon";
-  state.layer = LAYERS.includes(layer) ? layer : "temperature";
-  state.okres = outlook.okresy.some((o) => o.code === okres) ? okres : null;
-}
-
-function writeHash() {
-  const parts = [state.day, state.part, state.layer, state.okres ?? ""];
-  window.history.replaceState(null, "", `#${parts.join("/").replace(/\/$/, "")}`);
-}
-
-// --- ribbon -----------------------------------------------------------------------
-function tabs(id, items, current, onPick) {
-  const box = document.getElementById(id);
-  box.replaceChildren(
-    ...items.map(([value, label]) => {
-      const button = element("button", label);
-      button.type = "button";
-      button.setAttribute("aria-pressed", String(value === current));
-      button.addEventListener("click", () => onPick(value));
-      return button;
-    }),
-  );
-}
+// --- state, kept in the URL (tv.js parseView / viewHash) ----------------------------
+let state = { day: null, part: null, colour: "temperature", shown: [], okres: null };
+let playing = null;
 
 function dayText(day) {
   const label = dayLabel(day, today(Date.now()), language);
   return label.key ? t(label.key) : label.text;
 }
 
-function renderRibbon(outlook) {
-  tabs("days", outlook.days.map((d) => [d, dayText(d)]), state.day, (d) => update({ day: d }));
-  tabs("parts", PARTS.map((p) => [p, t(`part.${p}`)]), state.part, (p) => update({ part: p }));
-  tabs("layers", LAYERS.map((l) => [l, t(`layer.${l}`)]), state.layer, (l) => update({ layer: l }));
-  const play = document.getElementById("play");
-  play.textContent = state.playing ? t("tv.pause") : t("tv.play");
-  play.setAttribute("aria-pressed", String(Boolean(state.playing)));
+function dateText(day) {
+  return new Intl.DateTimeFormat(language, { weekday: "short", day: "numeric", month: "numeric", timeZone: "UTC" }).format(
+    Date.parse(`${day}T12:00Z`),
+  );
 }
 
-// --- map --------------------------------------------------------------------------
-const markers = new Map(); // okres → {marker, element, lngLat}
+// --- when: days and parts of the day (above the map) --------------------------------
+function renderWhen(outlook) {
+  const days = document.getElementById("days");
+  days.setAttribute("aria-label", t("tv.day"));
+  days.replaceChildren(
+    ...outlook.days.map((day) => {
+      const button = element("button", null, "daytab");
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(day === state.day));
+      const label = dayLabel(day, today(Date.now()), language);
+      button.append(element("strong", label.key ? t(label.key) : label.text));
+      if (label.key) button.append(element("small", dateText(day)));
+      button.addEventListener("click", () => update({ day }));
+      return button;
+    }),
+  );
+  const parts = document.getElementById("parts");
+  parts.setAttribute("aria-label", t("tv.part"));
+  parts.replaceChildren(
+    ...PARTS.map((part) => {
+      const button = element("button", null);
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(part === state.part));
+      button.append(element("span", t(`part.${part}`)), element("small", HOURS[part]));
+      button.addEventListener("click", () => update({ part }));
+      return button;
+    }),
+  );
+  const play = document.getElementById("play");
+  play.textContent = playing ? t("tv.pause") : t("tv.play");
+  play.setAttribute("aria-pressed", String(Boolean(playing)));
+}
+
+// --- what: values at the markers and the map colour (box on the map) ------------------
+function renderShow() {
+  const values = document.getElementById("values");
+  values.replaceChildren(
+    ...LAYERS.map((layer) => {
+      const label = element("label", null, "check");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = state.shown.includes(layer);
+      box.addEventListener("change", () => {
+        const shown = box.checked ? [...state.shown, layer] : state.shown.filter((l) => l !== layer);
+        update({ shown: LAYERS.filter((l) => shown.includes(l)) });
+      });
+      label.append(box, glyph(layer), element("span", t(`layer.${layer}`)));
+      return label;
+    }),
+  );
+  const colours = document.getElementById("colours");
+  colours.replaceChildren(
+    ...COLOURS.map((colour) => {
+      const label = element("label", null, "check");
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = "colour";
+      radio.checked = colour === state.colour;
+      radio.addEventListener("change", () => update({ colour }));
+      label.append(radio, element("span", t(colour === "none" ? "tv.noColour" : `layer.${colour}`)));
+      return label;
+    }),
+  );
+  renderScale();
+}
+
+function renderScale() {
+  const box = document.getElementById("scale");
+  const ramp = RAMPS[state.colour];
+  if (!ramp) {
+    box.replaceChildren();
+    return;
+  }
+  const [low, high] = [ramp[0][0], ramp.at(-1)[0]];
+  const stops = ramp.map(([v]) => `${colorFor(v, state.colour)} ${((v - low) / (high - low)) * 100}%`);
+  const bar = element("div", null, "bar");
+  bar.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
+  const show = (v) =>
+    ({ temperature: `${v}°`, precipitation: `${v * 100} %`, wind: `${v} m/s`, cloud: `${v} %` })[state.colour];
+  box.replaceChildren(
+    element("div", t(`scale.${state.colour}`), "scale-title"),
+    bar,
+    element("div", `${show(low)} … ${show(high)}`, "scale-ends"),
+  );
+}
+
+// --- markers ----------------------------------------------------------------------
+const markers = new Map(); // okres → {marker, el, lngLat}
 
 function markerElement(feature) {
   const box = element("button", null, "wx-marker");
   box.type = "button";
   box.title = displayName(feature.properties.name);
-  box.append(iconCanvas(feature.properties.icon, 30), element("span", feature.properties.label));
+  const top = element("span", null, "wx-top");
+  top.append(iconCanvas(feature.properties.icon, 30));
+  const chips = element("span", null, "wx-chips");
+  for (const { layer, text } of feature.properties.values) {
+    if (layer === "temperature") {
+      top.append(element("span", text, "wx-temp"));
+    } else {
+      const chip = element("span", null, `wx-chip ${layer}`);
+      chip.append(glyph(layer, 11), element("span", text));
+      chips.append(chip);
+    }
+  }
+  box.append(top);
+  if (chips.childElementCount) box.append(chips);
   box.addEventListener("click", (event) => {
     event.stopPropagation();
     update({ okres: feature.properties.code });
@@ -121,7 +189,7 @@ function markerElement(feature) {
 function renderMarkers(outlook) {
   for (const { marker } of markers.values()) marker.remove();
   markers.clear();
-  for (const feature of pointFeatures(outlook, state.day, state.part, state.layer).features) {
+  for (const feature of pointFeatures(outlook, state.day, state.part, state.shown).features) {
     const el = markerElement(feature);
     const marker = new Marker({ element: el }).setLngLat(feature.geometry.coordinates).addTo(map);
     markers.set(feature.properties.code, { marker, el, lngLat: feature.geometry.coordinates });
@@ -131,31 +199,18 @@ function renderMarkers(outlook) {
 
 function declutter() {
   const boxes = [...markers].map(([code, m]) => {
+    m.el.hidden = false;
     const p = map.project(m.lngLat);
-    return { code, x: p.x, y: p.y };
+    return { code, x: p.x, y: p.y, w: m.el.offsetWidth, h: m.el.offsetHeight };
   });
-  const shown = placeMarkers(boxes, MARKER.width, MARKER.height);
+  const shown = placeMarkers(boxes, 4, state.okres);
   for (const [code, m] of markers) {
-    m.el.hidden = !shown.has(code) && code !== state.okres;
+    m.el.hidden = !shown.has(code);
     m.el.classList.toggle("selected", code === state.okres);
   }
 }
 
-function renderScale() {
-  const ramp = RAMPS[state.layer];
-  const [low, high] = [ramp[0][0], ramp.at(-1)[0]];
-  const stops = ramp.map(([v]) => `${colorFor(v, state.layer)} ${((v - low) / (high - low)) * 100}%`);
-  const bar = element("div", null, "bar");
-  bar.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
-  const show = (v) =>
-    state.layer === "temperature" ? `${v}°` : state.layer === "precipitation" ? `${v * 100} %` : state.layer === "wind" ? `${v} m/s` : `${v} %`;
-  document.getElementById("scale").replaceChildren(
-    element("div", t(`scale.${state.layer}`), "scale-title"),
-    bar,
-    element("div", `${show(low)} … ${show(high)}`, "scale-ends"),
-  );
-}
-
+// --- headline: follows the values shown --------------------------------------------
 function renderHeadline(outlook) {
   const s = summary(outlook, state.day, state.part);
   const box = document.getElementById("headline");
@@ -163,14 +218,24 @@ function renderHeadline(outlook) {
     box.replaceChildren(element("p", t("tv.noPart")));
     return;
   }
-  const warm = element("p", t("tv.warmest", { okres: displayName(s.warmest.name), value: fmt(s.warmest.value) }));
-  const cold = element("p", t("tv.coldest", { okres: displayName(s.coldest.name), value: fmt(s.coldest.value) }));
-  box.replaceChildren(
-    element("h2", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`),
+  const line = (layer, text) => {
+    const p = element("p", null, "line");
+    p.append(glyph(layer), element("span", text));
+    return p;
+  };
+  const lines = [];
+  const shown = (l) => state.shown.includes(l) || state.colour === l;
+  // temperature also when nothing else is chosen
+  if (shown("temperature") || !LAYERS.some(shown)) {
+    const warm = line("temperature", t("tv.warmest", { okres: displayName(s.warmest.name), value: fmt(s.warmest.value) }));
+    const cold = line("temperature", t("tv.coldest", { okres: displayName(s.coldest.name), value: fmt(s.coldest.value) }));
     // at night the coldest place comes first
-    ...(state.part === "night" ? [cold, warm] : [warm, cold]),
-    element("p", t("tv.rainy", { n: s.rainy, of: s.okresy })),
-  );
+    lines.push(...(state.part === "night" ? [cold, warm] : [warm, cold]));
+  }
+  if (shown("precipitation")) lines.push(line("precipitation", t("tv.rainy", { n: s.rainy, of: s.okresy })));
+  if (shown("wind")) lines.push(line("wind", t("tv.windiest", { okres: displayName(s.windiest.name), value: fmt(s.windiest.value) })));
+  if (shown("cloud")) lines.push(line("cloud", t("tv.clearIn", { n: s.clear, of: s.okresy })));
+  box.replaceChildren(element("h2", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`), ...lines);
 }
 
 // --- okres panel ------------------------------------------------------------------
@@ -249,74 +314,48 @@ function renderPanel(outlook) {
 
 // --- update loop ------------------------------------------------------------------
 let outlook = null;
-
-let panelOpen = false;
+let padding = null;
 
 /** Fit Czechia beside the okres panel on wide screens, and back when it closes. */
-function fitBesidePanel() {
-  const open = Boolean(state.okres) && window.innerWidth > 700;
-  if (open === panelOpen) return;
-  panelOpen = open;
-  const right = open ? document.getElementById("okres-panel").offsetWidth + 70 : 20;
-  map.fitBounds(BOUNDS, { padding: { top: 20, bottom: 20, left: 20, right }, duration: 400 });
+function fitView() {
+  const right = window.innerWidth > 900 && state.okres ? document.getElementById("okres-panel").offsetWidth + 70 : 20;
+  if (padding && padding.right === right) return;
+  const first = padding === null;
+  padding = { top: 20, bottom: 20, left: 20, right };
+  map.fitBounds(BOUNDS, { padding, duration: first ? 0 : 400 });
 }
 
-function update(change = {}) {
-  if (change.day || change.part || change.layer || "okres" in change) stopIfManual(change);
-  Object.assign(state, change);
-  writeHash();
-  renderRibbon(outlook);
-  if (map.getLayer("okresy-fill")) {
-    map.setPaintProperty("okresy-fill", "fill-color", fillExpression(outlook, state.day, state.part, state.layer));
-    map.setFilter("okres-selected", ["==", ["get", "code"], state.okres ?? ""]);
+function update(change = {}, fromPlay = false) {
+  if (playing && !fromPlay) {
+    clearInterval(playing);
+    playing = null;
   }
+  state = { ...state, ...change };
+  window.history.replaceState(null, "", viewHash(state));
+  renderWhen(outlook);
+  renderShow();
+  map.setPaintProperty("okresy-fill", "fill-color", fillExpression(outlook, state.day, state.part, state.colour));
+  map.setFilter("okres-selected", ["==", ["get", "code"], state.okres ?? ""]);
   renderMarkers(outlook);
-  renderScale();
   renderHeadline(outlook);
   renderPanel(outlook);
-  fitBesidePanel();
-}
-
-function stopIfManual(change) {
-  if (state.playing && !change.fromPlay) {
-    clearInterval(state.playing);
-    state.playing = null;
-  }
-  delete change.fromPlay;
+  fitView();
 }
 
 function togglePlay() {
-  if (state.playing) {
-    clearInterval(state.playing);
-    state.playing = null;
-    renderRibbon(outlook);
+  if (playing) {
+    clearInterval(playing);
+    playing = null;
+    renderWhen(outlook);
     return;
   }
   const steps = sequence(outlook, state.day, state.part);
   let i = 0;
-  state.playing = setInterval(() => {
+  playing = setInterval(() => {
     i = (i + 1) % steps.length;
-    update({ ...steps[i], fromPlay: true });
+    update(steps[i], true);
   }, 1600);
-  renderRibbon(outlook);
-}
-
-async function main() {
-  outlook = parseOutlook(await getJson("data/scores/outlook.json"));
-  const status = document.getElementById("status");
-  if (outlook.okresy.length === 0) {
-    status.textContent = t("tv.none");
-    return;
-  }
-  const generated = new Date(outlook.generated);
-  status.textContent = t("tv.updated", {
-    time: new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Prague" }).format(generated),
-  });
-  readHash(outlook);
-  document.getElementById("play").addEventListener("click", togglePlay);
-  await mapLoaded;
-  addLayers();
-  update();
+  renderWhen(outlook);
 }
 
 function addLayers() {
@@ -336,6 +375,33 @@ function addLayers() {
   map.on("mouseenter", "okresy-fill", () => (map.getCanvas().style.cursor = "pointer"));
   map.on("mouseleave", "okresy-fill", () => (map.getCanvas().style.cursor = ""));
   map.on("moveend", declutter);
+}
+
+async function main() {
+  outlook = parseOutlook(await getJson("data/scores/outlook.json"));
+  const status = document.getElementById("status");
+  if (outlook.okresy.length === 0) {
+    status.textContent = t("tv.none");
+    return;
+  }
+  status.textContent = t("tv.updated", {
+    time: new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Prague" }).format(
+      new Date(outlook.generated),
+    ),
+  });
+  const now = Date.now();
+  const first = outlook.days.includes(today(now)) ? today(now) : outlook.days[0];
+  state = parseView(window.location.hash, outlook, {
+    day: first,
+    part: first === today(now) ? currentPart(now) : "afternoon",
+  });
+  // phones: the box starts folded so the map stays visible
+  const show = document.getElementById("show");
+  if (window.innerWidth <= 700) show.open = false;
+  document.getElementById("play").addEventListener("click", togglePlay);
+  await mapLoaded;
+  addLayers();
+  update();
 }
 
 main();
