@@ -75,3 +75,12 @@ def test_gauge_stations_are_the_ones_without_10_minute_data():
     stations = pl.DataFrame({"id": ["auto", "gauge", "closed"], "active": [True, True, False]})
     meta2 = pl.DataFrame({"OBS_TYPE": ["10M"], "WSI": ["auto"], "EG_EL_ABBREVIATION": ["SRA10M"]})
     assert gauges.gauge_stations(stations, meta2)["id"].to_list() == ["gauge", "closed"]
+
+
+def test_scheduled_runs_skip_the_historical_csv():
+    client, seen = server({"202608": AUGUST})
+    rows = gauges.fetch_gauge_precipitation(
+        client, [W], date(2026, 7, 1), date(2026, 8, 3), historical=False
+    )
+    assert rows["time"].min() == datetime(2026, 8, 2, 6, tzinfo=UTC)  # July is not in recent/
+    assert not any(p.endswith("-SRA.csv") for p in seen)
