@@ -43,9 +43,11 @@ def test_one_row_per_day_station_model_lead_and_variable():
     assert table.schema["a_5"] == pl.UInt8
     got = {(r["date"], r["variable"]): r for r in table.iter_rows(named=True)}
     first = date(2026, 9, 1)
-    # temperature: 00:00 … 23:00 belong to 1 September
-    assert got[(first, "temperature_2m")]["n"] == 24
-    assert got[(first, "temperature_2m")]["sum_err"] == pytest.approx(48.0)
+    # temperature: 00:00 … 23:00 belong to 1 September; ranked at the synoptic hours
+    assert got[(first, "temperature_2m_hourly")]["n"] == 24
+    assert got[(first, "temperature_2m_hourly")]["sum_err"] == pytest.approx(48.0)
+    assert got[(first, "temperature_2m")]["n"] == 4
+    assert got[(first, "temperature_2m")]["sum_err"] == pytest.approx(8.0)
     # precipitation: the hours ending 01:00 … 24:00 belong to 1 September
     assert got[(first, "precipitation")]["n"] == 24
     assert got[(first, "precipitation")]["period_h"] == 1
@@ -134,3 +136,17 @@ def test_temperature_at_synoptic_hours_is_scored_for_six_hourly_models_too():
     ]
     assert synoptic["n"].to_list() == [1] * 4
     assert synoptic["sum_err"].to_list() == pytest.approx([2.0] * 4)  # 12 °C vs 10 °C
+
+
+def test_ranked_temperature_and_wind_use_the_same_hours_for_every_model():
+    times = hours(24)
+    aifs = next(m for m in MODELS if m.id == "ecmwf_aifs025_single")
+    icon = next(m for m in MODELS if m.id == ICON_D2)
+    fc = pl.concat([forecasts(times), forecasts(times).with_columns(model=pl.lit(aifs.id))])
+    table = scoring.daily_scores(
+        observations(times), fc, [icon, aifs], date(2026, 9, 1), date(2026, 9, 1), with_blend=False
+    )
+    n = {(r["model"], r["variable"]): r["n"] for r in table.iter_rows(named=True)}
+    assert n[(ICON_D2, "temperature_2m")] == n[(aifs.id, "temperature_2m")] == 4
+    assert n[(ICON_D2, "wind_speed_10m")] == n[(aifs.id, "wind_speed_10m")] == 4
+    assert (n[(ICON_D2, "temperature_2m_hourly")], n[(aifs.id, "temperature_2m_hourly")]) == (24, 4)
