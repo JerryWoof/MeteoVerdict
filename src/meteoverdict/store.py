@@ -1,9 +1,8 @@
-"""Raw data store: monthly observation and forecast files as GitHub Release assets.
+"""Raw data store: monthly observation, forecast and score files as GitHub Release assets.
 
-Local layout ``<data>/obs/YYYY-MM.parquet`` and ``<data>/fc/YYYY-MM.parquet`` maps to the
-assets ``obs-YYYY-MM.parquet`` and ``fc-YYYY-MM.parquet`` of the release
-``data-YYYY-MM``. Each asset's label holds the file's SHA-256, so unchanged files are
-neither uploaded nor downloaded again.
+Local layout ``<data>/{obs,fc,scores}/YYYY-MM.parquet`` maps to the assets
+``{obs,fc,scores}-YYYY-MM.parquet`` of the release ``data-YYYY-MM``. Each asset's label
+holds the file's SHA-256, so unchanged files are neither uploaded nor downloaded again.
 """
 
 from __future__ import annotations
@@ -15,16 +14,18 @@ from pathlib import Path
 
 from meteoverdict.releases import GitHubReleaseStore
 
-KINDS = ("obs", "fc")
+KINDS = ("obs", "fc", "scores")
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 RELEASE_NOTES = (
-    "Hourly station observations (obs-YYYY-MM.parquet) and archived forecasts at the "
-    "stations (fc-YYYY-MM.parquet) for one month, written by `mvd fetch-obs` and "
-    "`mvd fetch-fc` (format: docs/data-sources.md). Observations: Czech Hydrometeorological "
+    "Hourly station observations (obs-YYYY-MM.parquet), archived forecasts at the "
+    "stations (fc-YYYY-MM.parquet) and daily scores (scores-YYYY-MM.parquet) for one "
+    "month, written by `mvd fetch-obs`, `mvd fetch-fc` and `mvd score` "
+    "(format: docs/data-sources.md). Observations: Czech Hydrometeorological "
     "Institute (ČHMÚ), opendata.chmi.cz, CC BY 4.0. Forecasts: Open-Meteo.com, CC BY 4.0, "
     "from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, KNMI, DMI, ČHMÚ and the "
-    "UK Met Office (CC BY-SA 4.0). Changes: hourly aggregation, station extraction. "
+    "UK Met Office (CC BY-SA 4.0). Changes: hourly aggregation, station extraction, "
+    "scoring. "
     "These files are published under CC BY-SA 4.0 "
     "(https://creativecommons.org/licenses/by-sa/4.0/); see docs/licensing.md."
 )
