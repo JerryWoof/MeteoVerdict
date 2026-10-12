@@ -105,3 +105,27 @@ def month_range(first: str, last: str) -> list[str]:
         months.append(f"{y:04d}-{m:02d}")
         y, m = (y + 1, 1) if m == 12 else (y, m + 1)
     return months
+
+
+STATE_TAG = "data-state"
+STATE_NAME = "backfill-state.json"
+
+
+class ReleaseSync:
+    """Backfill sync: month files and the backfill state in GitHub Releases."""
+
+    def __init__(self, store: GitHubReleaseStore, data_dir: Path, log=lambda _: None) -> None:
+        self.store, self.data_dir, self.log = store, data_dir, log
+
+    def pull_state(self) -> None:
+        if STATE_NAME in self.store.assets(STATE_TAG):
+            self.store.download(STATE_TAG, STATE_NAME, self.data_dir / STATE_NAME)
+
+    def pull(self, months: list[str]) -> None:
+        download(self.store, self.data_dir, months, self.log)
+
+    def push(self, months: list[str]) -> None:
+        upload(self.store, self.data_dir, self.log)
+        state = self.data_dir / STATE_NAME
+        if state.exists():
+            self.store.put(STATE_TAG, STATE_NAME, state, label=sha256(state))
