@@ -14,7 +14,9 @@ cannot reach some stations (ICON-D2 at six stations in the far east), those stat
 are left out of that region's comparison for every model, and still compared among the
 other models at the station level.
 A region needs at least ``MIN_STATIONS`` stations; otherwise ``enough_stations`` is
-false and it must not be ranked.
+false and it must not be ranked. An okres with too few stations of its own borrows the
+nearest ones of its neighbours (``meteoverdict.neighbours``, roadmap 6.1); ``borrowed``
+counts them.
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ from pathlib import Path
 
 import polars as pl
 
-from meteoverdict import metrics
+from meteoverdict import metrics, neighbours
 
 LEVELS = ("station", "okres", "kraj", "elevation", "cz")
 #: meteorological seasons and their months
@@ -108,6 +110,70 @@ def region_columns(level: str) -> list[pl.Expr]:
     return [pl.lit("cz").alias("region"), pl.lit("Česko").alias("region_name")]
 
 
+def okres_distances(stations: pl.DataFrame) -> pl.DataFrame | None:
+    """Station-to-okres distances for borrowing, or None without station coordinates."""
+    if not {"lon", "lat"} <= set(stations.columns):
+        return None
+    return neighbours.distances(stations)
+
+
+#: rounds of replacing stations the fair comparison drops (each round is one more scan)
+POOL_ROUNDS = 3
+
+
+def okres_pools(in_window: pl.LazyFrame, distance: pl.DataFrame) -> pl.DataFrame:
+    """``neighbours.pools`` for the stations with scores in ``in_window``.
+
+    A station counts only if it survives the fair comparison (``common_days``) at the
+    first lead day, where all models are present: a station that some of the okres's
+    models never reach (fewer models fetched for a rain gauge, ICON-D2 in the far east)
+    would otherwise fill a place in the pool and then be dropped. Such stations are
+    excluded from that okres and replaced by the next nearest ones.
+    """
+    available = in_window.select("variable", "station_id").unique().collect()
+    keys = ["variable", "region", "station_id"]
+    excluded = pl.DataFrame(schema={k: pl.String for k in keys})
+    pool = neighbours.pools(distance, available, MIN_STATIONS)
+    first = in_window.filter(pl.col("lead_day") == pl.col("lead_day").min())
+    for _ in range(POOL_ROUNDS):
+        joined = first.drop("okres_code", "okres").join(
+            pool.lazy(), on=["variable", "station_id"], how="inner"
+        )
+        kept = common_days(joined, by="region").select(keys).unique().collect()
+        short = (
+            pool.select("variable", "region")
+            .unique()
+            .join(kept.group_by("variable", "region").len(), on=["variable", "region"], how="left")
+            .filter(pl.col("len").fill_null(0) < MIN_STATIONS)
+        )
+        dropped = (
+            pool.select(keys)
+            .join(kept, on=keys, how="anti")
+            .join(short, on=["variable", "region"], how="semi")
+        )
+        if dropped.is_empty():
+            break
+        excluded = pl.concat([excluded, dropped])
+        pool = neighbours.pools(distance, available, MIN_STATIONS, exclude=excluded)
+    return pool
+
+
+def with_regions(
+    in_window: pl.LazyFrame, level: str, distance: pl.DataFrame | None
+) -> pl.LazyFrame:
+    """Rows of ``in_window`` with ``region``, ``region_name`` and ``borrowed``.
+
+    At the okres level with ``distance`` (from ``okres_distances``), a station's rows
+    appear once for every okres whose pool it is in (``neighbours.pools``).
+    """
+    if level == "okres" and distance is not None:
+        pool = okres_pools(in_window, distance)
+        return in_window.drop("okres_code", "okres").join(
+            pool.lazy(), on=["variable", "station_id"], how="inner"
+        )
+    return in_window.with_columns(*region_columns(level), pl.lit(False).alias("borrowed"))
+
+
 def date_span(scores: pl.LazyFrame) -> tuple[date, date]:
     span = scores.select(pl.col("date").min().alias("first"), pl.col("date").max().alias("last"))
     first_day, last_day = span.collect().row(0)
@@ -141,18 +207,20 @@ def aggregate(
     first_day, last_day = date_span(scores)
     as_of = as_of or last_day
     info = station_info(stations)
+    distance = okres_distances(stations)
     columns = scores.collect_schema().names()
     frames = []
     for window in windows:
         start, days = window_days(window, as_of, first_day)
         in_window = scores.filter(days).join(info, on="station_id", how="inner")
         for level in LEVELS:
-            fair = common_days(in_window.with_columns(region_columns(level)), by="region")
+            fair = common_days(with_regions(in_window, level, distance), by="region")
             frames.append(
                 fair.group_by("region", "region_name", "variable", "lead_day", "model")
                 .agg(
                     *_sum_columns(columns),
                     pl.col("station_id").n_unique().alias("stations"),
+                    pl.col("station_id").filter("borrowed").n_unique().alias("borrowed"),
                     pl.col("date").n_unique().alias("days"),
                 )
                 .with_columns(
@@ -179,6 +247,7 @@ JSON_COLUMNS = (
     "lead_day",
     "model",
     "stations",
+    "borrowed",
     "days",
     "n",
     "mae",
@@ -250,6 +319,7 @@ def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -
         "variables": sorted(table["variable"].unique().to_list()),
         "models": models,
         "min_stations": MIN_STATIONS,
+        "borrow_max_km": neighbours.MAX_KM,
         "precipitation_thresholds_mm": list(metrics.PRECIPITATION_THRESHOLDS),
         "heat_thresholds_c": list(metrics.HEAT_THRESHOLDS),
         "fair_comparison": "per window, variable and lead day only station-days all models cover",
