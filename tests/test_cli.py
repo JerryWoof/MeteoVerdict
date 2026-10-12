@@ -353,12 +353,17 @@ def test_report_rewrites_only_the_readme_block(tmp_path):
     ).write_parquet(tmp_path / "aggregates.parquet")  # fmt: skip
     readme = tmp_path / "README.md"
     readme.write_text(f"# x\n{report.START}\nold\n{report.END}\nend\n", encoding="utf-8")
-    args = ["report", "--readme", "--data-dir", str(tmp_path), "--readme-path", str(readme)]
+    args = [
+        "report", "--readme", "--data-dir", str(tmp_path), "--readme-path", str(readme),
+        "--out", str(tmp_path / "site"),
+    ]  # fmt: skip
     result = runner.invoke(app, args)
     assert result.exit_code == 0, result.output
     text = readme.read_text(encoding="utf-8")
     assert "**DWD ICON-EU** (1.40)" in text and "old" not in text
     assert text.startswith("# x\n") and text.endswith("end\n")
+    badge = json.loads((tmp_path / "site" / "badge.json").read_text())
+    assert badge["label"] == "last updated" and "scores to 2026-09-30" in badge["message"]
 
 
 def test_check_fails_loudly_and_writes_the_job_summary(tmp_path, monkeypatch):
