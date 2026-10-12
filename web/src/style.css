@@ -586,3 +586,30 @@ body.tv [hidden] {
     height: 260px;
   }
 }
+
+/* open data page (api.html) */
+pre.code {
+  background: #1d2329;
+  color: #f4f1ea;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+.doc-table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  width: 100%;
+}
+.doc-table th,
+.doc-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid #ddd8cc;
+}
+#links {
+  font-size: 0.85rem;
+  word-break: break-all;
+}
