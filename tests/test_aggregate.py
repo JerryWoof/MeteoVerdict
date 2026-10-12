@@ -175,3 +175,17 @@ def test_station_positions_for_the_map(tmp_path):
     doc = json.loads(path.read_text(encoding="utf-8"))
     assert doc["columns"] == ["id", "name", "lat", "lon", "okres_code", "kraj_code", "active"]
     assert doc["rows"][0] == ["s1", "One", 50.00778, 14.4, "CZ0201", "CZ020", True]
+
+
+def test_daily_error_series_per_station(tmp_path):
+    old = DAY - timedelta(days=agg.SERIES_DAYS)  # just outside the 90 days
+    days = (old, DAY - timedelta(days=1), DAY)
+    rows = [(d, "s1", m, 1, e) for d in days for m, e in (("a", 1.234), ("b", 2.0))]
+    rows.append((DAY, "s2", "a", 3, 1.0))  # D+3 is not kept
+    written = agg.write_series(score_rows(rows), tmp_path, DAY, ("temperature_2m",))
+    assert [p.name for p in written] == ["s1.json"]
+    doc = json.loads(written[0].read_text(encoding="utf-8"))
+    assert (doc["from"], doc["to"]) == ("2026-07-03", "2026-09-30")
+    series = doc["series"]["temperature_2m"]["1"]
+    assert sorted(series) == ["a", "b"] and len(series["a"]) == agg.SERIES_DAYS
+    assert series["a"][-2:] == [1.23, 1.23] and series["a"][0] is None

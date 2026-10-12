@@ -408,6 +408,9 @@ def _publish_aggregates(
         *aggregate.write_json(table, out, meta),
         aggregate.write_stations(station_table, out),
     ]
+    if table.height:
+        last = table["to"].max()
+        written += aggregate.write_series(scores, out, last, ranking.RANKED_VARIABLES)
     typer.echo(f"{table.height} rows, as of {meta['as_of']} → {len(written)} JSON files in {out}")
     return table
 

@@ -274,3 +274,50 @@ def write_stations(stations: pl.DataFrame, out_dir: Path) -> Path:
     doc = {"columns": columns, "rows": rows}
     path.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), "utf-8")
     return path
+
+
+#: Daily error series per station for the web map's charts (roadmap 4.4)
+SERIES_DAYS = 90
+SERIES_LEAD_DAYS = (1, 2)
+
+
+def write_series(
+    scores: pl.LazyFrame | pl.DataFrame,
+    out_dir: Path,
+    as_of: date,
+    variables: tuple[str, ...],
+) -> list[Path]:
+    """``out_dir/series/<station>.json``: each model's daily MAE over the last 90 days.
+
+    ``{"from": …, "to": …, "series": {variable: {lead day: {model: [MAE or null]}}}}``,
+    one value per day, rounded to 2 decimals; D+1 and D+2 only, to keep the files small.
+    """
+    first = as_of - timedelta(days=SERIES_DAYS - 1)
+    daily = (
+        scores.lazy()
+        .filter(
+            pl.col("date").is_between(first, as_of),
+            pl.col("lead_day").is_in(SERIES_LEAD_DAYS),
+            pl.col("variable").is_in(variables),
+        )
+        .group_by("station_id", "variable", "lead_day", "model", "date")
+        .agg((metrics.total("sum_abs_err") / metrics.total("n")).alias("mae"))
+        .collect()
+    )
+    days = [first + timedelta(days=i) for i in range(SERIES_DAYS)]
+    folder = out_dir / "series"
+    folder.mkdir(parents=True, exist_ok=True)
+    written = []
+    for (station,), part in daily.partition_by("station_id", as_dict=True).items():
+        series: dict = {}
+        groups = part.partition_by(["variable", "lead_day", "model"], as_dict=True)
+        for (variable, lead_day, model), rows in sorted(groups.items()):
+            values = dict(zip(rows["date"], rows["mae"], strict=True))
+            series.setdefault(variable, {}).setdefault(str(lead_day), {})[model] = [
+                None if values.get(d) is None else round(values[d], 2) for d in days
+            ]
+        doc = {"from": str(first), "to": str(as_of), "series": series}
+        path = folder / f"{station}.json"
+        path.write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
+        written.append(path)
+    return written
