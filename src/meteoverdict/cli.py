@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
@@ -21,6 +22,7 @@ from meteoverdict import (
     forecasts,
     gauges,
     observations,
+    outlook,
     partitions,
     quality,
     ranking,
@@ -200,6 +202,42 @@ def store_download(
     with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
         done = store.download(_release_store(client), data_dir, months, log=typer.echo)
     typer.echo(f"downloaded {len(done)} files")
+
+
+@app.command("outlook")
+def outlook_cmd(
+    aggregates_path: Annotated[
+        Path, typer.Option("--aggregates", help="aggregates.parquet from `mvd aggregate`.")
+    ] = Path("data/aggregates.parquet"),
+    out: Annotated[Path, typer.Option(help="The JSON file to write.")] = Path(
+        "site/data/outlook.json"
+    ),
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Take aggregates.parquet from and put outlook.json into the release "
+            "data-latest (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+        ),
+    ] = False,
+) -> None:
+    """TV-style forecast for every okres: today's models combined by their okres scores."""
+    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+        releases = _release_store(client) if github_release else None
+        if releases:
+            releases.download(store.LATEST_TAG, "aggregates.parquet", aggregates_path)
+        if not aggregates_path.exists():
+            raise typer.BadParameter(f"{aggregates_path} not found; run `mvd aggregate`")
+        weights = combine.weights(pl.read_parquet(aggregates_path))
+        if weights.is_empty():
+            typer.echo("mvd outlook: no okres weights yet", err=True)
+            raise typer.Exit(code=1)
+        points = combine.okres_points()
+        table = outlook.outlook(client, weights, points, sleep=time.sleep)
+        path = outlook.write(table, points, out, datetime.now(UTC))
+        if releases:
+            releases.put(store.LATEST_TAG, "outlook.json", path)
+    typer.echo(f"{table['okres'].n_unique()} okresy, {table.height} rows → {path}")
 
 
 @app.command("models")
