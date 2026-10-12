@@ -16,6 +16,7 @@
       <a href="compare.html" data-i18n="page.compare">Compare models</a>
       <a href="tv.html" data-i18n="page.tv">Forecast</a>
       <form id="controls">
+        <label><span data-i18n="control.okres">Okres</span> <select id="find"></select></label>
         <label><span data-i18n="control.variable">Variable</span> <select id="variable"></select></label>
         <label><span data-i18n="control.lead">Lead time</span> <select id="lead"></select></label>
         <label><span data-i18n="control.window">Period</span> <select id="window"></select></label>
@@ -25,7 +26,8 @@
     </header>
     <main id="map" aria-label="Map of Czechia">
       <aside id="legend" aria-label="Legend"></aside>
-      <aside id="chart" aria-label="Errors at the selected station"></aside>
+      <aside id="detail" aria-live="polite"></aside>
+      <div id="hover" role="tooltip" hidden></div>
     </main>
     <footer>
       <span data-i18n="footer.observations">Observations</span>:

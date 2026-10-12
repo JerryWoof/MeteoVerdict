@@ -64,31 +64,6 @@ footer {
   padding: 0.4rem 1rem;
   color: #5b6670;
 }
-#chart {
-  position: absolute;
-  z-index: 1;
-  right: 0.75rem;
-  top: 0.75rem;
-  max-width: calc(100% - 1.5rem);
-  padding: 0.5rem 0.75rem;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 4px;
-  font-size: 0.8rem;
-}
-#chart:empty {
-  display: none;
-}
-#chart h2 {
-  font-size: 0.95rem;
-  margin: 0 1.5rem 0.4rem 0;
-}
-#chart button {
-  float: right;
-  border: none;
-  background: none;
-  font-size: 1.1rem;
-  cursor: pointer;
-}
 body.page {
   height: auto;
   min-height: 100vh;
@@ -639,4 +614,198 @@ pre.code {
 #links {
   font-size: 0.85rem;
   word-break: break-all;
+}
+
+/* score map (index.html): legend, hover, okres panel */
+#legend .legend-title {
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.05rem 0.2rem;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.legend-item.static {
+  cursor: default;
+  color: #5b6670;
+}
+.legend-item .count {
+  margin-left: auto;
+  padding-left: 0.6rem;
+  color: #5b6670;
+  font-variant-numeric: tabular-nums;
+}
+.legend-item[aria-pressed="true"] {
+  background: #1d2329;
+  color: #ffffff;
+}
+.legend-item[aria-pressed="true"] .count {
+  color: #c9ced3;
+}
+button.legend-item:hover {
+  background: #ece8de;
+}
+button.legend-item[aria-pressed="true"]:hover {
+  background: #1d2329;
+}
+.legend-hint {
+  margin-top: 0.3rem;
+  max-width: 14rem;
+  font-size: 0.72rem;
+  color: #5b6670;
+}
+#hover {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  max-width: 18rem;
+  padding: 0.35rem 0.55rem;
+  background: rgba(255, 255, 255, 0.97);
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(29, 35, 41, 0.25);
+  font-size: 0.8rem;
+}
+#hover[hidden] {
+  display: none;
+}
+.muted {
+  color: #5b6670;
+}
+.small {
+  font-size: 0.75rem;
+}
+#detail {
+  position: absolute;
+  z-index: 2;
+  right: 3.2rem;
+  top: 0.75rem;
+  width: 22rem;
+  max-height: calc(100% - 1.5rem);
+  overflow-y: auto;
+  padding: 0.6rem 0.9rem 0.8rem;
+  background: rgba(255, 255, 255, 0.97);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(29, 35, 41, 0.18);
+  font-size: 0.85rem;
+}
+#detail:empty {
+  display: none;
+}
+#detail h2 {
+  font-size: 1.15rem;
+  margin: 0 1.6rem 0 0;
+}
+#detail h3 {
+  font-size: 0.8rem;
+  margin: 0.7rem 0 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #5b6670;
+}
+#detail p {
+  margin: 0.2rem 0;
+}
+#detail .close {
+  float: right;
+  border: none;
+  background: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+}
+#detail .back {
+  display: block;
+  margin-bottom: 0.3rem;
+  border: none;
+  background: none;
+  padding: 0;
+  color: #1f5fa8;
+  font: inherit;
+  cursor: pointer;
+}
+#detail .verdict {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.5rem;
+  margin: 0.5rem 0 0.2rem;
+  font-size: 1.05rem;
+}
+#detail .verdict .swatch {
+  width: 1rem;
+  height: 1rem;
+}
+#detail .warning {
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  background: #fff3cd;
+  font-size: 0.8rem;
+}
+#detail .why {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+#detail .why li {
+  margin: 0.2rem 0;
+}
+#detail .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+#detail .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.1rem 0.45rem 0.1rem 0.3rem;
+  border-radius: 999px;
+  background: #f4f1ea;
+  font-size: 0.75rem;
+}
+#detail .chip b {
+  font-weight: 600;
+  margin-right: 0.15rem;
+}
+#detail .station-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+}
+#detail .station {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.8rem;
+  color: #1f5fa8;
+  cursor: pointer;
+}
+#detail .links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  margin-top: 0.6rem;
+}
+@media (max-width: 700px) {
+  #detail {
+    left: 0.5rem;
+    right: 0.5rem;
+    top: auto;
+    bottom: 0.5rem;
+    width: auto;
+    max-height: 55%;
+  }
+  .legend-hint {
+    display: none;
+  }
 }
