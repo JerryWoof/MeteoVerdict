@@ -328,7 +328,11 @@ def test_score_writes_monthly_scores(tmp_path):
     result = runner.invoke(app, args)
     assert result.exit_code == 0, result.output
     scores = pl.read_parquet(tmp_path / "scores" / "2026-09.parquet")
-    assert scores.select("variable", "n").rows() == [("temperature_2m", 24), ("temperature_max", 1)]
+    assert scores.select("variable", "n").rows() == [
+        ("temperature_2m", 24),
+        *[(f"temperature_2m_{h}utc", 1) for h in ("00", "06", "12", "18")],
+        ("temperature_max", 1),
+    ]
 
 
 def test_aggregate_needs_scores(tmp_path):
