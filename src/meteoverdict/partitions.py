@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import polars as pl
@@ -43,3 +43,9 @@ def scan_months(folder: Path, first: date, last: date) -> pl.LazyFrame | None:
     paths = [folder / f"{m}.parquet" for m in months(first, last)]
     paths = [p for p in paths if p.exists()]
     return pl.scan_parquet(paths) if paths else None
+
+
+def month_end(day: date) -> date:
+    """Last day of ``day``'s month."""
+    following = date(day.year + day.month // 12, day.month % 12 + 1, 1)
+    return following - timedelta(days=1)
