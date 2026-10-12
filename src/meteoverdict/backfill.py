@@ -32,19 +32,23 @@ class State:
     obs_months: set[str] = field(default_factory=set)
     fc_done: set[str] = field(default_factory=set)
     scored: set[str] = field(default_factory=set)
+    #: model id -> stations Open-Meteo has no data for (outside the model's real domain)
+    uncovered: dict[str, set[str]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> State:
         if not path.exists():
             return cls(path)
         doc = json.loads(path.read_text(encoding="utf-8"))
-        return cls(path, set(doc["obs_months"]), set(doc["fc_done"]), set(doc["scored"]))
+        uncovered = {m: set(ids) for m, ids in doc.get("uncovered", {}).items()}
+        return cls(path, set(doc["obs_months"]), set(doc["fc_done"]), set(doc["scored"]), uncovered)
 
     def save(self) -> None:
         doc = {
             "obs_months": sorted(self.obs_months),
             "fc_done": sorted(self.fc_done),
             "scored": sorted(self.scored),
+            "uncovered": {m: sorted(ids) for m, ids in sorted(self.uncovered.items()) if ids},
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
@@ -123,7 +127,9 @@ def run(
             if model_start > end or fc_key(model, start, end) in state.fc_done:
                 continue
             try:
-                fc = forecasts.fetch_forecasts(client, points, [model], model_start, end, budget)
+                fc = forecasts.fetch_forecasts(
+                    client, points, [model], model_start, end, budget, uncovered=state.uncovered
+                )
             except forecasts.QuotaError as exc:
                 partitions.write_monthly(exc.partial, data_dir / "fc", forecasts.KEYS)
                 if sync:
