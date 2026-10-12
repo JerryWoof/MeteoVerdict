@@ -39,7 +39,7 @@ class Fake:
         rows = [("s", t, "temperature_2m", 10.0, 0, source) for t in hourly(start, end)]
         return pl.DataFrame(rows, schema=observations.SCHEMA, orient="row")
 
-    def forecasts(self, client, points, models, start, end, budget):
+    def forecasts(self, client, points, models, start, end, budget, uncovered=None):
         (model,) = models
         if self.quota_after is not None and len(self.fc_calls) >= self.quota_after:
             error = forecasts.QuotaError("Daily API request limit exceeded.")
