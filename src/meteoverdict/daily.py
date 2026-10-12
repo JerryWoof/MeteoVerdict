@@ -21,7 +21,8 @@ from pathlib import Path
 import httpx
 import polars as pl
 
-from meteoverdict import observations, partitions, scoring
+from meteoverdict import gauges, observations, partitions, scoring
+from meteoverdict.backfill import GAUGE_DELAY_DAYS
 from meteoverdict.models import Model
 
 RESCORE_DAYS = 100  # covers the 90-day window and the publication delay of ČHMÚ data
@@ -35,16 +36,29 @@ def run(
     day: date,
     data_dir: Path,
     log: Callable[[str], None] = lambda _: None,
+    gauge_points: pl.DataFrame | None = None,
 ) -> list[str]:
-    """Capture observations up to ``day`` and re-score; returns the months touched."""
+    """Capture observations up to ``day`` and re-score; returns the months touched.
+
+    Rain-gauge months still within ``GAUGE_DELAY_DAYS`` are read again from ``recent/``
+    every day, as ČHMÚ adds the manual readings.
+    """
     obs = observations.fetch_observations(
         client, points["id"], day - timedelta(days=CAPTURE_DAYS - 1), day
     )
     if obs.height:
         partitions.write_monthly(obs, data_dir / "obs", ["station_id", "time", "variable"])
     log(f"captured {obs.height} hourly observations up to {day}")
+    if gauge_points is not None:
+        since = (day - timedelta(days=GAUGE_DELAY_DAYS)).replace(day=1)
+        rows = gauges.fetch_gauge_precipitation(
+            client, gauge_points["id"], since, day, historical=False
+        )
+        if rows.height:
+            observations.write_monthly(rows, data_dir / "gauges")
+        log(f"refreshed {rows.height} rain-gauge totals since {since}")
     first = day - timedelta(days=RESCORE_DAYS - 1)
-    obs_scan = partitions.scan_months(data_dir / "obs", first, day + timedelta(days=1))
+    obs_scan = observations.scan(data_dir, first, day + timedelta(days=1))
     fc_scan = partitions.scan_months(data_dir / "fc", first, day + timedelta(days=1))
     if obs_scan is None or fc_scan is None:
         log("nothing to score yet")

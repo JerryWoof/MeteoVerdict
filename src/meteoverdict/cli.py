@@ -513,7 +513,15 @@ def daily(
             sync.pull(window)
         meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
         points = observations.verification_stations(table, meta2)
-        months = daily_mod.run(client, points, models, target, data_dir, log=typer.echo)
+        months = daily_mod.run(
+            client,
+            points,
+            models,
+            target,
+            data_dir,
+            log=typer.echo,
+            gauge_points=_gauge_points(table, meta2, points),
+        )
         if sync:
             sync.push(months)
             remote = store.remote_months(sync.store)
@@ -546,6 +554,12 @@ def check(
             f.write("## Data quality\n\n" + text.replace("\n", "\n\n") + "\n")
     if any(f.level == "error" for f in findings):
         raise typer.Exit(code=1)
+
+
+def _gauge_points(table: pl.DataFrame, meta2: pl.DataFrame, points: pl.DataFrame):
+    """Rain gauges that are not verified hourly (closed stations are both)."""
+    found = gauges.gauge_stations(table, meta2)
+    return found.filter(~pl.col("id").is_in(points["id"].to_list()))
 
 
 @app.command()
@@ -593,7 +607,16 @@ def backfill(
         points = observations.verification_stations(table, meta2)
         budget = forecasts.Budget(max_calls=max_calls)
         result = backfill_mod.run(
-            client, points, models, first, last, data_dir, budget, sync, log=typer.echo
+            client,
+            points,
+            models,
+            first,
+            last,
+            data_dir,
+            budget,
+            sync,
+            log=typer.echo,
+            gauge_points=_gauge_points(table, meta2, points),
         )
     typer.echo(
         f"{result.windows_done} windows done, {budget.used:g} calls used"

@@ -87,3 +87,24 @@ def test_daily_command_publishes_the_leaderboard(tmp_path, monkeypatch):
     assert "soon" not in text and "DWD ICON-D2" in text
     assert (tmp_path / "site" / "meta.json").exists()
     assert (tmp_path / "aggregates.parquet").exists()
+
+
+def test_run_refreshes_recent_rain_gauge_months(tmp_path, monkeypatch):
+    asked = []
+
+    def fake_gauges(client, ids, start, end, historical=True):
+        asked.append((list(ids), start, end, historical))
+        row = ("g", datetime(2026, 9, 2, 6, tzinfo=UTC), "precipitation_24h", 4.0, 0, "recent")
+        return pl.DataFrame([row], schema=observations.SCHEMA, orient="row")
+
+    monkeypatch.setattr(daily.observations, "fetch_observations", lambda *a: obs_rows([]))
+    monkeypatch.setattr(daily.gauges, "fetch_gauge_precipitation", fake_gauges)
+    gauge_points = pl.DataFrame({"id": ["g"]})
+    daily.run(None, pl.DataFrame({"id": ["a"]}), [ICON], DAY, tmp_path, gauge_points=gauge_points)
+    # 62 days back from 11 Oct is 10 Aug: whole months from August, recent/ only
+    assert asked == [(["g"], date(2026, 8, 1), DAY, False)]
+    stored = pl.read_parquet(tmp_path / "gauges" / "2026-09.parquet")
+    assert stored["station_id"].to_list() == ["g"]
+    assert not (tmp_path / "obs" / "2026-09.parquet").exists()
+    both = observations.scan(tmp_path, date(2026, 9, 1), DAY).collect()
+    assert both["variable"].to_list() == ["precipitation_24h"]
