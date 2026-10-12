@@ -12,6 +12,7 @@ from datetime import date, datetime
 
 import polars as pl
 
+from meteoverdict import blend
 from meteoverdict.regions import load_kraje
 
 START = "<!-- LEADERBOARD:START -->"
@@ -24,6 +25,23 @@ COLUMNS = {
 }
 MAX_TIED = 3
 WINDOW_TEXT = {"90d": "last 90 days", "season": "this season", "all": "all time"}
+
+
+def blend_summary(part: pl.DataFrame) -> str:
+    """How often the mean of all models beats the best single model (roadmap 5.3)."""
+    rows = part.filter(pl.col("model") == blend.ID, pl.col("enough_stations"))
+    if rows.height == 0 or "diff_to_best" not in rows.columns:
+        return ""
+    parts = []
+    for variable, label in COLUMNS.items():
+        here = rows.filter(pl.col("variable") == variable, pl.col("diff_to_best").is_not_null())
+        if here.height:
+            better = here.filter(pl.col("diff_to_best") < 0).height
+            clearly = here.filter(pl.col("diff_ci_high") < 0).height
+            parts.append(f"{label.lower()} {better} of {here.height} ({clearly} significantly)")
+    if not parts:
+        return ""
+    return "The mean of all models beats the best single model in: " + "; ".join(parts) + "."
 
 
 def _cell(rows: pl.DataFrame, names: dict[str, str]) -> str:
@@ -93,6 +111,9 @@ def leaderboard(
         cells = [_cell(here.filter(pl.col("variable") == v), names) for v in COLUMNS]
         label = f"**{name}**" if level == "cz" else name
         lines.append(f"| {label} | " + " | ".join(cells) + " |")
+    summary = blend_summary(part)
+    if summary:
+        lines += ["", summary]
     if updated is not None:
         lines += ["", f"_Last updated {updated:%Y-%m-%d %H:%M} UTC; scores up to {span[1]}._"]
     lines += [
