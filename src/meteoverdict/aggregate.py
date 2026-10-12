@@ -6,11 +6,13 @@ Levels: ``station``, ``okres``, ``kraj``, ``elevation`` (lowland/upland/mountain
 and ``all``; and per season over all years (roadmap 5.1): ``djf``, ``mam``, ``jja`` and
 ``son``, every day of that season up to ``as_of``.
 
-Fair comparison: for each window, variable, lead day and station, only the days that
-**every** model covering that station has scores for are used. So a model with a short
-archive (ALADIN) or gaps (UKMO) does not get easier or harder days than the others; a
-model that cannot reach a station at all (ICON-D2 in the far east) is simply absent
-there (its ``stations`` count in a region is then lower).
+Fair comparison: for each window, variable, lead day and region, only the station-days
+that **every** model present in that region has scores for are used. So a model with a
+short archive (ALADIN) or gaps (UKMO) does not get easier or harder days than the
+others, and all models in a region are compared on the same stations: where a model
+cannot reach some stations (ICON-D2 at six stations in the far east), those stations
+are left out of that region's comparison for every model, and still compared among the
+other models at the station level.
 A region needs at least ``MIN_STATIONS`` stations; otherwise ``enough_stations`` is
 false and it must not be ranked.
 """
@@ -66,24 +68,24 @@ def window_days(window: str, as_of: date, first_day: date) -> tuple[date, pl.Exp
     return start, pl.col("date").is_between(start, as_of)
 
 
-def common_days(scores: pl.LazyFrame) -> pl.LazyFrame:
-    """Keep the station-days every model covering that station has scores for.
+def common_days(scores: pl.LazyFrame, by: str = "station_id") -> pl.LazyFrame:
+    """Keep the station-days every model present in the group ``by`` has scores for.
 
-    Per variable, lead day and station, the models compared are those with any score at
-    that station in the period: a model whose domain does not reach a station (ICON-D2
-    in the far east) does not remove that station for the others, while a model that
-    covers it but lacks a day (a short archive, a gap) removes that day for all.
+    Per variable, lead day and group (a station, or ``region`` after
+    ``region_columns``), the models compared are those with any score in that group in
+    the period; a station-day is kept only if all of them have a score there.
     """
-    group = ["variable", "lead_day", "station_id"]
+    group = ["variable", "lead_day", by]
+    keys = list(dict.fromkeys([*group, "station_id", "date"]))
     models = scores.group_by(group).agg(pl.col("model").n_unique().alias("models"))
     present = (
-        scores.group_by(*group, "date")
+        scores.group_by(keys)
         .agg(pl.col("model").n_unique().alias("present"))
         .join(models, on=group)
         .filter(pl.col("present") == pl.col("models"))
-        .select(*group, "date")
+        .select(keys)
     )
-    return scores.join(present, on=[*group, "date"], how="semi")
+    return scores.join(present, on=keys, how="semi")
 
 
 def station_info(stations: pl.DataFrame) -> pl.LazyFrame:
@@ -143,12 +145,11 @@ def aggregate(
     frames = []
     for window in windows:
         start, days = window_days(window, as_of, first_day)
-        fair = common_days(scores.filter(days))
-        fair = fair.join(info, on="station_id", how="inner")
+        in_window = scores.filter(days).join(info, on="station_id", how="inner")
         for level in LEVELS:
+            fair = common_days(in_window.with_columns(region_columns(level)), by="region")
             frames.append(
-                fair.with_columns(region_columns(level))
-                .group_by("region", "region_name", "variable", "lead_day", "model")
+                fair.group_by("region", "region_name", "variable", "lead_day", "model")
                 .agg(
                     *_sum_columns(columns),
                     pl.col("station_id").n_unique().alias("stations"),
@@ -157,7 +158,8 @@ def aggregate(
                 .with_columns(
                     pl.lit(level).alias("level"),
                     pl.lit(window).alias("window"),
-                    pl.lit(start).alias("from"),
+                    # the window may start before the first scored day
+                    pl.lit(max(start, first_day)).alias("from"),
                     pl.lit(as_of).alias("to"),
                 )
             )
