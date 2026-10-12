@@ -191,6 +191,13 @@ def automatic_station_ids(meta2: pl.DataFrame) -> set[str]:
     )
 
 
+def verification_stations(stations: pl.DataFrame, meta2: pl.DataFrame) -> pl.DataFrame:
+    """Stations we verify hourly: automatic ones in today's ``meta2``, plus inactive ones
+    (which are not in today's ``meta2``, so their elements are unknown)."""
+    automatic = automatic_station_ids(meta2)
+    return stations.filter(pl.col("id").is_in(list(automatic)) | ~pl.col("active"))
+
+
 def write_monthly(observations: pl.DataFrame, out_dir: Path) -> list[Path]:
     """Merge into ``out_dir/YYYY-MM.parquet``: new rows replace old ones with the same
     station, time and variable (e.g. checked ``recent/`` data replacing ``now/`` data)."""
