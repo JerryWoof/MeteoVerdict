@@ -8,9 +8,10 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     chunkSizeWarningLimit: 1200,
-    // three pages: the map, the model comparison and the forecast per okres
+    // four pages: the score map, the model comparison, the detailed forecast per okres
+    // and the TV-style forecast map
     rollupOptions: {
-      input: { map: "index.html", compare: "compare.html", forecast: "forecast.html" },
+      input: { map: "index.html", compare: "compare.html", forecast: "forecast.html", tv: "tv.html" },
     },
   },
 });

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>meteoverdict: weather map</title>
+    <meta name="description" content="The weather of the next days for every okres, combined from all models by how well each did there." />
+  </head>
+  <body class="tv">
+    <header>
+      <h1><a href="./">meteoverdict</a></h1>
+      <p id="status">Loading…</p>
+      <a href="./" data-i18n="page.map">Map</a>
+      <a href="compare.html" data-i18n="page.compare">Compare models</a>
+      <button type="button" id="language">Česky</button>
+    </header>
+    <nav id="ribbon" aria-label="Day and time">
+      <div id="days" class="tabs" role="tablist"></div>
+      <div id="parts" class="tabs"></div>
+      <div id="layers" class="tabs"></div>
+      <button type="button" id="play" class="play" data-i18n="tv.play">▶</button>
+    </nav>
+    <main id="map" aria-label="Weather map of Czechia">
+      <aside id="headline" aria-live="polite"></aside>
+      <aside id="scale" aria-label="Colour scale"></aside>
+      <aside id="okres-panel" aria-live="polite"></aside>
+    </main>
+    <footer>
+      <span data-i18n="footer.forecasts">Forecasts</span>:
+      <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0; UK Met Office CC BY-SA 4.0), <span data-i18n="tv.combined">combined by meteoverdict</span> ·
+      <span data-i18n="footer.observations">Observations</span>:
+      <a href="https://opendata.chmi.cz/">ČHMÚ</a> (CC BY 4.0) ·
+      <span data-i18n="footer.boundaries">Boundaries</span>: ČÚZK (CC BY 4.0) ·
+      <a href="https://github.com/JerryLion/meteoverdict/blob/main/docs/methodology.md#our-own-forecast-roadmap-62-63" data-i18n="footer.method">Source and method</a>
+    </footer>
+    <script type="module" src="/src/tv-page.js"></script>
+  </body>
+</html>
