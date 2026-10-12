@@ -203,3 +203,15 @@ def test_daily_error_series_per_station(tmp_path):
     series = doc["series"]["temperature_2m"]["1"]
     assert sorted(series) == ["a", "b"] and len(series["a"]) == agg.SERIES_DAYS
     assert series["a"][-2:] == [1.23, 1.23] and series["a"][0] is None
+
+
+def test_json_leaves_out_empty_columns_and_native_precipitation(tmp_path):
+    rows = [(DAY, s, m, 1, 1.0) for s in ("s1", "s2", "s3") for m in ("a", "b")]
+    scores = pl.concat(
+        [score_rows(rows), score_rows(rows).with_columns(variable=pl.lit("precipitation"))]
+    )
+    table = agg.aggregate(scores, STATIONS, windows=("all",))
+    written = agg.write_json(table, tmp_path, {})
+    assert not any(p.name == "precipitation.json" for p in written)
+    doc = json.loads((tmp_path / "all" / "cz" / "temperature_2m.json").read_text())
+    assert "pod_5" not in doc["columns"] and "mae" in doc["columns"]

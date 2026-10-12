@@ -209,13 +209,20 @@ def write_json(table: pl.DataFrame, out_dir: Path, meta: dict) -> list[Path]:
     """Write ``out_dir/meta.json`` and ``out_dir/<window>/<level>/<variable>.json``.
 
     Each data file is ``{"columns": [...], "rows": [[...], ...]}`` with floats rounded to
-    3 decimals, small enough for a static web page.
+    3 decimals, small enough for a static web page. Columns that are empty in a file
+    (e.g. event scores for temperature) are left out, and so is the native-period
+    precipitation, whose periods differ between models (``aggregates.parquet`` keeps it).
     """
     written = []
     out_dir.mkdir(parents=True, exist_ok=True)
+    table = table.filter(pl.col("variable") != "precipitation")
     groups = table.partition_by(["window", "level", "variable"], as_dict=True)
     for (window, level, variable), part in sorted(groups.items()):
-        columns = [c for c in JSON_COLUMNS if c in part.columns]
+        columns = [
+            c
+            for c in JSON_COLUMNS
+            if c in part.columns and (c == "region" or part[c].null_count() < part.height)
+        ]
         rows = part.select(
             pl.col(c).round(3) if part.schema[c].is_float() else pl.col(c) for c in columns
         ).rows()
