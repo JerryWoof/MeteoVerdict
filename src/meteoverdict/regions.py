@@ -117,6 +117,8 @@ def find_region(
     for region in regions:
         if region.contains(lon, lat):
             return region
+    if tolerance_km <= 0:
+        return None
     distance, nearest = min((r.distance_km(lon, lat), i) for i, r in enumerate(regions))
     return regions[nearest] if distance <= tolerance_km else None
 
