@@ -31,7 +31,7 @@ test("colours follow the model order and skip the blend", () => {
 test("best model per region at one lead day, with ties but without the blend", () => {
   const best = bestByRegion(records(DOC), 1);
   assert.deepEqual(best.get("CZ020"), {
-    name: "Středočeský kraj", model: "icon", mae: 1.2, tied: ["ifs"], enough: true,
+    name: "Středočeský kraj", model: "icon", mae: 1.2, tied: ["ifs"], enough: true, ranked: true,
   });
   assert.equal(bestByRegion(records(DOC), 2).get("CZ020").model, "ifs");
 });
@@ -63,4 +63,18 @@ test("popup text", () => {
   );
   assert.equal(describe(best.get("CZ010"), MODELS), "too few stations to rank");
   assert.equal(describe(undefined, MODELS), "no data");
+});
+
+test("unranked variables show the lowest MAE, never the blend", () => {
+  const doc = {
+    columns: ["region", "region_name", "lead_day", "model", "mae", "enough_stations", "rank"],
+    rows: [
+      ["CZ020", "S", 1, "icon", 1.4, true, null],
+      ["CZ020", "S", 1, "ifs", 1.3, true, null],
+      ["CZ020", "S", 1, "blend", 1.0, true, null],
+    ],
+  };
+  const entry = bestByRegion(records(doc), 1).get("CZ020");
+  assert.equal(entry.model, "ifs");
+  assert.equal(describe(entry, MODELS), "best: ECMWF IFS (MAE 1.30, lowest MAE, no significance test)");
 });

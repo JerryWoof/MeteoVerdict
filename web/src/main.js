@@ -9,11 +9,11 @@ import {
   stationFeatures,
 } from "./data.js";
 import { statusText } from "./status.js";
+import {
+  VARIABLES, WINDOWS, availableLeadDays, availableVariables, parseHash, toHash,
+} from "./view.js";
 
 setWorkerUrl(workerUrl);
-
-// What the map shows until the controls exist (roadmap 4.3)
-const VIEW = { window: "90d", variable: "temperature_2m", leadDay: 1 };
 
 // Czechia, with a little margin
 const BOUNDS = [
@@ -44,8 +44,23 @@ async function getJson(path) {
   }
 }
 
-const scores = (level) =>
-  getJson(`data/scores/${VIEW.window}/${level}/${VIEW.variable}.json`).then(records);
+const scores = (view, level) =>
+  getJson(`data/scores/${view.window}/${level}/${view.variable}.json`).then(records);
+
+/** Fill a <select> with [value, label] pairs and select `current`. */
+function fillSelect(id, options, current) {
+  const select = document.getElementById(id);
+  select.replaceChildren(
+    ...options.map(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      option.selected = String(value) === String(current);
+      return option;
+    }),
+  );
+  return select;
+}
 
 function legend(colors, names, shown) {
   const items = Object.entries(colors)
@@ -65,50 +80,33 @@ function legend(colors, names, shown) {
   );
 }
 
-function popupOn(layer, best, names) {
+// the data behind the current view, read by the popups
+const current = { regions: new Map(), stations: new Map(), names: {} };
+
+function popupOn(layer, key) {
   map.on("click", layer, (event) => {
     const feature = event.features[0];
-    const entry = best.get(feature.properties.code);
+    const entry = current[key].get(feature.properties.code);
     const title = entry?.name ?? feature.properties.name;
     const text = document.createElement("div");
     const heading = document.createElement("strong");
     heading.textContent = title;
-    text.append(heading, document.createElement("br"), describe(entry, names));
+    text.append(heading, document.createElement("br"), describe(entry, current.names));
     new Popup().setLngLat(event.lngLat).setDOMContent(text).addTo(map);
   });
   map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
   map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
 }
 
-map.on("load", async () => {
-  const meta = await getJson("data/scores/meta.json");
-  document.getElementById("status").textContent = statusText(meta);
-  const names = meta?.models ?? {};
-  const colors = modelColors(names);
-
-  // okres choropleth where the okres level is published, kraj otherwise
-  let level = "okres";
-  let rows = await scores("okres");
-  if (rows.length === 0) {
-    level = "kraj";
-    rows = await scores("kraj");
-  }
-  const regions = bestByRegion(rows, VIEW.leadDay);
-  const stationBest = bestByRegion(await scores("station"), VIEW.leadDay);
-  const stations = await getJson("data/scores/stations.json");
-
+function addLayers(filled, stations) {
   map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
   map.addSource("kraje", { type: "geojson", data: "data/kraje.geojson" });
-  map.addSource("stations", {
-    type: "geojson",
-    data: stationFeatures(stations, stationBest, colors),
-  });
-  const filled = level === "okres" ? "okresy" : "kraje";
+  map.addSource("stations", { type: "geojson", data: stations });
   map.addLayer({
     id: "regions-fill",
     type: "fill",
     source: filled,
-    paint: { "fill-color": fillExpression(regions, colors), "fill-opacity": 0.75 },
+    paint: { "fill-color": NO_DATA, "fill-opacity": 0.75 },
   });
   map.addLayer({
     id: "okresy-line",
@@ -133,8 +131,52 @@ map.on("load", async () => {
       "circle-stroke-width": 1,
     },
   });
-  popupOn("regions-fill", regions, names);
-  popupOn("stations", stationBest, names);
-  const shown = new Set([...regions.values(), ...stationBest.values()].map((e) => e.model));
-  legend(colors, names, shown);
+  popupOn("regions-fill", "regions");
+  popupOn("stations", "stations");
+}
+
+map.on("load", async () => {
+  const meta = await getJson("data/scores/meta.json");
+  document.getElementById("status").textContent = statusText(meta);
+  const names = meta?.models ?? {};
+  const colors = modelColors(names);
+  const stationTable = await getJson("data/scores/stations.json");
+  current.names = names;
+
+  // okres choropleth where the okres level is published, kraj otherwise
+  const probe = parseHash(window.location.hash);
+  const level = (await scores(probe, "okres")).length ? "okres" : "kraj";
+  addLayers(level === "okres" ? "okresy" : "kraje", stationFeatures(null, new Map(), colors));
+
+  async function render(view) {
+    const rows = await scores(view, level);
+    const leadDays = availableLeadDays(rows);
+    if (!leadDays.includes(view.leadDay)) view.leadDay = leadDays[0];
+    fillSelect("lead", leadDays.map((d) => [d, `D+${d}`]), view.leadDay);
+    current.regions = bestByRegion(rows, view.leadDay);
+    current.stations = bestByRegion(await scores(view, "station"), view.leadDay);
+    map.setPaintProperty("regions-fill", "fill-color", fillExpression(current.regions, colors));
+    map.getSource("stations").setData(stationFeatures(stationTable, current.stations, colors));
+    const shown = new Set(
+      [...current.regions.values(), ...current.stations.values()].map((e) => e.model),
+    );
+    legend(colors, names, shown);
+    window.history.replaceState(null, "", toHash(view));
+  }
+
+  const view = parseHash(window.location.hash);
+  const variables = availableVariables(meta).map((v) => [v, VARIABLES[v]]);
+  fillSelect("variable", variables, view.variable);
+  fillSelect("window", Object.entries(WINDOWS), view.window);
+  for (const [id, key, parse] of [
+    ["variable", "variable", String],
+    ["lead", "leadDay", Number],
+    ["window", "window", String],
+  ]) {
+    document.getElementById(id).addEventListener("change", (event) => {
+      view[key] = parse(event.target.value);
+      render(view);
+    });
+  }
+  await render(view);
 });
