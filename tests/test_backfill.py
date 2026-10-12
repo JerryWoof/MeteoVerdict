@@ -228,3 +228,13 @@ def test_sync_covers_the_months_of_the_gauge_window(tmp_path, fake):
 
     run(tmp_path, Recorder(), gauges=GAUGES)
     assert pulls[0] == ("2026-08", "2026-09")  # 12-25 Sep is in the window 29 Aug-25 Sep
+
+
+def test_summary_for_the_job_page(tmp_path, fake):
+    fake(quota_after=3)
+    result = run(tmp_path)
+    text = backfill.summary(result, 1234.5, tmp_path, FIRST, LAST)
+    assert text.startswith("## Backfill\n")
+    assert "1234.5 Open-Meteo calls" in text
+    assert "of 4 14-day windows scored since 2026-08-01" in text
+    assert "Stopped: Daily API request limit exceeded." in text
