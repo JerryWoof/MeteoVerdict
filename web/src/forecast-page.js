@@ -4,8 +4,8 @@ import "./style.css";
 
 import { modelColors, records } from "./data.js";
 import {
-  VARIABLES, bestModel, combine, dailySummary, forecastUrl, parseForecast, weightTable,
-  weightedModels, weightsAt,
+  MAX_LEAD_DAY, VARIABLES, bestPerLeadDay, combine, dailySummary, forecastUrl, parseForecast,
+  weightTable, weightedModels, weightsAt, winnersByLeadDay,
 } from "./forecast.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
@@ -69,7 +69,8 @@ function renderDays(days) {
   table.replaceChildren(head, ...rows);
 }
 
-function chart(forecast, combined, best, variable, colors, names) {
+function chart(forecast, combined, table, variable, colors, names) {
+  const now = Date.now();
   const rows = [];
   for (const [model, values] of Object.entries(forecast.values[variable])) {
     values.forEach((v, i) => {
@@ -79,11 +80,24 @@ function chart(forecast, combined, best, variable, colors, names) {
   const ours = combined
     .map((v, i) => ({ time: new Date(forecast.times[i]), value: v }))
     .filter((r) => r.value != null);
-  const bestRows = rows.filter((r) => r.model === best);
-  const others = rows.filter((r) => r.model !== best);
+  // the best model of each lead day, as segments coloured by model
+  let segment = 0;
+  let previous = null;
+  const best = [];
+  bestPerLeadDay(forecast, table, variable, now).forEach(({ value, model }, i) => {
+    if (value == null) return;
+    if (model !== previous) {
+      // repeat the boundary point so the segments join
+      if (previous != null) best.push({ time: new Date(forecast.times[i]), value, model: previous, segment });
+      segment += 1;
+      previous = model;
+    }
+    best.push({ time: new Date(forecast.times[i]), value, model, segment });
+  });
   const figure = document.createElement("figure");
   figure.append(cell("figcaption", `${t(`forecast.${variable}`)} (${UNITS[variable]})`));
   const step = variable === "precipitation";
+  const curve = step ? "step-before" : "linear";
   figure.append(
     Plot.plot({
       width: Math.min(900, document.body.clientWidth - 32),
@@ -97,32 +111,47 @@ function chart(forecast, combined, best, variable, colors, names) {
       },
       y: { label: null, grid: true, zero: step },
       marks: [
-        Plot.lineY(others, { x: "time", y: "value", z: "model", stroke: "#b7bec4", strokeWidth: 0.8, curve: step ? "step-before" : "linear" }),
-        Plot.lineY(bestRows, { x: "time", y: "value", stroke: colors[best] ?? "#1f78b4", strokeWidth: 1.5, curve: step ? "step-before" : "linear" }),
-        Plot.lineY(ours, { x: "time", y: "value", stroke: "#1d2329", strokeWidth: 2.5, curve: step ? "step-before" : "linear", tip: true }),
+        Plot.lineY(rows, { x: "time", y: "value", z: "model", stroke: "#b7bec4", strokeWidth: 0.8, curve }),
+        Plot.lineY(best, {
+          x: "time", y: "value", z: "segment", stroke: (r) => colors[r.model] ?? "#1f78b4", strokeWidth: 1.6, curve,
+        }),
+        Plot.lineY(ours, { x: "time", y: "value", stroke: "#1d2329", strokeWidth: 2.5, curve, tip: true }),
         Plot.ruleX([new Date()], { stroke: "#c0392b", strokeDasharray: "3,3" }),
       ],
     }),
   );
+  const winners = winnersByLeadDay(table, variable)
+    .map(({ lead, model }) => `D+${lead}: ${names[model] ?? model ?? "–"}`)
+    .join(" · ");
   const legend = document.createElement("p");
   legend.className = "note";
-  legend.textContent = t("forecast.legend", { best: names[best] ?? best ?? "–" });
+  legend.textContent = t("forecast.legend", { best: winners || "–" });
   figure.append(legend);
   return figure;
 }
 
 function renderWeights(table, names) {
   const target = document.getElementById("weights");
+  const leads = Array.from({ length: MAX_LEAD_DAY }, (_, i) => i + 1);
   const head = document.createElement("tr");
-  head.append(cell("th", t("forecast.variable")), cell("th", t("forecast.top")));
+  head.append(cell("th", t("forecast.variable")), ...leads.map((d) => cell("th", `D+${d}`)));
   const rows = VARIABLES.map((variable) => {
     const tr = document.createElement("tr");
-    const top = weightsAt(table, variable, 1)
-      .slice()
-      .sort((a, b) => b.weight - a.weight)
-      .slice(0, 4)
-      .map((r) => `${names[r.model] ?? r.model} ${Math.round(r.weight * 100)} %`);
-    tr.append(cell("td", t(`forecast.${variable}`)), cell("td", top.join(" · ") || "–"));
+    tr.append(cell("td", t(`forecast.${variable}`)));
+    for (const lead of leads) {
+      const td = document.createElement("td");
+      const top = (table.get(`${variable}|${lead}`) ?? [])
+        .slice()
+        .sort((a, b) => b.weight - a.weight)
+        .slice(0, 3);
+      for (const r of top) {
+        const line = cell("div", `${names[r.model] ?? r.model} ${Math.round(r.weight * 100)}\u00a0%`);
+        if (r.rank === 1) line.className = "winner";
+        td.append(line);
+      }
+      if (top.length === 0) td.textContent = "–";
+      tr.append(td);
+    }
     return tr;
   });
   target.replaceChildren(head, ...rows);
@@ -153,7 +182,7 @@ async function show(point, names, colors) {
   const combined = Object.fromEntries(VARIABLES.map((v) => [v, combine(forecast, table, v, now)]));
   renderDays(dailySummary(forecast.times, combined, TIME_ZONE));
   document.getElementById("charts").replaceChildren(
-    ...VARIABLES.map((v) => chart(forecast, combined[v], bestModel(table, v, 1), v, colors, names)),
+    ...VARIABLES.map((v) => chart(forecast, combined[v], table, v, colors, names)),
   );
   renderWeights(table, names);
   message.textContent = "";
