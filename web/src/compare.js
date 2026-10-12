@@ -1,11 +1,6 @@
 // The model comparison page: national ranking and bias by elevation class.
 
 const ELEVATION_ORDER = ["lowland", "upland", "mountain"];
-export const ELEVATION_LABELS = {
-  lowland: "Lowland (< 400 m)",
-  upland: "Upland (400-800 m)",
-  mountain: "Mountain (> 800 m)",
-};
 
 /**
  * Rows of the national table at one lead day: ranked models first (by rank), the

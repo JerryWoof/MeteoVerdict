@@ -8,12 +8,14 @@ import {
   NO_DATA, TOO_FEW, bestByRegion, describe, fillExpression, modelColors, records,
   stationFeatures,
 } from "./data.js";
+import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import {
-  VARIABLES, WINDOWS, availableLeadDays, availableVariables, parseHash, toHash,
+  WINDOWS, availableLeadDays, availableVariables, parseHash, toHash,
 } from "./view.js";
 
 setWorkerUrl(workerUrl);
+const t = setUpLanguage();
 
 // Czechia, with a little margin
 const BOUNDS = [
@@ -66,7 +68,7 @@ function legend(colors, names, shown) {
   const items = Object.entries(colors)
     .filter(([id]) => shown.has(id))
     .map(([id, color]) => [names[id] ?? id, color]);
-  items.push(["too few stations", TOO_FEW], ["no data", NO_DATA]);
+  items.push([t("legend.tooFew"), TOO_FEW], [t("legend.noData"), NO_DATA]);
   const element = document.getElementById("legend");
   element.replaceChildren(
     ...items.map(([label, color]) => {
@@ -90,14 +92,14 @@ async function showStationChart(code, title) {
   const close = document.createElement("button");
   close.type = "button";
   close.textContent = "×";
-  close.setAttribute("aria-label", "Close the chart");
+  close.setAttribute("aria-label", t("chart.close"));
   close.addEventListener("click", () => panel.replaceChildren());
   // Observable Plot is loaded only when a chart is opened
   const [{ stationChart }, doc] = await Promise.all([
     import("./chart.js"),
     getJson(`data/scores/series/${code}.json`),
   ]);
-  panel.replaceChildren(close, heading, stationChart(doc, current.view, current.colors, current.names));
+  panel.replaceChildren(close, heading, stationChart(doc, current.view, current.colors, current.names, t));
 }
 
 function popupOn(layer, key) {
@@ -108,7 +110,7 @@ function popupOn(layer, key) {
     const text = document.createElement("div");
     const heading = document.createElement("strong");
     heading.textContent = title;
-    text.append(heading, document.createElement("br"), describe(entry, current.names));
+    text.append(heading, document.createElement("br"), describe(entry, current.names, t));
     new Popup().setLngLat(event.lngLat).setDOMContent(text).addTo(map);
     if (key === "stations") showStationChart(feature.properties.code, title);
   });
@@ -155,8 +157,8 @@ function addLayers(filled, stations) {
 
 map.on("load", async () => {
   const meta = await getJson("data/scores/meta.json");
-  document.getElementById("status").textContent = statusText(meta);
-  const names = meta?.models ?? {};
+  document.getElementById("status").textContent = statusText(meta, t);
+  const names = { ...meta?.models, blend: t("model.blend") };
   const colors = modelColors(names);
   const stationTable = await getJson("data/scores/stations.json");
   current.names = names;
@@ -186,9 +188,9 @@ map.on("load", async () => {
   }
 
   const view = parseHash(window.location.hash);
-  const variables = availableVariables(meta).map((v) => [v, VARIABLES[v]]);
+  const variables = availableVariables(meta).map((v) => [v, t(`variable.${v}`)]);
   fillSelect("variable", variables, view.variable);
-  fillSelect("window", Object.entries(WINDOWS), view.window);
+  fillSelect("window", WINDOWS.map((w) => [w, t(`window.${w}`)]), view.window);
   for (const [id, key, parse] of [
     ["variable", "variable", String],
     ["lead", "leadDay", Number],
