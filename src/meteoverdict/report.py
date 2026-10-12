@@ -8,6 +8,8 @@ significantly worse than the best (``tied_with_best``) are listed with "≈".
 
 from __future__ import annotations
 
+from datetime import date, datetime
+
 import polars as pl
 
 from meteoverdict.regions import load_kraje
@@ -40,8 +42,28 @@ def _cell(rows: pl.DataFrame, names: dict[str, str]) -> str:
     return f"{shown}{more}"
 
 
+#: Scores older than this many days make the badge orange (see quality.MAX_FC_AGE_DAYS).
+STALE_DAYS = 21
+
+
+def badge(updated: datetime, scores_up_to: date | None) -> dict:
+    """shields.io endpoint JSON (https://shields.io/badges/endpoint-badge)."""
+    stale = scores_up_to is None or (updated.date() - scores_up_to).days > STALE_DAYS
+    message = f"{updated:%Y-%m-%d}" + (f", scores to {scores_up_to}" if scores_up_to else "")
+    return {
+        "schemaVersion": 1,
+        "label": "last updated",
+        "message": message,
+        "color": "orange" if stale else "brightgreen",
+    }
+
+
 def leaderboard(
-    aggregates: pl.DataFrame, names: dict[str, str], window: str = "90d", lead_day: int = 1
+    aggregates: pl.DataFrame,
+    names: dict[str, str],
+    window: str = "90d",
+    lead_day: int = 1,
+    updated: datetime | None = None,
 ) -> str:
     """Markdown block for the README."""
     part = aggregates.filter(
@@ -70,6 +92,8 @@ def leaderboard(
         cells = [_cell(here.filter(pl.col("variable") == v), names) for v in COLUMNS]
         label = f"**{name}**" if level == "cz" else name
         lines.append(f"| {label} | " + " | ".join(cells) + " |")
+    if updated is not None:
+        lines += ["", f"_Last updated {updated:%Y-%m-%d %H:%M} UTC; scores up to {span[1]}._"]
     lines += [
         "",
         "Forecasts: [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0; UK Met Office data "
