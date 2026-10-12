@@ -269,3 +269,16 @@ def test_fetch_fc_saves_partial_results_when_the_quota_ends(monkeypatch, tmp_pat
     assert result.exit_code == 3
     assert "Daily API request limit" in result.stderr
     assert pl.read_parquet(tmp_path / "fc" / "2026-10.parquet").height == 1
+
+
+def test_store_needs_github_credentials(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    result = runner.invoke(app, ["store", "upload"])
+    assert result.exit_code == 2
+    assert "GITHUB_TOKEN" in plain(result.output)
+
+
+def test_store_download_rejects_a_bad_month():
+    result = runner.invoke(app, ["store", "download", "--from", "2026-13"])
+    assert result.exit_code == 2
+    assert "bad month range" in plain(result.output)
