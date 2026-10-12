@@ -16,13 +16,14 @@ from pathlib import Path
 
 from meteoverdict.releases import GitHubReleaseStore
 
-KINDS = ("obs", "fc", "scores")
+KINDS = ("obs", "gauges", "fc", "scores")
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 RELEASE_NOTES = (
-    "Hourly station observations (obs-YYYY-MM.parquet), archived forecasts at the "
-    "stations (fc-YYYY-MM.parquet) and daily scores (scores-YYYY-MM.parquet) for one "
-    "month, written by `mvd fetch-obs`, `mvd fetch-fc` and `mvd score` "
+    "Hourly station observations (obs-YYYY-MM.parquet), daily rain-gauge totals "
+    "(gauges-YYYY-MM.parquet), archived forecasts at the stations (fc-YYYY-MM.parquet) "
+    "and daily scores (scores-YYYY-MM.parquet) for one month, written by "
+    "`mvd fetch-obs`, `mvd fetch-gauges`, `mvd fetch-fc` and `mvd score` "
     "(format: docs/data-sources.md). Observations: Czech Hydrometeorological "
     "Institute (ČHMÚ), opendata.chmi.cz, CC BY 4.0. Forecasts: Open-Meteo.com, CC BY 4.0, "
     "from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, KNMI, DMI, ČHMÚ and the "

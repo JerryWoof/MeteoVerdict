@@ -216,6 +216,13 @@ def verification_stations(stations: pl.DataFrame, meta2: pl.DataFrame) -> pl.Dat
     return stations.filter(pl.col("id").is_in(list(automatic)) | ~pl.col("active"))
 
 
+def scan(data_dir: Path, first: date, last: date) -> pl.LazyFrame | None:
+    """Hourly observations (``obs/``) and rain-gauge totals (``gauges/``) of the months."""
+    scans = [partitions.scan_months(data_dir / kind, first, last) for kind in ("obs", "gauges")]
+    found = [s for s in scans if s is not None]
+    return pl.concat(found) if found else None
+
+
 def write_monthly(observations: pl.DataFrame, out_dir: Path) -> list[Path]:
     """Merge into ``out_dir/YYYY-MM.parquet``: new rows replace old ones with the same
     station, time and variable (e.g. checked ``recent/`` data replacing ``now/`` data)."""
