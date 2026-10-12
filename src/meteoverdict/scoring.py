@@ -10,6 +10,9 @@ One row per day, station, model, lead day and variable with the additive sums of
   different periods are not comparable, so models are ranked on daily sums.
 * ``precipitation_daily``: the UTC-day sum (``period_h`` 24), one value per day, with
   contingency counts for each event threshold.
+* ``precipitation_24h``: the 06-06 UTC total (``period_h`` 24) of ČHMÚ's climatological
+  day, from the manual rain gauges and the automatic stations; ``date`` is the day the
+  window starts. Same sums and counts as ``precipitation_daily``.
 """
 
 from __future__ import annotations
@@ -51,8 +54,16 @@ def daily_scores(
             pl.lit("precipitation_daily").alias("variable"), pl.lit(24, pl.Int8).alias("period_h")
         )
     )
+    climatological = (
+        align.precipitation_24h(observations, forecasts, models, exclude_estimated)
+        .group_by("date", "station_id", "model", "lead_day")
+        .agg(*metrics.error_sums(), *counts)
+        .with_columns(
+            pl.lit("precipitation_24h").alias("variable"), pl.lit(24, pl.Int8).alias("period_h")
+        )
+    )
     return (
-        pl.concat([hourly, daily], how="diagonal_relaxed")
+        pl.concat([hourly, daily, climatological], how="diagonal_relaxed")
         .filter(pl.col("date").is_between(start, end))
         .sort(KEYS)
         .collect()
