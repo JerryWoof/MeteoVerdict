@@ -1,0 +1,21 @@
+{
+  "name": "meteoverdict-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Web map of meteoverdict: which weather model forecasts Czechia best",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "data": "node scripts/copy-data.mjs",
+    "dev": "npm run data && vite",
+    "build": "npm run data && vite build",
+    "preview": "vite preview",
+    "test": "node --test src/*.test.js"
+  },
+  "dependencies": {
+    "maplibre-gl": "6.13.0"
+  },
+  "devDependencies": {
+    "vite": "7.3.7"
+  }
+}

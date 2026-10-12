@@ -27,6 +27,7 @@ site/data/*/station/
 # Web app (phase 4)
 node_modules/
 web/dist/
+web/public/data/
 
 # Editors / OS
 .idea/
