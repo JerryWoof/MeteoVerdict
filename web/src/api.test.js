@@ -26,7 +26,7 @@ test("an okres file: forecast by hour and part of day, licence and attribution",
   assert.deepEqual(DOC.forecast.hourly.temperature_2m, HOURLY_DOC.okresy.CZ0201.temperature_2m);
   const parts = DOC.forecast.parts;
   assert.equal(parts.length, 6 * 5);
-  assert.deepEqual(Object.keys(parts[0]), ["day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "symbol"]);
+  assert.deepEqual(Object.keys(parts[0]), ["day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol", "sunrise", "sunset"]);
 });
 
 test("model ranking per variable and lead day, with the weights of our forecast", () => {
@@ -46,13 +46,13 @@ test("model ranking per variable and lead day, with the weights of our forecast"
 
 test("CSV of the hourly forecast", () => {
   const lines = okresCsv(DOC).trim().split("\n");
-  assert.equal(lines[0], "time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover");
+  assert.equal(lines[0], "time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration");
   assert.equal(lines.length, 145);
   const first = lines[1].split(",");
   assert.equal(first[0], HOURLY_DOC.time[0]);
   assert.equal(Number(first[1]), HOURLY_DOC.okresy.CZ0201.temperature_2m[0]);
   const empty = okresDoc({ okres: { code: "X", name: "X" }, outlook: OUTLOOK, hourly: null, weightsDoc: null, scores: {}, meta: META });
-  assert.equal(okresCsv(empty), "time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover\n");
+  assert.equal(okresCsv(empty), "time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration\n");
 });
 
 test("index: every okres with the addresses of its files", () => {
