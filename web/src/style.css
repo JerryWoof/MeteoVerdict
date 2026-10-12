@@ -64,3 +64,28 @@ footer {
   padding: 0.4rem 1rem;
   color: #5b6670;
 }
+#chart {
+  position: absolute;
+  z-index: 1;
+  right: 0.75rem;
+  top: 0.75rem;
+  max-width: calc(100% - 1.5rem);
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+#chart:empty {
+  display: none;
+}
+#chart h2 {
+  font-size: 0.95rem;
+  margin: 0 1.5rem 0.4rem 0;
+}
+#chart button {
+  float: right;
+  border: none;
+  background: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
