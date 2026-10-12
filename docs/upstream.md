@@ -41,7 +41,7 @@ proposes it and links this documentation. Our readers (`meteoverdict.chmi`,
 parser and data model, so the contribution would be new code in their structure, not a
 copy of ours.
 
-**Should meteoverdict use wetterdienst instead of its own reader?** Not now: without
+**Should MeteoVerdict use wetterdienst instead of its own reader?** Not now: without
 `recent/` and `now/` it cannot feed the daily run, and the backfill needs the current
 year too.
 

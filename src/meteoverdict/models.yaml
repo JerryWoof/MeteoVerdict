@@ -1,4 +1,4 @@
-# Weather models compared by meteoverdict, as served by the Open-Meteo Previous Runs API.
+# Weather models compared by MeteoVerdict, as served by the Open-Meteo Previous Runs API.
 # Evidence and sources for every field: docs/data-sources.md#models (checked 2026-10-11).
 #
 # id               value for the Open-Meteo `models=` parameter
