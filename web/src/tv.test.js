@@ -103,8 +103,8 @@ test("the view in the URL, including old links", () => {
   assert.deepEqual(old.shown, DEFAULT_SHOWN);
   const none = parseView("#2026-10-13/day/none/-", OUTLOOK, fallback);
   assert.deepEqual(none.shown, []);
-  assert.equal(none.colour, "none");
-  assert.equal(viewHash(none), "#2026-10-13/day/none/-");
+  assert.equal(none.colour, "temperature"); // "no colour" is no longer offered
+  assert.equal(viewHash(none), "#2026-10-13/day/temperature/-");
   assert.deepEqual(parseView("", OUTLOOK, fallback), {
     day: "2026-10-12", part: "morning", colour: "temperature", shown: DEFAULT_SHOWN, okres: null,
   });
@@ -147,5 +147,5 @@ test("transitions: rows, colours and easing in between", () => {
   assert.equal(ease(0.5), 0.5);
   const colours = okresColours(OUTLOOK, DAY, "afternoon", "temperature");
   assert.equal(colours.size, 77);
-  assert.equal(okresColours(OUTLOOK, DAY, "afternoon", "none").get("CZ0100"), NEUTRAL);
+  assert.equal(okresColours(OUTLOOK, DAY, "afternoon", "unknown").get("CZ0100"), NEUTRAL);
 });
