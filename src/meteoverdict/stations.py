@@ -13,7 +13,7 @@ historical file are kept as inactive if their last period ended on or after
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 import httpx
@@ -21,7 +21,7 @@ import polars as pl
 
 from meteoverdict.chmi import (
     ChmiFormatError,
-    current_meta1_url,
+    fetch_current_meta,
     historical_meta1_url,
     parse_collection,
 )
@@ -117,14 +117,9 @@ def fetch_station_tables(client: httpx.Client, today: date) -> tuple[pl.DataFram
     Today's current list is created shortly after midnight UTC, so fall back to
     yesterday's when it is not there yet.
     """
-    try:
-        current = _get_json(client, current_meta1_url(today))
-    except httpx.HTTPStatusError as exc:
-        if exc.response.status_code != 404:
-            raise
-        current = _get_json(client, current_meta1_url(today - timedelta(days=1)))
-    historical = _get_json(client, historical_meta1_url())
-    return parse_collection(current), parse_collection(historical)
+    current = fetch_current_meta(client, 1, today)
+    historical = parse_collection(_get_json(client, historical_meta1_url()))
+    return current, historical
 
 
 def write_stations(stations: pl.DataFrame, path: Path) -> None:

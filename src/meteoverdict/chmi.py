@@ -7,15 +7,17 @@ that column order).
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
+import httpx
 import polars as pl
 
 BASE_URL = "https://opendata.chmi.cz/meteorology/climate"
 
-#: Station list valid today; republished daily, kept for 10 days.
-CURRENT_META1 = "now/metadata/meta1-{day:%Y%m%d}.json"
+#: Metadata valid today (meta1 stations, meta2 elements per station, …);
+#: republished daily, kept for 10 days.
+CURRENT_META = "now/metadata/meta{n}-{day:%Y%m%d}.json"
 #: Station history with one row per validity period; republished yearly.
 HISTORICAL_META1 = "historical/metadata/meta1.json"
 
@@ -24,8 +26,22 @@ class ChmiFormatError(ValueError):
     """A file does not have the documented ČHMÚ envelope."""
 
 
+def current_meta_url(n: int, day: date) -> str:
+    return f"{BASE_URL}/{CURRENT_META.format(n=n, day=day)}"
+
+
 def current_meta1_url(day: date) -> str:
-    return f"{BASE_URL}/{CURRENT_META1.format(day=day)}"
+    return current_meta_url(1, day)
+
+
+def fetch_current_meta(client: httpx.Client, n: int, today: date) -> pl.DataFrame:
+    """Today's ``metaN`` table, or yesterday's when today's is not published yet
+    (it appears shortly after midnight UTC)."""
+    response = client.get(current_meta_url(n, today))
+    if response.status_code == 404:
+        response = client.get(current_meta_url(n, today - timedelta(days=1)))
+    response.raise_for_status()
+    return parse_collection(response.json())
 
 
 def historical_meta1_url() -> str:
