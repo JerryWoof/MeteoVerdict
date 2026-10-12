@@ -10,6 +10,9 @@ max(1, variables / 10 * max(1, days / 14)), and allows 600 a minute, 5,000 an ho
 only), up to 14 days per request and up to ``BATCH`` stations per request, keep a
 running total, pace requests below the minute and hour limits, and stop before
 ``max_calls``.
+
+The rain gauges only need precipitation: at most 5 lead days are 5 variables, so a
+request of up to ``GAUGE_DAYS`` days still costs one call per location.
 """
 
 from __future__ import annotations
@@ -27,6 +30,7 @@ from meteoverdict.models import VARIABLES, Model
 
 URL = "https://previous-runs-api.open-meteo.com/v1/forecast"
 MAX_DAYS = 14  # longer windows cost more, shorter ones the same
+GAUGE_DAYS = 28  # precipitation only (<= 5 variables): 28 days cost one call per location
 BATCH = 100  # stations per request
 KEYS = ["station_id", "time", "model", "lead_day"]
 SCHEMA = {
@@ -89,18 +93,23 @@ class Budget:
         self.used += weight
 
 
-def windows(start: date, end: date) -> Iterator[tuple[date, date]]:
+def windows(start: date, end: date, days: int = MAX_DAYS) -> Iterator[tuple[date, date]]:
     while start <= end:
-        last = min(end, start + timedelta(days=MAX_DAYS - 1))
+        last = min(end, start + timedelta(days=days - 1))
         yield start, last
         start = last + timedelta(days=1)
 
 
-def hourly_names(model: Model) -> list[str]:
-    return [f"{var}_previous_day{n}" for n in model.lead_days for var in VARIABLES]
+def hourly_names(model: Model, variables: tuple[str, ...] = VARIABLES) -> list[str]:
+    return [f"{var}_previous_day{n}" for n in model.lead_days for var in variables]
 
 
-def parse(payload: list | dict, station_ids: list[str], model: Model) -> pl.DataFrame:
+def parse(
+    payload: list | dict,
+    station_ids: list[str],
+    model: Model,
+    variables: tuple[str, ...] = VARIABLES,
+) -> pl.DataFrame:
     """One Open-Meteo response (a list for several locations) → rows per lead day."""
     results = payload if isinstance(payload, list) else [payload]
     if len(results) != len(station_ids):
@@ -118,7 +127,10 @@ def parse(payload: list | dict, station_ids: list[str], model: Model) -> pl.Data
                         "time": times,
                         "model": model.id,
                         "lead_day": n,
-                        **{var: hourly[f"{var}_previous_day{n}"] for var in VARIABLES},
+                        **{
+                            var: hourly[f"{var}_previous_day{n}"] if var in variables else None
+                            for var in VARIABLES
+                        },
                     },
                     schema=SCHEMA,
                     strict=False,
@@ -154,8 +166,12 @@ def fetch_forecasts(
     budget: Budget,
     log: Callable[[str], None] = lambda _: None,
     uncovered: dict[str, set[str]] | None = None,
+    variables: tuple[str, ...] = VARIABLES,
+    max_days: int = MAX_DAYS,
 ) -> pl.DataFrame:
     """Forecasts for ``stations`` (id, lat, lon, elevation), ``start`` to ``end`` (UTC).
+
+    ``variables`` not asked for are null; ``max_days`` is the longest request window.
 
     Stations a model has no data for (outside its real domain, e.g. ICON-D2 in the far
     east) are found by splitting the failing request, skipped, and added to
@@ -171,33 +187,39 @@ def fetch_forecasts(
         return pl.concat(frames).filter(pl.col("time").is_between(first_hour, last_hour))
 
     try:
-        _fetch_into(frames, client, rows, models, start, end, budget, log, uncovered)
+        ask = Ask(variables, max_days)
+        _fetch_into(frames, client, rows, models, start, end, budget, log, uncovered, ask)
     except QuotaError as exc:
         exc.partial = collected()
         raise
     return collected()
 
 
-def _fetch_into(frames, client, rows, models, start, end, budget, log, uncovered) -> None:
+@dataclass(frozen=True)
+class Ask:
+    variables: tuple[str, ...] = VARIABLES
+    max_days: int = MAX_DAYS
+
+
+def _fetch_into(frames, client, rows, models, start, end, budget, log, uncovered, ask) -> None:
     for model in models:
         skip = uncovered.setdefault(model.id, set())
         first = max(start, model.archive_from)
-        for window_start, window_end in windows(first, end):
+        for window_start, window_end in windows(first, end, ask.max_days):
             todo = [r for r in rows if r[0] not in skip]
             for i in range(0, len(todo), BATCH):
+                batch = todo[i : i + BATCH]
                 frames.extend(
-                    _fetch_batch(
-                        client, todo[i : i + BATCH], model, window_start, window_end, budget, skip
-                    )
+                    _fetch_batch(client, batch, model, window_start, window_end, budget, skip, ask)
                 )
             log(f"{model.id} {window_start}..{window_end}: {budget.used:g} calls used")
             if skip:
                 log(f"{model.id}: no data for {len(skip)} stations: {', '.join(sorted(skip))}")
 
 
-def _fetch_batch(client, batch, model, window_start, window_end, budget, skip):
+def _fetch_batch(client, batch, model, window_start, window_end, budget, skip, ask):
     days = (window_end - window_start).days + 1
-    names = hourly_names(model)
+    names = hourly_names(model, ask.variables)
     budget.spend(call_weight(len(batch), len(names), days))
     params = {
         "latitude": ",".join(f"{r[1]:.5f}" for r in batch),
@@ -218,19 +240,27 @@ def _fetch_batch(client, batch, model, window_start, window_end, budget, skip):
             return []
         half = len(batch) // 2
         return [
-            *_fetch_batch(client, batch[:half], model, window_start, window_end, budget, skip),
-            *_fetch_batch(client, batch[half:], model, window_start, window_end, budget, skip),
+            *_fetch_batch(client, batch[:half], model, window_start, window_end, budget, skip, ask),
+            *_fetch_batch(client, batch[half:], model, window_start, window_end, budget, skip, ask),
         ]
-    return [parse(payload, [r[0] for r in batch], model)]
+    return [parse(payload, [r[0] for r in batch], model, ask.variables)]
 
 
-def estimate_calls(n_stations: int, models: list[Model], start: date, end: date) -> float:
+def estimate_calls(
+    n_stations: int,
+    models: list[Model],
+    start: date,
+    end: date,
+    variables: tuple[str, ...] = VARIABLES,
+    max_days: int = MAX_DAYS,
+) -> float:
     """Weighted Open-Meteo calls ``fetch_forecasts`` will use."""
     total = 0.0
     for model in models:
-        for window_start, window_end in windows(max(start, model.archive_from), end):
+        names = hourly_names(model, variables)
+        for window_start, window_end in windows(max(start, model.archive_from), end, max_days):
             days = (window_end - window_start).days + 1
             for i in range(0, n_stations, BATCH):
                 batch = min(BATCH, n_stations - i)
-                total += call_weight(batch, len(hourly_names(model)), days)
+                total += call_weight(batch, len(names), days)
     return total
