@@ -1,0 +1,43 @@
+name: Backfill
+
+# Fills history since 2024-01-01 newest first, a little every day: each run may use
+# MAX_CALLS weighted Open-Meteo calls (the free tier allows 10,000 a day and 300,000 a
+# month), then stops; progress and month files live in GitHub Releases, so the next run
+# continues where this one stopped. See docs/data-sources.md#backfill-mvd-backfill.
+on:
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+    inputs:
+      max_calls:
+        description: "Open-Meteo calls this run may use"
+        default: "6000"
+
+permissions:
+  contents: write # release assets
+
+concurrency:
+  group: backfill
+  cancel-in-progress: false
+
+env:
+  MAX_CALLS: ${{ inputs.max_calls || '6000' }}
+
+jobs:
+  backfill:
+    name: Backfill history
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install project
+        run: uv sync --frozen
+      - name: Station table
+        run: uv run --frozen mvd stations --out data/stations.parquet
+      - name: Backfill
+        run: uv run --frozen mvd backfill --from 2024-01-01 --github-release --max-calls "$MAX_CALLS"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -24,6 +24,7 @@ from meteoverdict import (
     stations,
     store,
 )
+from meteoverdict import backfill as backfill_mod
 from meteoverdict import models as catalogue
 from meteoverdict.chmi import ChmiFormatError, fetch_current_meta
 from meteoverdict.releases import GitHubReleaseStore
@@ -415,11 +416,47 @@ def backfill(
         datetime | None,
         typer.Option("--to", formats=["%Y-%m-%d"], help="Last day (UTC). Default: yesterday."),
     ] = None,
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    data_dir: Annotated[Path, typer.Option(help="Folder for obs/, fc/ and scores/.")] = Path(
+        "data"
+    ),
+    max_calls: Annotated[
+        float, typer.Option(help="Open-Meteo calls this run may use; it resumes next time.")
+    ] = 6000,
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Sync month files and progress with GitHub Releases (GITHUB_TOKEN, "
+            "GITHUB_REPOSITORY).",
+        ),
+    ] = False,
 ) -> None:
-    """Backfill history month by month (resumable)."""
-    last = end.date() if end else _yesterday()
-    _check_range(start.date(), last, hint="--from/--to")
-    _not_implemented("backfill", "2.6", f"backfill {start:%Y-%m-%d}..{last}")
+    """Backfill history newest first, in 14-day windows, resumable (state in the data dir)."""
+    first, last = start.date(), end.date() if end else _yesterday()
+    _check_range(first, last, hint="--from/--to")
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    table = pl.read_parquet(stations_path)
+    models = [m for m in catalogue.load_models() if m.enabled]
+    transport = httpx.HTTPTransport(retries=3)
+    with httpx.Client(timeout=300, transport=transport, follow_redirects=True) as client:
+        sync = None
+        if github_release:
+            sync = store.ReleaseSync(_release_store(client), data_dir, log=typer.echo)
+            sync.pull_state()
+        meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
+        points = observations.verification_stations(table, meta2)
+        budget = forecasts.Budget(max_calls=max_calls)
+        result = backfill_mod.run(
+            client, points, models, first, last, data_dir, budget, sync, log=typer.echo
+        )
+    typer.echo(
+        f"{result.windows_done} windows done, {budget.used:g} calls used"
+        + (f"; stopped: {result.stopped} (run again to continue)" if result.stopped else "")
+    )
 
 
 def main() -> None:
