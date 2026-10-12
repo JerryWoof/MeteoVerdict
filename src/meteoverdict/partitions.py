@@ -23,7 +23,8 @@ def write_monthly(
         part = part.drop("_month")
         if path.exists():
             old = pl.read_parquet(path)
-            part = pl.concat([old.join(part.select(keys), on=keys, how="anti"), part])
+            kept = old.join(part.select(keys), on=keys, how="anti")
+            part = pl.concat([kept, part], how="diagonal_relaxed")
         part.sort(keys).write_parquet(path, compression="zstd")
         written.append(path)
     return written
@@ -42,7 +43,10 @@ def scan_months(folder: Path, first: date, last: date) -> pl.LazyFrame | None:
     """Lazily read the monthly files of ``folder`` that exist for ``first`` to ``last``."""
     paths = [folder / f"{m}.parquet" for m in months(first, last)]
     paths = [p for p in paths if p.exists()]
-    return pl.scan_parquet(paths) if paths else None
+    if not paths:
+        return None
+    # files written before a column was added lack it: fill with nulls, in any order
+    return pl.concat([pl.scan_parquet(p) for p in paths], how="diagonal_relaxed")
 
 
 def month_end(day: date) -> date:

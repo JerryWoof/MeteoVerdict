@@ -14,6 +14,10 @@ One row per day, station, model, lead day and variable with the additive sums of
   day, from the manual rain gauges and the automatic stations; ``date`` is the day the
   window starts. Same sums and counts as ``precipitation_daily``.
 
+* ``temperature_max``: the highest hourly temperature of the UTC day (``period_h`` 24),
+  only for models with hourly output at that lead day, with counts for heat days
+  (``metrics.HEAT_THRESHOLDS``).
+
 The mean of all models (``meteoverdict.blend``) is scored as one more model, ``blend``.
 """
 
@@ -69,8 +73,17 @@ def daily_scores(
             pl.lit("precipitation_24h").alias("variable"), pl.lit(24, pl.Int8).alias("period_h")
         )
     )
+    heat = [e for t in metrics.HEAT_THRESHOLDS for e in metrics.contingency_counts(t)]
+    maximum = (
+        align.daily_maximum(observations, forecasts, models, exclude_estimated)
+        .group_by("date", "station_id", "model", "lead_day")
+        .agg(*metrics.error_sums(), *heat)
+        .with_columns(
+            pl.lit("temperature_max").alias("variable"), pl.lit(24, pl.Int8).alias("period_h")
+        )
+    )
     return (
-        pl.concat([hourly, daily, climatological], how="diagonal_relaxed")
+        pl.concat([hourly, daily, climatological, maximum], how="diagonal_relaxed")
         .filter(pl.col("date").is_between(start, end))
         .sort(KEYS)
         .collect()
