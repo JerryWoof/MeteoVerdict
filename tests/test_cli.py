@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 from typer.testing import CliRunner
 
-from meteoverdict import cli, stations
+from meteoverdict import aladin, cli, stations
 from meteoverdict.chmi import parse_collection
 from meteoverdict.cli import app
 
@@ -22,7 +22,17 @@ def plain(text: str) -> str:
     return ANSI.sub("", text)
 
 
-COMMANDS = ["stations", "models", "fetch-obs", "fetch-fc", "score", "report", "daily", "backfill"]
+COMMANDS = [
+    "stations",
+    "models",
+    "archive-aladin",
+    "fetch-obs",
+    "fetch-fc",
+    "score",
+    "report",
+    "daily",
+    "backfill",
+]
 
 
 def test_no_args_shows_help_with_all_commands():
@@ -153,3 +163,41 @@ def test_fetch_fc_rejects_unknown_model():
     result = runner.invoke(app, args)
     assert result.exit_code == 2
     assert "icon_d3" in plain(result.output)
+
+
+def test_archive_aladin_needs_exactly_one_destination(tmp_path):
+    stations_file = tmp_path / "s.parquet"
+    pl.DataFrame({"id": ["a"], "lat": [50.0], "lon": [14.4]}).write_parquet(stations_file)
+    base = ["archive-aladin", "--stations", str(stations_file)]
+    assert runner.invoke(app, base).exit_code == 2
+    both = [*base, "--out-dir", str(tmp_path), "--github-release"]
+    assert runner.invoke(app, both).exit_code == 2
+
+
+def test_archive_aladin_github_needs_token(tmp_path, monkeypatch):
+    stations_file = tmp_path / "s.parquet"
+    pl.DataFrame({"id": ["a"], "lat": [50.0], "lon": [14.4]}).write_parquet(stations_file)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    result = runner.invoke(
+        app, ["archive-aladin", "--stations", str(stations_file), "--github-release"]
+    )
+    assert result.exit_code == 2
+    assert "GITHUB_TOKEN" in plain(result.output)
+
+
+def test_archive_aladin_reports_and_fails_on_failed_runs(tmp_path, monkeypatch):
+    stations_file = tmp_path / "s.parquet"
+    pl.DataFrame({"id": ["a"], "lat": [50.0], "lon": [14.4]}).write_parquet(stations_file)
+    result_obj = aladin.ArchiveResult(["x.parquet"], 3, ["y.parquet"])
+    monkeypatch.setattr(aladin, "archive", lambda client, store, table, log: result_obj)
+    args = ["archive-aladin", "--stations", str(stations_file), "--out-dir", str(tmp_path)]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 1
+    assert "archived 1, already there 3, failed 1" in result.stdout
+
+
+def test_archive_aladin_needs_the_station_table(tmp_path):
+    args = ["archive-aladin", "--stations", str(tmp_path / "nope.parquet"), "--out-dir", "x"]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 2
+    assert "mvd stations" in plain(result.output)
