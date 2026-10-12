@@ -396,7 +396,8 @@ def _publish_aggregates(
     resamples: int,
 ) -> pl.DataFrame:
     """Aggregate and rank all score files; write aggregates.parquet and the JSON."""
-    scores = pl.scan_parquet(files)
+    # files written before a column was added lack it (see partitions.scan_months)
+    scores = pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
     table = aggregate.aggregate(scores, station_table, as_of)
     ranks = ranking.rank(scores, station_table, as_of, resamples=resamples)
     table = table.join(ranks, on=[*ranking.GROUP, "model"], how="left")
