@@ -80,4 +80,5 @@ def test_contingency_counts_from_values():
 
 def test_labels():
     assert metrics.label(0.1) == "0p1" and metrics.label(5.0) == "5"
+    assert metrics.label(20.0) == "20"
     assert metrics.counts_columns(0.1) == ["a_0p1", "b_0p1", "c_0p1", "d_0p1"]

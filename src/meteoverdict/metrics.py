@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import polars as pl
 
-#: Daily precipitation event thresholds in mm (ROADMAP "Scope v1").
-PRECIPITATION_THRESHOLDS = (0.1, 5.0)
+#: Daily precipitation event thresholds in mm: 0.1 and 5 (ROADMAP "Scope v1") and 20 for
+#: heavy precipitation (the ETCCDI climate index R20mm, roadmap 5.2).
+PRECIPITATION_THRESHOLDS = (0.1, 5.0, 20.0)
 
 SUMS = ("n", "sum_err", "sum_abs_err", "sum_sq_err")
 
