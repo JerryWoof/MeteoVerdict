@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { biasByElevation, fmt, rankingTable } from "./compare.js";
+import { readFileSync } from "node:fs";
+
+import {
+  biasByElevation, fmt, intervalRows, levelOf, maeByLead, rankingTable, regionList, regionSummary,
+} from "./compare.js";
 import { records } from "./data.js";
 
 const CZ = records({
@@ -44,4 +48,48 @@ test("number format", () => {
   assert.equal(fmt(0.5, true), "+0.50");
   assert.equal(fmt(-0.5, true), "-0.50");
   assert.equal(fmt(null), "–");
+});
+
+// real okres scores: 06-06 precipitation, last 90 days, Litoměřice and Benešov
+const OKRES = records(JSON.parse(readFileSync(new URL("./fixtures/scores-90d-okres-precipitation_24h.json", import.meta.url))));
+
+test("levels of region codes", () => {
+  assert.equal(levelOf("cz"), "cz");
+  assert.equal(levelOf("CZ064"), "kraj");
+  assert.equal(levelOf("CZ0642"), "okres");
+  assert.equal(levelOf("CZ020A"), "okres");
+});
+
+test("ranking of one okres, with skill against the mean and event scores", () => {
+  const table = rankingTable(OKRES, 1, "CZ0423");
+  assert.equal(table[0].rank, 1);
+  assert.equal(table.at(-1).model, "blend");
+  assert.equal(table.at(-1).skill, null);
+  const blend = table.at(-1);
+  for (const r of table.slice(0, -1)) {
+    assert.ok(Math.abs(r.skill - (1 - r.mae / blend.mae)) < 1e-12);
+  }
+  assert.ok(table.every((r) => r.ets == null || (r.ets >= -1 / 3 && r.ets <= 1)));
+  assert.ok(table.every((r) => r.stations >= 3));
+  assert.deepEqual(rankingTable(OKRES, 1, "CZ9999"), []);
+});
+
+test("interval rows: the best at zero, ties reach zero", () => {
+  const rows = intervalRows(rankingTable(OKRES, 1, "CZ0423"));
+  assert.equal(rows[0].diff, 0);
+  assert.deepEqual([rows[0].low, rows[0].high], [0, 0]);
+  for (const r of rows.slice(1)) assert.equal(r.tied, r.low <= 0 && r.high >= 0);
+  assert.ok(!rows.some((r) => r.model === "blend"));
+});
+
+test("MAE by lead day and the region summary", () => {
+  const lines = maeByLead(OKRES, "CZ0201");
+  const leads = [...new Set(lines.map((r) => r.lead_day))].sort();
+  assert.deepEqual(leads, [1, 2, 3, 4, 5]);
+  const s = regionSummary(OKRES, 1, "CZ0201");
+  assert.equal(s.name, "Benešov");
+  assert.equal(s.model, rankingTable(OKRES, 1, "CZ0201")[0].model);
+  assert.ok(s.days > 0 && s.stations >= 3);
+  assert.equal(regionSummary(OKRES, 1, "CZ9999"), null);
+  assert.deepEqual(regionList(OKRES).map((r) => r.name), ["Benešov", "Litoměřice"]);
 });
