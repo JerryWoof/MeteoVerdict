@@ -142,3 +142,42 @@ export function addIcons(map, cssSize = 30) {
     map.addImage(name, ctx.getImageData(0, 0, size, size), { pixelRatio: 2 });
   }
 }
+
+// Small glyphs for the four values (controls, marker chips, panel), as inline SVG.
+const GLYPHS = {
+  temperature: {
+    color: "#d0452b",
+    paths: [
+      "M10 3a2 2 0 0 1 4 0v10.3a4.5 4.5 0 1 1-4 0z",
+      "M12 9v7",
+    ],
+  },
+  precipitation: { color: "#2b7bd1", paths: ["M12 3c3 4.5 5.5 7.6 5.5 11a5.5 5.5 0 0 1-11 0C6.5 10.6 9 7.5 12 3z"] },
+  wind: { color: "#2f8a4a", paths: ["M3 9h11a3 3 0 1 0-3-3", "M3 14h15a3 3 0 1 1-3 3", "M3 19h7"] },
+  cloud: { color: "#6f7a83", paths: ["M7 18h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.4 1.5A3.3 3.3 0 0 0 7 18z"] },
+};
+
+/** An inline SVG glyph for a value ("temperature", "precipitation", "wind", "cloud"). */
+export function glyph(layer, size = 14) {
+  const spec = GLYPHS[layer];
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("aria-hidden", "true");
+  svg.classList.add("glyph");
+  for (const d of spec.paths) {
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("d", d);
+    path.setAttribute("fill", layer === "precipitation" || layer === "cloud" ? spec.color : "none");
+    path.setAttribute("stroke", spec.color);
+    path.setAttribute("stroke-width", "2");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    svg.append(path);
+  }
+  return svg;
+}
+
+export const glyphColor = (layer) => GLYPHS[layer].color;
