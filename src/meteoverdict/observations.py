@@ -31,6 +31,14 @@ ELEMENTS = {"T": "temperature_2m", "F": "wind_speed_10m", "SRA10M": "precipitati
 #: now/ keeps about three days; older day files are never asked for.
 NOW_KEEPS_DAYS = 4
 
+#: Physically plausible hourly values; anything outside is dropped as a sensor or
+#: transmission error. Czech records: -42.2 °C and 40.4 °C; gusts over 60 m/s on Sněžka.
+PLAUSIBLE = {
+    "temperature_2m": (-50.0, 50.0),
+    "wind_speed_10m": (0.0, 75.0),
+    "precipitation": (0.0, 120.0),
+}
+
 #: QUALITY codes (meta4) we keep: 0 good, 3 estimated, 5 unknown (unchecked now/ data).
 #: Dropped: 1 suspect, 2 poor, 4 missing.
 KEEP_QUALITY = (0, 3, 5)
@@ -146,7 +154,17 @@ def to_hourly(ten_minute: pl.DataFrame) -> pl.DataFrame:
             "source",
         )
     )
-    return pl.concat([instant.select(list(SCHEMA)), hourly_rain.cast(SCHEMA)])
+    hourly = pl.concat([instant.select(list(SCHEMA)), hourly_rain.cast(SCHEMA)])
+    return hourly.filter(plausible())
+
+
+def plausible() -> pl.Expr:
+    """True for values inside ``PLAUSIBLE`` for their variable."""
+    checks = [
+        (pl.col("variable") == var) & pl.col("value").is_between(low, high)
+        for var, (low, high) in PLAUSIBLE.items()
+    ]
+    return pl.any_horizontal(checks)
 
 
 def fetch_observations(
