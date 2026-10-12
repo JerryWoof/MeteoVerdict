@@ -374,7 +374,8 @@ body.tv > * {
   right: 3.2rem;
   top: 0.75rem;
   width: 21rem;
-  max-height: calc(100% - 1.5rem);
+  /* ends above the map attribution in the bottom right corner (it scrolls when longer) */
+  max-height: calc(100% - 3.2rem);
   overflow-y: auto;
   padding: 0.6rem 0.9rem 0.8rem;
 }
