@@ -80,8 +80,25 @@ function legend(colors, names, shown) {
   );
 }
 
-// the data behind the current view, read by the popups
-const current = { regions: new Map(), stations: new Map(), names: {} };
+// the data behind the current view, read by the popups and the chart
+const current = { regions: new Map(), stations: new Map(), names: {}, colors: {}, view: null };
+
+async function showStationChart(code, title) {
+  const panel = document.getElementById("chart");
+  const heading = document.createElement("h2");
+  heading.textContent = title;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = "×";
+  close.setAttribute("aria-label", "Close the chart");
+  close.addEventListener("click", () => panel.replaceChildren());
+  // Observable Plot is loaded only when a chart is opened
+  const [{ stationChart }, doc] = await Promise.all([
+    import("./chart.js"),
+    getJson(`data/scores/series/${code}.json`),
+  ]);
+  panel.replaceChildren(close, heading, stationChart(doc, current.view, current.colors, current.names));
+}
 
 function popupOn(layer, key) {
   map.on("click", layer, (event) => {
@@ -93,6 +110,7 @@ function popupOn(layer, key) {
     heading.textContent = title;
     text.append(heading, document.createElement("br"), describe(entry, current.names));
     new Popup().setLngLat(event.lngLat).setDOMContent(text).addTo(map);
+    if (key === "stations") showStationChart(feature.properties.code, title);
   });
   map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
   map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
@@ -142,6 +160,7 @@ map.on("load", async () => {
   const colors = modelColors(names);
   const stationTable = await getJson("data/scores/stations.json");
   current.names = names;
+  current.colors = colors;
 
   // okres choropleth where the okres level is published, kraj otherwise
   const probe = parseHash(window.location.hash);
@@ -149,6 +168,8 @@ map.on("load", async () => {
   addLayers(level === "okres" ? "okresy" : "kraje", stationFeatures(null, new Map(), colors));
 
   async function render(view) {
+    current.view = view;
+    document.getElementById("chart").replaceChildren();
     const rows = await scores(view, level);
     const leadDays = availableLeadDays(rows);
     if (!leadDays.includes(view.leadDay)) view.leadDay = leadDays[0];
