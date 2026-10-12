@@ -127,6 +127,13 @@ header h1 a {
   padding: 0.25rem 0.5rem;
   border-bottom: 1px solid #ddd8cc;
 }
+#weights td {
+  vertical-align: top;
+  font-size: 0.8rem;
+}
+#weights .winner {
+  font-weight: 600;
+}
 #ranking .num,
 #days .num,
 #days th.num {
