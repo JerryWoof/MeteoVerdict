@@ -151,18 +151,23 @@ export function today(now) {
 }
 
 /**
- * Day labels, the same shape for every day: the full weekday ("Tuesday"), the short
- * weekday with the date ("Tue, 10/13") and the date alone ("10/13").
+ * Day labels, the same shape for every day: `name` is "Today", "Tomorrow" (as the i18n
+ * key `key`) or the full weekday ("Wednesday"); `date` is the short weekday with the
+ * date ("Wed, 10/14") and `short` the date alone ("10/14").
  */
-export function dayLabel(day, language) {
+export function dayLabel(day, todayIso, language) {
   const at = Date.parse(`${day}T12:00Z`);
   const format = (options) => new Intl.DateTimeFormat(language, { timeZone: "UTC", ...options }).format(at);
-  const name = format({ weekday: "long" });
-  return {
-    name: name.charAt(0).toLocaleUpperCase(language) + name.slice(1),
+  const weekday = format({ weekday: "long" });
+  const offset = Math.round((at - Date.parse(`${todayIso}T12:00Z`)) / 86400000);
+  const label = {
+    name: weekday.charAt(0).toLocaleUpperCase(language) + weekday.slice(1),
     date: format({ weekday: "short", day: "numeric", month: "numeric" }),
     short: format({ day: "numeric", month: "numeric" }),
   };
+  if (offset === 0) label.key = "day.today";
+  if (offset === 1) label.key = "day.tomorrow";
+  return label;
 }
 
 
