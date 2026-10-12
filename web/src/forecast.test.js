@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  bestModel, combine, dailySummary, forecastUrl, leadDay, localDay, parseForecast,
+  bestModel, combine, taper, dailySummary, forecastUrl, leadDay, localDay, parseForecast,
   weightTable, weightedModels, weightsAt,
 } from "./forecast.js";
 
@@ -59,8 +59,9 @@ test("combined temperature: weighted, bias-corrected, rescaled over the models p
   for (const r of weightsAt(TABLE, "temperature_2m", 1)) {
     const v = FORECAST.values.temperature_2m[r.model]?.[i];
     if (v == null) continue;
-    sum += r.weight * (v - r.correction);
-    total += r.weight;
+    const w = r.weight * taper(FORECAST.values.temperature_2m[r.model])[i];
+    sum += w * (v - r.correction);
+    total += w;
   }
   assert.ok(Math.abs(combined[i] - sum / total) < 1e-9);
   const values = Object.values(FORECAST.values.temperature_2m).map((s) => s[i]);
@@ -95,4 +96,16 @@ test("daily summary in Prague time", () => {
     assert.ok(d.tmin <= d.tmax);
     assert.ok(d.precipitation >= 0 && d.wind >= 0);
   }
+});
+
+test("a model that ends early fades out over its last three hours", () => {
+  assert.deepEqual(taper([1, 2, 3, 4, 5, 6]), [1, 1, 1, 1, 1, 1]);
+  assert.deepEqual(taper([1, 2, 3, 4, 5, null, null]), [1, 1, 0.75, 0.5, 0.25, 0, -0.25].map((v) => Math.min(1, v)));
+  const d2 = FORECAST.values.temperature_2m.dwd_icon_d2;
+  const fade = taper(d2);
+  const last = d2.findLastIndex((v) => v != null);
+  assert.deepEqual(fade.slice(last - 3, last + 1), [1, 0.75, 0.5, 0.25]);
+  // the combined curve has no jump where ICON-D2 ends: neighbouring hours stay close
+  const combined = combine(FORECAST, TABLE, "temperature_2m", NOW);
+  assert.ok(Math.abs(combined[last + 1] - combined[last]) < 1.5);
 });
