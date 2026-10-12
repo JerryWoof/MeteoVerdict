@@ -4,10 +4,10 @@
 import { records } from "./data.js";
 
 export const PARTS = ["night", "morning", "afternoon", "evening", "day"];
-// the four forecast values; any of them can be shown at the okres markers, and one (or
-// none) colours the map
+// the four forecast values; any of them can be shown at the okres markers, and one
+// colours the map
 export const LAYERS = ["temperature", "precipitation", "wind", "cloud"];
-export const COLOURS = [...LAYERS, "none"];
+export const COLOURS = LAYERS;
 export const DEFAULT_SHOWN = ["temperature", "precipitation"];
 const SHORT = { temperature: "t", precipitation: "p", wind: "w", cloud: "c" };
 export const TIME_ZONE = "Europe/Prague";
@@ -165,7 +165,8 @@ export function dayLabel(day, todayIso, language) {
 
 /**
  * The view in the URL: "#day/part/colour/values/okres", values as letters
- * ("tp" = temperature and rain). Older links "#day/part/layer/okres" still work.
+ * ("tp" = temperature and rain). Older links "#day/part/layer/okres" still work, and
+ * the colour "none" offered earlier becomes temperature.
  * Unknown parts fall back to `fallback` ({day, part}).
  */
 export function parseView(hash, outlook, fallback) {
