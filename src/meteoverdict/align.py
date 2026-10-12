@@ -8,6 +8,10 @@ Open-Meteo fills every hour, also where a model's output is 3- or 6-hourly
 (Model.native_step); those in-between hours are interpolated. So for such a model and
 lead day we keep temperature and wind only at its native hours, and compare
 precipitation summed over its native periods (``period_h`` 3 or 6) instead of hourly.
+
+``precipitation_24h`` compares 24-hour totals over ČHMÚ's climatological day, 06:00 to
+06:00 UTC, which is the window of the manual rain gauges. Every native period of 3 or
+6 hours fits into it, so hourly forecasts can be summed for any model.
 """
 
 from __future__ import annotations
@@ -109,4 +113,60 @@ def daily_precipitation(precipitation_pairs: pl.LazyFrame | pl.DataFrame) -> pl.
         )
         .filter(pl.col("hours") == 24)
         .drop("hours")
+    )
+
+
+#: ČHMÚ's climatological day starts at 06:00 UTC; an hour ending at ``time`` belongs to
+#: the window of the date of ``time - 7 h`` (07:00 … 06:00 next day).
+WINDOW_OFFSET = timedelta(hours=7)
+
+
+def precipitation_24h(
+    observations: pl.LazyFrame | pl.DataFrame,
+    forecasts: pl.LazyFrame | pl.DataFrame,
+    models: list[Model],
+    exclude_estimated: bool = False,
+) -> pl.LazyFrame:
+    """06-06 UTC precipitation pairs; ``date`` is the day the window starts.
+
+    Observed totals come from the rain gauges (``precipitation_24h``, stamped at the
+    window's end) and, where a station has no gauge value, from 24 complete hourly
+    sums. Forecasts are hourly sums over the same 24 hours, each hour from its own lead
+    day (as for the UTC-day totals).
+    """
+    obs = observations.lazy()
+    if exclude_estimated:
+        obs = obs.filter(pl.col("quality") != 3)
+    window = (pl.col("time") - WINDOW_OFFSET).dt.date().alias("date")
+    gauges = obs.filter(pl.col("variable") == "precipitation_24h").select(
+        "station_id",
+        (pl.col("time") - timedelta(days=1)).dt.date().alias("date"),
+        pl.col("value").alias("observed"),
+        "quality",
+    )
+    hourly = (
+        obs.filter(pl.col("variable") == "precipitation")
+        .group_by("station_id", window)
+        .agg(pl.col("value").sum().alias("observed"), pl.col("quality").max(), pl.len())
+        .filter(pl.col("len") == 24)
+        .drop("len")
+        .join(gauges, on=["station_id", "date"], how="anti")
+    )
+    fc = (
+        forecasts.lazy()
+        .filter(pl.col("precipitation").is_not_null())
+        .join(_steps(models).select("model", "lead_day"), on=["model", "lead_day"], how="inner")
+        .group_by("station_id", window, "model", "lead_day")
+        .agg(pl.col("precipitation").sum().alias("forecast"), pl.len())
+        .filter(pl.col("len") == 24)
+        .drop("len")
+    )
+    return fc.join(pl.concat([gauges, hourly]), on=["station_id", "date"], how="inner").select(
+        "station_id",
+        "date",
+        "model",
+        pl.col("lead_day").cast(pl.Int8),
+        pl.col("forecast").cast(pl.Float32),
+        pl.col("observed").cast(pl.Float32),
+        pl.col("quality").cast(pl.UInt8),
     )
