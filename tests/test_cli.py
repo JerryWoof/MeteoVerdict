@@ -321,3 +321,9 @@ def test_score_writes_monthly_scores(tmp_path):
     assert result.exit_code == 0, result.output
     scores = pl.read_parquet(tmp_path / "scores" / "2026-09.parquet")
     assert scores.select("variable", "n").rows() == [("temperature_2m", 24)]
+
+
+def test_aggregate_needs_scores(tmp_path):
+    result = runner.invoke(app, ["aggregate", "--data-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "mvd score" in result.stderr
