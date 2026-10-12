@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>meteoverdict: forecast by okres</title>
+    <meta name="description" content="A forecast per okres that combines the weather models by how well each did there." />
+  </head>
+  <body class="page">
+    <header>
+      <h1><a href="./">meteoverdict</a></h1>
+      <p id="status">Loading…</p>
+      <a href="./" data-i18n="page.map">Map</a>
+      <a href="compare.html" data-i18n="page.compare">Compare models</a>
+      <form id="controls">
+        <label><span data-i18n="control.okres">Okres</span> <select id="okres"></select></label>
+      </form>
+      <button type="button" id="language">Česky</button>
+    </header>
+    <main class="content">
+      <h2 id="title" data-i18n="forecast.title">Forecast</h2>
+      <p class="note" data-i18n="forecast.note"></p>
+      <p id="message" class="note"></p>
+      <table id="days"></table>
+      <div id="charts"></div>
+      <h2 data-i18n="forecast.weights">Which models count most here</h2>
+      <p class="note" data-i18n="forecast.weightsNote"></p>
+      <table id="weights"></table>
+    </main>
+    <footer>
+      <span data-i18n="footer.observations">Observations</span>:
+      <a href="https://opendata.chmi.cz/">ČHMÚ</a> (CC BY 4.0) ·
+      <span data-i18n="footer.forecasts">Forecasts</span>:
+      <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0; UK Met Office CC BY-SA 4.0) ·
+      <span data-i18n="footer.boundaries">Boundaries</span>: ČÚZK (CC BY 4.0) ·
+      <span data-i18n="footer.scores">Scores</span>: CC BY-SA 4.0 ·
+      <a href="https://github.com/JerryLion/meteoverdict/blob/main/docs/methodology.md" data-i18n="footer.method">Source and method</a>
+    </footer>
+    <script type="module" src="/src/forecast-page.js"></script>
+  </body>
+</html>
