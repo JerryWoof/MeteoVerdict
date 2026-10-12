@@ -79,7 +79,7 @@ def test_only_days_every_covering_model_has_are_compared():
     assert cz == [("a", 24, 1.0, 1), ("b", 24, 2.0, 1)]
 
 
-def test_a_model_that_never_reaches_a_station_does_not_remove_it():
+def test_regions_compare_all_their_models_on_the_same_stations():
     # like ICON-D2 at the eastern tip: model b has no score at s3 at all
     scores = score_rows(
         [
@@ -89,8 +89,16 @@ def test_a_model_that_never_reaches_a_station_does_not_remove_it():
         ]
     )
     table = agg.aggregate(scores, STATIONS, windows=("all",))
-    cz = table.filter(pl.col("level") == "cz").select("model", "stations", "mae").rows()
-    assert cz == [("a", 2, 2.0), ("b", 1, 2.0)]
+
+    def rows(level, region):
+        here = table.filter(pl.col("level") == level, pl.col("region") == region)
+        return here.select("model", "stations", "mae").rows()
+
+    # Czechia: s3 lacks model b, so it is left out for model a too
+    assert rows("cz", "cz") == [("a", 1, 1.0), ("b", 1, 2.0)]
+    # s3's kraj and the station itself only have model a: still scored
+    assert rows("kraj", "CZ064") == [("a", 1, 3.0)]
+    assert rows("station", "s3") == [("a", 1, 3.0)]
 
 
 def test_a_window_starts_no_earlier_than_the_first_scored_day():
