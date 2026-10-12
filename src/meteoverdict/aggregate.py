@@ -169,6 +169,11 @@ JSON_COLUMNS = (
     "far_5",
     "ets_5",
     "enough_stations",
+    "rank",
+    "diff_ci_low",
+    "diff_ci_high",
+    "tied_with_best",
+    "clear_winner",
 )
 
 
@@ -212,6 +217,10 @@ def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -
         "min_stations": MIN_STATIONS,
         "precipitation_thresholds_mm": list(metrics.PRECIPITATION_THRESHOLDS),
         "fair_comparison": "per window, variable and lead day only station-days all models cover",
+        "ranking": (
+            "by MAE; tied_with_best when the 95 % bootstrap interval (days resampled) of the "
+            "MAE difference to the best model contains 0; clear_winner when nobody is tied"
+        ),
         "licence": "CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/",
         "attribution": (
             "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com "

@@ -18,6 +18,7 @@ from meteoverdict import (
     forecasts,
     observations,
     partitions,
+    ranking,
     regions,
     scoring,
     stations,
@@ -359,17 +360,20 @@ def aggregate_cmd(
             formats=["%Y-%m-%d"], help="Last day of the windows. Default: last scored day."
         ),
     ] = None,
+    resamples: Annotated[int, typer.Option(help="Bootstrap resamples for the ranking.")] = 1000,
 ) -> None:
-    """Aggregate daily scores per station, okres, kraj, elevation class and Czechia."""
+    """Aggregate and rank daily scores per station, okres, kraj, elevation class and Czechia."""
     files = sorted((data_dir / "scores").glob("*.parquet"))
     if not files:
         typer.echo(f"mvd aggregate: no scores in {data_dir / 'scores'}; run `mvd score`", err=True)
         raise typer.Exit(code=1)
     if not stations_path.exists():
         raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
-    table = aggregate.aggregate(
-        pl.scan_parquet(files), pl.read_parquet(stations_path), as_of.date() if as_of else None
-    )
+    scores, station_table = pl.scan_parquet(files), pl.read_parquet(stations_path)
+    day = as_of.date() if as_of else None
+    table = aggregate.aggregate(scores, station_table, day)
+    ranks = ranking.rank(scores, station_table, day, resamples=resamples)
+    table = table.join(ranks, on=[*ranking.GROUP, "model"], how="left")
     table.write_parquet(data_dir / "aggregates.parquet", compression="zstd")
     names = {m.id: m.name for m in catalogue.load_models()}
     meta = aggregate.metadata(table, names, datetime.now(UTC))
