@@ -257,3 +257,20 @@ def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -
             "ČHMÚ and the UK Met Office (CC BY-SA 4.0). Boundaries: ČÚZK (CC BY 4.0)."
         ),
     }
+
+
+#: Station columns for the web map's dots (``stations.json``).
+STATION_COLUMNS = ("id", "name", "lat", "lon", "elevation", "okres_code", "kraj_code", "active")
+
+
+def write_stations(stations: pl.DataFrame, out_dir: Path) -> Path:
+    """``out_dir/stations.json``: position and region of every station, same layout."""
+    columns = [c for c in STATION_COLUMNS if c in stations.columns]
+    rows = stations.select(
+        pl.col(c).round(5) if stations.schema[c].is_float() else pl.col(c) for c in columns
+    ).rows()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "stations.json"
+    doc = {"columns": columns, "rows": rows}
+    path.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), "utf-8")
+    return path
