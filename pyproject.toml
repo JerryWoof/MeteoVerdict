@@ -23,8 +23,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/JerryLion/meteoverdict"
-Issues = "https://github.com/JerryLion/meteoverdict/issues"
+Homepage = "https://github.com/JerryWoof/meteoverdict"
+Issues = "https://github.com/JerryWoof/meteoverdict/issues"
 
 [project.scripts]
 mvd = "meteoverdict.cli:main"
