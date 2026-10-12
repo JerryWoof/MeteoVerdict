@@ -101,9 +101,10 @@ def daily_scores(
             pl.lit("temperature_max").alias("variable"), pl.lit(24, pl.Int8).alias("period_h")
         )
     )
-    return (
+    table = (
         pl.concat([hourly, synoptic, daily, climatological, maximum], how="diagonal_relaxed")
         .filter(pl.col("date").is_between(start, end))
         .sort(KEYS)
         .collect()
     )
+    return table.cast(metrics.compact(table.columns))
