@@ -130,7 +130,20 @@ def test_window_filters_old_days():
         .select("window", "days")
         .rows()
     }
-    assert days == {"90d": 1, "season": 1, "all": 2}
+    assert days == {"90d": 1, "season": 1, "all": 2, "mam": 1, "son": 1}  # 14 Mar, 30 Sep
+
+
+def test_season_windows_span_all_years():
+    days = [date(2024, 12, 31), date(2025, 1, 15), date(2025, 7, 1), date(2026, 2, 1), DAY]
+    rows = [(d, "s1", m, 1, 1.0) for d in days for m in ("a", "b")]
+    table = agg.aggregate(score_rows(rows), STATIONS)
+    winter = table.filter(
+        pl.col("level") == "cz", pl.col("model") == "a", pl.col("window") == "djf"
+    )
+    assert winter.select("days", "from", "to").row(0) == (3, date(2024, 12, 31), DAY)
+    start, days_filter = agg.window_days("jja", DAY, date(2024, 1, 1))
+    picked = pl.DataFrame({"date": days}).filter(days_filter)["date"].to_list()
+    assert (start, picked) == (date(2024, 1, 1), [date(2025, 7, 1)])
 
 
 def test_no_scores_is_an_error():
