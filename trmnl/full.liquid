@@ -1,17 +1,14 @@
 {%- comment -%}
   MeteoVerdict for TRMNL (OG, 800x480, black and white), full screen layout.
-  Private plugin, strategy "Polling", URL:
-    https://jerrywoof.github.io/MeteoVerdict/api/v1/okresy/CZ0423.json
-  Sunrise, sunset and sunshine come with the forecast. Until the open data has them, add a
-  second line with Open-Meteo for them (TRMNL then names the answers IDX_0 and IDX_1):
-    https://api.open-meteo.com/v1/forecast?latitude=50.08&longitude=14.44&daily=sunrise,sunset,sunshine_duration&timezone=Europe%2FPrague&forecast_days=3
+  Private plugin, strategy "Polling", URL (your okres instead of CZ0100, Prague):
+    https://jerrywoof.github.io/MeteoVerdict/api/v1/okresy/CZ0100.json
+  The JSON's top-level keys (okres, forecast, ...) arrive as Liquid variables.
   Setup: trmnl/README.md.
 {%- endcomment -%}
 
-{%- assign place = "Praha" -%}
+{%- comment -%} your town or village for the footer; empty: the okres only {%- endcomment -%}
+{%- assign place = "" -%}
 
-{%- if IDX_0 -%}{%- assign okres = IDX_0.okres -%}{%- assign forecast = IDX_0.forecast -%}{%- endif -%}
-{%- assign astro = IDX_1.daily -%}
 {%- assign offset = trmnl.user.utc_offset | default: 7200 -%}
 {%- assign now_s = "now" | date: "%s" | plus: offset -%}
 {%- assign today = now_s | date: "%Y-%m-%d" -%}
@@ -111,15 +108,7 @@
           {%- assign sym = pm.symbol -%}{%- assign cloud = pm.cloud -%}
         {%- endif -%}
 
-        {%- comment -%} sunrise, sunset and sunshine: from MeteoVerdict, else from Open-Meteo (IDX_1) {%- endcomment -%}
         {%- assign rise = rows.first.sunrise -%}{%- assign set = rows.first.sunset -%}
-        {%- for d in astro.time -%}
-          {%- if d == day -%}
-            {%- assign i = forloop.index0 -%}
-            {%- if rise == nil -%}{%- assign rise = astro.sunrise[i] | slice: 11, 5 -%}{%- assign set = astro.sunset[i] | slice: 11, 5 -%}{%- endif -%}
-            {%- if shine == nil and astro.sunshine_duration -%}{%- assign shine = astro.sunshine_duration[i] | divided_by: 3600.0 -%}{%- endif -%}
-          {%- endif -%}
-        {%- endfor -%}
         {%- if rise -%}
           {%- assign rise_min = rise | slice: 0, 2 | times: 60 -%}{%- assign rise_min = rise | slice: 3, 2 | plus: rise_min -%}
           {%- assign set_min = set | slice: 0, 2 | times: 60 -%}{%- assign set_min = set | slice: 3, 2 | plus: set_min -%}
@@ -241,7 +230,7 @@
   </div>
 
   <div class="title_bar">
-    <span class="title">{{ place }} · okres {{ okres.name }}</span>
+    <span class="title">{% if place != "" %}{{ place }} · {% endif %}okres {{ okres.name }}</span>
     <span class="instance">MeteoVerdict · updated {{ forecast.generated | date: "%s" | plus: offset | date: "%-d %b %H:%M" }}</span>
   </div>
 </div>
