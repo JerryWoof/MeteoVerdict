@@ -2,7 +2,7 @@ name: Daily
 
 # Every morning: capture yesterday's ČHMÚ observations (now/ keeps them ~3 days),
 # re-score the last 100 days, aggregate and rank, check data quality (failing loudly),
-# then commit the README leaderboard, its badge and meta.json, and publish the
+# then commit the "last updated" badge and meta.json, and publish the
 # full data to the release data-latest.
 # No Open-Meteo calls: forecasts come from the backfill workflow.
 on:
@@ -38,11 +38,11 @@ jobs:
       - name: Data quality checks
         # fails the run (GitHub notifies the owner) and skips the commit on stale data
         run: uv run --frozen mvd check
-      - name: Commit leaderboard and summary data
+      - name: Commit the badge and summary data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md site/data/badge.json site/data/meta.json
+          git add site/data/badge.json site/data/meta.json
           if git diff --cached --quiet; then
             echo "nothing changed"
             exit 0
