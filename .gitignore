@@ -19,6 +19,11 @@ htmlcov/
 *.parquet
 !tests/fixtures/**/*.parquet
 
+# Generated web map data: only the summary levels are committed by the daily
+# workflow; okres and station levels are published in the release data-latest
+site/data/*/okres/
+site/data/*/station/
+
 # Web app (phase 4)
 node_modules/
 web/dist/

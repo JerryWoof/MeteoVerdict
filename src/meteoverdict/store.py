@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import re
+import shutil
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -74,17 +76,23 @@ def upload(
     return uploaded
 
 
+def remote_months(store: GitHubReleaseStore) -> list[str]:
+    """Months that have a ``data-YYYY-MM`` release."""
+    return [t.removeprefix("data-") for t in store.tags("data-") if MONTH.match(t[5:])]
+
+
 def download(
     store: GitHubReleaseStore,
     data_dir: Path,
     months: list[str],
     log: Callable[[str], None] = lambda _: None,
+    kinds: tuple[str, ...] = KINDS,
 ) -> list[str]:
     """Download the stored files of ``months`` that are missing or different locally."""
     downloaded = []
     for month in months:
         assets = store.assets(release_tag(month))
-        for kind in KINDS:
+        for kind in kinds:
             asset = assets.get(asset_name(kind, month))
             if asset is None:
                 continue
@@ -129,3 +137,19 @@ class ReleaseSync:
         state = self.data_dir / STATE_NAME
         if state.exists():
             self.store.put(STATE_TAG, STATE_NAME, state, label=sha256(state))
+
+
+LATEST_TAG = "data-latest"
+
+
+def publish_latest(store: GitHubReleaseStore, data_dir: Path, site_dir: Path) -> None:
+    """Replace ``aggregates.parquet`` and ``site-data.zip`` (all JSON) in ``data-latest``.
+
+    The repository only commits the small summary levels; the web map takes the full
+    set (okres and station levels) from here.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = Path(shutil.make_archive(str(Path(tmp) / "site-data"), "zip", site_dir))
+        store.put(LATEST_TAG, "site-data.zip", archive, label=sha256(archive))
+    aggregates = data_dir / "aggregates.parquet"
+    store.put(LATEST_TAG, "aggregates.parquet", aggregates, label=sha256(aggregates))

@@ -9,6 +9,11 @@ from meteoverdict.models import load_models
 MODELS = [m for m in load_models() if m.id in ("dwd_icon_d2", "ecmwf_ifs025")]
 POINTS = pl.DataFrame({"id": ["s"], "lat": [50.0], "lon": [14.4], "elevation": [300.0]})
 FIRST, LAST = date(2026, 8, 1), date(2026, 9, 30)
+# 61 days: four complete 14-day windows (1 Aug … 25 Sep) and an incomplete tail
+WINDOWS = [
+    (date(2026, 8, 1) + timedelta(days=14 * i), date(2026, 8, 14) + timedelta(days=14 * i))
+    for i in range(4)
+]
 
 
 def hourly(start: date, end: date) -> list[datetime]:
@@ -65,9 +70,10 @@ def run(tmp_path, sync=None):
 def test_newest_windows_first_and_everything_scored(tmp_path, fake):
     f = fake()
     result = run(tmp_path)
-    windows = list(forecasts.windows(FIRST, LAST))
-    assert result.windows_done == len(windows) and result.stopped == ""
-    assert f.fc_calls[0][1] == windows[-1][0]  # newest window first
+    assert backfill.complete_windows(FIRST, LAST) == WINDOWS
+    assert result.windows_done == 4 and result.stopped == ""
+    assert f.fc_calls[0][1] == WINDOWS[-1][0]  # newest complete window first
+    assert all(e <= date(2026, 9, 25) for _, _, e in f.fc_calls)  # incomplete tail skipped
     # 14-day windows run across the month boundary
     assert (date(2026, 8, 29), date(2026, 9, 11)) in [(s, e) for _, s, e in f.fc_calls]
     assert {p.name for p in (tmp_path / "scores").iterdir()} == {
@@ -75,7 +81,7 @@ def test_newest_windows_first_and_everything_scored(tmp_path, fake):
         "2026-09.parquet",
     }
     scores = pl.concat([pl.read_parquet(p) for p in (tmp_path / "scores").iterdir()])
-    assert scores["date"].min() == FIRST and scores["date"].max() == LAST
+    assert scores["date"].min() == FIRST and scores["date"].max() == date(2026, 9, 25)
     # each month's observations were fetched once
     assert sorted(f.obs_calls) == [
         (date(2026, 8, 1), date(2026, 8, 31)),
@@ -92,7 +98,7 @@ def test_stops_at_the_quota_and_resumes(tmp_path, fake):
     run(tmp_path)
     asked_again = {(m, s) for m, s, _ in first.fc_calls} & {(m, s) for m, s, _ in second.fc_calls}
     assert not asked_again  # finished model-windows are not fetched twice
-    assert done_before + len(second.fc_calls) == 2 * len(list(forecasts.windows(FIRST, LAST)))
+    assert done_before + len(second.fc_calls) == 2 * len(WINDOWS)
     assert run(tmp_path).windows_done == 0  # nothing left
 
 
@@ -120,6 +126,16 @@ def test_sync_pulls_before_and_pushes_after_each_window(tmp_path, fake):
 
     sync = Recorder()
     run(tmp_path, sync)
-    assert sync.calls[0] == ("pull", ("2026-09", "2026-10"))  # incl. the next day's month
+    assert sync.calls[0] == ("pull", ("2026-09",))  # 12-25 Sep; the next day is in September too
     assert sync.calls[1][0] == "push"
-    assert len(sync.calls) == 2 * len(list(forecasts.windows(FIRST, LAST)))
+    assert len(sync.calls) == 2 * len(WINDOWS)
+
+
+def test_a_window_seen_while_incomplete_is_done_again_once_complete(tmp_path, fake):
+    # an earlier version marked the incomplete newest window as done; its keys must not
+    # stop the complete window from being fetched
+    old = backfill.State(tmp_path / "backfill-state.json", fc_done={"dwd_icon_d2|2026-09-12"})
+    old.save()
+    f = fake()
+    run(tmp_path)
+    assert ("dwd_icon_d2", date(2026, 9, 12), date(2026, 9, 25)) in f.fc_calls
