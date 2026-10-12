@@ -36,9 +36,10 @@ documented their formats from real files: the shared JSON envelope, file names (
 daily `now/` files kept about three days), the ten-minute to hourly aggregation, and
 the publication lag (the current month is only in `now/`). The natural contribution is a
 `recent` period (and possibly `now`) for `chmi/observation`, starting with an issue that
-proposes it and links this documentation. Code in `meteoverdict.obs` is MIT like
-wetterdienst, but wetterdienst has its own parser and data model, so the contribution
-would be new code in their structure, not a copy of ours.
+proposes it and links this documentation. Our readers (`meteoverdict.chmi`,
+`meteoverdict.observations`) are MIT like wetterdienst, but wetterdienst has its own
+parser and data model, so the contribution would be new code in their structure, not a
+copy of ours.
 
 **Should meteoverdict use wetterdienst instead of its own reader?** Not now: without
 `recent/` and `now/` it cannot feed the daily run, and the backfill needs the current
