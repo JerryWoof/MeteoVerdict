@@ -28,18 +28,27 @@ export function modelColors(models) {
  */
 export function bestByRegion(rows, leadDay) {
   const best = new Map();
+  const unranked = new Map(); // region → lowest MAE, for variables without a ranking
   for (const r of rows) {
     if (r.lead_day !== leadDay) continue;
     const entry = best.get(r.region) ?? {
       name: r.region_name, model: null, mae: null, tied: [], enough: r.enough_stations,
+      ranked: false,
     };
     if (r.rank === 1) {
-      entry.model = r.model;
-      entry.mae = r.mae;
+      Object.assign(entry, { model: r.model, mae: r.mae, ranked: true });
     } else if (r.tied_with_best && r.rank != null) {
       entry.tied.push(r.model);
     }
+    if (r.rank == null && r.model !== "blend" && r.mae != null) {
+      const low = unranked.get(r.region);
+      if (!low || r.mae < low.mae) unranked.set(r.region, { model: r.model, mae: r.mae });
+    }
     best.set(r.region, entry);
+  }
+  // e.g. the synoptic-hour temperatures are aggregated but not ranked
+  for (const [region, entry] of best) {
+    if (entry.model == null && unranked.has(region)) Object.assign(entry, unranked.get(region));
   }
   return best;
 }
@@ -77,5 +86,6 @@ export function describe(entry, names) {
   if (!entry.enough) return "too few stations to rank";
   const name = (id) => names[id] ?? id;
   const tied = entry.tied.length ? `; not significantly worse: ${entry.tied.map(name).join(", ")}` : "";
-  return `best: ${name(entry.model)} (MAE ${entry.mae.toFixed(2)})${tied}`;
+  const how = entry.ranked ? "" : ", lowest MAE, no significance test";
+  return `best: ${name(entry.model)} (MAE ${entry.mae.toFixed(2)}${how})${tied}`;
 }
