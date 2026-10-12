@@ -19,11 +19,12 @@ htmlcov/
 *.parquet
 !tests/fixtures/**/*.parquet
 
-# Generated web map data: only the summary levels are committed by the daily
-# workflow; okres and station levels are published in the release data-latest
-site/data/*/okres/
-site/data/*/station/
-site/data/series/
+# Generated web map data: published in the release data-latest (site-data.zip) and on
+# GitHub Pages; the daily workflow commits only the README badge and meta.json, since
+# the JSON is several MB a day even for the summary levels
+site/data/*
+!site/data/badge.json
+!site/data/meta.json
 
 # Web app (phase 4)
 node_modules/
