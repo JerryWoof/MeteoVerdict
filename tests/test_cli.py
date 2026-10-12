@@ -373,3 +373,25 @@ def test_check_fails_loudly_and_writes_the_job_summary(tmp_path, monkeypatch):
     assert result.exit_code == 1
     assert "ERROR: no observations" in result.stdout
     assert "## Data quality" in summary.read_text(encoding="utf-8")
+
+
+def test_fetch_gauges_asks_for_manual_and_inactive_stations(monkeypatch, tmp_path):
+    from meteoverdict import gauges, observations
+
+    stations_file = tmp_path / "s.parquet"
+    pl.DataFrame({"id": ["auto", "gauge"], "active": [True, True]}).write_parquet(stations_file)
+    meta2 = pl.DataFrame({"OBS_TYPE": ["10M"], "WSI": ["auto"], "EG_EL_ABBREVIATION": ["T"]})
+    monkeypatch.setattr(cli, "fetch_current_meta", lambda client, n, today: meta2)
+    asked = {}
+
+    def fake(client, ids, start, end):
+        asked["ids"] = list(ids)
+        return pl.DataFrame(schema=observations.SCHEMA)
+
+    monkeypatch.setattr(gauges, "fetch_gauge_precipitation", fake)
+    args = ["fetch-gauges", "--start", "2026-08-01", "--end", "2026-08-31"]
+    result = runner.invoke(
+        app, [*args, "--stations", str(stations_file), "--out-dir", str(tmp_path)]
+    )
+    assert result.exit_code == 0, result.output
+    assert asked["ids"] == ["gauge"]

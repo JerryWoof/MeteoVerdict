@@ -17,6 +17,7 @@ from meteoverdict import (
     aggregate,
     aladin,
     forecasts,
+    gauges,
     observations,
     partitions,
     quality,
@@ -244,6 +245,38 @@ def fetch_obs(
     typer.echo(
         f"{obs.height} hourly values from {obs['station_id'].n_unique()} of {len(ids)} "
         f"stations → {', '.join(str(p) for p in written) or 'nothing'}"
+    )
+
+
+@app.command("fetch-gauges")
+def fetch_gauges(
+    start: DateOption,
+    end: DateOption,
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    out_dir: Annotated[Path, typer.Option(help="Monthly Parquet files go here.")] = Path(
+        "data/obs"
+    ),
+) -> None:
+    """Fetch daily precipitation of the manual rain gauges (06-06 UTC windows)."""
+    _check_range(start.date(), end.date())
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    table = pl.read_parquet(stations_path)
+    transport = httpx.HTTPTransport(retries=3)
+    try:
+        with httpx.Client(timeout=120, transport=transport, follow_redirects=True) as client:
+            meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
+            ids = gauges.gauge_stations(table, meta2)["id"]
+            rows = gauges.fetch_gauge_precipitation(client, ids, start.date(), end.date())
+    except httpx.HTTPError as exc:
+        typer.echo(f"mvd fetch-gauges: download failed: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    written = observations.write_monthly(rows, out_dir)
+    typer.echo(
+        f"{rows.height} daily values from {rows['station_id'].n_unique()} of {len(ids)} "
+        f"gauges → {', '.join(str(p) for p in written) or 'nothing'}"
     )
 
 
