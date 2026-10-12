@@ -123,3 +123,22 @@ def test_download_missing_or_changed_files_without_leaking_the_token(tmp_path):
     assert (target / "obs" / "2026-09.parquet").read_bytes() == b"obs"
     assert all("authorization" not in h for h in gh.storage_headers)
     assert store.download(gh.store(), target, ["2026-09", "2026-10"]) == []
+
+
+def test_release_sync_round_trip(tmp_path):
+    gh = FakeGitHub()
+    here = tmp_path / "here"
+    sync = store.ReleaseSync(gh.store(), here)
+    sync.pull_state()  # nothing stored yet
+    assert not (here / store.STATE_NAME).exists()
+
+    write(here, "obs", "2026-09", b"obs")
+    (here / store.STATE_NAME).write_text('{"obs_months": [], "fc_done": [], "scored": []}')
+    sync.push(["2026-09"])
+
+    there = tmp_path / "there"
+    other = store.ReleaseSync(gh.store(), there)
+    other.pull_state()
+    other.pull(["2026-09"])
+    assert (there / store.STATE_NAME).read_text() == (here / store.STATE_NAME).read_text()
+    assert (there / "obs" / "2026-09.parquet").read_bytes() == b"obs"
