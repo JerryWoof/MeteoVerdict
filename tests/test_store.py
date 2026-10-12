@@ -32,6 +32,11 @@ class FakeGitHub:
             if tag not in self.releases:
                 return httpx.Response(404)
             return httpx.Response(200, json={"id": self.releases[tag]})
+        if request.method == "GET" and path == "/releases":
+            tags = sorted(self.releases)
+            page = int(url.params["page"])
+            body = [{"tag_name": t} for t in tags[(page - 1) * 100 : page * 100]]
+            return httpx.Response(200, json=body)
         if request.method == "POST" and path == "/releases":
             tag = json.loads(request.content)["tag_name"]
             self.releases[tag] = len(self.releases) + 1
@@ -142,3 +147,35 @@ def test_release_sync_round_trip(tmp_path):
     other.pull(["2026-09"])
     assert (there / store.STATE_NAME).read_text() == (here / store.STATE_NAME).read_text()
     assert (there / "obs" / "2026-09.parquet").read_bytes() == b"obs"
+
+
+def test_remote_months_and_scores_only_download(tmp_path):
+    gh = FakeGitHub()
+    source = tmp_path / "source"
+    write(source, "obs", "2026-08", b"obs8")
+    write(source, "scores", "2026-08", b"scores8")
+    write(source, "scores", "2026-09", b"scores9")
+    store.upload(gh.store(), source)
+    gh.releases["aladin-2026-10"] = 99  # other releases are ignored
+    gh.releases["data-state"] = 98
+    assert store.remote_months(gh.store()) == ["2026-08", "2026-09"]
+
+    target = tmp_path / "target"
+    got = store.download(gh.store(), target, ["2026-08", "2026-09"], kinds=("scores",))
+    assert got == ["scores-2026-08.parquet", "scores-2026-09.parquet"]
+    assert not (target / "obs").exists()
+
+
+def test_publish_latest_replaces_the_bundle(tmp_path):
+    gh = FakeGitHub()
+    site = tmp_path / "site"
+    (site / "all" / "cz").mkdir(parents=True)
+    (site / "meta.json").write_text("{}")
+    (site / "all" / "cz" / "temperature_2m.json").write_text('{"columns": [], "rows": []}')
+    (tmp_path / "aggregates.parquet").write_bytes(b"agg v1")
+    store.publish_latest(gh.store(), tmp_path, site)
+    (tmp_path / "aggregates.parquet").write_bytes(b"agg v2")
+    store.publish_latest(gh.store(), tmp_path, site)
+    names = sorted(a["name"] for a in gh.assets.values())
+    assert names == ["aggregates.parquet", "site-data.zip"]  # replaced, not duplicated
+    assert b"agg v2" in [a["content"] for a in gh.assets.values()]
