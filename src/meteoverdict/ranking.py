@@ -96,8 +96,8 @@ def rank(
     info = aggregate.station_info(stations)
     rows = []
     for window in windows:
-        start = aggregate.window_start(window, as_of, first_day)
-        fair = aggregate.common_days(scores.filter(pl.col("date").is_between(start, as_of)))
+        _, days = aggregate.window_days(window, as_of, first_day)
+        fair = aggregate.common_days(scores.filter(days))
         fair = fair.join(info, on="station_id", how="inner")
         for level in aggregate.LEVELS:
             daily = (
