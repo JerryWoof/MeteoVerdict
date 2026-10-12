@@ -95,7 +95,11 @@ def stations_cmd(
     stations.write_stations(table, out)
     active = int(table["active"].sum())
     kraje = table["kraj"].n_unique()
-    typer.echo(f"Wrote {table.height} stations ({active} active) in {kraje} kraje to {out}")
+    okresy = table["okres"].n_unique()
+    typer.echo(
+        f"Wrote {table.height} stations ({active} active) "
+        f"in {okresy} okresy and {kraje} kraje to {out}"
+    )
 
 
 ALADIN_RELEASE_NOTES = (
