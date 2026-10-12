@@ -35,3 +35,4 @@ web/public/data/
 .idea/
 .vscode/
 .DS_Store
+web/public/api/
