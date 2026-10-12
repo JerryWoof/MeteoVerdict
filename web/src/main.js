@@ -1,18 +1,18 @@
-import { Map as MapLibreMap, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
+import * as Plot from "@observablehq/plot";
+import { Map as MapLibreMap, NavigationControl, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 // MapLibre's ES module build loads its worker from a separate file
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
 import {
-  NO_DATA, TOO_FEW, bestByRegion, describe, fillExpression, modelColors, records,
-  stationFeatures,
+  NO_DATA, TOO_FEW, bestByRegion, fillExpression, modelColors, records, stationFeatures,
 } from "./data.js";
+import { HOURS, explainRegion, reasons } from "./explain.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
-import {
-  WINDOWS, availableLeadDays, availableVariables, parseHash, toHash,
-} from "./view.js";
+import { displayName } from "./tv.js";
+import { WINDOWS, availableLeadDays, availableVariables, parseHash } from "./view.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -22,6 +22,9 @@ const BOUNDS = [
   [12.0, 48.5],
   [18.95, 51.1],
 ];
+const UNITS = { temperature: "°C", wind: "m/s", precipitation: "mm" };
+const unitOf = (variable) => UNITS[variable.split("_")[0]] ?? "";
+const isTemperature = (variable) => variable.startsWith("temperature_2m");
 
 // No third-party tiles: the map is the region boundaries on a plain background.
 const map = new MapLibreMap({
@@ -46,17 +49,33 @@ async function getJson(path) {
   }
 }
 
-const scores = (view, level) =>
-  getJson(`data/scores/${view.window}/${level}/${view.variable}.json`).then(records);
+const cache = new Map();
+function scores(view, level, variable = view.variable) {
+  const path = `data/scores/${view.window}/${level}/${variable}.json`;
+  if (!cache.has(path)) cache.set(path, getJson(path).then(records));
+  return cache.get(path);
+}
+
+function element(tag, text, className) {
+  const e = document.createElement(tag);
+  if (text != null) e.textContent = text;
+  if (className) e.className = className;
+  return e;
+}
+
+function swatch(color) {
+  const s = element("span", "", "swatch");
+  s.style.background = color;
+  return s;
+}
 
 /** Fill a <select> with [value, label] pairs and select `current`. */
 function fillSelect(id, options, current) {
   const select = document.getElementById(id);
   select.replaceChildren(
     ...options.map(([value, label]) => {
-      const option = document.createElement("option");
+      const option = element("option", label);
       option.value = value;
-      option.textContent = label;
       option.selected = String(value) === String(current);
       return option;
     }),
@@ -64,138 +83,350 @@ function fillSelect(id, options, current) {
   return select;
 }
 
-function legend(colors, names, shown) {
-  const items = Object.entries(colors)
-    .filter(([id]) => shown.has(id))
-    .map(([id, color]) => [names[id] ?? id, color]);
-  items.push([t("legend.tooFew"), TOO_FEW], [t("legend.noData"), NO_DATA]);
-  const element = document.getElementById("legend");
-  element.replaceChildren(
-    ...items.map(([label, color]) => {
-      const row = document.createElement("div");
-      const swatch = document.createElement("span");
-      swatch.className = "swatch";
-      swatch.style.background = color;
-      row.append(swatch, label);
-      return row;
-    }),
-  );
+// --- state: the view (variable, lead day, window) and the chosen region, in the URL ----
+const current = {
+  view: null, level: "okres", rows: [], regions: new Map(), stations: new Map(),
+  names: {}, colors: {}, stationTable: null, highlight: null,
+};
+
+function readView() {
+  const view = parseHash(window.location.hash);
+  view.region = window.location.hash.replace(/^#/, "").split("/")[3] || null;
+  return view;
 }
 
-// the data behind the current view, read by the popups and the chart
-const current = { regions: new Map(), stations: new Map(), names: {}, colors: {}, view: null };
-
-async function showStationChart(code, title) {
-  const panel = document.getElementById("chart");
-  const heading = document.createElement("h2");
-  heading.textContent = title;
-  const close = document.createElement("button");
-  close.type = "button";
-  close.textContent = "×";
-  close.setAttribute("aria-label", t("chart.close"));
-  close.addEventListener("click", () => panel.replaceChildren());
-  // Observable Plot is loaded only when a chart is opened
-  const [{ stationChart }, doc] = await Promise.all([
-    import("./chart.js"),
-    getJson(`data/scores/series/${code}.json`),
-  ]);
-  panel.replaceChildren(close, heading, stationChart(doc, current.view, current.colors, current.names, t));
+function writeView() {
+  const v = current.view;
+  const parts = [v.variable, v.leadDay, v.window, v.region].filter((p) => p != null && p !== "");
+  window.history.replaceState(null, "", `#${parts.join("/")}`);
 }
 
-function popupOn(layer, key) {
-  map.on("click", layer, (event) => {
-    const feature = event.features[0];
-    const entry = current[key].get(feature.properties.code);
-    const title = entry?.name ?? feature.properties.name;
-    const text = document.createElement("div");
-    const heading = document.createElement("strong");
-    heading.textContent = title;
-    text.append(heading, document.createElement("br"), describe(entry, current.names, t));
-    if (key === "regions" && /^CZ[0-9A-Z]{4}$/.test(feature.properties.code)) {
-      const link = document.createElement("a");
-      link.href = `forecast.html#${feature.properties.code}`;
-      link.textContent = t("forecast.link");
-      text.append(document.createElement("br"), link);
-    }
-    new Popup().setLngLat(event.lngLat).setDOMContent(text).addTo(map);
-    if (key === "stations") showStationChart(feature.properties.code, title);
+const nameOf = (model) => current.names[model] ?? model;
+
+// --- legend: models with the number of regions they win; click to highlight ---------
+function renderLegend() {
+  const wins = new Map();
+  for (const entry of current.regions.values()) {
+    if (entry.model && entry.enough) wins.set(entry.model, (wins.get(entry.model) ?? 0) + 1);
+  }
+  const box = document.getElementById("legend");
+  const title = element("div", t("legend.title"), "legend-title");
+  const items = [...wins]
+    .sort((a, b) => b[1] - a[1])
+    .map(([model, n]) => {
+      const button = element("button", null, "legend-item");
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(current.highlight === model));
+      button.append(swatch(current.colors[model] ?? "#888888"), element("span", nameOf(model)), element("span", String(n), "count"));
+      button.addEventListener("click", () => {
+        current.highlight = current.highlight === model ? null : model;
+        paintHighlight();
+        renderLegend();
+      });
+      return button;
+    });
+  const rest = [[t("legend.tooFew"), TOO_FEW], [t("legend.noData"), NO_DATA]].map(([label, color]) => {
+    const row = element("div", null, "legend-item static");
+    row.append(swatch(color), element("span", label));
+    return row;
   });
-  map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
-  map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
+  const hint = element("div", t("legend.hint"), "legend-hint");
+  box.replaceChildren(title, ...items, ...rest, hint);
 }
 
-function addLayers(filled, stations) {
+/** Dim the regions and stations the highlighted model does not win. */
+function paintHighlight() {
+  const model = current.highlight;
+  if (!model) {
+    map.setPaintProperty("regions-fill", "fill-opacity", 0.78);
+    map.setPaintProperty("stations", "circle-opacity", 1);
+    map.setPaintProperty("stations", "circle-stroke-opacity", 1);
+    return;
+  }
+  const codes = [...current.regions].filter(([, e]) => e.model === model && e.enough).map(([c]) => c);
+  map.setPaintProperty("regions-fill", "fill-opacity", codes.length ? ["match", ["get", "code"], codes, 0.9, 0.12] : 0.12);
+  const stations = [...current.stations].filter(([, e]) => e.model === model).map(([c]) => c);
+  const dim = stations.length ? ["match", ["get", "code"], stations, 1, 0.15] : 0.15;
+  map.setPaintProperty("stations", "circle-opacity", dim);
+  map.setPaintProperty("stations", "circle-stroke-opacity", dim);
+}
+
+// --- hover: a light tooltip instead of a click ----------------------------------------
+function showHover(event, entry, name) {
+  const box = document.getElementById("hover");
+  const title = element("strong", displayName(name));
+  const line = element("div");
+  if (!entry || entry.model == null) line.textContent = t("describe.noData");
+  else if (!entry.enough) line.textContent = t("describe.tooFew");
+  else {
+    line.append(swatch(current.colors[entry.model] ?? "#888888"), `${nameOf(entry.model)} · MAE ${entry.mae.toFixed(2)} ${unitOf(current.view.variable)}`);
+    if (entry.tied.length) line.append(element("div", t("hover.tied", { n: entry.tied.length }), "muted"));
+  }
+  box.replaceChildren(title, line, element("div", t("hover.click"), "muted"));
+  box.hidden = false;
+  const { x, y } = event.point;
+  box.style.left = `${x + 14}px`;
+  box.style.top = `${y + 14}px`;
+}
+
+// --- the detail panel: why a model is best in the region -------------------------------
+const panel = () => document.getElementById("detail");
+
+function closeButton(onClose) {
+  const b = element("button", "×", "close");
+  b.type = "button";
+  b.setAttribute("aria-label", t("chart.close"));
+  b.addEventListener("click", onClose);
+  return b;
+}
+
+function intervalChart(facts) {
+  const best = facts.table.find((r) => r.rank === 1);
+  const data = facts.table
+    .filter((r) => r.mae != null)
+    .map((r) => ({
+      label: r.model === "blend" ? t("model.blend") : nameOf(r.model),
+      model: r.model,
+      mae: r.mae,
+      low: r.rank === 1 || !r.ci ? null : best.mae + r.ci[0],
+      high: r.rank === 1 || !r.ci ? null : best.mae + r.ci[1],
+      tied: r.tied || r.rank === 1,
+    }));
+  return Plot.plot({
+    width: 340,
+    height: 28 + 19 * data.length,
+    marginLeft: 145,
+    marginRight: 10,
+    style: { fontSize: "10px" },
+    x: { label: `MAE (${unitOf(current.view.variable)}) →`, grid: true, zero: true },
+    y: { label: null, domain: data.map((d) => d.label), tickFormat: (l) => (l.length > 24 ? `${l.slice(0, 23)}…` : l) },
+    marks: [
+      Plot.ruleX([best.mae], { stroke: "#1d2329", strokeDasharray: "3,3" }),
+      Plot.ruleY(data.filter((d) => d.low != null), {
+        y: "label", x1: "low", x2: "high", stroke: (d) => (d.tied ? "#9aa7b1" : "#e0a19a"), strokeWidth: 3,
+      }),
+      Plot.dot(data, {
+        y: "label", x: "mae", r: 4.5,
+        fill: (d) => (d.model === "blend" ? "#ffffff" : (current.colors[d.model] ?? "#888888")),
+        stroke: (d) => (d.model === best.model ? "#1d2329" : "#ffffff"),
+        strokeWidth: (d) => (d.model === best.model ? 2 : 1),
+        tip: true,
+      }),
+    ],
+  });
+}
+
+function chips(items, label) {
+  const box = element("div", null, "chips");
+  for (const { title, model } of items) {
+    const chip = element("span", null, "chip");
+    chip.append(element("b", title), swatch(current.colors[model] ?? "#888888"), element("span", nameOf(model)));
+    chip.title = nameOf(model);
+    box.append(chip);
+  }
+  const wrap = element("div", null, "detail-block");
+  wrap.append(element("h3", label), box);
+  return wrap;
+}
+
+function stationList(region) {
+  const table = records(current.stationTable);
+  const own = table.filter((s) => s.okres_code === region || s.kraj_code === region);
+  const scored = own.filter((s) => current.stations.has(s.id));
+  if (scored.length === 0) return null;
+  const wrap = element("div", null, "detail-block");
+  wrap.append(element("h3", t("detail.stations", { n: scored.length })));
+  const list = element("div", null, "station-list");
+  for (const s of scored.sort((a, b) => a.name.localeCompare(b.name, "cs"))) {
+    const entry = current.stations.get(s.id);
+    const b = element("button", null, "station");
+    b.type = "button";
+    b.append(swatch(current.colors[entry?.model] ?? NO_DATA), element("span", s.name));
+    b.addEventListener("click", () => showStation(s.id, s.name, region));
+    list.append(b);
+  }
+  wrap.append(list);
+  return wrap;
+}
+
+async function showRegion(region) {
+  const view = current.view;
+  const box = panel();
+  if (!region) {
+    box.replaceChildren();
+    return;
+  }
+  box.scrollTop = 0;
+  const hourRows = isTemperature(view.variable)
+    ? Object.fromEntries(
+        await Promise.all(HOURS.map(async (h) => [h, await scores(view, current.level, `temperature_2m_${h}utc`)])),
+      )
+    : null;
+  const facts = explainRegion(current.rows, region, view.leadDay, hourRows);
+  const entry = current.regions.get(region);
+  const name = displayName(facts?.name ?? entry?.name ?? region);
+  const close = closeButton(() => select(null));
+  const heading = element("h2", name);
+  const sub = element("p", `${t(`variable.${view.variable}`)} · D+${view.leadDay} · ${t(`window.${view.window}`).toLowerCase()}`, "muted");
+  if (!facts) {
+    box.replaceChildren(close, heading, sub, element("p", t(entry && !entry.enough ? "describe.tooFew" : "detail.noRanking")));
+    return;
+  }
+  const unit = unitOf(view.variable);
+  const fmt = (v) => `${v.toFixed(2)} ${unit}`;
+  const verdict = element("div", null, "verdict");
+  verdict.append(
+    swatch(current.colors[facts.winner.model] ?? "#888888"),
+    element("strong", nameOf(facts.winner.model)),
+    element("span", t("detail.mae", { mae: fmt(facts.winner.mae) }), "muted"),
+  );
+  const why = element("ul", null, "why");
+  for (const { key, params } of reasons(facts, fmt)) why.append(element("li", t(key, params)));
+  const blocks = [close, heading, sub, verdict];
+  if (facts.preliminary) blocks.push(element("p", t("detail.preliminary", { days: facts.basis.days }), "warning"));
+  blocks.push(element("h3", t("detail.why")), why);
+  const chartBlock = element("div", null, "detail-block");
+  chartBlock.append(element("h3", t("detail.chart")), intervalChart(facts), element("p", t("detail.chartNote"), "muted small"));
+  blocks.push(chartBlock);
+  if (facts.byLead.length > 1) {
+    blocks.push(chips(facts.byLead.map((l) => ({ title: `D+${l.lead}`, model: l.model })), t("detail.byLead")));
+  }
+  if (facts.byHour.length) {
+    blocks.push(chips(facts.byHour.map((h) => ({ title: t(`hour.${h.hour}`), model: h.model })), t("detail.byHour")));
+  }
+  blocks.push(
+    element(
+      "p",
+      t("detail.basis", { stations: facts.basis.stations, days: facts.basis.days }) +
+        (facts.basis.borrowed ? ` ${t("compare.borrowed", { n: facts.basis.borrowed })}` : ""),
+      "muted small",
+    ),
+  );
+  const stations = stationList(region);
+  if (stations) blocks.push(stations);
+  const links = element("p", null, "links");
+  const compare = element("a", t("detail.compare"));
+  compare.href = `compare.html#${view.variable}/${view.leadDay}/${view.window}/${region}`;
+  links.append(compare);
+  if (current.level === "okres") {
+    const forecast = element("a", t("detail.forecast"));
+    forecast.href = `forecast.html#${region}`;
+    links.append(forecast);
+  }
+  blocks.push(links);
+  box.replaceChildren(...blocks);
+}
+
+async function showStation(code, title, backTo) {
+  const box = panel();
+  const back = element("button", `← ${t("detail.back")}`, "back");
+  back.type = "button";
+  back.addEventListener("click", () => showRegion(backTo));
+  const close = closeButton(() => select(null));
+  // Observable Plot is loaded only when a chart is opened
+  const [{ stationChart }, doc] = await Promise.all([import("./chart.js"), getJson(`data/scores/series/${code}.json`)]);
+  const children = [close];
+  if (backTo) children.push(back);
+  children.push(element("h2", title), stationChart(doc, current.view, current.colors, current.names, t));
+  box.replaceChildren(...children);
+  fitView();
+}
+
+let padding = null;
+
+/** Fit Czechia beside the detail panel on wide screens, and back when it closes. */
+function fitView() {
+  const open = Boolean(panel().childElementCount) && window.innerWidth > 900;
+  const right = open ? panel().offsetWidth + 70 : 20;
+  if (padding && padding.right === right) return;
+  const first = padding === null;
+  padding = { top: 20, bottom: 20, left: 20, right };
+  map.fitBounds(BOUNDS, { padding, duration: first ? 0 : 400 });
+}
+
+function select(region) {
+  current.view.region = region;
+  map.setFilter("selected", ["==", ["get", "code"], region ?? ""]);
+  document.getElementById("find").value = region ?? "";
+  writeView();
+  showRegion(region).then(fitView);
+}
+
+// --- map layers -------------------------------------------------------------------
+function addLayers(filled) {
   map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
   map.addSource("kraje", { type: "geojson", data: "data/kraje.geojson" });
-  map.addSource("stations", { type: "geojson", data: stations });
+  map.addSource("stations", { type: "geojson", data: stationFeatures(null, new Map(), current.colors) });
+  map.addLayer({ id: "regions-fill", type: "fill", source: filled, paint: { "fill-color": NO_DATA, "fill-opacity": 0.78 } });
+  map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#ffffff", "line-width": 0.6 } });
+  map.addLayer({ id: "kraje-line", type: "line", source: "kraje", paint: { "line-color": "#4b5863", "line-width": 1.2 } });
   map.addLayer({
-    id: "regions-fill",
-    type: "fill",
-    source: filled,
-    paint: { "fill-color": NO_DATA, "fill-opacity": 0.75 },
+    id: "selected", type: "line", source: filled, filter: ["==", ["get", "code"], ""],
+    paint: { "line-color": "#1d2329", "line-width": 3 },
   });
   map.addLayer({
-    id: "okresy-line",
-    type: "line",
-    source: "okresy",
-    paint: { "line-color": "#ffffff", "line-width": 0.6 },
+    id: "hovered", type: "line", source: filled, filter: ["==", ["get", "code"], ""],
+    paint: { "line-color": "#1d2329", "line-width": 1.5, "line-opacity": 0.6 },
   });
   map.addLayer({
-    id: "kraje-line",
-    type: "line",
-    source: "kraje",
-    paint: { "line-color": "#4b5863", "line-width": 1.2 },
+    id: "stations", type: "circle", source: "stations",
+    paint: { "circle-radius": 3.5, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 1 },
   });
-  map.addLayer({
-    id: "stations",
-    type: "circle",
-    source: "stations",
-    paint: {
-      "circle-radius": 3.5,
-      "circle-color": ["get", "color"],
-      "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 1,
-    },
+
+  map.on("mousemove", "regions-fill", (event) => {
+    const code = event.features[0].properties.code;
+    map.setFilter("hovered", ["==", ["get", "code"], code]);
+    map.getCanvas().style.cursor = "pointer";
+    showHover(event, current.regions.get(code), event.features[0].properties.name);
   });
-  popupOn("regions-fill", "regions");
-  popupOn("stations", "stations");
+  map.on("mouseleave", "regions-fill", () => {
+    map.setFilter("hovered", ["==", ["get", "code"], ""]);
+    map.getCanvas().style.cursor = "";
+    document.getElementById("hover").hidden = true;
+  });
+  map.on("click", (event) => {
+    const station = map.queryRenderedFeatures(event.point, { layers: ["stations"] })[0];
+    if (station) {
+      showStation(station.properties.code, station.properties.name, current.view.region);
+      return;
+    }
+    const region = map.queryRenderedFeatures(event.point, { layers: ["regions-fill"] })[0];
+    const code = region?.properties.code ?? null;
+    select(code === current.view.region ? null : code);
+  });
+  map.on("mouseenter", "stations", () => (map.getCanvas().style.cursor = "pointer"));
 }
 
+// --- loading ------------------------------------------------------------------------
 map.on("load", async () => {
   const meta = await getJson("data/scores/meta.json");
   document.getElementById("status").textContent = statusText(meta, t);
-  const names = { ...meta?.models, blend: t("model.blend") };
-  const colors = modelColors(names);
-  const stationTable = await getJson("data/scores/stations.json");
-  current.names = names;
-  current.colors = colors;
+  current.names = { ...meta?.models, blend: t("model.blend") };
+  current.colors = modelColors(current.names);
+  current.stationTable = await getJson("data/scores/stations.json");
 
+  const view = readView();
+  current.view = view;
   // okres choropleth where the okres level is published, kraj otherwise
-  const probe = parseHash(window.location.hash);
-  const level = (await scores(probe, "okres")).length ? "okres" : "kraj";
-  addLayers(level === "okres" ? "okresy" : "kraje", stationFeatures(null, new Map(), colors));
+  current.level = (await scores(view, "okres")).length ? "okres" : "kraj";
+  addLayers(current.level === "okres" ? "okresy" : "kraje");
 
-  async function render(view) {
-    current.view = view;
-    document.getElementById("chart").replaceChildren();
-    const rows = await scores(view, level);
-    const leadDays = availableLeadDays(rows);
+  async function render() {
+    current.rows = await scores(view, current.level);
+    const leadDays = availableLeadDays(current.rows);
     if (!leadDays.includes(view.leadDay)) view.leadDay = leadDays[0];
     fillSelect("lead", leadDays.map((d) => [d, `D+${d}`]), view.leadDay);
-    current.regions = bestByRegion(rows, view.leadDay);
+    current.regions = bestByRegion(current.rows, view.leadDay);
     current.stations = bestByRegion(await scores(view, "station"), view.leadDay);
-    map.setPaintProperty("regions-fill", "fill-color", fillExpression(current.regions, colors));
-    map.getSource("stations").setData(stationFeatures(stationTable, current.stations, colors));
-    const shown = new Set(
-      [...current.regions.values(), ...current.stations.values()].map((e) => e.model),
-    );
-    legend(colors, names, shown);
-    window.history.replaceState(null, "", toHash(view));
+    map.setPaintProperty("regions-fill", "fill-color", fillExpression(current.regions, current.colors));
+    map.getSource("stations").setData(stationFeatures(current.stationTable, current.stations, current.colors));
+    if (current.highlight && ![...current.regions.values()].some((e) => e.model === current.highlight)) current.highlight = null;
+    renderLegend();
+    paintHighlight();
+    select(view.region && current.regions.has(view.region) ? view.region : null);
   }
 
-  const view = parseHash(window.location.hash);
-  const variables = availableVariables(meta).map((v) => [v, t(`variable.${v}`)]);
-  fillSelect("variable", variables, view.variable);
+  fillSelect("variable", availableVariables(meta).map((v) => [v, t(`variable.${v}`)]), view.variable);
   fillSelect("window", WINDOWS.map((w) => [w, t(`window.${w}`)]), view.window);
   for (const [id, key, parse] of [
     ["variable", "variable", String],
@@ -204,8 +435,12 @@ map.on("load", async () => {
   ]) {
     document.getElementById(id).addEventListener("change", (event) => {
       view[key] = parse(event.target.value);
-      render(view);
+      render();
     });
   }
-  await render(view);
+  await render();
+  // the okres finder: every region of the map, by name
+  const found = [...current.regions].map(([code, e]) => [code, displayName(e.name)]).sort((a, b) => a[1].localeCompare(b[1], "cs"));
+  fillSelect("find", [["", t("find.placeholder")], ...found], view.region ?? "");
+  document.getElementById("find").addEventListener("change", (event) => select(event.target.value || null));
 });
