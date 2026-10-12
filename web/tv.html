@@ -14,15 +14,31 @@
       <a href="compare.html" data-i18n="page.compare">Compare models</a>
       <button type="button" id="language">Česky</button>
     </header>
-    <nav id="ribbon" aria-label="Day and time">
-      <div id="days" class="tabs" role="tablist"></div>
-      <div id="parts" class="tabs"></div>
-      <div id="layers" class="tabs"></div>
-      <button type="button" id="play" class="play" data-i18n="tv.play">▶</button>
+    <nav id="ribbon" data-i18n-aria="tv.when">
+      <div class="when">
+        <div id="days" class="daytabs"></div>
+        <div class="when-row">
+          <div id="parts" class="segmented"></div>
+          <button type="button" id="play" class="play">▶</button>
+        </div>
+      </div>
     </nav>
     <main id="map" aria-label="Weather map of Czechia">
       <aside id="headline" aria-live="polite"></aside>
-      <aside id="scale" aria-label="Colour scale"></aside>
+      <aside id="show-box">
+        <details id="show" open>
+          <summary data-i18n="tv.onMap">On the map</summary>
+          <fieldset>
+            <legend data-i18n="tv.values">Values at each okres</legend>
+            <div id="values"></div>
+          </fieldset>
+          <fieldset>
+            <legend data-i18n="tv.colour">Colour of the okresy</legend>
+            <div id="colours"></div>
+            <div id="scale"></div>
+          </fieldset>
+        </details>
+      </aside>
       <aside id="okres-panel" aria-live="polite"></aside>
     </main>
     <footer>
