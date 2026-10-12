@@ -23,8 +23,9 @@ export function modelColors(models) {
 }
 
 /**
- * Best model per region at one lead day: region → {name, model, mae, tied, enough}.
- * `tied` lists the models not significantly worse than the best.
+ * Best model per region at one lead day: region → {name, model, mae, tied, enough,
+ * ranked, borrowed}. `tied` lists the models not significantly worse than the best;
+ * `borrowed` counts the stations an okres borrowed from its neighbours.
  */
 export function bestByRegion(rows, leadDay) {
   const best = new Map();
@@ -33,7 +34,7 @@ export function bestByRegion(rows, leadDay) {
     if (r.lead_day !== leadDay) continue;
     const entry = best.get(r.region) ?? {
       name: r.region_name, model: null, mae: null, tied: [], enough: r.enough_stations,
-      ranked: false,
+      ranked: false, borrowed: r.borrowed ?? 0,
     };
     if (r.rank === 1) {
       Object.assign(entry, { model: r.model, mae: r.mae, ranked: true });
@@ -90,5 +91,5 @@ export function describe(entry, names, t) {
     mae: entry.mae.toFixed(2),
     how: entry.ranked ? "" : t("describe.unranked"),
     tied: entry.tied.length ? t("describe.tied", { models: entry.tied.map(name).join(", ") }) : "",
-  });
+  }) + (entry.borrowed ? t("describe.borrowed", { n: entry.borrowed }) : "");
 }
