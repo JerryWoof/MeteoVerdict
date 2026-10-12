@@ -53,8 +53,6 @@ def test_every_command_has_help(command):
 @pytest.mark.parametrize(
     ("args", "item", "detail"),
     [
-        (["report"], "3.1", "print the leaderboard"),
-        (["report", "--readme"], "3.1", "README.md"),
         (["daily", "--date", "2024-03-05"], "3.2", "2024-03-05"),
     ],
 )
@@ -330,3 +328,30 @@ def test_aggregate_needs_scores(tmp_path):
     result = runner.invoke(app, ["aggregate", "--data-dir", str(tmp_path)])
     assert result.exit_code == 1
     assert "mvd score" in result.stderr
+
+
+def test_report_needs_aggregates(tmp_path):
+    result = runner.invoke(app, ["report", "--data-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "mvd aggregate" in result.stderr
+
+
+def test_report_rewrites_only_the_readme_block(tmp_path):
+    from meteoverdict import report
+
+    pl.DataFrame(
+        {
+            "level": ["cz"], "region": ["cz"], "region_name": ["Česko"], "window": ["90d"],
+            "from": [date(2026, 7, 3)], "to": [date(2026, 9, 30)],
+            "variable": ["temperature_2m"], "lead_day": [1], "model": ["dwd_icon_eu"],
+            "mae": [1.4], "rank": [1], "tied_with_best": [False], "enough_stations": [True],
+        }
+    ).write_parquet(tmp_path / "aggregates.parquet")  # fmt: skip
+    readme = tmp_path / "README.md"
+    readme.write_text(f"# x\n{report.START}\nold\n{report.END}\nend\n", encoding="utf-8")
+    args = ["report", "--readme", "--data-dir", str(tmp_path), "--readme-path", str(readme)]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    text = readme.read_text(encoding="utf-8")
+    assert "**DWD ICON-EU** (1.40)" in text and "old" not in text
+    assert text.startswith("# x\n") and text.endswith("end\n")

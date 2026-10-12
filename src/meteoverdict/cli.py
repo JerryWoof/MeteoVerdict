@@ -26,6 +26,7 @@ from meteoverdict import (
 )
 from meteoverdict import backfill as backfill_mod
 from meteoverdict import models as catalogue
+from meteoverdict import report as report_mod
 from meteoverdict.chmi import ChmiFormatError, fetch_current_meta
 from meteoverdict.releases import GitHubReleaseStore
 
@@ -387,9 +388,29 @@ def report(
     readme: Annotated[
         bool, typer.Option("--readme", help="Rewrite the leaderboard block in README.md.")
     ] = False,
+    data_dir: Annotated[Path, typer.Option(help="Folder with aggregates.parquet.")] = Path("data"),
+    readme_path: Annotated[Path, typer.Option("--readme-path", help="README to update.")] = Path(
+        "README.md"
+    ),
 ) -> None:
     """Build the leaderboard from aggregated scores."""
-    _not_implemented("report", "3.1", "update README.md" if readme else "print the leaderboard")
+    path = data_dir / "aggregates.parquet"
+    if not path.exists():
+        typer.echo(f"mvd report: {path} not found; run `mvd aggregate`", err=True)
+        raise typer.Exit(code=1)
+    names = {m.id: m.name for m in catalogue.load_models()}
+    block = report_mod.leaderboard(pl.read_parquet(path), names)
+    if not readme:
+        typer.echo(block)
+        return
+    text = readme_path.read_text(encoding="utf-8")
+    try:
+        updated = report_mod.replace_block(text, block)
+    except ValueError as exc:
+        typer.echo(f"mvd report: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    readme_path.write_text(updated, encoding="utf-8")
+    typer.echo(f"updated the leaderboard in {readme_path}")
 
 
 @app.command()
