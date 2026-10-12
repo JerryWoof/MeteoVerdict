@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  CAPITALS, DEFAULT_SHOWN, NEUTRAL, colorFor, currentPart, dayLabel, displayName, ease, iconName,
+  CAPITALS, DEFAULT_SHOWN, NEUTRAL, colorFor, currentPart, dayLabel, displayName, ease, iconName, isNightPart,
   labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView, placeMarkers,
   playSteps, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary, today, valueFor,
   viewHash,
@@ -75,6 +75,32 @@ test("symbols get a moon at night", () => {
   assert.equal(iconName("rain", "night"), "rain");
   assert.equal(iconName("partly", "afternoon"), "partly");
   assert.equal(iconName(null, "day"), "");
+});
+
+test("night icons follow the okres's sunrise and sunset", () => {
+  const october = { sunrise: "07:19", sunset: "18:17" };
+  const june = { sunrise: "04:52", sunset: "21:14" };
+  const night = (sun) => ["night", "morning", "afternoon", "evening"].filter((p) => isNightPart(p, sun));
+  assert.deepEqual(night(october), ["night", "evening"]);
+  assert.deepEqual(night(june), ["night"]);
+  assert.equal(iconName("clear", "evening", october), "clear-night");
+  assert.equal(iconName("showers", "evening", october), "showers-night");
+  assert.equal(iconName("partly", "morning", october), "partly");
+  assert.equal(iconName("clear", "evening", june), "clear");
+  // just over or under half of the six hours
+  assert.equal(isNightPart("evening", { sunrise: "06:00", sunset: "20:59" }), true);
+  assert.equal(isNightPart("evening", { sunrise: "06:00", sunset: "21:00" }), false);
+  // older files without sun times: only the night part
+  for (const sun of [undefined, null, {}, { sunrise: "07:19" }]) {
+    assert.deepEqual(night(sun), ["night"]);
+    assert.equal(iconName("clear", "evening", sun), "clear");
+  }
+  // the whole day keeps the day symbol
+  assert.equal(isNightPart("day", october), false);
+  assert.equal(iconName("clear", "day", october), "clear");
+  // rows of the fixture carry their sun times
+  const evening = rowFor(OUTLOOK, "CZ0100", "2026-10-12", "evening");
+  assert.equal(iconName(evening.symbol, "evening", evening), "partly-night");
 });
 
 test("headline: warmest, coldest, rain likely", () => {
