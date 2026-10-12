@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  colorFor, currentPart, dayLabel, fillExpression, iconName, labelFor, parseOutlook,
+  CAPITALS, colorFor, currentPart, displayName, placeMarkers, dayLabel, fillExpression, iconName, labelFor, parseOutlook,
   pointFeatures, rowFor, sequence, summary, today, valueFor,
 } from "./tv.js";
 
@@ -85,4 +85,17 @@ test("play goes through every part of every day from the current one", () => {
   assert.deepEqual(steps[0], { day: DAY, part: "afternoon" });
   assert.equal(steps.length, 6 * 4);
   assert.equal(new Set(steps.map((s) => `${s.day}|${s.part}`)).size, steps.length);
+});
+
+test("markers: capitals first, no overlaps", () => {
+  const boxes = [
+    { code: "CZ0209", x: 100, y: 100 }, // Praha-východ, next to Praha
+    { code: "CZ0100", x: 110, y: 105 },
+    { code: "CZ0201", x: 100, y: 200 },
+  ];
+  const shown = placeMarkers(boxes, 50, 40);
+  assert.deepEqual([...shown].sort(), ["CZ0100", "CZ0201"]);
+  assert.ok(CAPITALS.includes("CZ0100"));
+  assert.equal(displayName("území Hlavního města Prahy"), "Praha");
+  assert.equal(displayName("Benešov"), "Benešov");
 });

@@ -7,6 +7,33 @@ export const PARTS = ["night", "morning", "afternoon", "evening", "day"];
 export const LAYERS = ["temperature", "precipitation", "wind", "cloud"];
 export const TIME_ZONE = "Europe/Prague";
 
+// okresy whose seat is a kraj capital (and Praha): their labels win when markers collide
+export const CAPITALS = [
+  "CZ0100", "CZ0642", "CZ0806", "CZ0323", "CZ0513", "CZ0712", "CZ0427", "CZ0521",
+  "CZ0311", "CZ0532", "CZ0724", "CZ0632", "CZ0412",
+];
+
+/** Short okres name for the map ("území Hlavního města Prahy" → "Praha"). */
+export function displayName(name) {
+  return /Hlavního města Prahy/.test(name) ? "Praha" : name;
+}
+
+/**
+ * Which markers to show without overlaps: capitals first, then the rest in the given
+ * order; `boxes` are {code, x, y} screen centres, `width`/`height` a marker's size.
+ */
+export function placeMarkers(boxes, width, height) {
+  const order = [...boxes].sort(
+    (a, b) => Number(!CAPITALS.includes(a.code)) - Number(!CAPITALS.includes(b.code)),
+  );
+  const placed = [];
+  for (const box of order) {
+    const free = placed.every((p) => Math.abs(p.x - box.x) >= width || Math.abs(p.y - box.y) >= height);
+    if (free) placed.push(box);
+  }
+  return new Set(placed.map((p) => p.code));
+}
+
 /** outlook.json → {generated, days, okresy, rows: Map "okres|day|part" → row} */
 export function parseOutlook(doc) {
   const rows = new Map();
@@ -88,7 +115,7 @@ export function iconName(symbol, part) {
   return symbol;
 }
 
-/** GeoJSON points at the okres forecast points with their symbol and label. */
+/** Points at the okres forecast points with their symbol and label (map markers). */
 export function pointFeatures(outlook, day, part, layer) {
   return {
     type: "FeatureCollection",
@@ -103,8 +130,6 @@ export function pointFeatures(outlook, day, part, layer) {
           name: o.name,
           icon: iconName(row.symbol, part),
           label: labelFor(row, layer, part),
-          // larger towns first when labels collide: higher sort key = drawn later
-          rank: -(valueFor(row, "temperature", part) ?? 0),
         },
       })),
   };
