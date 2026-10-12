@@ -23,7 +23,7 @@ from pathlib import Path
 
 import polars as pl
 
-from meteoverdict import partitions
+from meteoverdict import metrics, partitions
 
 MAX_OBS_AGE_H = 30
 MAX_FC_AGE_DAYS = 21
@@ -115,7 +115,7 @@ def check(
                 pl.col("variable") == "temperature_2m", pl.col("date") >= today - timedelta(90)
             )
             .group_by("station_id")
-            .agg((pl.col("sum_abs_err").sum() / pl.col("n").sum()).alias("mae"))
+            .agg((metrics.total("sum_abs_err") / metrics.total("n")).alias("mae"))
             .collect()
         )
         if per_station.height >= 5:

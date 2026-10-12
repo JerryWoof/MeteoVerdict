@@ -25,7 +25,7 @@ from datetime import date
 import numpy as np
 import polars as pl
 
-from meteoverdict import aggregate, blend
+from meteoverdict import aggregate, blend, metrics
 
 RANKED_VARIABLES = (
     "temperature_2m",
@@ -103,7 +103,7 @@ def rank(
             daily = (
                 fair.with_columns(aggregate.region_columns(level))
                 .group_by("region", "variable", "lead_day", "date", "model")
-                .agg(pl.col("sum_abs_err").sum(), pl.col("n").sum())
+                .agg(metrics.total("sum_abs_err"), metrics.total("n"))
                 .collect()
             )
             for (region, variable, lead_day), part in daily.partition_by(

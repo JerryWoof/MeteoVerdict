@@ -82,3 +82,20 @@ def test_labels():
     assert metrics.label(0.1) == "0p1" and metrics.label(5.0) == "5"
     assert metrics.label(20.0) == "20"
     assert metrics.counts_columns(0.1) == ["a_0p1", "b_0p1", "c_0p1", "d_0p1"]
+
+
+def test_scores_are_stored_compactly_and_summed_wide():
+    columns = ["date", "n", "sum_err", "sum_abs_err", "sum_sq_err", "a_5", "d_30"]
+    types = metrics.compact(columns)
+    assert types == {
+        "n": pl.UInt16,
+        "sum_err": pl.Float32,
+        "sum_abs_err": pl.Float32,
+        "sum_sq_err": pl.Float32,
+        "a_5": pl.UInt8,
+        "d_30": pl.UInt8,
+    }
+    rows = pl.DataFrame({"n": [24] * 3000, "a_5": [1] * 3000})
+    rows = rows.cast({c: types[c] for c in rows.columns})
+    totals = rows.select(metrics.total("n"), metrics.total("a_5")).row(0)
+    assert totals == (72_000, 3_000)  # beyond the range of the stored types
