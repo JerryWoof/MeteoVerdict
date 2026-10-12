@@ -53,7 +53,6 @@ def test_every_command_has_help(command):
 @pytest.mark.parametrize(
     ("args", "item", "detail"),
     [
-        (["fetch-obs", "--start", "2024-01-01", "--end", "2024-01-31"], "1.5", "2024-01-31"),
         (
             ["fetch-fc", "--start", "2024-01-01", "--end", "2024-01-02", "--model", "dwd_icon_d2"],
             "1.6",
@@ -202,3 +201,28 @@ def test_archive_aladin_needs_the_station_table(tmp_path):
     result = runner.invoke(app, args)
     assert result.exit_code == 2
     assert "mvd stations" in plain(result.output)
+
+
+def test_fetch_obs_selects_automatic_and_inactive_stations(monkeypatch, tmp_path):
+    from meteoverdict import observations
+
+    stations_file = tmp_path / "s.parquet"
+    pl.DataFrame({"id": ["auto", "manual", "closed"], "active": [True, True, False]}).write_parquet(
+        stations_file
+    )
+    meta2 = pl.DataFrame({"OBS_TYPE": ["10M"], "WSI": ["auto"], "EG_EL_ABBREVIATION": ["T"]})
+    monkeypatch.setattr(cli, "fetch_current_meta", lambda client, n, today: meta2)
+    asked = {}
+
+    def fake_fetch(client, ids, start, end):
+        asked["ids"] = sorted(ids)
+        return pl.DataFrame(schema=observations.SCHEMA)
+
+    monkeypatch.setattr(observations, "fetch_observations", fake_fetch)
+    args = ["fetch-obs", "--start", "2026-09-05", "--end", "2026-09-05"]
+    result = runner.invoke(
+        app, [*args, "--stations", str(stations_file), "--out-dir", str(tmp_path)]
+    )
+    assert result.exit_code == 0, result.output
+    assert asked["ids"] == ["auto", "closed"]
+    assert "0 hourly values from 0 of 2 stations" in result.stdout
