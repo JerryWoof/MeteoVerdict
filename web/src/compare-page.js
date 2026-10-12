@@ -231,7 +231,7 @@ function renderIntervals(rows, view, names, colors) {
     Plot.plot({
       width: width(),
       height: 40 + 24 * data.length,
-      marginLeft: 200,
+      marginLeft: 210,
       x: { label: t("compare.diffAxis"), grid: true },
       y: { label: null, domain: data.map((r) => label(r.model)) },
       marks: [
@@ -293,10 +293,11 @@ function renderBias(rows, view, names, colors) {
   target.replaceChildren(
     Plot.plot({
       width: width(),
-      marginLeft: 180,
+      marginLeft: 210,
+      marginRight: 130,
       x: { label: "Bias", grid: true },
       y: { label: null, tickFormat: (m) => names[m] ?? m },
-      fy: { label: null, tickFormat: (e) => t(`elevation.${e}`) },
+      fy: { label: null, domain: ["lowland", "upland", "mountain"], tickFormat: (e) => t(`elevation.${e}`) },
       color: { domain: models, range: models.map((m) => colors[m] ?? "#888888") },
       marks: [Plot.barX(data, { x: "bias", y: "model", fy: "elevation", fill: "model", tip: true }), Plot.ruleX([0])],
     }),
