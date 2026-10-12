@@ -5,9 +5,11 @@ Levels: ``station``, ``okres``, ``kraj``, ``elevation`` (lowland/upland/mountain
 (the last 90 days), ``season`` (the meteorological season so far: DJF, MAM, JJA, SON)
 and ``all``.
 
-Fair comparison: for each window, variable and lead day, only the station-days that
-**every** model with that lead day has scores for are used. So a model with a short
-archive (ALADIN) or gaps (UKMO) does not get easier or harder days than the others.
+Fair comparison: for each window, variable, lead day and station, only the days that
+**every** model covering that station has scores for are used. So a model with a short
+archive (ALADIN) or gaps (UKMO) does not get easier or harder days than the others; a
+model that cannot reach a station at all (ICON-D2 in the far east) is simply absent
+there (its ``stations`` count in a region is then lower).
 A region needs at least ``MIN_STATIONS`` stations; otherwise ``enough_stations`` is
 false and it must not be ranked.
 """
@@ -53,17 +55,23 @@ def window_start(window: str, as_of: date, first_day: date) -> date:
 
 
 def common_days(scores: pl.LazyFrame) -> pl.LazyFrame:
-    """Keep the station-days every model (of that variable and lead day) has scores for."""
-    group = ["variable", "lead_day"]
+    """Keep the station-days every model covering that station has scores for.
+
+    Per variable, lead day and station, the models compared are those with any score at
+    that station in the period: a model whose domain does not reach a station (ICON-D2
+    in the far east) does not remove that station for the others, while a model that
+    covers it but lacks a day (a short archive, a gap) removes that day for all.
+    """
+    group = ["variable", "lead_day", "station_id"]
     models = scores.group_by(group).agg(pl.col("model").n_unique().alias("models"))
     present = (
-        scores.group_by(*group, "station_id", "date")
+        scores.group_by(*group, "date")
         .agg(pl.col("model").n_unique().alias("present"))
         .join(models, on=group)
         .filter(pl.col("present") == pl.col("models"))
-        .select(*group, "station_id", "date")
+        .select(*group, "date")
     )
-    return scores.join(present, on=[*group, "station_id", "date"], how="semi")
+    return scores.join(present, on=[*group, "date"], how="semi")
 
 
 def station_info(stations: pl.DataFrame) -> pl.LazyFrame:

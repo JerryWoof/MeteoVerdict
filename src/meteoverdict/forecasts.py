@@ -40,6 +40,10 @@ SCHEMA = {
 }
 
 
+class NoDataError(ValueError):
+    """Open-Meteo has no data of this model for (at least one of) the locations."""
+
+
 class QuotaError(RuntimeError):
     """The call budget of this run, or Open-Meteo's daily limit, is used up.
 
@@ -133,7 +137,10 @@ def request(client: httpx.Client, params: dict, sleep: Callable[[float], None]) 
             break
         sleep(wait)
     if response.status_code == 400:
-        raise ValueError(f"Open-Meteo: {response.json().get('reason', response.text)}")
+        reason = response.json().get("reason", response.text)
+        if "No data is available" in reason:
+            raise NoDataError(reason)
+        raise ValueError(f"Open-Meteo: {reason}")
     response.raise_for_status()
     return response.json()
 
@@ -146,8 +153,15 @@ def fetch_forecasts(
     end: date,
     budget: Budget,
     log: Callable[[str], None] = lambda _: None,
+    uncovered: dict[str, set[str]] | None = None,
 ) -> pl.DataFrame:
-    """Forecasts for ``stations`` (id, lat, lon, elevation), ``start`` to ``end`` (UTC)."""
+    """Forecasts for ``stations`` (id, lat, lon, elevation), ``start`` to ``end`` (UTC).
+
+    Stations a model has no data for (outside its real domain, e.g. ICON-D2 in the far
+    east) are found by splitting the failing request, skipped, and added to
+    ``uncovered[model id]``; stations already listed there are not asked for.
+    """
+    uncovered = {} if uncovered is None else uncovered
     frames = [pl.DataFrame(schema=SCHEMA)]
     rows = stations.select("id", "lat", "lon", "elevation").rows()
     first_hour = datetime.combine(start, datetime.min.time(), UTC)
@@ -157,36 +171,57 @@ def fetch_forecasts(
         return pl.concat(frames).filter(pl.col("time").is_between(first_hour, last_hour))
 
     try:
-        _fetch_into(frames, client, rows, models, start, end, budget, log)
+        _fetch_into(frames, client, rows, models, start, end, budget, log, uncovered)
     except QuotaError as exc:
         exc.partial = collected()
         raise
     return collected()
 
 
-def _fetch_into(frames, client, rows, models, start, end, budget, log) -> None:
+def _fetch_into(frames, client, rows, models, start, end, budget, log, uncovered) -> None:
     for model in models:
+        skip = uncovered.setdefault(model.id, set())
         first = max(start, model.archive_from)
         for window_start, window_end in windows(first, end):
-            days = (window_end - window_start).days + 1
-            for i in range(0, len(rows), BATCH):
-                batch = rows[i : i + BATCH]
-                names = hourly_names(model)
-                budget.spend(call_weight(len(batch), len(names), days))
-                params = {
-                    "latitude": ",".join(f"{r[1]:.5f}" for r in batch),
-                    "longitude": ",".join(f"{r[2]:.5f}" for r in batch),
-                    # "nan" makes Open-Meteo use its own terrain height (checked live)
-                    "elevation": ",".join("nan" if r[3] is None else f"{r[3]:.1f}" for r in batch),
-                    "hourly": ",".join(names),
-                    "models": model.id,
-                    "wind_speed_unit": "ms",
-                    "start_date": window_start.isoformat(),
-                    "end_date": window_end.isoformat(),
-                }
-                payload = request(client, params, budget.sleep)
-                frames.append(parse(payload, [r[0] for r in batch], model))
+            todo = [r for r in rows if r[0] not in skip]
+            for i in range(0, len(todo), BATCH):
+                frames.extend(
+                    _fetch_batch(
+                        client, todo[i : i + BATCH], model, window_start, window_end, budget, skip
+                    )
+                )
             log(f"{model.id} {window_start}..{window_end}: {budget.used:g} calls used")
+            if skip:
+                log(f"{model.id}: no data for {len(skip)} stations: {', '.join(sorted(skip))}")
+
+
+def _fetch_batch(client, batch, model, window_start, window_end, budget, skip):
+    days = (window_end - window_start).days + 1
+    names = hourly_names(model)
+    budget.spend(call_weight(len(batch), len(names), days))
+    params = {
+        "latitude": ",".join(f"{r[1]:.5f}" for r in batch),
+        "longitude": ",".join(f"{r[2]:.5f}" for r in batch),
+        # "nan" makes Open-Meteo use its own terrain height (checked live)
+        "elevation": ",".join("nan" if r[3] is None else f"{r[3]:.1f}" for r in batch),
+        "hourly": ",".join(names),
+        "models": model.id,
+        "wind_speed_unit": "ms",
+        "start_date": window_start.isoformat(),
+        "end_date": window_end.isoformat(),
+    }
+    try:
+        payload = request(client, params, budget.sleep)
+    except NoDataError:
+        if len(batch) == 1:
+            skip.add(batch[0][0])
+            return []
+        half = len(batch) // 2
+        return [
+            *_fetch_batch(client, batch[:half], model, window_start, window_end, budget, skip),
+            *_fetch_batch(client, batch[half:], model, window_start, window_end, budget, skip),
+        ]
+    return [parse(payload, [r[0] for r in batch], model)]
 
 
 def estimate_calls(n_stations: int, models: list[Model], start: date, end: date) -> float:
