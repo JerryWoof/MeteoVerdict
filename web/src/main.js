@@ -111,6 +111,12 @@ function popupOn(layer, key) {
     const heading = document.createElement("strong");
     heading.textContent = title;
     text.append(heading, document.createElement("br"), describe(entry, current.names, t));
+    if (key === "regions" && /^CZ\d{4}$/.test(feature.properties.code)) {
+      const link = document.createElement("a");
+      link.href = `forecast.html#${feature.properties.code}`;
+      link.textContent = t("forecast.link");
+      text.append(document.createElement("br"), link);
+    }
     new Popup().setLngLat(event.lngLat).setDOMContent(text).addTo(map);
     if (key === "stations") showStationChart(feature.properties.code, title);
   });
