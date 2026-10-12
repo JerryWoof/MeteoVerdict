@@ -18,6 +18,7 @@ from meteoverdict import (
     observations,
     partitions,
     regions,
+    scoring,
     stations,
     store,
 )
@@ -315,10 +316,33 @@ def fetch_fc(
 
 
 @app.command()
-def score(start: DateOption, end: DateOption) -> None:
+def score(
+    start: DateOption,
+    end: DateOption,
+    data_dir: Annotated[
+        Path, typer.Option(help="Folder with obs/ and fc/; scores go to <data-dir>/scores.")
+    ] = Path("data"),
+    exclude_estimated: Annotated[
+        bool, typer.Option(help="Ignore observations ČHMÚ marked as estimated (quality 3).")
+    ] = False,
+) -> None:
     """Score forecasts against observations into the daily scores table."""
-    _check_range(start.date(), end.date())
-    _not_implemented("score", "2.3", f"score {start:%Y-%m-%d}..{end:%Y-%m-%d}")
+    first, last = start.date(), end.date()
+    _check_range(first, last)
+    # daily precipitation of the last day ends at 24:00 = next day 00:00
+    obs = partitions.scan_months(data_dir / "obs", first, last + timedelta(days=1))
+    fc = partitions.scan_months(data_dir / "fc", first, last + timedelta(days=1))
+    if obs is None or fc is None:
+        missing = "observations (mvd fetch-obs)" if obs is None else "forecasts (mvd fetch-fc)"
+        typer.echo(f"mvd score: no {missing} in {data_dir} for that period", err=True)
+        raise typer.Exit(code=1)
+    models = catalogue.load_models()
+    table = scoring.daily_scores(obs, fc, models, first, last, exclude_estimated)
+    written = partitions.write_monthly(table, data_dir / "scores", scoring.KEYS, "date")
+    typer.echo(
+        f"{table.height} score rows for {table['station_id'].n_unique()} stations and "
+        f"{table['model'].n_unique()} models → {', '.join(str(p) for p in written) or 'nothing'}"
+    )
 
 
 @app.command()
