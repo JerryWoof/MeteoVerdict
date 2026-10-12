@@ -175,3 +175,55 @@ export function winnersByLeadDay(table, variable) {
   }
   return out;
 }
+
+// --- night on the hourly charts -------------------------------------------------------
+
+/** A local wall-clock time ("YYYY-MM-DD", "HH:MM") in a time zone as ms since the epoch. */
+export function localTime(day, hhmm, timeZone = "Europe/Prague") {
+  const format = new Intl.DateTimeFormat("en-GB", {
+    timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  });
+  // how far the zone's wall clock is ahead of UTC at a moment
+  const offset = (at) => {
+    const p = Object.fromEntries(format.formatToParts(at).map((x) => [x.type, x.value]));
+    return Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:00Z`) - at;
+  };
+  const guess = Date.parse(`${day}T${hhmm}:00Z`);
+  // twice, so that a time near a DST change gets the offset that applies at it
+  return guess - offset(guess - offset(guess));
+}
+
+/**
+ * Nights between `start` and `end` (ms) as [{start, end}], from sunset to sunrise in
+ * local time. `sunOf(day)` gives {sunrise, sunset} ("HH:MM") for a "YYYY-MM-DD" day, or
+ * null. A night next to a day without sun times is estimated from the known day ±24 h
+ * (a few minutes off); without any sun times there are no nights.
+ */
+export function nightBands(sunOf, start, end, timeZone = "Europe/Prague") {
+  const days = [];
+  for (let at = start - 24 * HOUR; at <= end + 24 * HOUR; at += HOUR) {
+    const day = localDay(at, timeZone);
+    if (days.at(-1) !== day) days.push(day);
+  }
+  const sun = days.map((day) => {
+    const s = sunOf(day);
+    return s?.sunrise && s?.sunset
+      ? { rise: localTime(day, s.sunrise, timeZone), set: localTime(day, s.sunset, timeZone) }
+      : null;
+  });
+  const nights = [];
+  sun.forEach((s, i) => {
+    if (!s) return;
+    nights.push({ start: sun[i - 1]?.set ?? s.set - 24 * HOUR, end: s.rise });
+    nights.push({ start: s.set, end: sun[i + 1]?.rise ?? s.rise + 24 * HOUR });
+  });
+  const merged = [];
+  for (const n of nights.sort((a, b) => a.start - b.start)) {
+    const clipped = { start: Math.max(start, n.start), end: Math.min(end, n.end) };
+    if (clipped.end <= clipped.start) continue;
+    const last = merged.at(-1);
+    if (last && clipped.start <= last.end) last.end = Math.max(last.end, clipped.end);
+    else merged.push(clipped);
+  }
+  return merged;
+}
