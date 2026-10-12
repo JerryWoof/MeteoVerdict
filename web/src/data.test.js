@@ -35,6 +35,7 @@ test("best model per region at one lead day, with ties but without the blend", (
   const best = bestByRegion(records(DOC), 1);
   assert.deepEqual(best.get("CZ020"), {
     name: "Středočeský kraj", model: "icon", mae: 1.2, tied: ["ifs"], enough: true, ranked: true,
+    borrowed: 0,
   });
   assert.equal(bestByRegion(records(DOC), 2).get("CZ020").model, "ifs");
 });
@@ -80,6 +81,23 @@ test("unranked variables show the lowest MAE, never the blend", () => {
   const entry = bestByRegion(records(doc), 1).get("CZ020");
   assert.equal(entry.model, "ifs");
   assert.equal(describe(entry, MODELS, t), "best: ECMWF IFS (MAE 1.30, lowest MAE, no significance test)");
+});
+
+test("an okres with stations borrowed from its neighbours says so", () => {
+  const doc = {
+    columns: ["region", "region_name", "lead_day", "model", "mae", "enough_stations", "rank", "borrowed"],
+    rows: [["CZ0201", "Benešov", 1, "ifs", 1.1, true, 1, 2]],
+  };
+  const entry = bestByRegion(records(doc), 1).get("CZ0201");
+  assert.equal(entry.borrowed, 2);
+  assert.equal(
+    describe(entry, MODELS, t),
+    "best: ECMWF IFS (MAE 1.10); stations from neighbouring okresy: 2",
+  );
+  assert.equal(
+    describe(entry, MODELS, translator("cs")),
+    "nejlepší: ECMWF IFS (MAE 1.10); stanice ze sousedních okresů: 2",
+  );
 });
 
 test("popup text in Czech", () => {
