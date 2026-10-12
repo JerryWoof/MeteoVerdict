@@ -31,6 +31,31 @@ THRESHOLDS = PRECIPITATION_THRESHOLDS + HEAT_THRESHOLDS
 SUMS = ("n", "sum_err", "sum_abs_err", "sum_sq_err")
 
 
+def compact(columns: list[str]) -> dict[str, pl.DataType]:
+    """Storage types of the score columns among ``columns`` (roadmap 3.5).
+
+    One score row covers one station-day, so ``n`` is at most 24 and each count 0 or 1;
+    float32 keeps about 7 significant digits of the sums. Aggregations sum them as
+    ``total`` does, in 64 bits.
+    """
+    counts = {c for t in THRESHOLDS for c in counts_columns(t)}
+    types: dict[str, pl.DataType] = {}
+    for c in columns:
+        if c == "n":
+            types[c] = pl.UInt16
+        elif c in SUMS:
+            types[c] = pl.Float32
+        elif c in counts:
+            types[c] = pl.UInt8
+    return types
+
+
+def total(column: str) -> pl.Expr:
+    """Sum of a stored score column, in 64 bits."""
+    wide = pl.Float64 if column in SUMS[1:] else pl.Int64
+    return pl.col(column).cast(wide).sum()
+
+
 def label(threshold: float) -> str:
     """Column suffix for a threshold: 0.1 → "0p1", 5.0 → "5"."""
     return f"{threshold:g}".replace(".", "p")
