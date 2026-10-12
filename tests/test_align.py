@@ -173,3 +173,42 @@ def test_precipitation_24h_can_exclude_estimated_values():
     fc = forecasts(icon.id, 1, WINDOW)
     got = align.precipitation_24h(gauge(7.0, quality=3), fc, [icon], exclude_estimated=True)
     assert got.collect().height == 0
+
+
+def peaked(times, peak_hour: int, peak: float, base: float = 20.0) -> list[float]:
+    return [peak if t.hour == peak_hour else base for t in times]
+
+
+def test_daily_maximum_takes_the_highest_hour_of_each_side():
+    icon = MODELS["dwd_icon_d2"]
+    times = hours(24)  # 1 Sept 00:00 … 23:00
+    obs = pl.DataFrame(
+        [
+            ("s", t, "temperature_2m", v, 0, "recent")
+            for t, v in zip(times, peaked(times, 13, 31.0), strict=True)
+        ],
+        schema=OBS_SCHEMA,
+        orient="row",
+    )
+    fc = pl.DataFrame(
+        [
+            ("s", t, icon.id, 1, v, 0.0, 2.0)
+            for t, v in zip(times, peaked(times, 15, 29.0), strict=True)
+        ],
+        schema=FC_SCHEMA,
+        orient="row",
+    )
+    got = align.daily_maximum(obs, fc, [icon]).collect()
+    assert got.rows() == [("s", date(2026, 9, 1), icon.id, 1, 29.0, 31.0, 0)]
+    # 23 hours are not a day
+    assert align.daily_maximum(obs.head(23), fc, [icon]).collect().height == 0
+
+
+def test_daily_maximum_only_where_the_model_is_hourly():
+    times = hours(24)
+    eu, aifs = MODELS["dwd_icon_eu"], MODELS["ecmwf_aifs025_single"]
+    fc = pl.concat(
+        [forecasts(eu.id, n, times) for n in (1, 4)] + [forecasts(aifs.id, 1, times)]
+    )  # ICON-EU is 3-hourly from D+4, AIFS always 6-hourly
+    got = align.daily_maximum(observations(times), fc, [eu, aifs]).collect()
+    assert got.select("model", "lead_day").rows() == [(eu.id, 1)]
