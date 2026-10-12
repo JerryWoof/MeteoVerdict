@@ -810,3 +810,13 @@ button.legend-item[aria-pressed="true"]:hover {
     display: none;
   }
 }
+
+/* the TRMNL screenshot on the open data page */
+img.eink {
+  display: block;
+  width: 100%;
+  max-width: 800px;
+  height: auto;
+  border: 1px solid #9aa7b1;
+  border-radius: 6px;
+}
