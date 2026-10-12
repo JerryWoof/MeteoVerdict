@@ -5,7 +5,7 @@ import { test } from "node:test";
 import {
   CAPITALS, DEFAULT_SHOWN, NEUTRAL, colorFor, currentPart, dayLabel, displayName, ease, iconName,
   labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView, placeMarkers,
-  playSteps, rowFor, startIndex, summary, today, valueFor, viewHash,
+  playSteps, rowFor, startIndex, switchColours, summary, today, valueFor, viewHash,
 } from "./tv.js";
 
 // the real outlook.json of the first run of the Outlook workflow (12 Oct 2026, 08:31 UTC)
@@ -148,4 +148,15 @@ test("transitions: rows, colours and easing in between", () => {
   const colours = okresColours(OUTLOOK, DAY, "afternoon", "temperature");
   assert.equal(colours.size, 77);
   assert.equal(okresColours(OUTLOOK, DAY, "afternoon", "unknown").get("CZ0100"), NEUTRAL);
+});
+
+test("a switch to another value fades through the background, never mixing the two", () => {
+  const from = new Map([["A", "#ff0000"]]);
+  const to = new Map([["A", "#0000ff"]]);
+  assert.equal(switchColours(from, to, 0).get("A"), "#ff0000");
+  assert.equal(switchColours(from, to, 0.5).get("A"), NEUTRAL);
+  assert.equal(switchColours(from, to, 1).get("A"), "#0000ff");
+  // on the way out only red and the background, on the way in only the background and blue
+  assert.equal(switchColours(from, to, 0.25).get("A"), mixColor("#ff0000", NEUTRAL, ease(0.5)));
+  assert.equal(switchColours(from, to, 0.75).get("A"), mixColor(NEUTRAL, "#0000ff", ease(0.5)));
 });

@@ -253,3 +253,17 @@ export function okresColours(outlook, day, part, layer) {
     ]),
   );
 }
+
+/**
+ * Okres colours during a switch to another map colour, `f` from 0 to 1: the old colours
+ * fade to the neutral background, then the new ones come up from it, so two different
+ * values are never mixed.
+ */
+export function switchColours(coloursFrom, coloursTo, f) {
+  const out = new Map();
+  for (const [code, to] of coloursTo) {
+    const from = coloursFrom.get(code) ?? to;
+    out.set(code, f < 0.5 ? mixColor(from, NEUTRAL, ease(f * 2)) : mixColor(NEUTRAL, to, ease(f * 2 - 1)));
+  }
+  return out;
+}
