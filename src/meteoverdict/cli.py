@@ -11,7 +11,15 @@ import httpx
 import polars as pl
 import typer
 
-from meteoverdict import __version__, aladin, observations, regions, stations
+from meteoverdict import (
+    __version__,
+    aladin,
+    forecasts,
+    observations,
+    partitions,
+    regions,
+    stations,
+)
 from meteoverdict import models as catalogue
 from meteoverdict.chmi import ChmiFormatError, fetch_current_meta
 from meteoverdict.releases import GitHubReleaseStore
@@ -190,9 +198,7 @@ def fetch_obs(
     try:
         with httpx.Client(timeout=120, transport=transport, follow_redirects=True) as client:
             meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
-            automatic = observations.automatic_station_ids(meta2)
-            # inactive stations are not in today's meta2; try them anyway
-            ids = table.filter(pl.col("id").is_in(list(automatic)) | ~pl.col("active"))["id"]
+            ids = observations.verification_stations(table, meta2)["id"]
             obs = observations.fetch_observations(client, ids, start.date(), end.date())
     except httpx.HTTPError as exc:
         typer.echo(f"mvd fetch-obs: download failed: {exc}", err=True)
@@ -210,19 +216,65 @@ def fetch_fc(
     end: DateOption,
     model: Annotated[
         list[str] | None,
-        typer.Option(help="Model id from models.yaml; repeat for several. Default: all."),
+        typer.Option(help="Model id from models.yaml; repeat for several. Default: all enabled."),
     ] = None,
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    out_dir: Annotated[Path, typer.Option(help="Monthly Parquet files go here.")] = Path("data/fc"),
+    max_calls: Annotated[
+        float, typer.Option(help="Stop before using more weighted Open-Meteo calls than this.")
+    ] = 9000,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Only print how many calls it would use.")
+    ] = False,
 ) -> None:
     """Fetch archived forecasts from the Open-Meteo Previous Runs API for a date range."""
     _check_range(start.date(), end.date())
-    known = {m.id for m in catalogue.load_models()}
-    unknown = sorted(set(model or []) - known)
+    known = {m.id: m for m in catalogue.load_models()}
+    unknown = sorted(set(model or []) - set(known))
     if unknown:
         raise typer.BadParameter(
             f"unknown model(s) {', '.join(unknown)}; see `mvd models --all`", param_hint="--model"
         )
-    models = ", ".join(model) if model else "all models"
-    _not_implemented("fetch-fc", "1.6", f"fetch {models} for {start:%Y-%m-%d}..{end:%Y-%m-%d}")
+    chosen = [known[m] for m in model] if model else [m for m in known.values() if m.enabled]
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    table = pl.read_parquet(stations_path)
+    transport = httpx.HTTPTransport(retries=3)
+    with httpx.Client(timeout=180, transport=transport, follow_redirects=True) as client:
+        try:
+            meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
+        except httpx.HTTPError as exc:
+            typer.echo(f"mvd fetch-fc: could not download ČHMÚ meta2: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        points = observations.verification_stations(table, meta2)
+        estimate = forecasts.estimate_calls(points.height, chosen, start.date(), end.date())
+        typer.echo(
+            f"{len(chosen)} models x {points.height} stations, {start:%Y-%m-%d}..{end:%Y-%m-%d}: "
+            f"about {estimate:g} Open-Meteo calls (budget {max_calls:g})"
+        )
+        if dry_run:
+            return
+        budget = forecasts.Budget(max_calls=max_calls)
+        code = 0
+        try:
+            fc = forecasts.fetch_forecasts(
+                client, points, chosen, start.date(), end.date(), budget, log=typer.echo
+            )
+        except forecasts.QuotaError as exc:
+            typer.echo(f"mvd fetch-fc: stopped: {exc}", err=True)
+            fc, code = exc.partial, 3
+        except httpx.HTTPError as exc:
+            typer.echo(f"mvd fetch-fc: download failed: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+    written = partitions.write_monthly(fc, out_dir, forecasts.KEYS)
+    typer.echo(
+        f"{fc.height} rows, {budget.used:g} calls used → "
+        f"{', '.join(str(p) for p in written) or 'nothing'}"
+    )
+    if code:
+        raise typer.Exit(code=code)
 
 
 @app.command()
