@@ -157,7 +157,8 @@ def aggregate(
                 .with_columns(
                     pl.lit(level).alias("level"),
                     pl.lit(window).alias("window"),
-                    pl.lit(start).alias("from"),
+                    # the window may start before the first scored day
+                    pl.lit(max(start, first_day)).alias("from"),
                     pl.lit(as_of).alias("to"),
                 )
             )
