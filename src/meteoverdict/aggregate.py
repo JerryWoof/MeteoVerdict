@@ -3,7 +3,8 @@
 Levels: ``station``, ``okres``, ``kraj``, ``elevation`` (lowland/upland/mountain) and
 ``cz`` (all stations). Windows, all ending at ``as_of`` (the last scored day): ``90d``
 (the last 90 days), ``season`` (the meteorological season so far: DJF, MAM, JJA, SON)
-and ``all``.
+and ``all``; and per season over all years (roadmap 5.1): ``djf``, ``mam``, ``jja`` and
+``son``, every day of that season up to ``as_of``.
 
 Fair comparison: for each window, variable, lead day and station, only the days that
 **every** model covering that station has scores for are used. So a model with a short
@@ -25,7 +26,9 @@ import polars as pl
 from meteoverdict import metrics
 
 LEVELS = ("station", "okres", "kraj", "elevation", "cz")
-WINDOWS = ("90d", "season", "all")
+#: meteorological seasons and their months
+SEASONS = {"djf": (12, 1, 2), "mam": (3, 4, 5), "jja": (6, 7, 8), "son": (9, 10, 11)}
+WINDOWS = ("90d", "season", "all", *SEASONS)
 MIN_STATIONS = 3
 _REGION = {
     "station": ("station_id", "station_name"),
@@ -52,6 +55,15 @@ def window_start(window: str, as_of: date, first_day: date) -> date:
     if window == "all":
         return first_day
     raise ValueError(f"unknown window {window!r}")
+
+
+def window_days(window: str, as_of: date, first_day: date) -> tuple[date, pl.Expr]:
+    """First day of a window and the filter on ``date`` that selects its days."""
+    if window in SEASONS:
+        months = pl.col("date").dt.month().is_in(SEASONS[window])
+        return first_day, pl.col("date").is_between(first_day, as_of) & months
+    start = window_start(window, as_of, first_day)
+    return start, pl.col("date").is_between(start, as_of)
 
 
 def common_days(scores: pl.LazyFrame) -> pl.LazyFrame:
@@ -130,8 +142,8 @@ def aggregate(
     columns = scores.collect_schema().names()
     frames = []
     for window in windows:
-        start = window_start(window, as_of, first_day)
-        fair = common_days(scores.filter(pl.col("date").is_between(start, as_of)))
+        start, days = window_days(window, as_of, first_day)
+        fair = common_days(scores.filter(days))
         fair = fair.join(info, on="station_id", how="inner")
         for level in LEVELS:
             frames.append(

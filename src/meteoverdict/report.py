@@ -24,7 +24,15 @@ COLUMNS = {
     "precipitation_24h": "Precipitation (24 h)",
 }
 MAX_TIED = 3
-WINDOW_TEXT = {"90d": "last 90 days", "season": "this season", "all": "all time"}
+WINDOW_TEXT = {
+    "90d": "last 90 days",
+    "season": "this season",
+    "all": "all time",
+    "djf": "all winters (Dec-Feb)",
+    "mam": "all springs (Mar-May)",
+    "jja": "all summers (Jun-Aug)",
+    "son": "all autumns (Sep-Nov)",
+}
 
 
 def blend_summary(part: pl.DataFrame) -> str:
