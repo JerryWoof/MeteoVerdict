@@ -27,6 +27,9 @@ import polars as pl
 from meteoverdict.chmi import BASE_URL, parse_collection
 
 ELEMENTS = {"T": "temperature_2m", "F": "wind_speed_10m", "SRA10M": "precipitation"}
+#: now/ keeps about three days; older day files are never asked for.
+NOW_KEEPS_DAYS = 4
+
 #: QUALITY codes (meta4) we keep: 0 good, 3 estimated, 5 unknown (unchecked now/ data).
 #: Dropped: 1 suspect, 2 poor, 4 missing.
 KEEP_QUALITY = (0, 3, 5)
@@ -71,9 +74,10 @@ def _months(start: date, end: date) -> list[tuple[int, int]]:
 
 
 def raw_station(
-    client: httpx.Client, wsi: str, start: date, end: date
+    client: httpx.Client, wsi: str, start: date, end: date, today: date | None = None
 ) -> list[tuple[str, pl.DataFrame]]:
     """10-minute rows for ``wsi`` covering ``start`` to ``end``: ``[(source, rows)]``."""
+    oldest_in_now = (today or datetime.now(UTC).date()) - timedelta(days=NOW_KEEPS_DAYS)
     parts = []
     for year, month in _months(start, end):
         first = max(start, date(year, month, 1))
@@ -87,7 +91,7 @@ def raw_station(
                 else:
                     first = last + timedelta(days=1)
                 break
-        day = first  # days not covered by a monthly file: try the day files in now/
+        day = max(first, oldest_in_now)  # days not in a monthly file: try now/
         while day <= last:
             if (doc := _get(client, day_url(wsi, day))) is not None:
                 parts.append(("now", parse_collection(doc)))
@@ -150,6 +154,7 @@ def fetch_observations(
     start: date,
     end: date,
     workers: int = 8,
+    today: date | None = None,
 ) -> pl.DataFrame:
     """Hourly observations for the stations, ``start`` 00:00 to ``end`` 23:00 UTC.
 
@@ -157,12 +162,12 @@ def fetch_observations(
     """
 
     def one(wsi: str) -> pl.DataFrame:
-        parts = raw_station(client, wsi, start - timedelta(days=1), end)
+        parts = raw_station(client, wsi, start - timedelta(days=1), end, today)
         rows = [normalize(raw, source) for source, raw in parts]
         return to_hourly(pl.concat(rows)) if rows else pl.DataFrame(schema=SCHEMA)
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        frames = list(pool.map(one, list(station_ids)))
+        frames = [pl.DataFrame(schema=SCHEMA), *pool.map(one, list(station_ids))]
     first = datetime.combine(start, datetime.min.time(), UTC)
     last = datetime.combine(end, datetime.min.time(), UTC) + timedelta(hours=23)
     return (
