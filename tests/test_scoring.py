@@ -117,3 +117,18 @@ def test_heat_days_are_counted_on_the_daily_maximum():
     assert (row["n"], row["period_h"], row["sum_err"]) == (1, 24, pytest.approx(-2.0))
     # 31 °C observed, 29 °C forecast: a missed tropical day
     assert [row[c] for c in metrics.counts_columns(30.0)] == [0, 0, 1, 0]
+
+
+def test_temperature_at_synoptic_hours_is_scored_for_six_hourly_models_too():
+    times = hours(24)
+    aifs = [m for m in MODELS if m.id == "ecmwf_aifs025_single"]
+    fc = forecasts(times).with_columns(model=pl.lit(aifs[0].id))
+    table = scoring.daily_scores(
+        observations(times), fc, aifs, date(2026, 9, 1), date(2026, 9, 1), with_blend=False
+    )
+    synoptic = table.filter(pl.col("variable").str.ends_with("utc")).sort("variable")
+    assert synoptic["variable"].to_list() == [
+        f"temperature_2m_{h}utc" for h in ("00", "06", "12", "18")
+    ]
+    assert synoptic["n"].to_list() == [1] * 4
+    assert synoptic["sum_err"].to_list() == pytest.approx([2.0] * 4)  # 12 °C vs 10 °C
