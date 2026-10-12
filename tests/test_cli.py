@@ -56,7 +56,6 @@ def test_every_command_has_help(command):
         (["report"], "3.1", "print the leaderboard"),
         (["report", "--readme"], "3.1", "README.md"),
         (["daily", "--date", "2024-03-05"], "3.2", "2024-03-05"),
-        (["backfill", "--from", "2024-01-01", "--to", "2024-02-29"], "2.6", "2024-02-29"),
     ],
 )
 def test_stub_commands_exit_1_and_name_roadmap_item(args, item, detail):
@@ -66,12 +65,16 @@ def test_stub_commands_exit_1_and_name_roadmap_item(args, item, detail):
     assert detail in result.stderr
 
 
-def test_daily_and_backfill_default_to_yesterday(monkeypatch):
+def test_daily_defaults_to_yesterday(monkeypatch):
     monkeypatch.setattr(cli, "_yesterday", lambda: date(2025, 6, 30))
     assert "2025-06-30" in runner.invoke(app, ["daily"]).stderr
-    assert (
-        "2025-01-01..2025-06-30" in runner.invoke(app, ["backfill", "--from", "2025-01-01"]).stderr
-    )
+
+
+def test_backfill_needs_the_station_table(tmp_path):
+    args = ["backfill", "--from", "2025-01-01", "--stations", str(tmp_path / "none.parquet")]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 2
+    assert "mvd stations" in plain(result.output)
 
 
 @pytest.mark.parametrize(
