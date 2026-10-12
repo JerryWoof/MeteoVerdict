@@ -18,6 +18,7 @@ from meteoverdict import (
     forecasts,
     observations,
     partitions,
+    quality,
     ranking,
     regions,
     scoring,
@@ -482,6 +483,24 @@ def daily(
         with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
             store.publish_latest(_release_store(client), data_dir, out)
         typer.echo(f"published aggregates and site data to the release {store.LATEST_TAG}")
+
+
+@app.command()
+def check(
+    data_dir: Annotated[Path, typer.Option(help="Folder with obs/, fc/ and scores/.")] = Path(
+        "data"
+    ),
+) -> None:
+    """Data quality checks: exit 1 on stale data or many missing stations."""
+    findings = quality.check(data_dir)
+    text = quality.report(findings)
+    typer.echo(text)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:  # shown on the workflow run page
+        with open(summary, "a", encoding="utf-8") as f:
+            f.write("## Data quality\n\n" + text.replace("\n", "\n\n") + "\n")
+    if any(f.level == "error" for f in findings):
+        raise typer.Exit(code=1)
 
 
 @app.command()

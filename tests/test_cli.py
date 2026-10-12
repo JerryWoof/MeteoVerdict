@@ -359,3 +359,12 @@ def test_report_rewrites_only_the_readme_block(tmp_path):
     text = readme.read_text(encoding="utf-8")
     assert "**DWD ICON-EU** (1.40)" in text and "old" not in text
     assert text.startswith("# x\n") and text.endswith("end\n")
+
+
+def test_check_fails_loudly_and_writes_the_job_summary(tmp_path, monkeypatch):
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    result = runner.invoke(app, ["check", "--data-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "ERROR: no observations" in result.stdout
+    assert "## Data quality" in summary.read_text(encoding="utf-8")
