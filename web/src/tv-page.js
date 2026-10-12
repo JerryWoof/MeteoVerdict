@@ -202,7 +202,7 @@ function markerElement(o) {
 function setMarker(entry, row, part, shown) {
   entry.el.style.display = row ? "" : "none";
   if (!row) return;
-  const icon = iconName(row.symbol, part);
+  const icon = iconName(row.symbol, part, row);
   if (icon !== entry.icon) {
     entry.icon = icon;
     const ctx = entry.canvas.getContext("2d");
@@ -300,7 +300,7 @@ function partCell(row, part) {
   const cell = element("div", null, "part");
   cell.append(
     element("span", t(`part.${part}`), "part-name"),
-    iconCanvas(row ? iconName(row.symbol, part) : "", 34, symbolText(row?.symbol)),
+    iconCanvas(row ? iconName(row.symbol, part, row) : "", 34, symbolText(row?.symbol)),
     element("strong", row ? labelFor(row, "temperature", part) : "–"),
     element("span", row ? percent(row.rain_probability) : "", "rain"),
   );
@@ -321,7 +321,7 @@ function renderPanel(outlook) {
   close.addEventListener("click", () => update({ okres: null }));
   const big = element("div", null, "now");
   big.append(
-    iconCanvas(now ? iconName(now.symbol, state.part) : "", 64, symbolText(now?.symbol)),
+    iconCanvas(now ? iconName(now.symbol, state.part, now) : "", 64, symbolText(now?.symbol)),
     element("div", now ? labelFor(now, "temperature", state.part) : "–", "big-temp"),
   );
   const facts = element("ul", null, "facts");
@@ -352,7 +352,7 @@ function renderPanel(outlook) {
     if (day === state.day) tr.className = "current";
     tr.addEventListener("click", () => update({ day }));
     const iconCell = element("td");
-    iconCell.append(iconCanvas(row ? iconName(row.symbol, "day") : "", 26, symbolText(row?.symbol)));
+    iconCell.append(iconCanvas(row ? iconName(row.symbol, "day", row) : "", 26, symbolText(row?.symbol)));
     tr.append(
       element("td", dayText(day)),
       iconCell,
