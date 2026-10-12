@@ -115,9 +115,10 @@ def test_stations_writes_parquet(monkeypatch, tmp_path):
     out = tmp_path / "stations.parquet"
     result = runner.invoke(app, ["stations", "--out", str(out)])
     assert result.exit_code == 0, result.output
-    assert "Wrote 3 stations (3 active) in 2 kraje" in result.stdout
+    assert "Wrote 3 stations (3 active) in 3 okresy and 2 kraje" in result.stdout
     table = pl.read_parquet(out)
     assert table["kraj_code"].to_list() == ["CZ041", "CZ041", "CZ010"]
+    assert table["okres"].to_list() == ["Cheb", "Karlovy Vary", "území Hlavního města Prahy"]
     assert table["elevation_class"].to_list() == ["upland", "upland", "lowland"]
 
 
