@@ -8,8 +8,9 @@ recompute every model's MAE. A model is ``tied_with_best`` when the 95 % interva
 its MAE minus the best model's MAE includes 0. The best model is a clear winner only
 when no other model is tied with it.
 
-Ranked variables: ``temperature_2m``, ``wind_speed_10m`` and ``precipitation_daily``
-(hourly precipitation is left out because its periods differ between models).
+Ranked variables: ``temperature_2m``, ``wind_speed_10m``, ``precipitation_daily`` and
+``precipitation_24h`` (hourly precipitation is left out because its periods differ
+between models).
 """
 
 from __future__ import annotations
@@ -22,7 +23,12 @@ import polars as pl
 
 from meteoverdict import aggregate
 
-RANKED_VARIABLES = ("temperature_2m", "wind_speed_10m", "precipitation_daily")
+RANKED_VARIABLES = (
+    "temperature_2m",
+    "wind_speed_10m",
+    "precipitation_daily",
+    "precipitation_24h",
+)
 RESAMPLES = 1000
 CONFIDENCE = 0.95
 GROUP = ["level", "region", "window", "variable", "lead_day"]
