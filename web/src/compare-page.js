@@ -2,12 +2,15 @@ import * as Plot from "@observablehq/plot";
 
 import "./style.css";
 
-import { ELEVATION_LABELS, biasByElevation, fmt, rankingTable } from "./compare.js";
+import { biasByElevation, fmt, rankingTable } from "./compare.js";
 import { modelColors, records } from "./data.js";
+import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import {
-  VARIABLES, WINDOWS, availableLeadDays, availableVariables, parseHash, toHash,
+  WINDOWS, availableLeadDays, availableVariables, parseHash, toHash,
 } from "./view.js";
+
+const t = setUpLanguage();
 
 async function getJson(path) {
   try {
@@ -44,19 +47,19 @@ function cell(tag, text, className) {
 function renderTable(rows, names) {
   const table = document.getElementById("ranking");
   const head = document.createElement("tr");
-  for (const label of ["#", "Model", "MAE", "vs best (95 % interval)", "Bias", "RMSE", "Stations", "Days"]) {
-    head.append(cell("th", label));
+  for (const key of ["rank", "model", "mae", "diff", "bias", "rmse", "stations", "days"]) {
+    head.append(cell("th", t(`table.${key}`)));
   }
   const body = rows.map((r) => {
     const tr = document.createElement("tr");
     if (r.rank == null) tr.className = "baseline";
     const rank = r.rank == null ? "–" : `${r.tied ? "≈" : ""}${r.rank}`;
-    const ci = r.ci ? ` (${fmt(r.ci[0], true)} to ${fmt(r.ci[1], true)})` : "";
+    const ci = r.ci ? ` ${t("compare.interval", { low: fmt(r.ci[0], true), high: fmt(r.ci[1], true) })}` : "";
     tr.append(
       cell("td", rank),
       cell("td", names[r.model] ?? r.model),
       cell("td", fmt(r.mae), "num"),
-      cell("td", r.rank === 1 ? "best" : r.diff == null ? "–" : `${fmt(r.diff, true)}${ci}`, "num"),
+      cell("td", r.rank === 1 ? t("compare.best") : r.diff == null ? "–" : `${fmt(r.diff, true)}${ci}`, "num"),
       cell("td", fmt(r.bias, true), "num"),
       cell("td", fmt(r.rmse), "num"),
       cell("td", r.stations ?? "–", "num"),
@@ -66,7 +69,7 @@ function renderTable(rows, names) {
   });
   if (body.length === 0) {
     const tr = document.createElement("tr");
-    tr.append(cell("td", "No scores for this choice yet."));
+    tr.append(cell("td", t("compare.empty")));
     body.push(tr);
   }
   table.replaceChildren(head, ...body);
@@ -75,7 +78,7 @@ function renderTable(rows, names) {
 function renderBias(rows, colors, names) {
   const target = document.getElementById("bias");
   if (rows.length === 0) {
-    target.replaceChildren(cell("p", "No scores for this choice yet."));
+    target.replaceChildren(cell("p", t("compare.empty")));
     return;
   }
   const models = [...new Set(rows.map((r) => r.model))];
@@ -85,7 +88,7 @@ function renderBias(rows, colors, names) {
       marginLeft: 180,
       x: { label: "Bias", grid: true },
       y: { label: null, tickFormat: (m) => names[m] ?? m },
-      fy: { label: null, tickFormat: (e) => ELEVATION_LABELS[e] ?? e },
+      fy: { label: null, tickFormat: (e) => t(`elevation.${e}`) },
       color: { domain: models, range: models.map((m) => colors[m] ?? "#888888") },
       marks: [
         Plot.barX(rows, { x: "bias", y: "model", fy: "elevation", fill: "model", tip: true }),
@@ -97,8 +100,8 @@ function renderBias(rows, colors, names) {
 
 async function main() {
   const meta = await getJson("data/scores/meta.json");
-  document.getElementById("status").textContent = statusText(meta);
-  const names = meta?.models ?? {};
+  document.getElementById("status").textContent = statusText(meta, t);
+  const names = { ...meta?.models, blend: t("model.blend") };
   const colors = modelColors(names);
   const view = parseHash(window.location.hash);
 
@@ -112,8 +115,8 @@ async function main() {
     window.history.replaceState(null, "", toHash(view));
   }
 
-  fillSelect("variable", availableVariables(meta).map((v) => [v, VARIABLES[v]]), view.variable);
-  fillSelect("window", Object.entries(WINDOWS), view.window);
+  fillSelect("variable", availableVariables(meta).map((v) => [v, t(`variable.${v}`)]), view.variable);
+  fillSelect("window", WINDOWS.map((w) => [w, t(`window.${w}`)]), view.window);
   for (const [id, key, parse] of [
     ["variable", "variable", String],
     ["lead", "leadDay", Number],

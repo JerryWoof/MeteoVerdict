@@ -6,14 +6,11 @@ import { seriesRows } from "./series.js";
  * Line chart of each model's daily MAE at one station (7-day moving average),
  * or a note when there is nothing to draw.
  */
-export function stationChart(doc, view, colors, names) {
+export function stationChart(doc, view, colors, names, t) {
   const rows = seriesRows(doc, view.variable, view.leadDay);
   if (rows.length === 0) {
     const note = document.createElement("p");
-    note.textContent =
-      view.leadDay > 2
-        ? "Daily errors are published for D+1 and D+2 only."
-        : "No daily errors for this station and variable in the last 90 days.";
+    note.textContent = t(view.leadDay > 2 ? "chart.leadNote" : "chart.empty");
     return note;
   }
   const models = [...new Set(rows.map((r) => r.model))];
@@ -21,7 +18,7 @@ export function stationChart(doc, view, colors, names) {
     width: 360,
     height: 220,
     marginLeft: 40,
-    y: { label: "MAE (7-day mean)", grid: true, zero: true },
+    y: { label: t("chart.y"), grid: true, zero: true },
     x: { label: null },
     color: {
       domain: models.map((m) => names[m] ?? m),

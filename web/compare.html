@@ -10,30 +10,30 @@
     <header>
       <h1><a href="./">meteoverdict</a></h1>
       <p id="status">Loading…</p>
-      <form id="controls" aria-label="What the page shows">
-        <label>Variable <select id="variable"></select></label>
-        <label>Lead time <select id="lead"></select></label>
-        <label>Period <select id="window"></select></label>
+      <a href="./" data-i18n="page.map">Map</a>
+      <form id="controls">
+        <label><span data-i18n="control.variable">Variable</span> <select id="variable"></select></label>
+        <label><span data-i18n="control.lead">Lead time</span> <select id="lead"></select></label>
+        <label><span data-i18n="control.window">Period</span> <select id="window"></select></label>
       </form>
+      <button type="button" id="language">Česky</button>
     </header>
     <main class="content">
-      <h2>Ranking for Czechia</h2>
-      <p class="note">
-        Mean absolute error (MAE), bias (forecast minus observed) and RMSE over the stations
-        and days every model covers. "≈" marks models whose MAE difference from the best is
-        not significant (95 % bootstrap interval over days). The mean of all models is a
-        baseline, not ranked.
-      </p>
+      <h2 data-i18n="compare.ranking">Ranking for Czechia</h2>
+      <p class="note" data-i18n="compare.rankingNote"></p>
       <table id="ranking"></table>
-      <h2>Bias by elevation</h2>
-      <p class="note">Positive: the model forecasts too high, e.g. too warm in the mountains.</p>
+      <h2 data-i18n="compare.bias">Bias by elevation</h2>
+      <p class="note" data-i18n="compare.biasNote"></p>
       <div id="bias"></div>
     </main>
     <footer>
-      Observations: <a href="https://opendata.chmi.cz/">ČHMÚ</a> (CC BY 4.0) · Forecasts:
-      <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0; UK Met Office data CC
-      BY-SA 4.0) · Scores: CC BY-SA 4.0 ·
-      <a href="https://github.com/JerryLion/meteoverdict/blob/main/docs/methodology.md">Method</a>
+      <span data-i18n="footer.observations">Observations</span>:
+      <a href="https://opendata.chmi.cz/">ČHMÚ</a> (CC BY 4.0) ·
+      <span data-i18n="footer.forecasts">Forecasts</span>:
+      <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0; UK Met Office CC BY-SA 4.0) ·
+      <span data-i18n="footer.boundaries">Boundaries</span>: ČÚZK (CC BY 4.0) ·
+      <span data-i18n="footer.scores">Scores</span>: CC BY-SA 4.0 ·
+      <a href="https://github.com/JerryLion/meteoverdict/blob/main/docs/methodology.md" data-i18n="footer.method">Source and method</a>
     </footer>
     <script type="module" src="/src/compare-page.js"></script>
   </body>

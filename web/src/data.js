@@ -80,12 +80,15 @@ export function stationFeatures(stations, best, colors) {
   };
 }
 
-/** Text for a region's popup. */
-export function describe(entry, names) {
-  if (!entry || entry.model == null) return "no data";
-  if (!entry.enough) return "too few stations to rank";
+/** Text for a region's popup; `t` translates (i18n.js). */
+export function describe(entry, names, t) {
+  if (!entry || entry.model == null) return t("describe.noData");
+  if (!entry.enough) return t("describe.tooFew");
   const name = (id) => names[id] ?? id;
-  const tied = entry.tied.length ? `; not significantly worse: ${entry.tied.map(name).join(", ")}` : "";
-  const how = entry.ranked ? "" : ", lowest MAE, no significance test";
-  return `best: ${name(entry.model)} (MAE ${entry.mae.toFixed(2)}${how})${tied}`;
+  return t("describe.best", {
+    model: name(entry.model),
+    mae: entry.mae.toFixed(2),
+    how: entry.ranked ? "" : t("describe.unranked"),
+    tied: entry.tied.length ? t("describe.tied", { models: entry.tied.map(name).join(", ") }) : "",
+  });
 }
