@@ -443,8 +443,9 @@ body.tv > * {
     0 0 3px #ffffff,
     0 0 3px #ffffff;
 }
-.wx-marker[hidden] {
-  display: none;
+/* elements hidden with the attribute stay hidden whatever their display */
+body.tv [hidden] {
+  display: none !important;
 }
 .wx-top {
   display: flex;

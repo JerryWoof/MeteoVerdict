@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  CAPITALS, DEFAULT_SHOWN, NEUTRAL, colorFor, markerValues, parseView, viewHash, currentPart, displayName, placeMarkers, dayLabel, fillExpression, iconName, labelFor, parseOutlook,
-  pointFeatures, rowFor, sequence, summary, today, valueFor,
+  CAPITALS, DEFAULT_SHOWN, NEUTRAL, colorFor, currentPart, dayLabel, displayName, ease, iconName,
+  labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView, placeMarkers,
+  playSequence, rowFor, summary, today, valueFor, viewHash,
 } from "./tv.js";
 
 // the real outlook.json of the first run of the Outlook workflow (12 Oct 2026, 08:31 UTC)
@@ -37,10 +38,7 @@ test("colour ramps interpolate and clamp", () => {
   assert.equal(colorFor(12.5, "temperature"), colorFor(12.5, "temperature"));
   assert.notEqual(colorFor(10, "temperature"), colorFor(15, "temperature"));
   assert.equal(colorFor(null, "wind"), "#ececec");
-  assert.equal(fillExpression(OUTLOOK, DAY, "afternoon", "none"), NEUTRAL);
-  const expression = fillExpression(OUTLOOK, DAY, "afternoon", "temperature");
-  assert.equal(expression[0], "match");
-  assert.equal(expression.length, 3 + 2 * 77);
+  assert.notEqual(colorFor(0, "precipitation"), colorFor(1, "precipitation"));
 });
 
 test("symbols get a moon at night", () => {
@@ -48,26 +46,6 @@ test("symbols get a moon at night", () => {
   assert.equal(iconName("rain", "night"), "rain");
   assert.equal(iconName("partly", "afternoon"), "partly");
   assert.equal(iconName(null, "day"), "");
-});
-
-test("points carry the symbol and the chosen values for every okres", () => {
-  const points = pointFeatures(OUTLOOK, DAY, "afternoon", ["temperature", "wind"]);
-  assert.equal(points.features.length, 77);
-  const praha = points.features.find((f) => f.properties.code === "CZ0100");
-  assert.deepEqual(praha.properties.values.map((v) => v.layer), ["temperature", "wind"]);
-  assert.match(praha.properties.values[0].text, /^-?\d+°$/);
-  assert.match(praha.properties.values[1].text, /^\d+ m\/s$/);
-  assert.ok(praha.properties.icon.length > 0);
-});
-
-test("marker values keep a fixed order and can be empty", () => {
-  const row = { tmin: 3, tmax: 12, rain_probability: 0.4, wind: 3, cloud: 80 };
-  assert.deepEqual(
-    markerValues(row, "afternoon", ["cloud", "temperature", "precipitation", "wind"]).map((v) => v.text),
-    ["12°", "40 %", "3 m/s", "80 %"],
-  );
-  assert.deepEqual(markerValues(row, "afternoon", []), []);
-  assert.deepEqual(markerValues(undefined, "afternoon", ["temperature"]), []);
 });
 
 test("headline: warmest, coldest, rain likely", () => {
@@ -94,13 +72,6 @@ test("day tabs: today, tomorrow, then dates", () => {
   assert.deepEqual(dayLabel("2026-10-12", "2026-10-12", "cs"), { key: "tv.today" });
   assert.deepEqual(dayLabel("2026-10-13", "2026-10-12", "cs"), { key: "tv.tomorrow" });
   assert.match(dayLabel("2026-10-15", "2026-10-12", "cs").text, /15\. ?10\./);
-});
-
-test("play goes through every part of every day from the current one", () => {
-  const steps = sequence(OUTLOOK, DAY, "afternoon");
-  assert.deepEqual(steps[0], { day: DAY, part: "afternoon" });
-  assert.equal(steps.length, 6 * 4);
-  assert.equal(new Set(steps.map((s) => `${s.day}|${s.part}`)).size, steps.length);
 });
 
 test("markers: capitals first, no overlaps, by each marker's own size", () => {
@@ -137,4 +108,42 @@ test("the view in the URL, including old links", () => {
   assert.deepEqual(parseView("", OUTLOOK, fallback), {
     day: "2026-10-12", part: "morning", colour: "temperature", shown: DEFAULT_SHOWN, okres: null,
   });
+});
+
+test("play: morning, afternoon, evening of each day, from the current part on", () => {
+  const steps = playSequence(OUTLOOK, DAY, "afternoon");
+  assert.deepEqual(steps.slice(0, 4), [
+    { day: DAY, part: "afternoon" },
+    { day: DAY, part: "evening" },
+    { day: "2026-10-14", part: "morning" },
+    { day: "2026-10-14", part: "afternoon" },
+  ]);
+  assert.ok(!steps.some((s) => s.part === "night" || s.part === "day"));
+  assert.equal(playSequence(OUTLOOK, DAY, "night")[0].day, DAY); // from that day's morning
+  assert.equal(playSequence(OUTLOOK, OUTLOOK.days[0], "morning").length, 6 * 3);
+});
+
+test("each round colours the map with the next value", () => {
+  assert.equal(nextColour("temperature"), "precipitation");
+  assert.equal(nextColour("cloud"), "temperature");
+  assert.equal(nextColour("none"), "temperature");
+});
+
+test("transitions: rows, colours and easing in between", () => {
+  const a = { tmin: 2, tmax: 10, rain_probability: 0, wind: 2, cloud: 20, symbol: "clear" };
+  const b = { tmin: 4, tmax: 14, rain_probability: 1, wind: 6, cloud: 100, symbol: "rain" };
+  const mid = lerpRow(a, b, 0.25);
+  assert.equal(mid.tmax, 11);
+  assert.equal(mid.cloud, 40);
+  assert.equal(mid.symbol, "clear");
+  assert.equal(lerpRow(a, b, 0.75).symbol, "rain");
+  assert.equal(lerpRow(undefined, b, 0.2), b);
+  assert.equal(mixColor("#000000", "#ffffff", 0.5), "#808080");
+  assert.equal(mixColor("#102030", "#102030", 0.3), "#102030");
+  assert.equal(ease(0), 0);
+  assert.equal(ease(1), 1);
+  assert.equal(ease(0.5), 0.5);
+  const colours = okresColours(OUTLOOK, DAY, "afternoon", "temperature");
+  assert.equal(colours.size, 77);
+  assert.equal(okresColours(OUTLOOK, DAY, "afternoon", "none").get("CZ0100"), NEUTRAL);
 });
