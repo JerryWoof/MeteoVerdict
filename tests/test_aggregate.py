@@ -93,6 +93,12 @@ def test_a_model_that_never_reaches_a_station_does_not_remove_it():
     assert cz == [("a", 2, 2.0), ("b", 1, 2.0)]
 
 
+def test_a_window_starts_no_earlier_than_the_first_scored_day():
+    rows = [(DAY, "s1", m, 1, 1.0) for m in ("a", "b")]
+    table = agg.aggregate(score_rows(rows), STATIONS, windows=("90d",))
+    assert set(table["from"]) == {DAY}
+
+
 def test_common_days_are_per_lead_day():
     scores = score_rows(
         [
