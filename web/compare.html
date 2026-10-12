@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>meteoverdict: model comparison</title>
-    <meta name="description" content="Which weather model forecasts Czechia best, nationally and by elevation." />
+    <meta name="description" content="Which weather model forecasts best in Czechia, each kraj and each okres, with confidence intervals." />
   </head>
   <body class="page">
     <header>
@@ -13,19 +13,36 @@
       <a href="./" data-i18n="page.map">Map</a>
       <a href="tv.html" data-i18n="page.tv">Forecast</a>
       <form id="controls">
+        <label><span data-i18n="control.region">Region</span> <select id="region"></select></label>
         <label><span data-i18n="control.variable">Variable</span> <select id="variable"></select></label>
         <label><span data-i18n="control.lead">Lead time</span> <select id="lead"></select></label>
         <label><span data-i18n="control.window">Period</span> <select id="window"></select></label>
       </form>
       <button type="button" id="language">Česky</button>
     </header>
-    <main class="content">
-      <h2 data-i18n="compare.ranking">Ranking for Czechia</h2>
+    <main class="content wide">
+      <section class="overview">
+        <div>
+          <div id="mini-map" aria-label="Map: best model per okres"></div>
+          <p class="note" data-i18n="compare.mapNote"></p>
+          <div id="mini-legend" class="mini-legend"></div>
+        </div>
+        <div id="summary" aria-live="polite"></div>
+      </section>
+      <h2 id="ranking-title" data-i18n="compare.ranking">Ranking</h2>
       <p class="note" data-i18n="compare.rankingNote"></p>
-      <table id="ranking"></table>
-      <h2 data-i18n="compare.bias">Bias by elevation</h2>
-      <p class="note" data-i18n="compare.biasNote"></p>
-      <div id="bias"></div>
+      <div class="scroll"><table id="ranking"></table></div>
+      <h2 data-i18n="compare.intervals">How sure is the ranking?</h2>
+      <p class="note" data-i18n="compare.intervalsNote"></p>
+      <div id="intervals"></div>
+      <h2 data-i18n="compare.byLead">Error by lead time</h2>
+      <p class="note" data-i18n="compare.byLeadNote"></p>
+      <div id="by-lead"></div>
+      <section id="elevation-section">
+        <h2 data-i18n="compare.bias">Bias by elevation</h2>
+        <p class="note" data-i18n="compare.biasNote"></p>
+        <div id="bias"></div>
+      </section>
     </main>
     <footer>
       <span data-i18n="footer.observations">Observations</span>:

@@ -527,3 +527,61 @@ body.tv > * {
     padding: 0.25rem 0.45rem;
   }
 }
+
+/* model comparison (compare.html) */
+.content.wide {
+  max-width: 64rem;
+}
+.overview {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 1rem;
+  margin-top: 0.8rem;
+}
+#mini-map {
+  height: 340px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.mini-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.8rem;
+  font-size: 0.78rem;
+}
+.overview .note {
+  margin: 0.3rem 0;
+}
+#summary {
+  align-self: start;
+  padding: 0.6rem 0.9rem;
+  background: #ffffff;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(29, 35, 41, 0.12);
+  font-size: 0.9rem;
+}
+#summary h2 {
+  margin: 0 0 0.2rem;
+  font-size: 1.2rem;
+}
+#summary .best {
+  font-size: 1.1rem;
+  margin: 0.5rem 0;
+}
+#summary p {
+  margin: 0.3rem 0;
+}
+#ranking tr.winner {
+  font-weight: 600;
+}
+.scroll {
+  overflow-x: auto;
+}
+@media (max-width: 700px) {
+  .overview {
+    grid-template-columns: 1fr;
+  }
+  #mini-map {
+    height: 260px;
+  }
+}
