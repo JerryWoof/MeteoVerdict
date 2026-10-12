@@ -101,3 +101,19 @@ def test_climatological_day_includes_rain_gauges():
     assert rows["sum_err"].to_list() == pytest.approx([0.0, -18.0])
     assert [rows[c][0] for c in metrics.counts_columns(5.0)] == [1, 0, 0, 0]
     assert [rows[c][1] for c in metrics.counts_columns(5.0)] == [1, 0, 0, 0]
+
+
+def test_heat_days_are_counted_on_the_daily_maximum():
+    times = hours(24)
+    obs = pl.DataFrame(
+        [("s", t, "temperature_2m", 31.0 if t.hour == 13 else 20.0, 0, "recent") for t in times],
+        schema=OBS_SCHEMA,
+        orient="row",
+    )
+    table = scoring.daily_scores(
+        obs, forecasts(times, temperature=29.0), MODELS, date(2026, 9, 1), date(2026, 9, 1)
+    )
+    row = table.filter(pl.col("variable") == "temperature_max").row(0, named=True)
+    assert (row["n"], row["period_h"], row["sum_err"]) == (1, 24, pytest.approx(-2.0))
+    # 31 °C observed, 29 °C forecast: a missed tropical day
+    assert [row[c] for c in metrics.counts_columns(30.0)] == [0, 0, 1, 0]
