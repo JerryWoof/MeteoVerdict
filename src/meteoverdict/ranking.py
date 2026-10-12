@@ -12,9 +12,9 @@ The mean of all models (``blend``, roadmap 5.3) is not ranked (``rank`` null): i
 difference and interval are relative to the best single model, so a ``diff_ci_high``
 below 0 means the blend beats every model in that group.
 
-Ranked variables: ``temperature_2m``, ``wind_speed_10m``, ``precipitation_daily`` and
-``precipitation_24h`` (hourly precipitation is left out because its periods differ
-between models).
+Ranked variables: ``temperature_2m``, ``wind_speed_10m``, ``precipitation_daily``,
+``precipitation_24h`` and ``temperature_max`` (hourly precipitation is left out
+because its periods differ between models).
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ RANKED_VARIABLES = (
     "wind_speed_10m",
     "precipitation_daily",
     "precipitation_24h",
+    "temperature_max",
 )
 RESAMPLES = 1000
 CONFIDENCE = 0.95

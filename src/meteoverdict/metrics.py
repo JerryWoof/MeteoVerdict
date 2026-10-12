@@ -6,7 +6,8 @@ station group or region before the final metric is computed:
 * continuous (temperature, wind, precipitation amounts): ``n``, ``sum_err``,
   ``sum_abs_err``, ``sum_sq_err`` with error = forecast - observed →
   MAE = sum_abs_err / n, bias = sum_err / n, RMSE = sqrt(sum_sq_err / n);
-* categorical (precipitation events "at least T mm"): hits ``a``, false alarms ``b``,
+* categorical (events "at least T": daily precipitation in mm, daily maximum
+  temperature in °C): hits ``a``, false alarms ``b``,
   misses ``c`` and correct negatives ``d`` →
   POD = a / (a + c), FAR = b / (a + b),
   ETS = (a - a_r) / (a + b + c - a_r) with a_r = (a + b)(a + c) / (a + b + c + d).
@@ -21,6 +22,11 @@ import polars as pl
 #: Daily precipitation event thresholds in mm: 0.1 and 5 (ROADMAP "Scope v1") and 20 for
 #: heavy precipitation (the ETCCDI climate index R20mm, roadmap 5.2).
 PRECIPITATION_THRESHOLDS = (0.1, 5.0, 20.0)
+#: Daily maximum temperature event thresholds in °C: a "tropický den" (tropical day,
+#: ČHMÚ's term for a day reaching 30 °C), roadmap 5.2b.
+HEAT_THRESHOLDS = (30.0,)
+#: All event thresholds; their count columns share one namespace (``a_30`` etc.).
+THRESHOLDS = PRECIPITATION_THRESHOLDS + HEAT_THRESHOLDS
 
 SUMS = ("n", "sum_err", "sum_abs_err", "sum_sq_err")
 

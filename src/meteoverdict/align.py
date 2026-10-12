@@ -170,3 +170,46 @@ def precipitation_24h(
         pl.col("observed").cast(pl.Float32),
         pl.col("quality").cast(pl.UInt8),
     )
+
+
+def daily_maximum(
+    observations: pl.LazyFrame | pl.DataFrame,
+    forecasts: pl.LazyFrame | pl.DataFrame,
+    models: list[Model],
+    exclude_estimated: bool = False,
+) -> pl.LazyFrame:
+    """Highest hourly temperature of each UTC day (00:00 … 23:00), forecast and observed.
+
+    Only for models with hourly output at that lead day: the maximum of interpolated
+    hours would hide the peak. Both sides use the values at the full hour, so the
+    observed maximum is the highest hourly reading, not ČHMÚ's ``TMA``.
+    """
+    obs = observations.lazy().filter(pl.col("variable") == "temperature_2m")
+    if exclude_estimated:
+        obs = obs.filter(pl.col("quality") != 3)
+    day = pl.col("time").dt.date().alias("date")
+    observed = (
+        obs.group_by("station_id", day)
+        .agg(pl.col("value").max().alias("observed"), pl.col("quality").max(), pl.len())
+        .filter(pl.col("len") == 24)
+        .drop("len")
+    )
+    hourly = _steps(models).filter(pl.col("step") == 1).select("model", "lead_day")
+    forecast = (
+        forecasts.lazy()
+        .filter(pl.col("temperature_2m").is_not_null())
+        .join(hourly, on=["model", "lead_day"], how="inner")
+        .group_by("station_id", day, "model", "lead_day")
+        .agg(pl.col("temperature_2m").max().alias("forecast"), pl.len())
+        .filter(pl.col("len") == 24)
+        .drop("len")
+    )
+    return forecast.join(observed, on=["station_id", "date"], how="inner").select(
+        "station_id",
+        "date",
+        "model",
+        pl.col("lead_day").cast(pl.Int8),
+        pl.col("forecast").cast(pl.Float32),
+        pl.col("observed").cast(pl.Float32),
+        pl.col("quality").cast(pl.UInt8),
+    )
