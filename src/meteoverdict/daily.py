@@ -8,7 +8,7 @@ run needs no Open-Meteo calls:
 2. Re-score the last ``RESCORE_DAYS`` days, so newly captured observations, forecast
    windows finished by the backfill, and checked observations replacing unchecked
    ones all reach the scores.
-3. Aggregate and rank all scores, write the web map JSON and the README leaderboard
+3. Aggregate and rank all scores, write the web map JSON and the "last updated" badge
    (done by ``mvd daily`` with the functions of those steps).
 """
 
