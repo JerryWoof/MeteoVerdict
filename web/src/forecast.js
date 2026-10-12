@@ -82,13 +82,26 @@ export function bestModel(table, variable, lead) {
   return weightsAt(table, variable, lead).find((r) => r.rank === 1)?.model ?? null;
 }
 
+// a model that ends before the others fades out over its last hours instead of
+// dropping out at once (as MeteoSwiss does; docs/forecast-research.md)
+export const TAPER_HOURS = 3;
+
+/** Weight factor per hour for a series that may end early: 1, then ¾, ½, ¼ at its end. */
+export function taper(values) {
+  let last = values.length - 1;
+  while (last >= 0 && values[last] == null) last -= 1;
+  if (last === values.length - 1) return values.map(() => 1);
+  return values.map((_, i) => Math.min(1, (last - i + 1) / (TAPER_HOURS + 1)));
+}
+
 /**
  * The combined forecast per hour: Σ weight · (forecast − correction) over the models
- * that have a value for that hour, the weights rescaled to sum to 1; null when fewer
- * than `minModels` models have a value.
+ * that have a value for that hour (tapered at their end), the weights rescaled to sum
+ * to 1; null when fewer than `minModels` models have a value.
  */
 export function combine(forecast, table, variable, now, minModels = 2) {
   const series = forecast.values[variable] ?? {};
+  const fades = Object.fromEntries(Object.entries(series).map(([m, v]) => [m, taper(v)]));
   return forecast.times.map((time, i) => {
     let sum = 0;
     let total = 0;
@@ -96,8 +109,9 @@ export function combine(forecast, table, variable, now, minModels = 2) {
     for (const r of weightsAt(table, variable, leadDay(time, now))) {
       const value = series[r.model]?.[i];
       if (value == null) continue;
-      sum += r.weight * (value - r.correction);
-      total += r.weight;
+      const weight = r.weight * fades[r.model][i];
+      sum += weight * (value - r.correction);
+      total += weight;
       count += 1;
     }
     if (count < minModels || total <= 0) return null;
