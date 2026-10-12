@@ -23,6 +23,7 @@ htmlcov/
 # workflow; okres and station levels are published in the release data-latest
 site/data/*/okres/
 site/data/*/station/
+site/data/series/
 
 # Web app (phase 4)
 node_modules/
