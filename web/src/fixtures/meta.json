@@ -1,0 +1,73 @@
+{
+ "generated": "2026-10-12T08:12:03+00:00",
+ "as_of": "2026-09-30",
+ "windows": {
+  "90d": {
+   "from": "2026-09-07",
+   "to": "2026-09-30"
+  },
+  "all": {
+   "from": "2026-09-07",
+   "to": "2026-09-30"
+  },
+  "season": {
+   "from": "2026-09-07",
+   "to": "2026-09-30"
+  },
+  "son": {
+   "from": "2026-09-07",
+   "to": "2026-09-30"
+  }
+ },
+ "levels": [
+  "station",
+  "okres",
+  "kraj",
+  "elevation",
+  "cz"
+ ],
+ "variables": [
+  "precipitation",
+  "precipitation_24h",
+  "precipitation_daily",
+  "temperature_2m",
+  "temperature_2m_00utc",
+  "temperature_2m_06utc",
+  "temperature_2m_12utc",
+  "temperature_2m_18utc",
+  "temperature_2m_hourly",
+  "temperature_max",
+  "wind_speed_10m",
+  "wind_speed_10m_hourly"
+ ],
+ "models": {
+  "chmi_aladin_cz_1km": "ČHMÚ ALADIN CZ 1 km",
+  "chmi_aladin_central_europe_2km": "ČHMÚ ALADIN Central Europe 2.3 km",
+  "dwd_icon_d2": "DWD ICON-D2",
+  "dwd_icon_eu": "DWD ICON-EU",
+  "ecmwf_ifs": "ECMWF IFS HRES 9 km",
+  "ecmwf_ifs025": "ECMWF IFS 0.25°",
+  "ecmwf_aifs025_single": "ECMWF AIFS 0.25°",
+  "ncep_gfs_global": "NOAA GFS 0.11°/0.25°",
+  "ukmo_global_deterministic_10km": "UK Met Office Global 10 km",
+  "meteofrance_arpege_europe": "Météo-France ARPEGE Europe",
+  "geosphere_arome_austria": "GeoSphere Austria AROME 2.5 km",
+  "knmi_harmonie_arome_europe": "KNMI HARMONIE-AROME Europe",
+  "dmi_harmonie_arome_europe": "DMI HARMONIE-AROME DINI",
+  "blend": "Mean of all models"
+ },
+ "min_stations": 3,
+ "borrow_max_km": 30.0,
+ "precipitation_thresholds_mm": [
+  0.1,
+  5.0,
+  20.0
+ ],
+ "heat_thresholds_c": [
+  30.0
+ ],
+ "fair_comparison": "per window, variable and lead day only station-days all models cover",
+ "ranking": "by MAE; tied_with_best when the 95 % bootstrap interval (days resampled) of the MAE difference to the best model contains 0; clear_winner when nobody is tied; the blend (mean of all models) is not ranked, its difference and interval are relative to the best single model",
+ "licence": "CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/",
+ "attribution": "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com (CC BY 4.0) from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, KNMI, DMI, ČHMÚ and the UK Met Office (CC BY-SA 4.0). Boundaries: ČÚZK (CC BY 4.0)."
+}
