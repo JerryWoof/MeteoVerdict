@@ -11,7 +11,7 @@ on:
     inputs:
       max_calls:
         description: "Open-Meteo calls this run may use"
-        default: "8500"
+        default: "6800"
 
 permissions:
   contents: write # release assets
@@ -21,11 +21,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # 8,500 a day plus the outlook's ~680 (outlook.yml) stays under the free tier's 10,000
-  # a day and 300,000 a month (8,500 x 31 + 680 x 31 = 285,000); Open-Meteo
-  # counts per IP, and runners share IPs, so a run may still meet the daily limit: it
-  # then stops cleanly and the next run continues
-  MAX_CALLS: ${{ inputs.max_calls || '8500' }}
+  # 6,800 a day plus the outlook's ~850 (outlook.yml) and the single runs' 1,800
+  # (runs.yml) stays under the free tier's 10,000 a day and 300,000 a month
+  # (9,450 x 31 = ~293,000); Open-Meteo counts per IP, and runners share IPs, so a run
+  # may still meet the daily limit: it then stops cleanly and the next run continues.
+  # Once the history is complete (it then needs ~600 a day), give the rest to runs.yml.
+  MAX_CALLS: ${{ inputs.max_calls || '6800' }}
 
 jobs:
   backfill:
