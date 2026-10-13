@@ -12,7 +12,7 @@ import { HOURS, explainRegion, reasons } from "./explain.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
-import { WINDOWS, availableLeadDays, availableVariables, parseHash } from "./view.js";
+import { WINDOWS, availableLeadDays, availableVariables, parseHash, windowLabel } from "./view.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -427,7 +427,9 @@ map.on("load", async () => {
   }
 
   fillSelect("variable", availableVariables(meta).map((v) => [v, t(`variable.${v}`)]), view.variable);
-  fillSelect("window", WINDOWS.map((w) => [w, t(`window.${w}`)]), view.window);
+  // each period with its real dates and days, so a short history explains itself
+  const language = document.documentElement.lang;
+  fillSelect("window", WINDOWS.map((w) => [w, windowLabel(w, meta?.windows, t, language)]), view.window);
   for (const [id, key, parse] of [
     ["variable", "variable", String],
     ["lead", "leadDay", Number],

@@ -12,7 +12,7 @@ import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./d
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
-import { WINDOWS, availableLeadDays, availableVariables, parseHash } from "./view.js";
+import { WINDOWS, availableLeadDays, availableVariables, parseHash, windowLabel } from "./view.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -335,7 +335,9 @@ async function main() {
   if (!known.has(view.region)) view.region = "cz";
   fillRegions(regionList(kraje), regionList(okresy), view.region);
   fillSelect("variable", availableVariables(meta).map((v) => [v, t(`variable.${v}`)]), view.variable);
-  fillSelect("window", WINDOWS.map((w) => [w, t(`window.${w}`)]), view.window);
+  // each period with its real dates and days, so a short history explains itself
+  const language = document.documentElement.lang;
+  fillSelect("window", WINDOWS.map((w) => [w, windowLabel(w, meta?.windows, t, language)]), view.window);
   for (const [id, key, parse] of [
     ["region", "region", String],
     ["variable", "variable", String],
