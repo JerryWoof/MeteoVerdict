@@ -3,9 +3,10 @@ name: Daily
 # Every morning: capture yesterday's ČHMÚ observations (now/ keeps them ~3 days),
 # re-score the last 100 days, aggregate and rank, check data quality (failing loudly),
 # then commit the "last updated" badge and meta.json, and publish the
-# full data to the release data-latest. Last, ALADIN's error by lead hour (leads.json),
-# allowed to fail without failing the run.
-# No Open-Meteo calls: forecasts come from the backfill workflow.
+# full data to the release data-latest. Last, the error by lead hour of every model
+# (leads.json, from the single runs of runs.yml) and of ALADIN from our own archive
+# (leads-aladin.json), allowed to fail without failing the run.
+# No Open-Meteo calls: forecasts come from the backfill and single-runs workflows.
 on:
   schedule:
     - cron: "17 5 * * *"
@@ -50,7 +51,7 @@ jobs:
           fi
           git commit -m "data: daily update $(date -u +%F)"
           git push
-      - name: ALADIN error by lead hour
+      - name: Error by lead hour (all models and ALADIN)
         # optional: a failure here must not fail the daily update
         continue-on-error: true
         timeout-minutes: 30

@@ -1,0 +1,58 @@
+name: Single runs
+
+# Every model run by run (roadmap: error by hours ahead). Four times a day, about 10 h
+# after each 00, 06, 12 and 18 UTC run (by then every model has reached Open-Meteo), fetch
+# the newest runs from the Open-Meteo Single Runs API at the ~100 stations of
+# src/meteoverdict/data/run-stations.csv (`mvd fetch-runs`: all 11 models, H+1…H+120,
+# about 330 weighted calls a run), then, with what is left of the budget, older runs
+# newest first back to 2026-04-02. Month files and progress live in the releases
+# runs-YYYY-MM and runs-state, so a stopped run continues next time. The daily workflow
+# scores them (`mvd leads`). See docs/data-sources.md#single-runs-mvd-fetch-runs.
+#
+# Open-Meteo budget (free tier, non-commercial: 10,000 weighted calls a day and 300,000 a
+# month, shared by all workflows):
+#   backfill 6,800 + outlook ~850 + single runs 1,800 = ~9,450 a day, ~293,000 in 31 days.
+# Single runs: 350 at 04:20, 16:20 and 22:20 (the newest run), 750 at 10:20 (the newest
+# run plus about one older run).
+on:
+  schedule:
+    - cron: "20 4,16,22 * * *"
+    - cron: "20 10 * * *"
+  workflow_dispatch:
+    inputs:
+      max_calls:
+        description: "Open-Meteo calls this run may use"
+        default: "350"
+      mode:
+        description: "recent, history or all"
+        default: "all"
+
+permissions:
+  contents: write # release assets
+
+concurrency:
+  # only this workflow writes runs-YYYY-MM and runs-state (the daily workflow reads
+  # them), so it does not share the data-pipeline group of backfill and daily
+  group: single-runs
+  cancel-in-progress: false
+
+env:
+  MAX_CALLS: ${{ inputs.max_calls || (github.event.schedule == '20 10 * * *' && '750' || '350') }}
+  MODE: ${{ inputs.mode || 'all' }}
+
+jobs:
+  runs:
+    name: Fetch single runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install project
+        run: uv sync --frozen
+      - name: Fetch runs
+        run: uv run --frozen mvd fetch-runs --github-release --mode "$MODE" --max-calls "$MAX_CALLS"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -110,7 +110,9 @@ export function fmt(value, signed = false) {
   return signed && value > 0 ? `+${text}` : text;
 }
 
-// --- run-based ALADIN errors by lead hour (leads.json, written by `mvd leads`) -------
+// --- run-based errors by lead hour (leads.json, written by `mvd leads`) -------------
+// Every model from Open-Meteo's single runs; older files hold ALADIN from our archive
+// only (with a region column). Both have the same columns and rows.
 
 /** The leads.json variable for a page variable: hourly precipitation for the daily sums. */
 export function leadHourVariable(variable) {
@@ -125,13 +127,52 @@ export function leadHourLines(doc, variable, runHour = "all") {
   const columns = doc.columns;
   return doc.rows
     .map((row) => Object.fromEntries(columns.map((c, i) => [c, row[i]])))
-    .filter((r) => r.region === "cz" && r.run_hour === runHour && r.variable === variable && r.mae != null)
+    .filter((r) => (r.region ?? "cz") === "cz" && r.run_hour === runHour && r.variable === variable && r.mae != null)
     .map((r) => ({ model: r.model, lead_h: r.lead_h, mae: r.mae, bias: r.bias, n: r.n, runs: r.runs }))
     .sort((a, b) => a.model.localeCompare(b.model) || a.lead_h - b.lead_h);
 }
 
-/** How much history the chart rests on: runs per model (the most), first and last run
- * (YYYY-MM-DD HH UTC) and days from the first to the last run. */
+/** Run hours with rows in the file: "all" first, then "00", "06", "12", "18". */
+export function leadHourRunHours(doc) {
+  if (!doc?.rows) return [];
+  const at = doc.columns.indexOf("run_hour");
+  const found = new Set(doc.rows.map((row) => row[at]));
+  return ["all", "00", "06", "12", "18"].filter((h) => found.has(h));
+}
+
+/**
+ * The best models over the lead hours: at every lead hour each model gets its rank among
+ * the models compared there, scaled 0 (best) to 1 (worst); models are ordered by their
+ * mean scaled rank. Fair to short models, which only meet the others at early hours.
+ */
+export function leadHourRanking(lines) {
+  const byLead = new Map();
+  for (const r of lines) {
+    if (!byLead.has(r.lead_h)) byLead.set(r.lead_h, []);
+    byLead.get(r.lead_h).push(r);
+  }
+  const scores = new Map();
+  for (const group of byLead.values()) {
+    if (group.length < 2) continue;
+    const sorted = [...group].sort((a, b) => a.mae - b.mae);
+    sorted.forEach((r, i) => {
+      const s = scores.get(r.model) ?? [];
+      s.push(i / (sorted.length - 1));
+      scores.set(r.model, s);
+    });
+  }
+  return [...scores.entries()]
+    .map(([model, s]) => ({ model, score: s.reduce((a, b) => a + b, 0) / s.length, leads: s.length }))
+    .sort((a, b) => a.score - b.score || a.model.localeCompare(b.model));
+}
+
+/** True for ČHMÚ's ALADIN (both domains), marked on the chart. */
+export function isAladin(model) {
+  return model.startsWith("chmi_aladin");
+}
+
+/** How much history the chart rests on: runs per model (the most), models, stations,
+ * first and last run (YYYY-MM-DD HH UTC) and days from the first to the last run. */
 export function leadHourBasis(doc) {
   const models = Object.values(doc?.models ?? {});
   if (!models.length || !doc.first_run) return null;
@@ -140,14 +181,17 @@ export function leadHourBasis(doc) {
   const stamp = (d) => `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 13)} UTC`;
   return {
     runs: Math.max(...models.map((m) => m.runs ?? 0)),
+    models: models.length,
+    stations: doc.stations ?? null,
     first: stamp(first),
     last: stamp(last),
     days: Math.round((last - first) / 864e5 * 10) / 10,
   };
 }
 
-/** Hours after a run's start before ČHMÚ has published it: the largest measured median
- * delay, or `fallback` (about 4 h, docs/data-sources.md) before delays were recorded. */
+/** Hours after a run's start before ČHMÚ has published ALADIN: the largest measured
+ * median delay, or `fallback` (about 4 h, docs/data-sources.md) before delays were
+ * recorded. Known for ALADIN only. */
 export function unpublishedHours(doc, fallback = 4) {
   const delays = Object.values(doc?.models ?? {})
     .map((m) => m.publication_delay_h)

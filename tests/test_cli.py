@@ -27,6 +27,7 @@ COMMANDS = [
     "models",
     "archive-aladin",
     "leads",
+    "fetch-runs",
     "fetch-obs",
     "fetch-fc",
     "score",
@@ -477,13 +478,89 @@ def test_leads_writes_the_json(tmp_path):
     ]  # fmt: skip
     result = runner.invoke(app, args)
     assert result.exit_code == 0, result.output
-    doc = json.loads(out.read_text())
+    assert not out.exists()  # no single runs: only our ALADIN archive
+    doc = json.loads((tmp_path / "site" / "leads-aladin.json").read_text())
     rows = [dict(zip(doc["columns"], r, strict=True)) for r in doc["rows"]]
     h1 = [r for r in rows if r["lead_h"] == 1 and r["run_hour"] == "all"]
     assert {r["model"]: r["mae"] for r in h1} == {
         "chmi_aladin_cz_1km": 1.0,
         "chmi_aladin_central_europe_2km": 2.0,
     }
-    kraj = json.loads((tmp_path / "site" / "leads-kraj.json").read_text())
+    kraj = json.loads((tmp_path / "site" / "leads-aladin-kraj.json").read_text())
     assert kraj["regions"] == {"CZ010": "Praha"}
     assert "H+1 1.00 (1 runs, 1 pairs)" in plain(result.output)
+
+
+def test_leads_scores_every_model_from_the_single_runs(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    run = now.replace(hour=now.hour // 6 * 6) - timedelta(hours=12)
+    steps = [1, 2, 3]
+    rows = pl.concat(
+        pl.DataFrame(
+            {
+                "run": [run] * 3,
+                "model": model,
+                "station_id": "a",
+                "lead_h": pl.Series(steps, dtype=pl.Int16),
+                "valid_time": [run + timedelta(hours=h) for h in steps],
+                "temperature_2m": pl.Series([10.0 + offset] * 3, dtype=pl.Float32),
+                "precipitation": pl.Series([0.0] * 3, dtype=pl.Float32),
+                "wind_speed_10m": pl.Series([2.0] * 3, dtype=pl.Float32),
+            }
+        )
+        for model, offset in (("dwd_icon_eu", 1.0), ("ncep_gfs_global", 2.0))
+    )
+    (tmp_path / "runs").mkdir()
+    rows.write_parquet(tmp_path / "runs" / f"{run:%Y-%m}.parquet")
+    (tmp_path / "obs").mkdir()
+    pl.DataFrame(
+        {
+            "station_id": "a",
+            "time": [run + timedelta(hours=h) for h in steps],
+            "variable": "temperature_2m",
+            "value": [10.0] * 3,
+        }
+    ).write_parquet(tmp_path / "obs" / f"{run:%Y-%m}.parquet")
+    out = tmp_path / "site" / "leads.json"
+    args = [
+        "leads",
+        "--archive-dir",
+        str(tmp_path / "none"),
+        "--data-dir",
+        str(tmp_path),
+        "--out",
+        str(out),
+    ]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    doc = json.loads(out.read_text())
+    rows = [dict(zip(doc["columns"], r, strict=True)) for r in doc["rows"]]
+    h1 = {r["model"]: r["mae"] for r in rows if r["lead_h"] == 1 and r["run_hour"] == "all"}
+    assert h1 == {"dwd_icon_eu": 1.0, "ncep_gfs_global": 2.0}
+    assert doc["models"]["dwd_icon_eu"]["name"] == "DWD ICON-EU"
+    assert not (tmp_path / "site" / "leads-aladin.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("args", "hint"),
+    [(["--run", "2026-10-12T05"], "--run"), (["--mode", "sometimes"], "--mode")],
+)
+def test_fetch_runs_rejects_bad_options(args, hint):
+    result = runner.invoke(app, ["fetch-runs", *args])
+    assert result.exit_code == 2
+    assert hint in plain(result.output)
+
+
+def test_fetch_runs_dry_run_prints_the_cost(tmp_path):
+    args = ["fetch-runs", "--dry-run", "--data-dir", str(tmp_path), "--run", "2026-10-12T06"]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    assert "1 runs to fetch at 100 stations, about 330 Open-Meteo calls" in plain(result.output)
+
+
+def test_fetch_runs_github_needs_credentials(monkeypatch, tmp_path):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    result = runner.invoke(app, ["fetch-runs", "--github-release", "--data-dir", str(tmp_path)])
+    assert result.exit_code == 2
