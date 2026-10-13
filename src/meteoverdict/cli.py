@@ -21,6 +21,7 @@ from meteoverdict import (
     combine,
     forecasts,
     gauges,
+    leads,
     observations,
     outlook,
     partitions,
@@ -166,6 +167,70 @@ def archive_aladin(
     )
     if result.failed:
         raise typer.Exit(code=1)
+
+
+@app.command("leads")
+def leads_cmd(
+    days: Annotated[int, typer.Option(help="Score the runs of the last N days.")] = 30,
+    archive_dir: Annotated[
+        Path, typer.Option(help="Archived runs in <dir>/aladin-YYYY-MM/ (from the releases).")
+    ] = Path("data/aladin"),
+    data_dir: Annotated[Path, typer.Option(help="Folder with obs/.")] = Path("data"),
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table, for the kraj level (optional).")
+    ] = Path("data/stations.parquet"),
+    out: Annotated[
+        Path, typer.Option(help="The JSON file to write; leads-kraj.json goes beside it.")
+    ] = Path("site/data/leads.json"),
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Download the archived runs (aladin-YYYY-MM) and observations "
+            "(data-YYYY-MM) from GitHub Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+        ),
+    ] = False,
+    publish: Annotated[
+        bool,
+        typer.Option("--publish", help="Put the JSON files into the release data-latest."),
+    ] = False,
+) -> None:
+    """ALADIN error by lead hour (H+1 … H+72), run by run against the observations."""
+    if publish and not github_release:
+        raise typer.BadParameter("--publish needs --github-release")
+    now = datetime.now(UTC)
+    since = (now - timedelta(days=days)).replace(minute=0, second=0, microsecond=0)
+    months = partitions.months(since.date(), now.date())
+    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+        releases = _release_store(client) if github_release else None
+        if releases:
+            leads.download_archive(releases, archive_dir, months, since, typer.echo)
+            store.download(releases, data_dir, months, typer.echo, kinds=("obs",))
+        files = leads.archive_files(archive_dir, since)
+        obs = partitions.scan_months(data_dir / "obs", since.date(), now.date())
+        if not files or obs is None:
+            missing = "archived runs" if not files else "observations"
+            typer.echo(f"mvd leads: no {missing} since {since:%Y-%m-%d %H} UTC", err=True)
+            raise typer.Exit(code=1)
+        archive = leads.read_archive(files)
+        pairs = leads.pairs(leads.forecast_hours(archive), obs)
+        station_table = pl.read_parquet(stations_path) if stations_path.exists() else None
+        table = leads.lead_scores(pairs, station_table)
+        delays = leads.publication_delays(archive)
+        generated, names = datetime.now(UTC), _model_names()
+        written = []
+        for path, part in (
+            (out, table.filter(pl.col("region") == "cz")),
+            (out.with_name("leads-kraj.json"), table.filter(pl.col("region") != "cz")),
+        ):
+            doc = leads.document(part, pairs, generated, delays, names)
+            written.append(leads.write(doc, path))
+        if publish:
+            for path in written:
+                releases.put(store.LATEST_TAG, path.name, path)
+    for line in leads.summary(table):
+        typer.echo(line)
+    typer.echo(f"{len(files)} run files, {pairs.height:,} pairs → {', '.join(map(str, written))}")
 
 
 store_app = typer.Typer(help="Raw data store in GitHub Releases (data-YYYY-MM).")
