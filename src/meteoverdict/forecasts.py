@@ -57,6 +57,13 @@ class QuotaError(RuntimeError):
     partial: pl.DataFrame = pl.DataFrame(schema=SCHEMA)
 
 
+class UnavailableError(QuotaError):
+    """Open-Meteo kept failing (server or network errors, unreadable answers) after retries.
+
+    Handled like the daily limit: what was fetched is saved and the next run continues.
+    """
+
+
 def call_weight(locations: int, variables: int, days: int) -> float:
     """Open-Meteo's weighted call count for one request (formula from its pricing page)."""
     variables_weight = variables / 10
@@ -141,20 +148,46 @@ def parse(
 
 
 def request(client: httpx.Client, params: dict, sleep: Callable[[float], None]) -> list | dict:
+    """One Previous Runs API request; transient failures are retried after a pause.
+
+    Retried: the per-minute/hour 429, server errors, network errors and an answer that is
+    not JSON (seen once as an empty 200 in the middle of a backfill). If they persist,
+    ``UnavailableError`` (a ``QuotaError``) stops the run cleanly so the next one resumes.
+    """
+    problem = ""
     for wait in (30, 60, 120, None):
-        response = client.get(URL, params=params)
-        if response.status_code == 429 and "daily" in response.text.lower():
-            raise QuotaError(f"Open-Meteo: {response.json().get('reason', response.text)}")
-        if response.status_code != 429 or wait is None:
+        try:
+            response = client.get(URL, params=params)
+        except httpx.TransportError as exc:
+            problem = f"{type(exc).__name__}: {exc}"
+        else:
+            if response.status_code == 429 and "daily" in response.text.lower():
+                raise QuotaError(f"Open-Meteo: {_reason(response)}")
+            if response.status_code == 400:
+                reason = _reason(response)
+                if "No data is available" in reason:
+                    raise NoDataError(reason)
+                raise ValueError(f"Open-Meteo: {reason}")
+            if response.status_code == 429 or response.status_code >= 500:
+                problem = f"HTTP {response.status_code} {_reason(response)}".strip()
+            else:
+                response.raise_for_status()
+                try:
+                    return response.json()
+                except ValueError:
+                    problem = f"HTTP {response.status_code} with a non-JSON answer: "
+                    problem += repr(response.text[:80])
+        if wait is None:
             break
         sleep(wait)
-    if response.status_code == 400:
-        reason = response.json().get("reason", response.text)
-        if "No data is available" in reason:
-            raise NoDataError(reason)
-        raise ValueError(f"Open-Meteo: {reason}")
-    response.raise_for_status()
-    return response.json()
+    raise UnavailableError(f"Open-Meteo unavailable after 4 attempts ({problem})")
+
+
+def _reason(response: httpx.Response) -> str:
+    try:
+        return str(response.json().get("reason", response.text))
+    except (ValueError, AttributeError):
+        return response.text[:200]
 
 
 def fetch_forecasts(
