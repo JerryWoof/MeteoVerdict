@@ -27,7 +27,13 @@ def hourly(start: date, end: date) -> list[datetime]:
 class Fake:
     """Stands in for ČHMÚ and Open-Meteo; records what was asked."""
 
-    def __init__(self, quota_after: int | None = None, now_month: str | None = None):
+    def __init__(
+        self,
+        quota_after: int | None = None,
+        now_month: str | None = None,
+        error: type[forecasts.QuotaError] = forecasts.QuotaError,
+    ):
+        self.error = error
         self.obs_calls: list[tuple[date, date]] = []
         self.fc_calls: list[tuple[str, date, date]] = []
         self.gauge_fc_calls: list[tuple[str, date, date]] = []
@@ -44,7 +50,7 @@ class Fake:
     def forecasts(self, client, points, models, start, end, budget, uncovered=None, **ask):
         (model,) = models
         if self.quota_after is not None and len(self.fc_calls) >= self.quota_after:
-            error = forecasts.QuotaError("Daily API request limit exceeded.")
+            error = self.error("Daily API request limit exceeded.")
             error.partial = pl.DataFrame(schema=forecasts.SCHEMA)
             raise error
         if ask:  # rain gauges: precipitation only, 28-day requests
@@ -116,6 +122,15 @@ def test_newest_windows_first_and_everything_scored(tmp_path, fake):
         (date(2026, 8, 1), date(2026, 8, 31)),
         (date(2026, 9, 1), date(2026, 9, 30)),
     ]
+
+
+def test_open_meteo_failing_after_retries_stops_cleanly(tmp_path, fake):
+    # an empty answer failed backfill run 38231929911 (12 Oct 2026) and lost the window
+    fake(quota_after=3, error=forecasts.UnavailableError)
+    result = run(tmp_path)
+    assert result.stopped and result.windows_done < len(WINDOWS)
+    state = backfill.State.load(tmp_path / "backfill-state.json")
+    assert len(state.fc_done) == 3  # finished model-windows are kept for the next run
 
 
 def test_stops_at_the_quota_and_resumes(tmp_path, fake):

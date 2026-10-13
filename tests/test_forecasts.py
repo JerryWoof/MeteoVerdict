@@ -250,3 +250,45 @@ def test_the_longest_model_still_costs_one_call_per_gauge_and_28_days():
     longest = max(MODELS.values(), key=lambda m: len(m.lead_days))
     names = fc.hourly_names(longest, ("precipitation",))
     assert fc.call_weight(100, len(names), fc.GAUGE_DAYS) == 100
+
+
+def test_an_empty_answer_is_retried():
+    # backfill run 38231929911 (12 Oct 2026) failed on an empty answer with JSONDecodeError
+    answers = iter(
+        [(200, ""), (502, "<html>Bad Gateway</html>"), (200, json.dumps(ALADIN_RESPONSE))]
+    )
+    client, seen = open_meteo(lambda p: next(answers))
+    budget = no_wait_budget()
+    rows = fc.fetch_forecasts(
+        client, STATIONS, [ALADIN], date(2026, 10, 9), date(2026, 10, 9), budget
+    )
+    assert len(seen) == 3 and rows.height == 96
+    assert budget.sleep.__self__.slept == [30, 60]
+
+
+def test_network_errors_are_retried():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if len(calls) == 1:
+            raise httpx.ReadTimeout("timed out", request=request)
+        return httpx.Response(200, text=json.dumps(ALADIN_RESPONSE))
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    rows = fc.fetch_forecasts(
+        client, STATIONS, [ALADIN], date(2026, 10, 9), date(2026, 10, 9), no_wait_budget()
+    )
+    assert len(calls) == 2 and rows.height == 96
+
+
+def test_persistent_failures_stop_like_the_daily_limit_with_partial_results():
+    answers = iter([(200, json.dumps(ALADIN_RESPONSE)), *[(200, "")] * 4])
+    client, seen = open_meteo(lambda p: next(answers))
+    ifs = MODELS["ecmwf_ifs"]
+    with pytest.raises(fc.UnavailableError, match="non-JSON") as info:
+        fc.fetch_forecasts(
+            client, STATIONS, [ALADIN, ifs], date(2026, 10, 9), date(2026, 10, 9), no_wait_budget()
+        )
+    assert isinstance(info.value, fc.QuotaError)
+    assert len(seen) == 5 and info.value.partial.height == 2 * 2 * 24
