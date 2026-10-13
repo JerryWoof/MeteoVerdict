@@ -204,3 +204,140 @@ def test_download_archive_only_new_runs_since(tmp_path):
     )
     assert store.downloaded == ["chmi_aladin_cz_1km_2026101006.parquet"]
     assert leads.download_archive(store, tmp_path, ["2026-10"], RUN, log=lambda _: None) == 0
+
+
+# --- every model, from the single runs --------------------------------------------------
+
+
+def model(id_, step=1, coarser_after=None, coarser_step=None):
+    from datetime import date
+
+    from meteoverdict.models import Model
+
+    return Model(
+        id=id_, name=id_.upper(), provider="P", grid="1 km", step_hours=step,
+        forecast_days=5, max_lead_day=1, archive_from=date(2026, 1, 1),
+        coarser_after_h=coarser_after, coarser_step_h=coarser_step,
+    )  # fmt: skip
+
+
+def single(model_id, run=RUN, station=A, last=3, temp=10.0, rain=0.0, skip=()):
+    """Rows like ``runs.parse``: one per lead hour 1…last."""
+    hours = [h for h in range(1, last + 1) if h not in skip]
+    n = len(hours)
+    return pl.DataFrame(
+        {
+            "run": [run] * n,
+            "model": [model_id] * n,
+            "station_id": [station] * n,
+            "lead_h": pl.Series(hours, dtype=pl.Int16),
+            "valid_time": [run + timedelta(hours=h) for h in hours],
+            "temperature_2m": pl.Series([temp] * n, dtype=pl.Float32),
+            "precipitation": pl.Series([rain] * n, dtype=pl.Float32),
+            "wind_speed_10m": pl.Series([2.0] * n, dtype=pl.Float32),
+        }
+    )
+
+
+def test_horizons_per_run_hour():
+    rows = pl.concat(
+        [
+            single("x", last=5),
+            single("x", run=RUN + timedelta(hours=6), last=2),
+            single("x", run=RUN + timedelta(days=1), last=5),
+        ]
+    )
+    assert leads.horizons(rows).rows() == [("x", "06", 5), ("x", "12", 2)]
+
+
+def test_required_models_reach_the_lead_with_native_output():
+    table = pl.DataFrame(
+        {
+            "model": ["hourly", "hourly", "six", "six", "short"],
+            "run_hour": ["00", "06", "00", "06", "00"],
+            "horizon_h": [12, 6, 12, 12, 3],
+        },
+        schema_overrides={"horizon_h": pl.Int16},
+    )
+    models = [model("hourly"), model("six", step=6), model("short")]
+    req = leads.required(table, models)
+
+    def at(stratum, lead, variable="temperature_2m"):
+        found = req.filter(
+            pl.col("stratum") == stratum, pl.col("lead_h") == lead, pl.col("variable") == variable
+        )
+        return sorted(found["model"])
+
+    assert at("00", 1) == ["hourly", "short"]  # six: no own output at H+1
+    assert at("00", 6) == ["hourly", "six"]
+    assert at("00", 6, "precipitation") == ["hourly"]  # no hourly sums from 6-hourly output
+    assert at("06", 12) == ["six"]
+    # all run hours: a model must reach the lead in each; "short" has no 06 runs
+    assert at("all", 6) == ["hourly", "six"]
+    assert at("all", 12) == ["six"]
+    assert at("all", 2) == ["hourly"]
+    n = req.filter(pl.col("stratum") == "00", pl.col("lead_h") == 1).select("n_required")
+    assert set(n["n_required"]) == {2}
+
+
+def test_run_scores_on_the_fair_set():
+    observed = obs(A, RUN, [10.0] * 6).vstack(obs(B, RUN, [10.0] * 6))
+    rows = pl.concat(
+        [
+            single("long", last=4, temp=11.0),
+            single("long", station=B, last=4, temp=13.0),
+            single("short", last=2, temp=12.0),
+            single("short", station=B, last=2, temp=12.0, skip=(1,)),  # gap at B, H+1
+        ]
+    )
+    models = [model("long"), model("short")]
+    table, info = leads.run_lead_scores(rows, observed, models)
+    allruns = table.filter(pl.col("run_hour") == "all", pl.col("variable") == "temperature_2m")
+
+    def mae(m, lead):
+        found = allruns.filter(pl.col("model") == m, pl.col("lead_h") == lead)
+        return found.select("mae", "n").row(0) if found.height else None
+
+    # H+1: B is left out for both (short has no H+1 there), so long is scored at A only
+    assert mae("long", 1) == (pytest.approx(1.0), 1)
+    assert mae("short", 1) == (pytest.approx(2.0), 1)
+    # H+2: both stations, both models
+    assert mae("long", 2) == (pytest.approx(2.0), 2)
+    assert mae("short", 2) == (pytest.approx(2.0), 2)
+    # H+3: short has ended, long alone
+    assert mae("long", 3) == (pytest.approx(2.0), 2)
+    assert mae("short", 3) is None
+    assert set(table["run_hour"]) == {"all", "06"}
+    assert info["models"]["long"]["horizon_h"] == {"06": 4}
+    assert info["models"]["short"]["runs"] == 1
+    assert info["stations"] == 2
+    assert info["first_run"] == info["last_run"] == RUN
+
+    doc = leads.runs_document(
+        table, info, datetime(2026, 10, 13, tzinfo=UTC), {"short": 4.4}, {"long": "Long"}
+    )
+    assert doc["columns"] == leads.RUN_COLUMNS and "region" not in doc["columns"]
+    assert doc["models"]["long"]["name"] == "Long"
+    assert doc["models"]["short"]["publication_delay_h"] == 4.4
+    assert doc["first_run"] == "2026-10-10T06:00Z"
+    assert len(doc["rows"]) == table.height
+    assert "Open-Meteo" in doc["source"]
+
+
+def test_run_scores_chunks_add_up():
+    observed = obs(A, RUN, [10.0] * 30)
+    rows = pl.concat(
+        [single("m", run=RUN + timedelta(hours=6 * k), last=3, temp=10.0 + k) for k in range(4)]
+    )
+    whole, _ = leads.run_lead_scores(rows, observed, [model("m")], chunk_runs=10)
+    parts, _ = leads.run_lead_scores(rows, observed, [model("m")], chunk_runs=1)
+    assert whole.equals(parts)
+    first = whole.filter(
+        pl.col("run_hour") == "all", pl.col("lead_h") == 1, pl.col("variable") == "temperature_2m"
+    )
+    assert first.select("runs", "n", "mae").row(0) == (4, 4, pytest.approx(1.5))
+
+
+def test_run_scores_without_pairs():
+    table, info = leads.run_lead_scores(single("m"), obs(B, RUN, [1.0]), [model("m")])
+    assert table.height == 0 and info["models"] == {}

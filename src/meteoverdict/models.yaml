@@ -14,6 +14,9 @@
 #                  scripts/probe_archive.py (2026-10-11, Praha-Libuš)
 # variable_from    optional per-variable start when one variable starts later than the rest
 # note             known gaps (also measured with the probe script)
+# runs_from        optional: first day whose runs are in Open-Meteo's Single Runs archive
+#                  (`mvd fetch-runs`), when later than 2026-04-02 (models.RUNS_FROM);
+#                  measured live 2026-10-13
 # enabled          false = covers Czechia but is not part of the v1 comparison
 
 models:
@@ -25,6 +28,7 @@ models:
     forecast_days: 3
     max_lead_day: 2
     archive_from: 2026-06-24
+    runs_from: 2026-06-23
     enabled: true
 
   - id: chmi_aladin_central_europe_2km
@@ -35,6 +39,7 @@ models:
     forecast_days: 3
     max_lead_day: 2
     archive_from: 2026-06-24
+    runs_from: 2026-06-23
     enabled: true
 
   - id: dwd_icon_d2
