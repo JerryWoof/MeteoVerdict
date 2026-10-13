@@ -28,6 +28,7 @@ from meteoverdict import (
     quality,
     ranking,
     regions,
+    runs,
     scoring,
     stations,
     store,
@@ -171,23 +172,33 @@ def archive_aladin(
 
 @app.command("leads")
 def leads_cmd(
-    days: Annotated[int, typer.Option(help="Score the runs of the last N days.")] = 30,
+    days: Annotated[
+        int, typer.Option(help="Score the archived ALADIN runs of the last N days.")
+    ] = 30,
+    runs_days: Annotated[
+        int, typer.Option(help="Score the single runs of all models of the last N days.")
+    ] = 90,
     archive_dir: Annotated[
         Path, typer.Option(help="Archived runs in <dir>/aladin-YYYY-MM/ (from the releases).")
     ] = Path("data/aladin"),
-    data_dir: Annotated[Path, typer.Option(help="Folder with obs/.")] = Path("data"),
+    data_dir: Annotated[Path, typer.Option(help="Folder with obs/ and runs/.")] = Path("data"),
     stations_path: Annotated[
         Path, typer.Option("--stations", help="Station table, for the kraj level (optional).")
     ] = Path("data/stations.parquet"),
     out: Annotated[
-        Path, typer.Option(help="The JSON file to write; leads-kraj.json goes beside it.")
+        Path,
+        typer.Option(
+            help="The all-model JSON file; ALADIN from our archive goes beside it as "
+            "leads-aladin.json and leads-aladin-kraj.json."
+        ),
     ] = Path("site/data/leads.json"),
     github_release: Annotated[
         bool,
         typer.Option(
             "--github-release",
-            help="Download the archived runs (aladin-YYYY-MM) and observations "
-            "(data-YYYY-MM) from GitHub Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+            help="Download the single runs (runs-YYYY-MM), the archived ALADIN runs "
+            "(aladin-YYYY-MM) and observations (data-YYYY-MM) from GitHub Releases first "
+            "(GITHUB_TOKEN, GITHUB_REPOSITORY).",
         ),
     ] = False,
     publish: Annotated[
@@ -195,42 +206,153 @@ def leads_cmd(
         typer.Option("--publish", help="Put the JSON files into the release data-latest."),
     ] = False,
 ) -> None:
-    """ALADIN error by lead hour (H+1 … H+72), run by run against the observations."""
+    """Error by lead hour, run by run: every model from Open-Meteo's single runs
+    (H+1 … H+120) and ALADIN from our own archive (H+1 … H+72)."""
     if publish and not github_release:
         raise typer.BadParameter("--publish needs --github-release")
     now = datetime.now(UTC)
-    since = (now - timedelta(days=days)).replace(minute=0, second=0, microsecond=0)
-    months = partitions.months(since.date(), now.date())
+    hour = now.replace(minute=0, second=0, microsecond=0)
+    since, runs_since = hour - timedelta(days=days), hour - timedelta(days=runs_days)
+    first = min(since, runs_since)
+    months = partitions.months(first.date(), now.date())
+    generated, names = datetime.now(UTC), _model_names()
+    written, lines, delays = [], [], {}
     with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
         releases = _release_store(client) if github_release else None
         if releases:
             leads.download_archive(releases, archive_dir, months, since, typer.echo)
+            runs.RunsSync(releases, data_dir, typer.echo).pull(months)
             store.download(releases, data_dir, months, typer.echo, kinds=("obs",))
         files = leads.archive_files(archive_dir, since)
         obs = partitions.scan_months(data_dir / "obs", since.date(), now.date())
-        if not files or obs is None:
-            missing = "archived runs" if not files else "observations"
-            typer.echo(f"mvd leads: no {missing} since {since:%Y-%m-%d %H} UTC", err=True)
+        if files and obs is not None:
+            archive = leads.read_archive(files)
+            pairs = leads.pairs(leads.forecast_hours(archive), obs)
+            station_table = pl.read_parquet(stations_path) if stations_path.exists() else None
+            table = leads.lead_scores(pairs, station_table)
+            delays = leads.publication_delays(archive)
+            for path, part in (
+                (out.with_name("leads-aladin.json"), table.filter(pl.col("region") == "cz")),
+                (out.with_name("leads-aladin-kraj.json"), table.filter(pl.col("region") != "cz")),
+            ):
+                doc = leads.document(part, pairs, generated, delays, names)
+                written.append(leads.write(doc, path))
+            lines += ["ALADIN, our archive:", *leads.summary(table)]
+            lines.append(f"{len(files)} archived run files, {pairs.height:,} pairs")
+        single = leads.scan_runs(data_dir / "runs", runs_since, now)
+        obs = partitions.scan_months(data_dir / "obs", runs_since.date(), now.date())
+        if single is not None and obs is not None:
+            models = [m for m in catalogue.load_models() if m.enabled]
+            table, info = leads.run_lead_scores(single, obs, models)
+            if table.height:
+                doc = leads.runs_document(table, info, generated, delays, names)
+                written.append(leads.write(doc, out))
+                lines += ["All models, Open-Meteo single runs:", *leads.summary(table)]
+        if not written:
+            typer.echo(
+                f"mvd leads: no runs with observations since {first:%Y-%m-%d %H} UTC", err=True
+            )
             raise typer.Exit(code=1)
-        archive = leads.read_archive(files)
-        pairs = leads.pairs(leads.forecast_hours(archive), obs)
-        station_table = pl.read_parquet(stations_path) if stations_path.exists() else None
-        table = leads.lead_scores(pairs, station_table)
-        delays = leads.publication_delays(archive)
-        generated, names = datetime.now(UTC), _model_names()
-        written = []
-        for path, part in (
-            (out, table.filter(pl.col("region") == "cz")),
-            (out.with_name("leads-kraj.json"), table.filter(pl.col("region") != "cz")),
-        ):
-            doc = leads.document(part, pairs, generated, delays, names)
-            written.append(leads.write(doc, path))
         if publish:
             for path in written:
                 releases.put(store.LATEST_TAG, path.name, path)
-    for line in leads.summary(table):
+    for line in lines:
         typer.echo(line)
-    typer.echo(f"{len(files)} run files, {pairs.height:,} pairs → {', '.join(map(str, written))}")
+    typer.echo(f"→ {', '.join(map(str, written))}")
+
+
+@app.command("fetch-runs")
+def fetch_runs(
+    run: Annotated[
+        list[str] | None,
+        typer.Option(
+            help="Run start, YYYY-MM-DDTHH (HH 00, 06, 12, 18); repeat for several. "
+            "Default: the recent runs, then the history."
+        ),
+    ] = None,
+    mode: Annotated[
+        str, typer.Option(help="Without --run: recent, history or all (recent first).")
+    ] = "all",
+    data_dir: Annotated[
+        Path, typer.Option(help="Folder for runs/YYYY-MM.parquet and runs-state.json.")
+    ] = Path("data"),
+    stations_path: Annotated[
+        Path | None,
+        typer.Option("--stations", help="Station subset CSV. Default: the committed one."),
+    ] = None,
+    max_calls: Annotated[
+        float, typer.Option(help="Open-Meteo calls this run may use; it resumes next time.")
+    ] = 450,
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Sync month files and progress with the releases runs-YYYY-MM and "
+            "runs-state (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+        ),
+    ] = False,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Only print the runs to fetch and their cost.")
+    ] = False,
+) -> None:
+    """Fetch single model runs (H+1 … H+120) at the station subset from Open-Meteo's
+    Single Runs API, resumable within a call budget."""
+    if mode not in ("recent", "history", "all"):
+        raise typer.BadParameter("use recent, history or all", param_hint="--mode")
+    try:
+        chosen = [runs.parse_run(r) for r in run] if run else None
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--run") from exc
+    stations_table = runs.load_stations(stations_path)
+    models = [m for m in catalogue.load_models() if m.enabled]
+    now = datetime.now(UTC)
+    modes = ("recent", "history") if mode == "all" else (mode,)
+    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+        sync = None
+        if github_release:
+            notes_store = GitHubReleaseStore(
+                client, *_github_credentials(), notes=runs.RELEASE_NOTES
+            )
+            sync = runs.RunsSync(notes_store, data_dir, log=typer.echo)
+            sync.pull_state()
+        if dry_run:
+            state = runs.State.load(data_dir / runs.STATE_NAME)
+            todo = chosen or [
+                *(runs.recent_runs(now) if "recent" in modes else []),
+                *(runs.history_runs(now) if "history" in modes else []),
+            ]
+            pending = [(r, state.todo(r, runs.wanted(models, r))) for r in todo]
+            pending = [(r, m) for r, m in pending if m]
+            cost = sum(runs.run_cost(stations_table.height, len(m)) for _, m in pending)
+            typer.echo(
+                f"{len(pending)} runs to fetch at {stations_table.height} stations, about "
+                f"{cost:g} Open-Meteo calls ({runs.run_cost(stations_table.height, len(models)):g}"
+                f" per run of all {len(models)} models; budget {max_calls:g})"
+            )
+            return
+        budget = forecasts.Budget(max_calls=max_calls)
+        result = runs.collect(
+            client,
+            stations_table,
+            models,
+            data_dir,
+            budget,
+            now,
+            runs=chosen,
+            modes=modes,
+            sync=sync,
+            log=typer.echo,
+        )
+    typer.echo(
+        f"{len(result.runs)} runs fetched, {budget.used:g} calls used"
+        + (f"; stopped: {result.stopped} (run again to continue)" if result.stopped else "")
+    )
+    job_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if job_summary:  # shown on the workflow run page
+        with open(job_summary, "a", encoding="utf-8") as f:
+            f.write(runs.summary(result, budget.used, data_dir, models, now))
+    if result.failed:
+        raise typer.Exit(code=1)
 
 
 store_app = typer.Typer(help="Raw data store in GitHub Releases (data-YYYY-MM).")
@@ -238,11 +360,16 @@ app.add_typer(store_app, name="store")
 DataDir = Annotated[Path, typer.Option(help="Folder with obs/ and fc/ subfolders.")]
 
 
-def _release_store(client: httpx.Client) -> GitHubReleaseStore:
+def _github_credentials() -> tuple[str, str]:
+    """``(repo, token)`` from the environment."""
     token, repo = os.environ.get("GITHUB_TOKEN"), os.environ.get("GITHUB_REPOSITORY")
     if not token or not repo:
         raise typer.BadParameter("needs GITHUB_TOKEN and GITHUB_REPOSITORY in the environment")
-    return GitHubReleaseStore(client, repo, token, notes=store.RELEASE_NOTES)
+    return repo, token
+
+
+def _release_store(client: httpx.Client) -> GitHubReleaseStore:
+    return GitHubReleaseStore(client, *_github_credentials(), notes=store.RELEASE_NOTES)
 
 
 @store_app.command("upload")
