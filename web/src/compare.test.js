@@ -4,7 +4,8 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 
 import {
-  biasByElevation, fmt, intervalRows, levelOf, maeByLead, rankingTable, regionList, regionSummary,
+  biasByElevation, fmt, intervalRows, leadHourBasis, leadHourLines, leadHourVariable, levelOf, maeByLead,
+  rankingTable, regionList, regionSummary, unpublishedHours,
 } from "./compare.js";
 import { records } from "./data.js";
 
@@ -92,4 +93,50 @@ test("MAE by lead day and the region summary", () => {
   assert.ok(s.days > 0 && s.stations >= 3);
   assert.equal(regionSummary(OKRES, 1, "CZ9999"), null);
   assert.deepEqual(regionList(OKRES).map((r) => r.name), ["Benešov", "Litoměřice"]);
+});
+
+const LEADS = {
+  first_run: "2026-10-09T00:00Z",
+  last_run: "2026-10-13T06:00Z",
+  models: {
+    cz1: { runs: 18, pairs: 100, publication_delay_h: null },
+    lamb: { runs: 17, pairs: 100, publication_delay_h: null },
+  },
+  columns: ["region", "run_hour", "model", "variable", "lead_h", "runs", "stations", "n", "mae", "bias", "rmse"],
+  rows: [
+    ["cz", "all", "lamb", "temperature_2m", 2, 15, 290, 4000, 1.1, 0.3, 1.5],
+    ["cz", "all", "lamb", "temperature_2m", 1, 14, 290, 4000, 1.0, 0.3, 1.4],
+    ["cz", "all", "cz1", "temperature_2m", 1, 14, 290, 4000, 0.9, 0.2, 1.3],
+    ["cz", "06", "cz1", "temperature_2m", 1, 4, 290, 1000, 0.8, 0.2, 1.2],
+    ["cz", "all", "cz1", "precipitation", 1, 14, 430, 6000, 0.1, 0.0, 0.2],
+    ["CZ010", "all", "cz1", "temperature_2m", 1, 14, 5, 70, 0.7, 0.1, 0.9],
+  ],
+};
+
+test("lead-hour variable for the page variables", () => {
+  assert.equal(leadHourVariable("temperature_2m_06utc"), "temperature_2m");
+  assert.equal(leadHourVariable("temperature_max"), "temperature_2m");
+  assert.equal(leadHourVariable("wind_speed_10m_hourly"), "wind_speed_10m");
+  assert.equal(leadHourVariable("precipitation_24h"), "precipitation");
+});
+
+test("MAE by lead hour for Czechia, one run hour", () => {
+  const lines = leadHourLines(LEADS, "temperature_2m");
+  assert.deepEqual(lines.map((r) => [r.model, r.lead_h, r.mae]), [
+    ["cz1", 1, 0.9],
+    ["lamb", 1, 1.0],
+    ["lamb", 2, 1.1],
+  ]);
+  assert.deepEqual(leadHourLines(LEADS, "temperature_2m", "06").map((r) => r.mae), [0.8]);
+  assert.deepEqual(leadHourLines(null, "temperature_2m"), []);
+});
+
+test("history behind the lead-hour chart and the unpublished hours", () => {
+  assert.deepEqual(leadHourBasis(LEADS), {
+    runs: 18, first: "2026-10-09 00 UTC", last: "2026-10-13 06 UTC", days: 4.3,
+  });
+  assert.equal(leadHourBasis({}), null);
+  assert.equal(unpublishedHours(LEADS), 4);
+  const measured = { models: { a: { publication_delay_h: 3.4 }, b: { publication_delay_h: 4.4 } } };
+  assert.equal(unpublishedHours(measured), 4.4);
 });

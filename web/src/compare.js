@@ -109,3 +109,48 @@ export function fmt(value, signed = false) {
   const text = value.toFixed(2);
   return signed && value > 0 ? `+${text}` : text;
 }
+
+// --- run-based ALADIN errors by lead hour (leads.json, written by `mvd leads`) -------
+
+/** The leads.json variable for a page variable: hourly precipitation for the daily sums. */
+export function leadHourVariable(variable) {
+  if (variable.startsWith("temperature")) return "temperature_2m";
+  if (variable.startsWith("wind")) return "wind_speed_10m";
+  return "precipitation";
+}
+
+/** MAE by lead hour for Czechia: [{model, lead_h, mae, bias, n, runs}] sorted by model and hour. */
+export function leadHourLines(doc, variable, runHour = "all") {
+  if (!doc?.rows) return [];
+  const columns = doc.columns;
+  return doc.rows
+    .map((row) => Object.fromEntries(columns.map((c, i) => [c, row[i]])))
+    .filter((r) => r.region === "cz" && r.run_hour === runHour && r.variable === variable && r.mae != null)
+    .map((r) => ({ model: r.model, lead_h: r.lead_h, mae: r.mae, bias: r.bias, n: r.n, runs: r.runs }))
+    .sort((a, b) => a.model.localeCompare(b.model) || a.lead_h - b.lead_h);
+}
+
+/** How much history the chart rests on: runs per model (the most), first and last run
+ * (YYYY-MM-DD HH UTC) and days from the first to the last run. */
+export function leadHourBasis(doc) {
+  const models = Object.values(doc?.models ?? {});
+  if (!models.length || !doc.first_run) return null;
+  const first = new Date(doc.first_run);
+  const last = new Date(doc.last_run);
+  const stamp = (d) => `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 13)} UTC`;
+  return {
+    runs: Math.max(...models.map((m) => m.runs ?? 0)),
+    first: stamp(first),
+    last: stamp(last),
+    days: Math.round((last - first) / 864e5 * 10) / 10,
+  };
+}
+
+/** Hours after a run's start before ČHMÚ has published it: the largest measured median
+ * delay, or `fallback` (about 4 h, docs/data-sources.md) before delays were recorded. */
+export function unpublishedHours(doc, fallback = 4) {
+  const delays = Object.values(doc?.models ?? {})
+    .map((m) => m.publication_delay_h)
+    .filter((d) => d != null);
+  return delays.length ? Math.max(...delays) : fallback;
+}
