@@ -4,7 +4,9 @@ opendata.chmi.cz/meteorology/weather/nwp_aladin/ keeps only the last three days 
 runs (00, 06, 12 and 18 UTC). For every run still there and not yet archived, we
 download 2 m temperature, 10 m wind speed and total precipitation (GRIB1, hourly
 steps 0-72 h), take the value at the grid point nearest to each station, and store
-one small Parquet file per run. The raw GRIB files are discarded.
+one small Parquet file per run. The raw GRIB files are discarded. Each file also
+records when ČHMÚ published the run (``published``: the latest HTTP ``Last-Modified``
+of the files we read), for scores of what a user could actually have seen.
 
 Licence: ČHMÚ, CC BY 4.0 (National Open Data Catalogue). Changes we make: nearest
 grid point extraction, K → °C. See docs/data-sources.md#aladin-archive.
@@ -20,6 +22,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Protocol
 
@@ -85,11 +88,28 @@ def available_runs(client: httpx.Client, domain: Domain) -> list[datetime]:
     )
 
 
-def download_bz2(client: httpx.Client, url: str, dest: Path) -> Path:
-    """Stream a .bz2 file to ``dest`` decompressed (handles multi-stream bz2)."""
+def last_modified(headers: httpx.Headers) -> datetime | None:
+    """The ``Last-Modified`` header as a UTC time, or None if missing or malformed."""
+    value = headers.get("last-modified")
+    if not value:
+        return None
+    try:
+        stamp = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    return stamp.astimezone(UTC) if stamp.tzinfo else stamp.replace(tzinfo=UTC)
+
+
+def download_bz2(client: httpx.Client, url: str, dest: Path) -> datetime | None:
+    """Stream a .bz2 file to ``dest`` decompressed (handles multi-stream bz2).
+
+    Returns the file's ``Last-Modified`` time on the server (None if not sent). On
+    opendata.chmi.cz it equals the time in the directory listing, to the second.
+    """
     decompressor = bz2.BZ2Decompressor()
     with client.stream("GET", url) as response, dest.open("wb") as out:
         response.raise_for_status()
+        modified = last_modified(response.headers)
         for chunk in response.iter_bytes(1 << 20):
             while chunk:
                 out.write(decompressor.decompress(chunk))
@@ -97,7 +117,7 @@ def download_bz2(client: httpx.Client, url: str, dest: Path) -> Path:
                 if decompressor.eof:
                     chunk = decompressor.unused_data
                     decompressor = bz2.BZ2Decompressor()
-    return dest
+    return modified
 
 
 def grib_messages(path: Path) -> Iterator[tuple[int, np.ndarray]]:
@@ -156,7 +176,8 @@ def extract_run(
     client: httpx.Client, domain: Domain, run: datetime, stations: pl.DataFrame, workdir: Path
 ) -> pl.DataFrame:
     """Values of one run at the stations: one row per station and lead hour."""
-    oro = download_bz2(client, file_url(domain, run, OROGRAPHY), workdir / "oro.grb")
+    oro = workdir / "oro.grb"
+    modified = [download_bz2(client, file_url(domain, run, OROGRAPHY), oro)]
     lats, lons, geopotential = grid_coordinates(oro)
     oro.unlink()
     st_lats, st_lons = stations["lat"].to_numpy(), stations["lon"].to_numpy()
@@ -166,7 +187,8 @@ def extract_run(
 
     columns: dict[str, dict[int, np.ndarray]] = {}
     for field, column in FIELDS.items():
-        path = download_bz2(client, file_url(domain, run, field), workdir / f"{field}.grb")
+        path = workdir / f"{field}.grb"
+        modified.append(download_bz2(client, file_url(domain, run, field), path))
         columns[column] = {step: values[index] for step, values in grib_messages(path)}
         path.unlink()
     steps = sorted(set().union(*columns.values()))
@@ -177,6 +199,8 @@ def extract_run(
         return np.concatenate([by_step.get(s, empty) + offset for s in steps]).astype(np.float32)
 
     n = len(steps)
+    stamps = [m for m in modified if m is not None]
+    published = max(stamps) if len(stamps) == len(modified) else None
     return pl.DataFrame(
         {
             "model": domain.model,
@@ -190,6 +214,7 @@ def extract_run(
             "grid_lon": np.tile(lons[index], n).astype(np.float32),
             "grid_elevation": np.tile(geopotential[index] / GRAVITY, n).astype(np.float32),
             "grid_distance_km": np.tile(distance, n).astype(np.float32),
+            "published": pl.Series([published] * (n * len(ids)), dtype=pl.Datetime("us", "UTC")),
         }
     ).with_columns(
         pl.col("run").dt.replace_time_zone("UTC"),

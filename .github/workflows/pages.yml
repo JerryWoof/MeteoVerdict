@@ -51,11 +51,11 @@ jobs:
           else
             echo "no published scores yet; the map shows the boundaries only"
           fi
-          for name in outlook.json outlook-hourly.json; do
+          for name in outlook.json outlook-hourly.json leads.json; do
             if gh release download data-latest --pattern "$name" --dir site/data --clobber 2>/dev/null; then
               echo "$name from data-latest"
             else
-              echo "no $name yet; the forecast map and the open data files say so"
+              echo "no $name yet; the pages that use it say so or hide that part"
             fi
           done
       - uses: actions/setup-node@v4

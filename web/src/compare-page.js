@@ -6,7 +6,8 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
 import {
-  biasByElevation, fmt, intervalRows, levelOf, maeByLead, rankingTable, regionList, regionSummary,
+  biasByElevation, fmt, intervalRows, leadHourBasis, leadHourLines, leadHourVariable, levelOf, maeByLead,
+  rankingTable, regionList, regionSummary, unpublishedHours,
 } from "./compare.js";
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
 import { setUpLanguage } from "./i18n.js";
@@ -279,6 +280,51 @@ function renderByLead(rows, view, names, colors) {
   );
 }
 
+// --- run-based ALADIN errors by lead hour (leads.json; hidden until it exists) -------
+const leadsDoc = getJson("data/scores/leads.json");
+
+async function renderLeadHours(view, names, colors) {
+  const section = document.getElementById("lead-hours-section");
+  const doc = await leadsDoc;
+  const variable = leadHourVariable(view.variable);
+  const data = leadHourLines(doc, variable);
+  const basis = leadHourBasis(doc);
+  section.hidden = data.length === 0 || basis == null;
+  if (section.hidden) return;
+  const models = [...new Set(data.map((r) => r.model))];
+  const label = (m) => doc.models?.[m]?.name ?? names[m] ?? m;
+  const hidden = unpublishedHours(doc);
+  document.getElementById("lead-hours-basis").textContent =
+    `${t(`leadHours.${variable}`)} · ${t("compare.leadHoursBasis", basis)}`;
+  const ticks = [1, 6, 12, 18, 24, 36, 48, 60, 72];
+  document.getElementById("lead-hours").replaceChildren(
+    Plot.plot({
+      width: width(),
+      height: 320,
+      marginLeft: 50,
+      x: { label: t("compare.leadHoursAxis"), domain: [0, 72], ticks, tickFormat: (h) => `H+${h}` },
+      y: { label: "MAE", grid: true, zero: true },
+      color: {
+        domain: models.map(label),
+        range: models.map((m) => colors[m] ?? "#888888"),
+        legend: true,
+      },
+      marks: [
+        Plot.rectX([{ x1: 0, x2: hidden }], { x1: "x1", x2: "x2", fill: "#ddd8cc", fillOpacity: 0.6 }),
+        Plot.text([{ x: hidden / 2 }], {
+          x: "x", frameAnchor: "top", dy: 6, text: () => t("compare.leadHoursUnpublished"), fontSize: 10,
+          lineWidth: 6, fill: "#4b5863",
+        }),
+        Plot.ruleX([1, 6, 12], { stroke: "#ddd8cc", strokeDasharray: "2,3" }),
+        Plot.lineY(data, {
+          x: "lead_h", y: "mae", stroke: (r) => label(r.model), strokeWidth: 1.5,
+          channels: { runs: "runs", n: "n" }, tip: { format: { x: (h) => `H+${h}` } },
+        }),
+      ],
+    }),
+  );
+}
+
 function renderBias(rows, view, names, colors) {
   const section = document.getElementById("elevation-section");
   section.hidden = view.region !== "cz";
@@ -325,6 +371,7 @@ async function main() {
     renderTable(rows, view, names);
     renderIntervals(rows, view, names, colors);
     renderByLead(rows, view, names, colors);
+    renderLeadHours(view, names, colors);
     renderBias(view.region === "cz" ? await load(view, "elevation") : [], view, names, colors);
     if (map.getLayer("fill")) paintMap(okresRows, view, colors, names);
     writeView(view);
