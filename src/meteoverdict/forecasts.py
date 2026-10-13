@@ -17,6 +17,7 @@ request of up to ``GAUGE_DAYS`` days still costs one call per location.
 
 from __future__ import annotations
 
+import re
 import time
 from collections import deque
 from collections.abc import Callable, Iterator
@@ -46,6 +47,19 @@ SCHEMA = {
 
 class NoDataError(ValueError):
     """Open-Meteo has no data of this model for (at least one of) the locations."""
+
+
+class RunNotAvailableError(ValueError):
+    """Single Runs API: one requested model has no such run (the whole request fails).
+
+    ``model`` is the name Open-Meteo reports, which can differ from the requested id
+    (``dwd_icon_eu_native`` for ``dwd_icon_eu``, ``ncep_gfs013`` for ``ncep_gfs_global``).
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        match = re.search(r"Model: ([^,\s]+)", reason)
+        self.model = match[1] if match else ""
 
 
 class QuotaError(RuntimeError):
@@ -147,8 +161,11 @@ def parse(
     return out.filter(~pl.all_horizontal(pl.col(v).is_null() for v in VARIABLES))
 
 
-def request(client: httpx.Client, params: dict, sleep: Callable[[float], None]) -> list | dict:
-    """One Previous Runs API request; transient failures are retried after a pause.
+def request(
+    client: httpx.Client, params: dict, sleep: Callable[[float], None], url: str = URL
+) -> list | dict:
+    """One Open-Meteo request (default: Previous Runs API); transient failures are
+    retried after a pause.
 
     Retried: the per-minute/hour 429, server errors, network errors and an answer that is
     not JSON (seen once as an empty 200 in the middle of a backfill). If they persist,
@@ -157,7 +174,7 @@ def request(client: httpx.Client, params: dict, sleep: Callable[[float], None]) 
     problem = ""
     for wait in (30, 60, 120, None):
         try:
-            response = client.get(URL, params=params)
+            response = client.get(url, params=params)
         except httpx.TransportError as exc:
             problem = f"{type(exc).__name__}: {exc}"
         else:
@@ -167,6 +184,8 @@ def request(client: httpx.Client, params: dict, sleep: Callable[[float], None]) 
                 reason = _reason(response)
                 if "No data is available" in reason:
                     raise NoDataError(reason)
+                if "model run is not available" in reason:
+                    raise RunNotAvailableError(reason)
                 raise ValueError(f"Open-Meteo: {reason}")
             if response.status_code == 429 or response.status_code >= 500:
                 problem = f"HTTP {response.status_code} {_reason(response)}".strip()

@@ -17,6 +17,10 @@ MAX_LEAD_DAY = 5
 #: Hours added to 24 x lead day when deciding a run's output step (see Model.native_step).
 LEAD_MARGIN_H = 6
 
+#: First day of Open-Meteo's Single Runs archive for most models (00 UTC run, measured
+#: live 2026-10-13: the 2026-04-01 12 UTC runs are missing, 2026-04-02 00 UTC are there).
+RUNS_FROM = date(2026, 4, 2)
+
 #: Forecast variables we verify (Open-Meteo names).
 VARIABLES = ("temperature_2m", "precipitation", "wind_speed_10m")
 
@@ -30,7 +34,14 @@ _FIELDS = {
     "max_lead_day",
     "archive_from",
 }
-_OPTIONAL = {"enabled", "note", "variable_from", "coarser_after_h", "coarser_step_h"}
+_OPTIONAL = {
+    "enabled",
+    "note",
+    "variable_from",
+    "coarser_after_h",
+    "coarser_step_h",
+    "runs_from",
+}
 
 
 class ModelCatalogError(ValueError):
@@ -52,6 +63,8 @@ class Model:
     variable_from: dict[str, date] = field(default_factory=dict)
     coarser_after_h: int | None = None
     coarser_step_h: int | None = None
+    #: first day (00 UTC run) in Open-Meteo's Single Runs archive; None = ``RUNS_FROM``
+    runs_from: date | None = None
 
     def available_from(self, variable: str) -> date:
         """First day with D+1 forecasts of ``variable`` in the Previous Runs archive."""
@@ -69,6 +82,21 @@ class Model:
         if self.coarser_after_h is not None and lead_hours > self.coarser_after_h:
             return self.coarser_step_h
         return self.step_hours
+
+    def step_at(self, lead_h: int) -> int:
+        """Output step (hours) of a single run at ``lead_h`` hours after its start."""
+        if self.coarser_after_h is not None and lead_h > self.coarser_after_h:
+            return self.coarser_step_h
+        return self.step_hours
+
+    def native_hour(self, lead_h: int) -> bool:
+        """True if a single run has its own output at ``lead_h`` (not interpolated)."""
+        return lead_h % self.step_at(lead_h) == 0
+
+    @property
+    def single_runs_from(self) -> date:
+        """First day whose runs are in Open-Meteo's Single Runs archive."""
+        return self.runs_from or RUNS_FROM
 
     @property
     def lead_days(self) -> tuple[int, ...]:
@@ -90,6 +118,8 @@ def _parse(entry: Any, index: int) -> Model:
     numbers = (entry["step_hours"], entry["forecast_days"])
     if any(isinstance(n, bool) or not isinstance(n, int | float) for n in numbers):
         raise ModelCatalogError(f"models[{index}]: step_hours and forecast_days must be numbers")
+    if not isinstance(entry.get("runs_from", date.min), date):
+        raise ModelCatalogError(f"models[{index}]: runs_from must be a YYYY-MM-DD date")
     if not isinstance(entry.get("enabled", True), bool):
         raise ModelCatalogError(f"models[{index}]: enabled must be true or false")
     variable_from = entry.get("variable_from") or {}
