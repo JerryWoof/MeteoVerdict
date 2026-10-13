@@ -22,6 +22,9 @@ STATIONS = pl.DataFrame(
         "lon": [14.446944, 12.391389, -21.903905],
     }
 )
+#: as opendata.chmi.cz sends it; the temperature file of the test server is the newest
+MODIFIED = "Sun, 11 Oct 2026 03:34:09 GMT"
+NEWEST = "Sun, 11 Oct 2026 03:34:41 GMT"
 GRIB_FIELDS = {"CLSTEMPERATURE": 11, "CLSWIND_SPEED": 32, "SURFPREC_TOTAL": 61}
 
 
@@ -59,7 +62,9 @@ def server_files() -> dict[str, bytes]:
     return files
 
 
-def mock_server(server_files, listing=LISTING, fail=()) -> tuple[httpx.Client, list[str]]:
+def mock_server(
+    server_files, listing=LISTING, fail=(), dated=True
+) -> tuple[httpx.Client, list[str]]:
     seen: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -71,7 +76,9 @@ def mock_server(server_files, listing=LISTING, fail=()) -> tuple[httpx.Client, l
             return httpx.Response(200, text="<html></html>")
         for field, body in server_files.items():
             if path.endswith(f"_{field}.grb.bz2") and field not in fail:
-                return httpx.Response(200, content=body)
+                stamp = NEWEST if field == "CLSTEMPERATURE" else MODIFIED
+                headers = {"Last-Modified": stamp} if dated else {}
+                return httpx.Response(200, content=body, headers=headers)
         return httpx.Response(404)
 
     return httpx.Client(transport=httpx.MockTransport(handler)), seen
@@ -97,8 +104,17 @@ def test_download_handles_multi_stream_bz2(tmp_path):
     client = httpx.Client(
         transport=httpx.MockTransport(lambda r: httpx.Response(200, content=body))
     )
-    out = aladin.download_bz2(client, "https://example.test/x.bz2", tmp_path / "x")
+    out = tmp_path / "x"
+    assert aladin.download_bz2(client, "https://example.test/x.bz2", out) is None
     assert out.read_bytes() == b"GRIB-part-1GRIB-part-2"
+
+
+def test_last_modified_header():
+    assert aladin.last_modified(httpx.Headers({"Last-Modified": MODIFIED})) == datetime(
+        2026, 10, 11, 3, 34, 9, tzinfo=UTC
+    )
+    assert aladin.last_modified(httpx.Headers({})) is None
+    assert aladin.last_modified(httpx.Headers({"Last-Modified": "yesterday"})) is None
 
 
 def test_real_grid_and_nearest_points(tmp_path):
@@ -136,6 +152,24 @@ def test_extract_run(tmp_path, server_files):
     assert libus["precipitation_accum"].to_list()[1:] == pytest.approx([2001, 2002, 2003])
     assert libus["grid_elevation"][0] == pytest.approx(302, abs=30)
     assert not list(tmp_path.iterdir())  # GRIB files are deleted after use
+    # published: the newest Last-Modified of the files read
+    assert table["published"].unique().to_list() == [datetime(2026, 10, 11, 3, 34, 41, tzinfo=UTC)]
+
+
+def test_published_is_null_without_last_modified(tmp_path, server_files):
+    client, _ = mock_server(server_files, dated=False)
+    table = aladin.extract_run(client, CZ, RUN, STATIONS, tmp_path)
+    assert table["published"].null_count() == table.height
+    assert table.schema["published"] == pl.Datetime("us", "UTC")
+
+
+def test_old_archive_files_without_published_still_read(tmp_path, server_files):
+    """Files archived before ``published`` existed concatenate with new ones."""
+    client, _ = mock_server(server_files)
+    new = aladin.extract_run(client, CZ, RUN, STATIONS, tmp_path)
+    old = new.drop("published")
+    both = pl.concat([old, new], how="diagonal_relaxed")
+    assert both["published"].null_count() == old.height
 
 
 def test_archive_skips_existing_and_keeps_going_on_failure(tmp_path, server_files):

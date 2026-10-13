@@ -26,6 +26,7 @@ COMMANDS = [
     "stations",
     "models",
     "archive-aladin",
+    "leads",
     "fetch-obs",
     "fetch-fc",
     "score",
@@ -421,3 +422,68 @@ def test_aggregate_reads_score_files_of_different_ages(tmp_path):
     assert result.exit_code == 0, result.output
     doc = json.loads((tmp_path / "site" / "stations.json").read_text(encoding="utf-8"))
     assert [r[0] for r in doc["rows"]] == ["s1", "s2", "s3"]
+
+
+def test_leads_publish_needs_github_release():
+    result = runner.invoke(app, ["leads", "--publish"])
+    assert result.exit_code == 2
+
+
+def test_leads_without_archive_fails(tmp_path):
+    args = ["leads", "--archive-dir", str(tmp_path / "a"), "--data-dir", str(tmp_path)]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 1
+
+
+def test_leads_writes_the_json(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    run = now.replace(hour=now.hour // 6 * 6) - timedelta(hours=12)
+    steps = list(range(0, 4))
+    folder = tmp_path / "aladin" / f"aladin-{run:%Y-%m}"
+    folder.mkdir(parents=True)
+    for model, offset in (("chmi_aladin_cz_1km", 1.0), ("chmi_aladin_central_europe_2km", 2.0)):
+        pl.DataFrame(
+            {
+                "model": model,
+                "run": [run] * 4,
+                "lead_h": pl.Series(steps, dtype=pl.Int16),
+                "station_id": "a",
+                "temperature_2m": [10.0 + offset] * 4,
+                "wind_speed_10m": [2.0] * 4,
+                "precipitation_accum": [None, 0.0, 0.0, 0.0],
+                "valid_time": [run + timedelta(hours=h) for h in steps],
+            }
+        ).write_parquet(folder / f"{model}_{run:%Y%m%d%H}.parquet")
+    obs_rows = pl.DataFrame(
+        {
+            "station_id": "a",
+            "time": [run + timedelta(hours=h) for h in steps],
+            "variable": "temperature_2m",
+            "value": [10.0] * 4,
+        }
+    )
+    (tmp_path / "obs").mkdir()
+    obs_rows.write_parquet(tmp_path / "obs" / f"{run:%Y-%m}.parquet")
+    stations_file = tmp_path / "s.parquet"
+    pl.DataFrame({"id": ["a"], "kraj_code": ["CZ010"], "kraj": ["Praha"]}).write_parquet(
+        stations_file
+    )
+    out = tmp_path / "site" / "leads.json"
+    args = [
+        "leads", "--archive-dir", str(tmp_path / "aladin"), "--data-dir", str(tmp_path),
+        "--stations", str(stations_file), "--out", str(out),
+    ]  # fmt: skip
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    doc = json.loads(out.read_text())
+    rows = [dict(zip(doc["columns"], r, strict=True)) for r in doc["rows"]]
+    h1 = [r for r in rows if r["lead_h"] == 1 and r["run_hour"] == "all"]
+    assert {r["model"]: r["mae"] for r in h1} == {
+        "chmi_aladin_cz_1km": 1.0,
+        "chmi_aladin_central_europe_2km": 2.0,
+    }
+    kraj = json.loads((tmp_path / "site" / "leads-kraj.json").read_text())
+    assert kraj["regions"] == {"CZ010": "Praha"}
+    assert "H+1 1.00 (1 runs, 1 pairs)" in plain(result.output)
