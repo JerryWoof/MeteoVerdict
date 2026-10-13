@@ -4,8 +4,8 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 
 import {
-  biasByElevation, fmt, intervalRows, leadHourBasis, leadHourLines, leadHourVariable, levelOf, maeByLead,
-  rankingTable, regionList, regionSummary, unpublishedHours,
+  biasByElevation, fmt, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
+  leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, unpublishedHours,
 } from "./compare.js";
 import { records } from "./data.js";
 
@@ -133,10 +133,59 @@ test("MAE by lead hour for Czechia, one run hour", () => {
 
 test("history behind the lead-hour chart and the unpublished hours", () => {
   assert.deepEqual(leadHourBasis(LEADS), {
-    runs: 18, first: "2026-10-09 00 UTC", last: "2026-10-13 06 UTC", days: 4.3,
+    runs: 18, models: 2, stations: null, first: "2026-10-09 00 UTC", last: "2026-10-13 06 UTC", days: 4.3,
   });
   assert.equal(leadHourBasis({}), null);
   assert.equal(unpublishedHours(LEADS), 4);
   const measured = { models: { a: { publication_delay_h: 3.4 }, b: { publication_delay_h: 4.4 } } };
   assert.equal(unpublishedHours(measured), 4.4);
+});
+
+// leads.json from the single runs: no region column, every model, H+1 to H+120
+const RUNS = {
+  first_run: "2026-07-15T00:00Z",
+  last_run: "2026-10-13T00:00Z",
+  stations: 99,
+  region: "cz",
+  models: {
+    chmi_aladin_cz_1km: { runs: 3, publication_delay_h: 4.4 },
+    dwd_icon_d2: { runs: 3, publication_delay_h: null },
+    ncep_gfs_global: { runs: 4, publication_delay_h: null },
+  },
+  columns: ["run_hour", "model", "variable", "lead_h", "runs", "stations", "n", "mae", "bias", "rmse"],
+  rows: [
+    ["all", "chmi_aladin_cz_1km", "temperature_2m", 1, 3, 99, 290, 1.0, 0.1, 1.2],
+    ["all", "dwd_icon_d2", "temperature_2m", 1, 3, 99, 290, 0.8, 0.1, 1.1],
+    ["all", "ncep_gfs_global", "temperature_2m", 1, 3, 99, 290, 2.0, 0.1, 2.5],
+    ["all", "chmi_aladin_cz_1km", "temperature_2m", 2, 3, 99, 290, 1.1, 0.1, 1.2],
+    ["all", "dwd_icon_d2", "temperature_2m", 2, 3, 99, 290, 1.2, 0.1, 1.4],
+    ["all", "ncep_gfs_global", "temperature_2m", 2, 3, 99, 290, 1.5, 0.1, 2.0],
+    ["all", "ncep_gfs_global", "temperature_2m", 100, 2, 99, 190, 2.5, 0.1, 3.0],
+    ["00", "ncep_gfs_global", "temperature_2m", 1, 2, 99, 190, 2.1, 0.1, 2.6],
+  ],
+};
+
+test("lead-hour lines from the single runs (no region column)", () => {
+  const lines = leadHourLines(RUNS, "temperature_2m");
+  assert.equal(lines.length, 7);
+  assert.deepEqual(lines.filter((r) => r.model === "ncep_gfs_global").map((r) => r.lead_h), [1, 2, 100]);
+  assert.deepEqual(leadHourRunHours(RUNS), ["all", "00"]);
+  assert.deepEqual(leadHourRunHours(LEADS), ["all", "06"]);
+  assert.deepEqual(leadHourRunHours(null), []);
+  assert.equal(leadHourBasis(RUNS).stations, 99);
+  assert.equal(leadHourBasis(RUNS).models, 3);
+  assert.equal(unpublishedHours(RUNS), 4.4);
+});
+
+test("best models by their mean rank over the lead hours", () => {
+  const ranking = leadHourRanking(leadHourLines(RUNS, "temperature_2m"));
+  // H+1: d2 0, aladin 0.5, gfs 1; H+2: aladin 0, d2 0.5, gfs 1; H+100: gfs alone (not ranked)
+  assert.deepEqual(ranking.map((r) => [r.model, r.score, r.leads]), [
+    ["chmi_aladin_cz_1km", 0.25, 2],
+    ["dwd_icon_d2", 0.25, 2],
+    ["ncep_gfs_global", 1, 2],
+  ]);
+  assert.deepEqual(leadHourRanking([]), []);
+  assert.ok(isAladin("chmi_aladin_central_europe_2km"));
+  assert.ok(!isAladin("dwd_icon_d2"));
 });

@@ -884,3 +884,9 @@ img.eink {
   border: 1px solid #9aa7b1;
   border-radius: 6px;
 }
+
+.lead-hours-runs {
+  display: inline-block;
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.9rem;
+}

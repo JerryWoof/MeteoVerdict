@@ -6,8 +6,8 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
 import {
-  biasByElevation, fmt, intervalRows, leadHourBasis, leadHourLines, leadHourVariable, levelOf, maeByLead,
-  rankingTable, regionList, regionSummary, unpublishedHours,
+  biasByElevation, fmt, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
+  leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, unpublishedHours,
 } from "./compare.js";
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
 import { setUpLanguage } from "./i18n.js";
@@ -280,47 +280,83 @@ function renderByLead(rows, view, names, colors) {
   );
 }
 
-// --- run-based ALADIN errors by lead hour (leads.json; hidden until it exists) -------
+// --- run-based errors by lead hour (leads.json; hidden until it exists) -------------
 const leadsDoc = getJson("data/scores/leads.json");
+const HIGHLIGHT = 3; // the best models over the lead hours get bold lines
+const leadHoursView = { runHour: "all" };
 
 async function renderLeadHours(view, names, colors) {
   const section = document.getElementById("lead-hours-section");
   const doc = await leadsDoc;
   const variable = leadHourVariable(view.variable);
-  const data = leadHourLines(doc, variable);
+  const runHours = leadHourRunHours(doc);
+  if (!runHours.includes(leadHoursView.runHour)) leadHoursView.runHour = "all";
+  const data = leadHourLines(doc, variable, leadHoursView.runHour);
   const basis = leadHourBasis(doc);
   section.hidden = data.length === 0 || basis == null;
   if (section.hidden) return;
+  const select = document.getElementById("lead-hours-run");
+  fillSelect("lead-hours-run", runHours.map((h) => [h, h === "all" ? t("compare.leadHoursAllRuns") : `${h} UTC`]),
+    leadHoursView.runHour);
+  select.onchange = (event) => {
+    leadHoursView.runHour = event.target.value;
+    renderLeadHours(view, names, colors);
+  };
   const models = [...new Set(data.map((r) => r.model))];
   const label = (m) => doc.models?.[m]?.name ?? names[m] ?? m;
+  const ranking = leadHourRanking(data);
+  const best = new Set(ranking.slice(0, HIGHLIGHT).map((r) => r.model));
+  const aladin = models.filter(isAladin);
+  const lastLead = Math.max(...data.map((r) => r.lead_h));
   const hidden = unpublishedHours(doc);
-  document.getElementById("lead-hours-basis").textContent =
-    `${t(`leadHours.${variable}`)} · ${t("compare.leadHoursBasis", basis)}`;
-  const ticks = [1, 6, 12, 18, 24, 36, 48, 60, 72];
+  const parts = [
+    t(`leadHours.${variable}`),
+    t("compare.leadHoursBasis", basis),
+    basis.stations ? t("compare.leadHoursStations", basis) : null,
+  ];
+  if (ranking.length > 1) {
+    parts.push(t("compare.leadHoursBest", { models: ranking.slice(0, HIGHLIGHT).map((r) => label(r.model)).join(", ") }));
+  }
+  document.getElementById("lead-hours-basis").textContent = parts.filter(Boolean).join(" · ");
+  const ticks = [1, 6, 12, 18, 24, 36, 48, 60, 72, 84, 96, 108, 120].filter((h) => h <= Math.max(lastLead, 72));
+  // bold: the best few; dashed: ALADIN; the others thin and pale
+  const lines = (subset, width, opacity, dashed) =>
+    Plot.lineY(subset, {
+      x: "lead_h", y: "mae", z: "model", stroke: (r) => label(r.model), strokeWidth: width, strokeOpacity: opacity,
+      strokeDasharray: dashed ? "5,3" : null,
+      channels: { runs: "runs", n: "n" }, tip: { format: { x: (h) => `H+${h}`, z: false } },
+    });
+  const pick = (bold, dashed) => data.filter((r) => best.has(r.model) === bold && isAladin(r.model) === dashed);
+  const marks = [];
+  if (aladin.length) {
+    marks.push(
+      Plot.rectX([{ x1: 0, x2: hidden }], { x1: "x1", x2: "x2", fill: "#ddd8cc", fillOpacity: 0.6 }),
+      Plot.text([{ x: hidden / 2 }], {
+        x: "x", frameAnchor: "top", dy: 6, rotate: -90, textAnchor: "end",
+        text: () => t("compare.leadHoursUnpublished"), fontSize: 10, fill: "#4b5863",
+      }),
+    );
+  }
+  marks.push(
+    Plot.ruleX([1, 6, 12, 24, 48, 72], { stroke: "#ddd8cc", strokeDasharray: "2,3" }),
+    lines(pick(false, false), 1.2, 0.45, false),
+    lines(pick(false, true), 2, 0.9, true),
+    lines(pick(true, false), 2.8, 1, false),
+    lines(pick(true, true), 2.8, 1, true),
+  );
   document.getElementById("lead-hours").replaceChildren(
     Plot.plot({
       width: width(),
-      height: 320,
+      height: 380,
       marginLeft: 50,
-      x: { label: t("compare.leadHoursAxis"), domain: [0, 72], ticks, tickFormat: (h) => `H+${h}` },
+      x: { label: t("compare.leadHoursAxis"), domain: [0, Math.max(lastLead, 72)], ticks, tickFormat: (h) => `H+${h}` },
       y: { label: "MAE", grid: true, zero: true },
       color: {
         domain: models.map(label),
         range: models.map((m) => colors[m] ?? "#888888"),
         legend: true,
       },
-      marks: [
-        Plot.rectX([{ x1: 0, x2: hidden }], { x1: "x1", x2: "x2", fill: "#ddd8cc", fillOpacity: 0.6 }),
-        Plot.text([{ x: hidden / 2 }], {
-          x: "x", frameAnchor: "top", dy: 6, text: () => t("compare.leadHoursUnpublished"), fontSize: 10,
-          lineWidth: 6, fill: "#4b5863",
-        }),
-        Plot.ruleX([1, 6, 12], { stroke: "#ddd8cc", strokeDasharray: "2,3" }),
-        Plot.lineY(data, {
-          x: "lead_h", y: "mae", stroke: (r) => label(r.model), strokeWidth: 1.5,
-          channels: { runs: "runs", n: "n" }, tip: { format: { x: (h) => `H+${h}` } },
-        }),
-      ],
+      marks,
     }),
   );
 }
