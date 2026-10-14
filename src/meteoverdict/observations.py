@@ -16,7 +16,9 @@ yet, ``now/`` (last ~3 days, unchecked).
 from __future__ import annotations
 
 import calendar
-from collections.abc import Iterable
+import logging
+import time
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -66,12 +68,40 @@ def day_url(wsi: str, day: date) -> str:
     return f"{BASE_URL}/now/data/10m-{wsi}-{day:%Y%m%d}.json"
 
 
-def _get(client: httpx.Client, url: str) -> dict | None:
-    response = client.get(url)
-    if response.status_code == 404:
-        return None
-    response.raise_for_status()
-    return response.json()
+log = logging.getLogger(__name__)
+
+#: pauses (s) before retrying a ČHMÚ file after a network or server error or a body that
+#: is not JSON (seen: a 200 with an empty body for a now/ file, 14 Oct 2026)
+RETRY_WAITS = (2, 5, 15)
+
+
+def _get(
+    client: httpx.Client, url: str, sleep: Callable[[float], None] = time.sleep
+) -> dict | None:
+    """One ČHMÚ JSON file, or None when it does not exist. Network and server errors and
+    unreadable bodies are retried; a body that stays unreadable is skipped with a warning
+    (one station-day missing, not a failed run); errors that persist are raised."""
+    for wait in (*RETRY_WAITS, None):
+        try:
+            response = client.get(url)
+        except httpx.TransportError:
+            if wait is None:
+                raise
+        else:
+            if response.status_code == 404:
+                return None
+            if response.status_code < 500 and response.status_code != 429:
+                response.raise_for_status()
+                try:
+                    return response.json()
+                except ValueError:
+                    if wait is None:
+                        log.warning("skipping %s: not JSON (%d bytes)", url, len(response.content))
+                        return None
+            elif wait is None:
+                response.raise_for_status()
+        sleep(wait)
+    return None
 
 
 def _months(start: date, end: date) -> list[tuple[int, int]]:
