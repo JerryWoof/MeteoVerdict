@@ -125,7 +125,8 @@ def test_partly_published_month_continues_with_now():
     ]
 
 
-def test_server_errors_are_not_swallowed():
+def test_server_errors_are_not_swallowed(monkeypatch):
+    monkeypatch.setattr(obs, "RETRY_WAITS", (0, 0, 0))  # retried, then raised
     client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
     with pytest.raises(httpx.HTTPStatusError):
         obs.fetch_observations(client, [LIBUS], date(2026, 9, 5), date(2026, 9, 5))
@@ -170,3 +171,29 @@ def test_no_stations_gives_an_empty_table():
     table = obs.fetch_observations(client, [], date(2026, 9, 5), date(2026, 9, 5))
     assert table.height == 0 and table.schema == pl.Schema(obs.SCHEMA)
     assert seen == []
+
+
+def test_a_chmi_file_that_is_not_json_is_retried_then_skipped():
+    from meteoverdict import observations
+
+    answers = iter([httpx.Response(200, content=b""), httpx.Response(200, json={"ok": 1})])
+    transport = httpx.MockTransport(lambda request: next(answers))
+    waits = []
+    with httpx.Client(transport=transport) as client:
+        assert observations._get(client, "https://x/a.json", waits.append) == {"ok": 1}
+    assert waits == [2]
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=b"<html>"))
+    with httpx.Client(transport=transport) as client:
+        assert observations._get(client, "https://x/a.json", waits.append) is None
+
+
+def test_chmi_server_errors_are_retried_and_raised_when_they_persist():
+    from meteoverdict import observations
+
+    answers = iter([httpx.Response(503), httpx.Response(404)])
+    with httpx.Client(transport=httpx.MockTransport(lambda r: next(answers))) as client:
+        assert observations._get(client, "https://x/a.json", lambda _: None) is None
+    transport = httpx.MockTransport(lambda request: httpx.Response(502))
+    with httpx.Client(transport=transport) as client, pytest.raises(httpx.HTTPStatusError):
+        observations._get(client, "https://x/a.json", lambda _: None)
