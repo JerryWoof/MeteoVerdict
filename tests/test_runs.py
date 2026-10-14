@@ -6,7 +6,7 @@ import httpx
 import polars as pl
 import pytest
 
-from meteoverdict import forecasts, runs
+from meteoverdict import backfill, forecasts, runs
 from meteoverdict.models import RUNS_FROM, load_models
 
 MODELS = [m for m in load_models() if m.enabled]
@@ -181,12 +181,27 @@ def test_run_lists():
     assert len(recent) == 6
     history = runs.history_runs(NOW)
     assert history[0] == datetime(2026, 10, 11, 12, tzinfo=UTC)
-    assert history[-1] == datetime.combine(RUNS_FROM, datetime.min.time(), UTC)
+    # back to the first run with ALADIN by default, to the archive start on request
+    assert (
+        history[-1]
+        == datetime(2026, 6, 23, 0, tzinfo=UTC)
+        == datetime.combine(runs.HISTORY_FROM, datetime.min.time(), UTC)
+    )
+    archive = runs.history_runs(NOW, RUNS_FROM)
+    assert archive[-1] == datetime.combine(RUNS_FROM, datetime.min.time(), UTC)
+    assert archive[: len(history)] == history
     assert not set(recent) & set(history)
     assert runs.parse_run("2026-10-12T06") == RUN
     assert runs.parse_run("2026101206") == RUN
     with pytest.raises(ValueError):
         runs.parse_run("2026-10-12T05")
+
+
+def test_history_floor_is_the_first_aladin_run():
+    aladin = [m for m in MODELS if m.id.startswith("chmi_aladin")]
+    assert aladin and {m.single_runs_from for m in aladin} == {runs.HISTORY_FROM}
+    history = runs.history_runs(NOW)
+    assert all(len(runs.wanted(MODELS, r)) == len(MODELS) for r in history)
 
 
 def test_models_by_run_and_native_hours():
@@ -406,3 +421,72 @@ def test_runs_from_in_the_catalogue(tmp_path):
     (model,) = load_models(path)
     assert model.single_runs_from == date(2026, 6, 23)
     assert BY_ID["dwd_icon_eu"].single_runs_from == RUNS_FROM
+
+
+# --- the budget --------------------------------------------------------------------------
+
+BACKFILL_FROM = date(2026, 8, 1)
+
+
+def backfill_state(tmp_path, last, models=MODELS):
+    """A backfill state with every complete window up to ``last`` fetched and scored."""
+    state = backfill.State(tmp_path / "backfill-state.json")
+    for start, end in backfill.complete_windows(BACKFILL_FROM, last):
+        state.fc_done |= {backfill.fc_key(m, start, end) for m in models}
+        state.scored.add(backfill.window_key(start, end))
+        span = backfill.gauge_window(BACKFILL_FROM, last, start)
+        if span:
+            state.fc_done |= {backfill.gauge_key(m, *span) for m in models}
+    return state
+
+
+def test_extra_budget_only_when_the_backfill_is_idle(tmp_path):
+    today = date(2026, 10, 14)  # windows from 1 Aug end 14 Aug … 9 Oct, next 23 Oct
+    done = backfill_state(tmp_path, today)
+
+    def budget(state, extra=3000.0, day=today):
+        return runs.handover_budget(750, extra, lambda: state, MODELS, BACKFILL_FROM, day)
+
+    calls, why = budget(done)
+    assert calls == 3750
+    assert (
+        why == "3750 calls (750 normal + 3000 extra: backfill idle (all 5 complete "
+        "windows since 2026-08-01 fetched))"
+    )
+    assert budget(done, extra=0) == (750, "750 calls (normal)")
+    # a model enabled later makes every window pending again
+    calls, why = budget(backfill_state(tmp_path, today, MODELS[:-1]))
+    assert calls == 750 and "5 backfill windows pending (newest 2026-09-26..2026-10-09)" in why
+    # the backfill asked Open-Meteo today (e.g. finished a window this morning)
+    done.calls_on = "2026-10-14"
+    assert budget(done)[0] == 750 and "used Open-Meteo calls today" in budget(done)[1]
+    done.calls_on = "2026-10-13"
+    assert budget(done)[0] == 3750
+    # the window 10..23 Oct is fetched tomorrow: today stays normal
+    calls, why = budget(done, day=date(2026, 10, 23))
+    assert calls == 750 and "2026-10-10..2026-10-23 becomes due tomorrow" in why
+    calls, why = budget(done, day=date(2026, 10, 24))
+    # with the 28-day gauge window 26 Sep..23 Oct, the window before it is pending too
+    assert calls == 750 and "2 backfill windows pending (newest 2026-10-10..2026-10-23)" in why
+
+
+def test_extra_budget_falls_back_when_the_state_cannot_be_read(tmp_path):
+    def broken():
+        raise httpx.ConnectError("no route to GitHub")
+
+    calls, why = runs.handover_budget(750, 3000, broken, MODELS, BACKFILL_FROM, date(2026, 10, 14))
+    assert calls == 750
+    assert (
+        why == "750 calls (normal; extra 3000 not used: backfill state not readable: "
+        "no route to GitHub)"
+    )
+    # a missing state loads as empty: everything pending, so normal too
+    empty = backfill.State.load(tmp_path / "nothing.json")
+    calls, _ = runs.handover_budget(750, 3000, lambda: empty, MODELS, BACKFILL_FROM, date.today())
+    assert calls == 750
+
+
+def test_summary_states_the_budget(tmp_path):
+    text = runs.summary(runs.Result(), 0, tmp_path, MODELS, NOW, budget_note="750 calls (normal)")
+    assert "- Budget: 750 calls (normal)" in text
+    assert "runs complete since 2026-06-23" in text
