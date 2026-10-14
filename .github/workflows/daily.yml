@@ -50,7 +50,13 @@ jobs:
             exit 0
           fi
           git commit -m "data: daily update $(date -u +%F)"
-          git push
+          # main may have moved during the run (a merge): rebase onto it and try again
+          for attempt in 1 2 3; do
+            if git push; then exit 0; fi
+            sleep $((attempt * 10))
+            git pull --rebase --quiet origin main
+          done
+          exit 1
       - name: Error by lead hour (all models and ALADIN)
         # optional: a failure here must not fail the daily update
         continue-on-error: true
