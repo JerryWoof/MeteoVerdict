@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -9,8 +9,10 @@ import pytest
 from typer.testing import CliRunner
 
 from meteoverdict import aladin, cli, stations
+from meteoverdict import backfill as backfill_mod
 from meteoverdict.chmi import parse_collection
 from meteoverdict.cli import app
+from meteoverdict.models import load_models
 
 runner = CliRunner()
 
@@ -558,6 +560,45 @@ def test_fetch_runs_dry_run_prints_the_cost(tmp_path):
     result = runner.invoke(app, args)
     assert result.exit_code == 0, result.output
     assert "1 runs to fetch at 100 stations, about 330 Open-Meteo calls" in plain(result.output)
+
+
+def test_fetch_runs_extra_budget_needs_a_readable_backfill_state(tmp_path):
+    args = ["fetch-runs", "--dry-run", "--data-dir", str(tmp_path), "--run", "2026-10-12T06"]
+    result = runner.invoke(app, [*args, "--extra-calls-if-backfill-idle", "3000"])
+    assert result.exit_code == 0, result.output
+    out = plain(result.output)
+    assert "budget: 450 calls (normal; extra 3000 not used: backfill state not readable" in out
+    assert "budget 450)" in out
+
+
+def test_fetch_runs_extra_budget_when_the_backfill_is_idle(tmp_path):
+    today = datetime.now(UTC).date()
+    first = today - timedelta(days=40)
+    models = [m for m in load_models() if m.enabled]
+    state = backfill_mod.State(tmp_path / "backfill-state.json")
+    for start, end in backfill_mod.complete_windows(first, today):
+        state.fc_done |= {backfill_mod.fc_key(m, start, end) for m in models}
+        span = backfill_mod.gauge_window(first, today, start)
+        if span:
+            state.fc_done |= {backfill_mod.gauge_key(m, *span) for m in models}
+    state.save()
+    args = ["fetch-runs", "--dry-run", "--data-dir", str(tmp_path), "--run", "2026-10-12T06"]
+    extra = ["--extra-calls-if-backfill-idle", "3000", "--backfill-from", f"{first}"]
+    result = runner.invoke(app, [*args, *extra])
+    assert result.exit_code == 0, result.output
+    assert "budget: 3450 calls (450 normal + 3000 extra: backfill idle" in plain(result.output)
+
+
+def test_fetch_runs_without_budget_does_nothing(monkeypatch, tmp_path):
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    args = ["fetch-runs", "--data-dir", str(tmp_path), "--max-calls", "0"]
+    result = runner.invoke(app, [*args, "--extra-calls-if-backfill-idle", "3000"])
+    assert result.exit_code == 0, result.output
+    assert "0 runs fetched, 0 calls used" in plain(result.output)
+    text = summary.read_text()
+    assert "- Budget: 0 calls (normal; extra 3000 not used: backfill state not readable" in text
+    assert not (tmp_path / "runs").exists()
 
 
 def test_fetch_runs_github_needs_credentials(monkeypatch, tmp_path):

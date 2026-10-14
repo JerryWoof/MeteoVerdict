@@ -25,7 +25,11 @@ env:
   # (runs.yml) stays under the free tier's 10,000 a day and 300,000 a month
   # (9,450 x 31 = ~293,000); Open-Meteo counts per IP, and runners share IPs, so a run
   # may still meet the daily limit: it then stops cleanly and the next run continues.
-  # Once the history is complete (it then needs ~600 a day), give the rest to runs.yml.
+  # Once the history is complete, the backfill only needs a new window every 14 days
+  # (~6,900, + ~3,100 for the gauges every other window, over two days); on days with
+  # nothing pending, runs.yml takes up to 6,000 of this share for the single-runs history
+  # (`--extra-calls-if-backfill-idle`, reading the state this workflow keeps in
+  # data-state; docs/data-sources.md#open-meteo-budget).
   MAX_CALLS: ${{ inputs.max_calls || '6800' }}
 
 jobs:
