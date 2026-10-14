@@ -253,3 +253,48 @@ def test_summary_for_the_job_page(tmp_path, fake):
     assert "1234.5 Open-Meteo calls" in text
     assert "of 4 14-day windows scored since 2026-08-01" in text
     assert "Stopped: Daily API request limit exceeded." in text
+
+
+def test_pending_windows_and_the_day_of_the_last_calls(tmp_path, fake):
+    state = backfill.State.load(tmp_path / "backfill-state.json")
+    assert backfill.pending_windows(MODELS, FIRST, LAST, state) == WINDOWS[::-1]
+    fake()
+    budget = forecasts.Budget(max_calls=1e9)
+    backfill.run(
+        None,
+        POINTS,
+        MODELS,
+        FIRST,
+        LAST,
+        tmp_path,
+        budget,
+        gauge_points=GAUGES,
+        today=date(2026, 10, 1),
+    )
+    state = backfill.State.load(tmp_path / "backfill-state.json")
+    assert state.calls_on == "2026-10-01"
+    assert backfill.pending_windows(MODELS, FIRST, LAST, state) == []
+    # the gauges' 28-day windows still owe their forecasts: pending, though scored
+    state.fc_done = {k for k in state.fc_done if not k.startswith("gauges|")}
+    assert backfill.pending_windows(MODELS, FIRST, LAST, state) == WINDOWS[::-1]
+    assert backfill.pending_windows(MODELS, FIRST, LAST, state, gauges=False) == []
+    # a run with nothing to fetch keeps the day of the last calls
+    backfill.run(
+        None,
+        POINTS,
+        MODELS,
+        FIRST,
+        LAST,
+        tmp_path,
+        budget,
+        gauge_points=GAUGES,
+        today=date(2026, 10, 2),
+    )
+    assert backfill.State.load(tmp_path / "backfill-state.json").calls_on == "2026-10-01"
+
+
+def test_stopped_run_records_the_day_of_its_calls(tmp_path, fake):
+    fake(quota_after=1)
+    budget = forecasts.Budget(max_calls=1e9)
+    backfill.run(None, POINTS, MODELS, FIRST, LAST, tmp_path, budget, today=date(2026, 10, 3))
+    assert backfill.State.load(tmp_path / "backfill-state.json").calls_on == "2026-10-03"

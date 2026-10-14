@@ -16,6 +16,10 @@ month from ``recent/`` (last 12 months; older ones are imported once with
 ``mvd fetch-gauges``) into ``gauges/``, and kept as final once the month ended
 ``GAUGE_DELAY_DAYS`` before the last day (manual readings arrive about a month late);
 newer months are refreshed by the daily run.
+
+When nothing is pending (``pending_windows``), the backfill's share of the Open-Meteo
+budget can go to the single runs' history (``handover``, used by ``mvd fetch-runs
+--extra-calls-if-backfill-idle``; docs/data-sources.md#open-meteo-budget).
 """
 
 from __future__ import annotations
@@ -23,7 +27,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
@@ -45,6 +49,8 @@ class State:
     gauge_months: set[str] = field(default_factory=set)
     #: model id -> stations Open-Meteo has no data for (outside the model's real domain)
     uncovered: dict[str, set[str]] = field(default_factory=dict)
+    #: UTC day (YYYY-MM-DD) the backfill last asked Open-Meteo for forecasts
+    calls_on: str = ""
 
     @classmethod
     def load(cls, path: Path) -> State:
@@ -59,6 +65,7 @@ class State:
             set(doc["scored"]),
             set(doc.get("gauge_months", [])),
             uncovered,
+            doc.get("calls_on", ""),
         )
 
     def save(self) -> None:
@@ -69,6 +76,8 @@ class State:
             "gauge_months": sorted(self.gauge_months),
             "uncovered": {m: sorted(ids) for m, ids in sorted(self.uncovered.items()) if ids},
         }
+        if self.calls_on:
+            doc["calls_on"] = self.calls_on
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
 
@@ -125,9 +134,12 @@ def run(
     sync: Sync | None = None,
     log: Callable[[str], None] = lambda _: None,
     gauge_points: pl.DataFrame | None = None,
+    today: date | None = None,
 ) -> Result:
-    """``gauge_points``: rain gauges that are not in ``points`` (precipitation only)."""
+    """``gauge_points``: rain gauges that are not in ``points`` (precipitation only);
+    ``today``: the UTC day recorded as ``calls_on`` (default: now)."""
     state = State.load(data_dir / "backfill-state.json")
+    calls_on = str(today or datetime.now(UTC).date())
     result = Result()
     for start, end in reversed(complete_windows(first, last)):
         gauge_span = gauge_window(first, last, start) if gauge_points is not None else None
@@ -167,12 +179,14 @@ def run(
             model_start = max(start, model.archive_from)
             if model_start > end or fc_key(model, start, end) in state.fc_done:
                 continue
+            state.calls_on = calls_on
             try:
                 fc = forecasts.fetch_forecasts(
                     client, points, [model], model_start, end, budget, uncovered=state.uncovered
                 )
             except forecasts.QuotaError as exc:
                 partitions.write_monthly(exc.partial, data_dir / "fc", forecasts.KEYS)
+                state.save()
                 if sync:
                     sync.push(touched)
                 result.stopped = str(exc)
@@ -182,9 +196,10 @@ def run(
             state.save()
         if gauge_span:
             stopped = _gauge_forecasts(
-                client, gauge_points, models, gauge_span, data_dir, budget, state
+                client, gauge_points, models, gauge_span, data_dir, budget, state, calls_on
             )
             if stopped:
+                state.save()
                 if sync:
                     sync.push(touched)
                 result.stopped = stopped
@@ -236,13 +251,16 @@ def _gauges_pending(models: list[Model], span: tuple[date, date], state: State) 
     )
 
 
-def _gauge_forecasts(client, gauge_points, models, span, data_dir, budget, state) -> str:
+def _gauge_forecasts(
+    client, gauge_points, models, span, data_dir, budget, state, calls_on=""
+) -> str:
     """Precipitation forecasts at the gauges for one 28-day window; why it stopped."""
     start, end = span
     for model in models:
         model_start = max(start, model.archive_from)
         if model_start > end or gauge_key(model, start, end) in state.fc_done:
             continue
+        state.calls_on = calls_on or state.calls_on
         try:
             fc = forecasts.fetch_forecasts(
                 client,
@@ -262,6 +280,52 @@ def _gauge_forecasts(client, gauge_points, models, span, data_dir, budget, state
         state.fc_done.add(gauge_key(model, start, end))
         state.save()
     return ""
+
+
+def _forecasts_pending(models: list[Model], start: date, end: date, state: State) -> bool:
+    return any(
+        max(start, m.archive_from) <= end and fc_key(m, start, end) not in state.fc_done
+        for m in models
+    )
+
+
+def pending_windows(
+    models: list[Model], first: date, last: date, state: State, gauges: bool = True
+) -> list[tuple[date, date]]:
+    """Complete windows (newest first) for which ``run`` would still ask Open-Meteo:
+    station forecasts of a model, or (``gauges``) the rain-gauge forecasts of the 28-day
+    window the 14-day window completes. A window fetched but not scored yet (its
+    observations not published as a month) needs only ČHMÚ downloads, so it is not
+    pending here."""
+    found = []
+    for start, end in reversed(complete_windows(first, last)):
+        gauge_span = gauge_window(first, last, start) if gauges else None
+        if _forecasts_pending(models, start, end, state) or (
+            gauge_span and _gauges_pending(models, gauge_span, state)
+        ):
+            found.append((start, end))
+    return found
+
+
+def handover(models: list[Model], first: date, today: date, state: State) -> tuple[bool, str]:
+    """Whether the backfill (``--from first``, ``--to`` yesterday) leaves today's share
+    of the Open-Meteo budget unused, and why (one line).
+
+    Idle only if the backfill asked Open-Meteo nothing today (UTC), no complete window
+    is pending now, and none becomes due tomorrow (a window ending today is fetched by
+    tomorrow's run: keeping today normal keeps the extra calls a day away from it).
+    """
+    if state.calls_on == str(today):
+        return False, "the backfill used Open-Meteo calls today"
+    pending = pending_windows(models, first, today - timedelta(days=1), state)
+    if pending:
+        (start, end), n = pending[0], len(pending)
+        return False, f"{n} backfill window{'s' * (n > 1)} pending (newest {start}..{end})"
+    due = pending_windows(models, first, today, state)
+    if due:
+        return False, f"backfill window {due[0][0]}..{due[0][1]} becomes due tomorrow"
+    n = len(complete_windows(first, today - timedelta(days=1)))
+    return True, f"backfill idle (all {n} complete windows since {first} fetched)"
 
 
 def summary(result: Result, calls: float, data_dir: Path, first: date, last: date) -> str:

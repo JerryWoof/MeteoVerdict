@@ -294,6 +294,26 @@ def fetch_runs(
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Only print the runs to fetch and their cost.")
     ] = False,
+    history_from: Annotated[
+        datetime | None,
+        typer.Option(
+            formats=["%Y-%m-%d"],
+            help="Oldest day (00 UTC run) of the history. Default: the first run with "
+            "ALADIN (runs.HISTORY_FROM).",
+        ),
+    ] = None,
+    extra_calls_if_backfill_idle: Annotated[
+        float,
+        typer.Option(
+            help="Calls added to --max-calls when the D+N backfill has nothing pending "
+            "(its state in the release data-state with --github-release, else "
+            "backfill-state.json in --data-dir); the normal budget if it cannot be read.",
+        ),
+    ] = 0,
+    backfill_from: Annotated[
+        datetime,
+        typer.Option(formats=["%Y-%m-%d"], help="The backfill's --from (for the idle check)."),
+    ] = datetime(2024, 1, 1),
 ) -> None:
     """Fetch single model runs (H+1 … H+120) at the station subset from Open-Meteo's
     Single Runs API, resumable within a call budget."""
@@ -306,6 +326,7 @@ def fetch_runs(
     stations_table = runs.load_stations(stations_path)
     models = [m for m in catalogue.load_models() if m.enabled]
     now = datetime.now(UTC)
+    first = history_from.date() if history_from else runs.HISTORY_FROM
     modes = ("recent", "history") if mode == "all" else (mode,)
     with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
         sync = None
@@ -315,11 +336,20 @@ def fetch_runs(
             )
             sync = runs.RunsSync(notes_store, data_dir, log=typer.echo)
             sync.pull_state()
+        max_calls, budget_note = runs.handover_budget(
+            max_calls,
+            extra_calls_if_backfill_idle,
+            lambda: _backfill_state(client if github_release else None, data_dir),
+            models,
+            backfill_from.date(),
+            now.date(),
+        )
+        typer.echo(f"budget: {budget_note}")
         if dry_run:
             state = runs.State.load(data_dir / runs.STATE_NAME)
             todo = chosen or [
                 *(runs.recent_runs(now) if "recent" in modes else []),
-                *(runs.history_runs(now) if "history" in modes else []),
+                *(runs.history_runs(now, first) if "history" in modes else []),
             ]
             pending = [(r, state.todo(r, runs.wanted(models, r))) for r in todo]
             pending = [(r, m) for r, m in pending if m]
@@ -331,18 +361,21 @@ def fetch_runs(
             )
             return
         budget = forecasts.Budget(max_calls=max_calls)
-        result = runs.collect(
-            client,
-            stations_table,
-            models,
-            data_dir,
-            budget,
-            now,
-            runs=chosen,
-            modes=modes,
-            sync=sync,
-            log=typer.echo,
-        )
+        result = runs.Result()
+        if max_calls > 0:  # a schedule with only the extra budget: nothing when not idle
+            result = runs.collect(
+                client,
+                stations_table,
+                models,
+                data_dir,
+                budget,
+                now,
+                runs=chosen,
+                modes=modes,
+                sync=sync,
+                log=typer.echo,
+                first=first,
+            )
     typer.echo(
         f"{len(result.runs)} runs fetched, {budget.used:g} calls used"
         + (f"; stopped: {result.stopped} (run again to continue)" if result.stopped else "")
@@ -350,9 +383,23 @@ def fetch_runs(
     job_summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if job_summary:  # shown on the workflow run page
         with open(job_summary, "a", encoding="utf-8") as f:
-            f.write(runs.summary(result, budget.used, data_dir, models, now))
+            f.write(runs.summary(result, budget.used, data_dir, models, now, first, budget_note))
     if result.failed:
         raise typer.Exit(code=1)
+
+
+def _backfill_state(client: httpx.Client | None, data_dir: Path) -> backfill_mod.State:
+    """The backfill's progress: from the release data-state (``client``), else local."""
+    path = data_dir / store.STATE_NAME
+    if client is not None:
+        releases = _release_store(client)
+        if store.STATE_NAME not in releases.assets(store.STATE_TAG):
+            raise FileNotFoundError(f"{store.STATE_NAME} not in the release {store.STATE_TAG}")
+        path = data_dir / "backfill" / store.STATE_NAME  # apart from any local backfill
+        releases.download(store.STATE_TAG, store.STATE_NAME, path)
+    if not path.exists():
+        raise FileNotFoundError(path)
+    return backfill_mod.State.load(path)
 
 
 store_app = typer.Typer(help="Raw data store in GitHub Releases (data-YYYY-MM).")

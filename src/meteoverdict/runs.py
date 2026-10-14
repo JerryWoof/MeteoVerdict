@@ -19,7 +19,11 @@ as a gap; a younger run is asked again for it later (models arrive at different 
 Progress is kept in ``runs-state.json`` (per run: models fetched and models missing),
 so runs are fetched once and a run stopped by the call budget continues next time.
 "Recent" runs (the last ``RECENT_H`` hours, at least ``MIN_AGE_H`` old) come first,
-then "history" newest first back to ``models.RUNS_FROM``.
+then "history" newest first back to ``HISTORY_FROM`` (not to the archive start
+``models.RUNS_FROM``; see ``HISTORY_FROM``).
+
+The call budget of a scheduled run can grow by the backfill's share when the backfill
+has nothing to do (``handover_budget``).
 
 See docs/data-sources.md#single-runs-mvd-fetch-runs.
 """
@@ -37,8 +41,8 @@ from pathlib import Path
 import httpx
 import polars as pl
 
-from meteoverdict import forecasts, partitions, store
-from meteoverdict.models import RUNS_FROM, VARIABLES, Model
+from meteoverdict import backfill, forecasts, partitions, store
+from meteoverdict.models import VARIABLES, Model
 
 URL = "https://single-runs-api.open-meteo.com/v1/forecast"
 RUN_HOURS = (0, 6, 12, 18)
@@ -52,6 +56,12 @@ RECENT_H = 48
 #: A model missing from a run younger than this is asked again later, not a gap yet.
 PENDING_H = 24
 BATCH = 100  # stations per request
+#: Oldest run the history goes back to by default: the first run with ALADIN (both
+#: domains) in Open-Meteo's Single Runs archive (models.yaml ``runs_from``). The archive
+#: itself starts on ``models.RUNS_FROM`` (2026-04-02), but earlier runs lack the two
+#: ALADIN models, so they barely enter the fair comparison (all models on a common set)
+#: and would cost about 330 more runs (~89,000 calls). ``mvd fetch-runs --history-from``.
+HISTORY_FROM = date(2026, 6, 23)
 
 #: Model names in Open-Meteo's "run is not available" errors that differ from our id
 #: (checked live 2026-10-13).
@@ -226,7 +236,7 @@ def recent_runs(now: datetime) -> list[datetime]:
     return found
 
 
-def history_runs(now: datetime, first: date = RUNS_FROM) -> list[datetime]:
+def history_runs(now: datetime, first: date = HISTORY_FROM) -> list[datetime]:
     """Runs older than the recent ones, newest first, back to ``first`` 00 UTC."""
     recent = recent_runs(now)
     run = (recent[-1] if recent else _latest_run(now)) - timedelta(hours=6)
@@ -488,7 +498,7 @@ def collect(
     modes: tuple[str, ...] = ("recent", "history"),
     sync: RunsSync | None = None,
     log: Callable[[str], None] = lambda _: None,
-    first: date = RUNS_FROM,
+    first: date = HISTORY_FROM,
 ) -> Result:
     """Fetch the runs not done yet: ``runs`` if given, else the recent ones, then the
     history (newest first), until done or the call budget is used up."""
@@ -540,7 +550,7 @@ def collect(
     return result
 
 
-def progress(data_dir: Path, models: list[Model], now: datetime, first: date = RUNS_FROM):
+def progress(data_dir: Path, models: list[Model], now: datetime, first: date = HISTORY_FROM):
     """``(complete, all)`` runs from ``first`` to the newest recent run."""
     state = State.load(data_dir / STATE_NAME)
     every = [*recent_runs(now), *history_runs(now, first)]
@@ -548,15 +558,25 @@ def progress(data_dir: Path, models: list[Model], now: datetime, first: date = R
     return done, len(every)
 
 
-def summary(result: Result, calls: float, data_dir: Path, models, now: datetime) -> str:
+def summary(
+    result: Result,
+    calls: float,
+    data_dir: Path,
+    models,
+    now: datetime,
+    first: date = HISTORY_FROM,
+    budget_note: str = "",
+) -> str:
     """Markdown for the workflow's job summary."""
-    done, every = progress(data_dir, models, now)
+    done, every = progress(data_dir, models, now, first)
     lines = [
         "## Single runs",
         "",
         f"- This run: {len(result.runs)} model runs fetched, {calls:g} Open-Meteo calls",
-        f"- Progress: {done} of {every} runs complete since {RUNS_FROM}",
+        f"- Progress: {done} of {every} runs complete since {first}",
     ]
+    if budget_note:
+        lines.append(f"- Budget: {budget_note}")
     if result.gaps:
         gaps = "; ".join(f"{k}: {', '.join(sorted(v))}" for k, v in sorted(result.gaps.items()))
         lines.append(f"- Not available at Open-Meteo: {gaps}")
@@ -565,3 +585,32 @@ def summary(result: Result, calls: float, data_dir: Path, models, now: datetime)
     if result.stopped:
         lines.append(f"- Stopped: {result.stopped} (the next run continues)")
     return "\n".join(lines) + "\n"
+
+
+# --- the budget ----------------------------------------------------------------------
+
+
+def handover_budget(
+    base: float,
+    extra: float,
+    read_state: Callable[[], backfill.State],
+    models: list[Model],
+    backfill_from: date,
+    today: date,
+) -> tuple[float, str]:
+    """``(calls, why)``: ``base`` plus ``extra`` when the D+N backfill is idle
+    (``backfill.handover``), else ``base``; also ``base`` when its state cannot be read.
+
+    ``read_state`` gives the backfill's state (from the release ``data-state``).
+    """
+    if extra <= 0:
+        return base, f"{base:g} calls (normal)"
+    normal = f"{base:g} calls (normal; extra {extra:g} not used"
+    try:
+        state = read_state()
+        idle, why = backfill.handover(models, backfill_from, today, state)
+    except Exception as exc:  # anything: the normal budget is always safe
+        return base, f"{normal}: backfill state not readable: {exc})"
+    if not idle:
+        return base, f"{normal}: {why})"
+    return base + extra, f"{base + extra:g} calls ({base:g} normal + {extra:g} extra: {why})"
