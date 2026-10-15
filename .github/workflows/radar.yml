@@ -38,9 +38,8 @@ on:
         type: boolean
         default: false
 
-permissions:
-  contents: write # push radar-live, create releases and upload assets
-  actions: write # the live loop starts the next one (workflow_dispatch)
+# each job asks for what it needs
+permissions: {}
 
 jobs:
   check:
@@ -50,6 +49,8 @@ jobs:
       github.event.schedule == '7 * * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      actions: read # list the running Radar workflows
     outputs:
       start: ${{ steps.check.outputs.start }}
     steps:
@@ -84,12 +85,17 @@ jobs:
     if: needs.check.outputs.start == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 355
+    permissions:
+      contents: write # push radar-live (the script pushes with GH_TOKEN in the URL)
+      actions: write # start the next loop (workflow_dispatch)
     concurrency:
       group: radar-live
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: true
       - name: Install project
@@ -107,12 +113,16 @@ jobs:
       github.event.schedule == '37 */6 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    permissions:
+      contents: write # create releases and upload assets
     concurrency:
       group: radar-archive
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: true
       - name: Install project

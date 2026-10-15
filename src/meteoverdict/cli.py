@@ -320,16 +320,22 @@ def mirror_radar(
     typer.echo(f"downloaded {count} files to {out_dir}")
 
 
-SATELLITE_RELEASE_NOTES = (
-    "Meteosat images published by ČHMÚ (opendata.chmi.cz/meteorology/weather/satellite/"
-    "geo/), one uncompressed tar per product, region and UTC day (e.g. "
-    "night-M-ce-20261014.tar: the JPG files of that day as published, every 15 minutes), "
-    "archived by `mvd archive-satellite`. Contains EUMETSAT Meteosat data (EUMETSAT "
-    "Advanced Image Products, Core data, CC BY 4.0 under the EUMETSAT Data Policy), "
-    "processed by the Czech Hydrometeorological Institute (ČHMÚ), CC BY 4.0 "
-    "(https://creativecommons.org/licenses/by/4.0/). Changes: packed per day. Format: "
-    "docs/data-sources.md#satellite-images."
-)
+def satellite_release_notes(tag: str) -> str:
+    """Notes of the release ``satellite-YYYY-MM``: EUMETSAT's credit names the year of
+    the data (Data Policy, Article 6.3; docs/licensing.md)."""
+    year = tag.removeprefix("satellite-")[:4]
+    if not year.isdigit():
+        year = f"{_now():%Y}"
+    return (
+        "Meteosat images published by ČHMÚ (opendata.chmi.cz/meteorology/weather/satellite/"
+        "geo/), one uncompressed tar per product, region and UTC day (e.g. "
+        "night-M-ce-20261014.tar: the JPG files of that day as published, every 15 "
+        f"minutes), archived by `mvd archive-satellite`. Contains modified EUMETSAT "
+        f"Meteosat data {year} (EUMETSAT Advanced Image Products, Core data, CC BY 4.0 "
+        "under the EUMETSAT Data Policy), processed by the Czech Hydrometeorological "
+        "Institute (ČHMÚ), CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). "
+        "Changes: packed per day. Format: docs/data-sources.md#satellite-images."
+    )
 
 
 @app.command("archive-satellite")
@@ -369,7 +375,7 @@ def archive_satellite(
     with httpx.Client(timeout=120, transport=transport, follow_redirects=True) as client:
         if github_release:
             store_ = GitHubReleaseStore(
-                client, *_github_credentials(), notes=SATELLITE_RELEASE_NOTES
+                client, *_github_credentials(), notes=satellite_release_notes
             )
         else:
             store_ = radar.LocalStore(out_dir)
@@ -939,6 +945,14 @@ def _github_credentials() -> tuple[str, str]:
     return repo, token
 
 
+def _job_summary(markdown: str) -> None:
+    """Append to the GitHub Actions job summary (shown on the run page), if there is one."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if path:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(markdown)
+
+
 def _release_store(client: httpx.Client) -> GitHubReleaseStore:
     return GitHubReleaseStore(client, *_github_credentials(), notes=store.RELEASE_NOTES)
 
@@ -967,6 +981,29 @@ def store_download(
     typer.echo(f"downloaded {len(done)} files")
 
 
+class _OpenMeteoMeter:
+    """Counts the requests to the Open-Meteo forecast API (``outlook.URL``) an httpx
+    client sends, retries included, and their weighted calls (``outlook.cost``), so the
+    daily budget can be checked from the log (an httpx ``request`` event hook)."""
+
+    def __init__(self, url: str = outlook.URL) -> None:
+        self.url = httpx.URL(url)
+        self.requests = 0
+        self.calls = 0.0
+
+    def __call__(self, request: httpx.Request) -> None:
+        if (request.url.host, request.url.path) != (self.url.host, self.url.path):
+            return
+        params = request.url.params
+        points = len(params.get("latitude", "").split(","))
+        models = len([m for m in params.get("models", "").split(",") if m])
+        self.requests += 1
+        self.calls += outlook.cost(points, max(models, 1))
+
+    def line(self) -> str:
+        return f"Open-Meteo: {self.calls:g} calls in {self.requests} requests"
+
+
 @app.command("outlook")
 def outlook_cmd(
     aggregates_path: Annotated[
@@ -986,7 +1023,12 @@ def outlook_cmd(
     ] = False,
 ) -> None:
     """TV-style forecast for every okres: today's models combined by their okres scores."""
-    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+    meter = _OpenMeteoMeter()
+    with httpx.Client(
+        timeout=300,
+        transport=httpx.HTTPTransport(retries=3),
+        event_hooks={"request": [meter]},
+    ) as client:
         releases = _release_store(client) if github_release else None
         if releases:
             releases.download(store.LATEST_TAG, "aggregates.parquet", aggregates_path)
@@ -997,7 +1039,11 @@ def outlook_cmd(
             typer.echo("mvd outlook: no okres weights yet", err=True)
             raise typer.Exit(code=1)
         points = combine.okres_points()
-        table, hourly = outlook.outlook(client, weights, points, sleep=time.sleep)
+        try:
+            table, hourly = outlook.outlook(client, weights, points, sleep=time.sleep)
+        finally:  # also when it fails: the calls count against the daily budget
+            typer.echo(meter.line())
+            _job_summary(f"## Outlook\n\n- {meter.line()}\n")
         now = datetime.now(UTC)
         path = outlook.write(table, points, out, now)
         hourly_path = outlook.write_hourly(hourly, out.with_name("outlook-hourly.json"), now)
