@@ -84,3 +84,12 @@ export function stationFeatures(stations, best, colors) {
       })),
   };
 }
+
+/** Every station of an okres (or kraj) in the station table, by name: links to the
+ * station pages. All of them, not only those scored for the variable shown. */
+export function stationsIn(table, region) {
+  return records(table)
+    .filter((s) => s.okres_code === region || s.kraj_code === region)
+    .map((s) => ({ id: s.id, name: s.name }))
+    .sort((a, b) => a.name.localeCompare(b.name, "cs"));
+}
