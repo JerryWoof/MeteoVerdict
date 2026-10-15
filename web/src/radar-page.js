@@ -147,6 +147,7 @@ function frame(url) {
     else {
       // gone (the live folder drops old nowcasts every 5 min) or broken: never wait for
       // it again, and fetch a fresh frame list
+      frames.delete(url); // a fresh frame list may bring it back
       failed.add(url);
       refreshSoon();
     }
@@ -1096,9 +1097,16 @@ function writeHash() {
 }
 
 // --- state ----------------------------------------------------------------------------
+// only the latest load applies, and a failed refresh keeps what is shown
+let loadToken = 0;
 async function load(fresh = false) {
-  base = sourceUrl(view.day, LIVE);
-  index = await getJson(`${base}index.json`, fresh);
+  const token = ++loadToken;
+  const nextBase = sourceUrl(view.day, LIVE);
+  const next = await getJson(`${nextBase}index.json`, fresh);
+  if (token !== loadToken) return false;
+  if (!next && fresh && nextBase === base && index) return false;
+  base = nextBase;
+  index = next;
   steps = timeline(index, { hours: view.day === "live" ? view.hours : null });
   allSteps = timeline(index);
   cellsData = new Map();
@@ -1106,6 +1114,7 @@ async function load(fresh = false) {
   motionReady.clear();
   flows.clear();
   makeLuts();
+  return true;
 }
 
 function initialTime() {
@@ -1121,7 +1130,7 @@ async function update(change) {
   view.filter = parseFilter(view.filter);
   if (reload) {
     stop();
-    await load();
+    if (!(await load())) return;
     shownMs = initialTime();
   }
   if ("filter" in change && !reload) makeLuts();
@@ -1185,7 +1194,8 @@ function refreshSoon() {
     refreshTimer = null;
     lastRefresh = Date.now();
     const keep = shownMs;
-    await load(true);
+    if (!(await load(true))) return;
+    for (const url of failed) frames.delete(url);
     failed.clear();
     shownMs = Math.min(lastTime(), Math.max(firstTime(), keep ?? initialTime()));
     renderTimeline();
@@ -1198,7 +1208,7 @@ function refreshSoon() {
 setInterval(async () => {
   if (view.day !== "live" || playing) return;
   const atNow = shownMs === quantize(lastObserved() ?? 0);
-  await load(true);
+  if (!(await load(true))) return;
   if (atNow || shownMs == null) shownMs = initialTime();
   shownMs = Math.min(lastTime(), Math.max(firstTime(), shownMs));
   if (atNow) shownMs = quantize(lastObserved() ?? lastTime());
