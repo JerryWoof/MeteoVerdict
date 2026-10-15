@@ -82,17 +82,17 @@ def write_meta(path, generated: str, as_of: str):
     return path
 
 
-def test_published_scores_more_than_3_days_behind_fail(tmp_path):
-    # 15 Oct 2026: generated 2026-10-15T10:06 but as of 2026-09-30, and the check passed
+def test_published_scores_more_than_21_days_behind_fail(tmp_path):
     healthy(tmp_path)
-    meta = write_meta(tmp_path / "meta.json", "2026-10-15T10:06:16+00:00", "2026-09-30")
+    meta = write_meta(tmp_path / "meta.json", "2026-10-15T10:06:16+00:00", "2026-09-20")
     messages = errors(quality.check(tmp_path, now=NOW, meta_path=meta))
     assert len(messages) == 1
-    assert messages[0].startswith("published scores are as of 2026-09-30, 15 days before")
+    assert messages[0].startswith("published scores are as of 2026-09-20, 25 days before")
 
 
 @pytest.mark.parametrize(
-    ("as_of", "late"), [("2026-10-14", False), ("2026-10-12", False), ("2026-10-11", True)]
+    ("as_of", "late"),
+    [("2026-10-14", False), ("2026-09-30", False), ("2026-09-24", False), ("2026-09-23", True)],
 )
 def test_as_of_lag_limit(as_of, late):
     meta = {"generated": "2026-10-15T10:06:16+00:00", "as_of": as_of}
@@ -112,10 +112,10 @@ def test_check_command_fails_on_late_meta(tmp_path):
     from meteoverdict.cli import app
 
     healthy(tmp_path)
-    meta = write_meta(tmp_path / "meta.json", NOW.isoformat(), "2026-09-30")
+    meta = write_meta(tmp_path / "meta.json", NOW.isoformat(), "2026-09-01")
     result = CliRunner().invoke(app, ["check", "--data-dir", str(tmp_path), "--meta", str(meta)])
     assert result.exit_code == 1
-    assert "ERROR: published scores are as of 2026-09-30" in result.output
+    assert "ERROR: published scores are as of 2026-09-01" in result.output
 
 
 def test_too_many_silent_stations(tmp_path):
