@@ -6,7 +6,7 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
 import {
-  NO_DATA, TOO_FEW, bestByRegion, fillExpression, modelColors, records, stationFeatures,
+  NO_DATA, TOO_FEW, bestByRegion, fillExpression, modelColors, records, stationFeatures, stationsIn,
 } from "./data.js";
 import { HOURS, explainRegion, reasons } from "./explain.js";
 import { setUpLanguage } from "./i18n.js";
@@ -229,6 +229,21 @@ function chips(items, label) {
   return wrap;
 }
 
+/** Under the okres name: links to the pages of all its stations (station.html). */
+function stationPages(region) {
+  const all = stationsIn(current.stationTable, region);
+  if (all.length === 0) return null;
+  const line = element("p", null, "station-pages");
+  line.append(element("span", `${t(all.length === 1 ? "detail.stationPage" : "detail.stationPages")}: `, "muted"));
+  all.forEach((s, i) => {
+    if (i > 0) line.append(" · ");
+    const a = element("a", s.name);
+    a.href = `station.html#${s.id}`;
+    line.append(a);
+  });
+  return line;
+}
+
 function stationList(region) {
   const table = records(current.stationTable);
   const own = table.filter((s) => s.okres_code === region || s.kraj_code === region);
@@ -268,8 +283,10 @@ async function showRegion(region) {
   const close = closeButton(() => select(null));
   const heading = element("h2", name);
   const sub = element("p", `${t(`variable.${view.variable}`)} · D+${view.leadDay} · ${t(`window.${view.window}`).toLowerCase()}`, "muted");
+  const pages = stationPages(region);
+  const top = pages ? [close, heading, pages, sub] : [close, heading, sub];
   if (!facts) {
-    box.replaceChildren(close, heading, sub, element("p", t(entry && !entry.enough ? "describe.tooFew" : "detail.noRanking")));
+    box.replaceChildren(...top, element("p", t(entry && !entry.enough ? "describe.tooFew" : "detail.noRanking")));
     return;
   }
   const unit = unitOf(view.variable);
@@ -282,7 +299,7 @@ async function showRegion(region) {
   );
   const why = element("ul", null, "why");
   for (const { key, params } of reasons(facts, fmt)) why.append(element("li", t(key, params)));
-  const blocks = [close, heading, sub, verdict];
+  const blocks = [...top, verdict];
   if (facts.preliminary) blocks.push(element("p", t("detail.preliminary", { days: facts.basis.days }), "warning"));
   blocks.push(element("h3", t("detail.why")), why);
   const chartBlock = element("div", null, "detail-block");
