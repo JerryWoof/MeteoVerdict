@@ -890,6 +890,53 @@ img.eink {
   margin: 0.25rem 0 0.5rem;
   font-size: 0.9rem;
 }
+/* the station page: one chart per resolution, then all elements */
+.content.station-page {
+  max-width: 72rem;
+}
+#controls input[type="search"] {
+  margin-left: 0.3rem;
+  min-width: 14rem;
+}
+#pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  margin: 0.5rem 0 0.75rem;
+}
+#pick select {
+  margin-left: 0.3rem;
+  max-width: 100%;
+}
+.station-chart h3 {
+  font-size: 0.95rem;
+  margin: 1rem 0 0.25rem;
+}
+.station-chart svg {
+  background: #ffffff;
+  border-radius: 4px;
+  max-width: 100%;
+}
+.station-elements {
+  font-size: 0.8rem;
+}
+.station-elements tr.muted td {
+  color: #8a949c;
+}
+/* wide tables scroll sideways on phones instead of widening the page */
+table.station-elements {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+/* the station page never gets wider than the screen */
+body.station {
+  grid-template-columns: minmax(0, 1fr);
+}
+body.station #facts {
+  overflow-wrap: anywhere;
+}
 
 /* weather radar (radar.html), on the TV map's layout */
 .radar-when {

@@ -328,6 +328,12 @@ async function showStation(code, title, backTo) {
   const children = [close];
   if (backTo) children.push(back);
   children.push(element("h2", title), stationChart(doc, current.view, current.colors, current.names, t));
+  // every element the station measures, with its history (station.html)
+  const all = element("a", t("station.link"));
+  all.href = `station.html#${code}`;
+  const links = element("p", null, "links");
+  links.append(all);
+  children.push(links);
   box.replaceChildren(...children);
   fitView();
 }
