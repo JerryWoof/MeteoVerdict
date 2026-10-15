@@ -81,8 +81,11 @@ jobs:
           npm test
           npm run build
       - name: Radar days (web-YYYYMMDD.tar of the last 60 days from the releases radar-YYYY-MM)
+        # Satellite images only for the last 7 days and echo tops for the last 14 (size);
+        # if the site would still pass PAGES_BUDGET_MB, the oldest days go first.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PAGES_BUDGET_MB: 900
         run: |
           mkdir -p /tmp/radar web/dist/radar/days
           for back in 0 1 2; do
@@ -91,17 +94,41 @@ jobs:
               || echo "no $tag yet"
           done
           cutoff=$(date -u -d '60 days ago' +%Y%m%d)
+          satellite_cutoff=$(date -u -d '7 days ago' +%Y%m%d)
+          echotop_cutoff=$(date -u -d '14 days ago' +%Y%m%d)
           : > /tmp/radar/days.txt
           for tar in /tmp/radar/web-*.tar; do
             [ -e "$tar" ] || continue
             day=$(basename "$tar" .tar); day=${day#web-}
             [[ "$day" < "$cutoff" ]] && continue
-            mkdir -p "web/dist/radar/days/$day"
-            tar -xf "$tar" -C "web/dist/radar/days/$day"
-            echo "${day:0:4}-${day:4:2}-${day:6:2}" >> /tmp/radar/days.txt
+            dir="web/dist/radar/days/$day"
+            mkdir -p "$dir"
+            tar -xf "$tar" -C "$dir"
+            if [[ "$day" < "$satellite_cutoff" ]] && [ -d "$dir/satellite" ]; then
+              rm -rf "$dir/satellite"
+              jq -c 'if .satellite then .satellite |= map_values(.frames = []) else . end | del(.satellite_attribution)' \
+                "$dir/index.json" > /tmp/radar/index.json && mv /tmp/radar/index.json "$dir/index.json"
+            fi
+            if [[ "$day" < "$echotop_cutoff" ]] && [ -d "$dir/echotop" ]; then
+              rm -rf "$dir/echotop"
+              jq -c '.echotop = []' "$dir/index.json" > /tmp/radar/index.json && mv /tmp/radar/index.json "$dir/index.json"
+            fi
+            echo "$day" >> /tmp/radar/days.txt
           done
-          sort /tmp/radar/days.txt | jq -R . | jq -s -c . > web/dist/radar/days.json
+          sort -o /tmp/radar/days.txt /tmp/radar/days.txt
+          budget=$(( PAGES_BUDGET_MB * 1000000 ))
+          while [ "$(du -sb web/dist | cut -f1)" -gt "$budget" ] && [ -s /tmp/radar/days.txt ]; do
+            oldest=$(head -1 /tmp/radar/days.txt)
+            echo "::warning::site over ${PAGES_BUDGET_MB} MB: leaving out radar day $oldest"
+            rm -rf "web/dist/radar/days/$oldest"
+            sed -i 1d /tmp/radar/days.txt
+          done
+          sed 's/^\(....\)\(..\)\(..\)$/\1-\2-\3/' /tmp/radar/days.txt | jq -R . | jq -s -c . > web/dist/radar/days.json
           echo "radar days: $(wc -l < /tmp/radar/days.txt), $(du -sh web/dist/radar | cut -f1)"
+          for layer in maxz merge1h echotop motion cells satellite; do
+            echo "  $layer: $(du -sch web/dist/radar/days/*/$layer 2>/dev/null | tail -1 | cut -f1)"
+          done
+          echo "site: $(du -sh web/dist | cut -f1)"
       - uses: actions/upload-pages-artifact@v3
         if: steps.pages.outputs.enabled == 'true'
         with:
