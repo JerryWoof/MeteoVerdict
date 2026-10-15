@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MeteoVerdict: weather radar</title>
+    <meta name="description" content="ČHMÚ weather radar over Czechia: the last hours, the nowcast for the next hour, hourly precipitation and archived days." />
+  </head>
+  <body class="tv radar">
+    <header>
+      <h1><a href="./">MeteoVerdict</a></h1>
+      <p id="status">Loading…</p>
+      <a href="./" data-i18n="page.map">Map</a>
+      <a href="tv.html" data-i18n="page.tv">Forecast</a>
+      <a href="compare.html" data-i18n="page.compare">Compare models</a>
+      <a href="api.html" data-i18n="page.api">Open data</a>
+      <button type="button" id="language">Česky</button>
+    </header>
+    <nav id="ribbon">
+      <div class="radar-when">
+        <div class="when-row">
+          <div id="source" class="segmented"></div>
+          <input type="date" id="day" data-i18n-title="radar.dayLabel" />
+          <div id="hours" class="segmented"></div>
+        </div>
+        <div class="when-row timebar">
+          <button type="button" id="play" class="play">▶</button>
+          <div class="slider">
+            <input type="range" id="time" min="0" max="0" value="0" data-i18n-aria="radar.time" />
+            <div id="ticks"></div>
+          </div>
+          <output id="clock" for="time"></output>
+        </div>
+      </div>
+    </nav>
+    <main id="map" aria-label="Radar map of Czechia">
+      <aside id="headline" aria-live="polite"></aside>
+      <aside id="show-box">
+        <details id="show" open>
+          <summary data-i18n="radar.onMap">On the map</summary>
+          <div id="layers"></div>
+          <div id="radar-legend"></div>
+        </details>
+      </aside>
+    </main>
+    <footer>
+      <span data-i18n="footer.radar">Radar</span>:
+      <a href="https://opendata.chmi.cz/meteorology/weather/radar/">ČHMÚ</a> (CC BY 4.0) ·
+      <span data-i18n="footer.boundaries">Boundaries</span>: ČÚZK (CC BY 4.0) ·
+      <a href="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/data-sources.md#radar-archive" data-i18n="footer.method">Source and method</a>
+    </footer>
+    <script type="module" src="/src/radar-page.js"></script>
+  </body>
+</html>
