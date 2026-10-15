@@ -215,13 +215,25 @@ def run(
             year, mon = map(int, month.split("-"))
             month_first = date(year, mon, 1)
             month_last = partitions.month_end(month_first)
+            unreadable: list[str] = []
             obs = observations.fetch_observations(
-                client, points["id"], max(first, month_first), min(last, month_last)
+                client,
+                points["id"],
+                max(first, month_first),
+                min(last, month_last),
+                unreadable=unreadable,
             )
             if obs.height:
                 partitions.write_monthly(obs, data_dir / "obs", ["station_id", "time", "variable"])
-            # only a published month (recent/ or historical/) is final; data from now/
-            # covers a few days and is replaced once ČHMÚ publishes the month
+            # only a whole month published (recent/ or historical/) and read for every
+            # station is final; data from now/ covers a few days and is replaced once ČHMÚ
+            # publishes the month
+            if first > month_first or last < month_last:
+                log(f"{month}: observations fetched for part of the month only")
+                continue
+            if unreadable:
+                log(f"{month}: {len(unreadable)} monthly files unreadable, e.g. {unreadable[0]}")
+                continue
             if obs.height == 0 or "now" in set(obs["source"]):
                 log(f"{month}: observations not published as a month yet")
                 continue
