@@ -92,11 +92,15 @@ RETRY_WAITS = (2, 5, 15)
 
 
 def _get(
-    client: httpx.Client, url: str, sleep: Callable[[float], None] = time.sleep
+    client: httpx.Client,
+    url: str,
+    sleep: Callable[[float], None] = time.sleep,
+    unreadable: list[str] | None = None,
 ) -> dict | None:
     """One ČHMÚ JSON file, or None when it does not exist. Network and server errors and
     unreadable bodies are retried; a body that stays unreadable is skipped with a warning
-    (one station-day missing, not a failed run); errors that persist are raised."""
+    (one station-day missing, not a failed run) and its URL added to ``unreadable``;
+    errors that persist are raised."""
     for wait in (*RETRY_WAITS, None):
         try:
             response = client.get(url)
@@ -113,6 +117,8 @@ def _get(
                 except ValueError:
                     if wait is None:
                         log.warning("skipping %s: not JSON (%d bytes)", url, len(response.content))
+                        if unreadable is not None:
+                            unreadable.append(url)
                         return None
             elif wait is None:
                 response.raise_for_status()
@@ -129,16 +135,23 @@ def _months(start: date, end: date) -> list[tuple[int, int]]:
 
 
 def raw_station(
-    client: httpx.Client, wsi: str, start: date, end: date, today: date | None = None
+    client: httpx.Client,
+    wsi: str,
+    start: date,
+    end: date,
+    today: date | None = None,
+    unreadable: list[str] | None = None,
 ) -> list[tuple[str, pl.DataFrame]]:
-    """10-minute rows for ``wsi`` covering ``start`` to ``end``: ``[(source, rows)]``."""
+    """10-minute rows for ``wsi`` covering ``start`` to ``end``: ``[(source, rows)]``.
+    Monthly files that exist but could not be read are added to ``unreadable`` (their
+    days then come from now/ only, if at all)."""
     oldest_in_now = (today or datetime.now(UTC).date()) - timedelta(days=NOW_KEEPS_DAYS)
     parts = []
     for year, month in _months(start, end):
         first = max(start, date(year, month, 1))
         last = min(end, date(year, month, calendar.monthrange(year, month)[1]))
         for source, url in month_urls(wsi, year, month):
-            if (doc := _get(client, url)) is not None:
+            if (doc := _get(client, url, unreadable=unreadable)) is not None:
                 rows = parse_collection(doc)
                 parts.append((source, rows))
                 if rows.height:  # a partly published month: the rest may be in now/
@@ -221,14 +234,16 @@ def fetch_observations(
     end: date,
     workers: int = 8,
     today: date | None = None,
+    unreadable: list[str] | None = None,
 ) -> pl.DataFrame:
     """Hourly observations for the stations, ``start`` 00:00 to ``end`` 23:00 UTC.
 
     The day before ``start`` is read too, so the first hour's precipitation is complete.
+    URLs of monthly files that exist but could not be read are added to ``unreadable``.
     """
 
     def one(wsi: str) -> pl.DataFrame:
-        parts = raw_station(client, wsi, start - timedelta(days=1), end, today)
+        parts = raw_station(client, wsi, start - timedelta(days=1), end, today, unreadable)
         rows = [normalize(raw, source) for source, raw in parts]
         return to_hourly(pl.concat(rows)) if rows else pl.DataFrame(schema=SCHEMA)
 

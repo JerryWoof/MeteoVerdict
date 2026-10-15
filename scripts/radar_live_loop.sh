@@ -4,8 +4,8 @@
 # the branch radar-live; after LOOP_MINUTES start the next loop (workflow_dispatch of
 # this workflow, which waits in the concurrency group until this one has ended).
 #
-# Environment: GH_TOKEN (contents: write, actions: write), GITHUB_REPOSITORY,
-# GITHUB_REF_NAME; optional LOOP_MINUTES (default 340), EVERY_MINUTES (5),
+# Environment: GH_TOKEN (contents: write, actions: write), GITHUB_REPOSITORY; optional
+# LOOP_MINUTES (default 340), EVERY_MINUTES (5),
 # OFFSET_SECONDS (60: ČHMÚ publishes a composite within a minute after its time),
 # HOURS (24), SATELLITE_HOURS (24), HANDOVER (1: dispatch the next loop; 0: do not).
 # See docs/data-sources.md#live-loop.
@@ -63,7 +63,8 @@ while :; do
   now=$(date +%s)
   # start the next loop a few minutes early: it waits until this one has ended
   if [ "$HANDOVER" = 1 ] && [ $handed_over = 0 ] && [ $(( end - now )) -lt $(( EVERY + 120 )) ]; then
-    if gh workflow run radar.yml --repo "$GITHUB_REPOSITORY" --ref "${GITHUB_REF_NAME:-main}" \
+    # always main: a loop started from another branch must not hand over to that branch
+    if gh workflow run radar.yml --repo "$GITHUB_REPOSITORY" --ref main \
         -f live=true -f handover=true; then
       echo "dispatched the next live loop"
     else
