@@ -26,6 +26,7 @@ from meteoverdict import (
     outlook,
     partitions,
     quality,
+    radar,
     ranking,
     regions,
     runs,
@@ -168,6 +169,113 @@ def archive_aladin(
     )
     if result.failed:
         raise typer.Exit(code=1)
+
+
+RADAR_RELEASE_NOTES = (
+    "ČHMÚ weather radar composites, one tar per product and UTC day "
+    "(e.g. maxz-hdf5-20261014.tar: the files of that day as published), plus derived "
+    "files: merge1h-hourly-YYYYMMDD.npz (hourly MERGE precipitation grids), "
+    "merge1h-stations-YYYYMMDD.parquet (that precipitation at the ČHMÚ stations) and "
+    "web-YYYYMMDD.tar (the frames of the radar page), archived by `mvd archive-radar`. "
+    "Source: Czech Hydrometeorological Institute (ČHMÚ), opendata.chmi.cz, licensed under "
+    "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Changes: packed per day; "
+    "derived files: grid cell of each station, PNG frames cropped to the data area with "
+    "transparent frame and labels. Format: docs/data-sources.md#radar-archive."
+)
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+@app.command("archive-radar")
+def archive_radar(
+    products: Annotated[
+        str,
+        typer.Option(
+            help="observed (radar images, echo tops, MERGE), forecast (nowcasts), all, "
+            "or comma-separated product keys (e.g. maxz-hdf5,merge1h-png)."
+        ),
+    ] = "observed",
+    stations_path: Annotated[
+        Path | None,
+        typer.Option("--stations", help="Station table from `mvd stations` (MERGE at stations)."),
+    ] = None,
+    day: Annotated[
+        list[datetime] | None,
+        typer.Option(formats=["%Y-%m-%d"], help="Only this UTC day (repeatable)."),
+    ] = None,
+    no_derived: Annotated[
+        bool, typer.Option("--no-derived", help="Only the raw files, no derived files.")
+    ] = False,
+    out_dir: Annotated[
+        Path | None, typer.Option(help="Write to <dir>/radar-YYYY-MM/ (the release layout).")
+    ] = None,
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Upload to GitHub Releases of $GITHUB_REPOSITORY using $GITHUB_TOKEN.",
+        ),
+    ] = False,
+) -> None:
+    """Archive ČHMÚ radar composites per product and day before they expire (~7 days)."""
+    if (out_dir is None) == (not github_release):
+        raise typer.BadParameter("use exactly one of --out-dir and --github-release")
+    try:
+        keys = radar.parse_products(products)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    table = None
+    if stations_path is not None:
+        if not stations_path.exists():
+            raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+        table = pl.read_parquet(stations_path)
+    days = sorted({d.date() for d in day}) if day else None
+    transport = httpx.HTTPTransport(retries=3)
+    with httpx.Client(timeout=120, transport=transport, follow_redirects=True) as client:
+        if github_release:
+            store_ = GitHubReleaseStore(client, *_github_credentials(), notes=RADAR_RELEASE_NOTES)
+        else:
+            store_ = radar.LocalStore(out_dir)
+        result = radar.archive(
+            client, store_, keys, _now(), table, days, not no_derived, log=typer.echo
+        )
+    total = sum(result.sizes.values())
+    typer.echo(
+        f"archived {len(result.archived)} ({total / 1e6:.1f} MB), already there "
+        f"{result.skipped}, failed {len(result.failed)}"
+    )
+    if result.failed:
+        raise typer.Exit(code=1)
+
+
+@app.command("radar-live")
+def radar_live(
+    folder: Annotated[Path, typer.Option("--dir", help="The live folder (branch radar-live).")],
+    hours: Annotated[float, typer.Option(help="Keep the frames of the last … hours.")] = 24,
+) -> None:
+    """Update the radar page's live frames (last hours and the newest nowcast) in a folder."""
+    folder.mkdir(parents=True, exist_ok=True)
+    transport = httpx.HTTPTransport(retries=3)
+    with httpx.Client(timeout=60, transport=transport, follow_redirects=True) as client:
+        index = radar.update_live(client, folder, _now(), hours, log=typer.echo)
+    typer.echo(
+        f"{len(index['maxz'])} radar frames, {len(index['merge1h'])} MERGE frames, "
+        f"nowcast {(index.get('nowcast') or {}).get('base', 'none')}"
+    )
+
+
+@app.command("mirror-radar")
+def mirror_radar(
+    out_dir: Annotated[Path, typer.Option(help="Local copy: <dir>/radar-YYYY-MM/<asset>.")],
+    since: Annotated[str, typer.Option(help="First month (YYYY-MM); default all.")] = "",
+) -> None:
+    """Copy the radar archive (releases radar-YYYY-MM) to a local disk, skipping copies."""
+    with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
+        store_ = GitHubReleaseStore(client, *_github_credentials())
+        count = radar.mirror(store_, out_dir, since, log=typer.echo)
+    typer.echo(f"downloaded {count} files to {out_dir}")
 
 
 @app.command("leads")
