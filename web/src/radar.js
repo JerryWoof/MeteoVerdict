@@ -132,23 +132,32 @@ export function legendNumber(value) {
   return value < 1 ? value.toFixed(1) : String(Math.round(value * 10) / 10);
 }
 
-export const LAYERS = ["radar", "rain"];
+/** Map layers in the URL: radar, 1-hour sums, echo tops, storm cells, satellite clouds, water vapour. */
+export const LAYERS = ["radar", "rain", "echotop", "cells", "sat", "wv"];
 export const HOURS = [1, 3, 6, 24];
+const FILTERS = ["all", "light", "moderate", "heavy", "hail"];
 
-/** "#live/3/radar+rain/202610151035" or "#2026-10-14/24/radar/…" → view state. */
+/**
+ * "#live/3/radar+rain/202610151035/moderate" → view state. The time may be "now" (the
+ * newest frame) and the last part, the "show from" setting, may be left out.
+ */
 export function parseView(hash) {
-  const [day, hours, layers, time] = (hash ?? "").replace(/^#/, "").split("/");
+  const [day, hours, layers, time, filter] = (hash ?? "").replace(/^#/, "").split("/");
   const shown = (layers ?? "").split("+").filter((l) => LAYERS.includes(l));
+  // one satellite product at a time
+  const layerList = shown.includes("sat") && shown.includes("wv") ? shown.filter((l) => l !== "wv") : shown;
   return {
     day: /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day : "live",
     hours: HOURS.includes(Number(hours)) ? Number(hours) : 3,
-    layers: layers === undefined ? ["radar"] : shown,
+    layers: layers === undefined ? ["radar"] : layerList,
     time: parseStamp(time) != null ? time : null,
+    filter: FILTERS.includes(filter) ? filter : null,
   };
 }
 
 export function viewHash(view) {
   const parts = [view.day, String(view.hours), view.layers.join("+")];
-  if (view.time) parts.push(view.time);
+  if (view.time || (view.filter && view.filter !== "all")) parts.push(view.time ?? "now");
+  if (view.filter && view.filter !== "all") parts.push(view.filter);
   return `#${parts.join("/")}`;
 }

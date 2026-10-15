@@ -1,25 +1,55 @@
-import { Map as MapLibreMap, NavigationControl, setWorkerUrl } from "maplibre-gl";
+import { Map as MapLibreMap, Marker, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
 import { setUpLanguage } from "./i18n.js";
 import {
-  DBZ_SCALE, HOURS, LAYERS, MM_SCALE, boundsOf, clock, closestStep, frameUrl, imageCoordinates,
-  legendNumber, localDay, minutesBetween, parseStamp, parseView, rainRate, sourceUrl, timeline,
-  viewHash,
+  HOURS, MM_SCALE, boundsOf, clock, frameUrl, imageCoordinates, latestAtOrBefore, legendNumber,
+  minutesBetween, parseStamp, parseView, rainRate, sourceUrl, timeline, toStamp, viewHash,
 } from "./radar.js";
+import {
+  ALOFT_COLOURS, CATEGORIES, FILTER_KEYS, buildLut, categoriesFrom, categoryOf, decodePixels, dbzLevel,
+  filterLevels, labelKey, legendRows, maxzScale, parseFilter, rateLabel, simpleScale,
+} from "./radar-palette.js";
+import {
+  SPEEDS, advanceClock, locate, motionFor, msPerDataMinute, quantize, upsampleFlow, validMotion,
+  warpBlend,
+} from "./radar-motion.js";
+import {
+  bracket, cellFeatures, compass, hourTicks, lonLatToPixel, nowcastSentence, relativeTime, sample,
+  satelliteProduct,
+} from "./radar-extras.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
+const language = document.documentElement.lang === "cs" ? "cs" : "en";
 
 // Live frames: the branch radar-live (force-pushed by the Radar workflow every ~10 min),
 // served with CORS by raw.githubusercontent.com (cached about 5 min). Archived days:
 // radar/days/YYYYMMDD/ on this site (from the releases radar-YYYY-MM, see pages.yml).
 const LIVE = import.meta.env.VITE_RADAR_LIVE ?? "https://raw.githubusercontent.com/JerryWoof/MeteoVerdict/radar-live/";
-const FRAME_MS = 400; // animation speed
 const REFRESH_MS = 5 * 60 * 1000;
-const FOLDER = { radar: "maxz", rain: "merge1h" };
+const STALE_MIN = 30;
+const MINUTE = 60000;
+const DEFAULT_LAYERS = ["radar", "sat", "cells"]; // a first visit: radar on clouds, with storms
+const SAT_LAYERS = ["sat", "wv"];
+
+// --- small storage helpers (private windows may throw) ----------------------------------
+function stored(key, fallback) {
+  try {
+    return window.localStorage.getItem(`radar.${key}`) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+function store(key, value) {
+  try {
+    window.localStorage.setItem(`radar.${key}`, String(value));
+  } catch {
+    // keep working without storage
+  }
+}
 
 const map = new MapLibreMap({
   container: "map",
@@ -38,13 +68,21 @@ const map = new MapLibreMap({
 map.addControl(new NavigationControl({ showCompass: false }));
 const mapLoaded = new Promise((resolve) => map.on("load", resolve));
 
+const hadHash = window.location.hash.length > 1;
 let view = parseView(window.location.hash);
+if (!hadHash) view.layers = DEFAULT_LAYERS;
+view.filter = parseFilter(view.filter ?? stored("filter", "all"));
 let index = null; // index.json of the shown source
 let base = null; // its folder
 let steps = [];
-let step = -1;
-let playing = null;
+let allSteps = []; // every frame of the source, for the rain at a place
 let days = [];
+let shownMs = null; // the data time on the map (a whole minute)
+let playing = false;
+let clockState = { ms: 0, hold: 0 };
+let speed = SPEEDS.includes(Number(stored("speed", 1))) ? Number(stored("speed", 1)) : 1;
+let satOpacity = Math.min(1, Math.max(0.2, Number(stored("satOpacity", 0.8)) || 0.8));
+let point = null; // {lon, lat} of the rain-at-my-place panel
 
 function element(tag, text, className) {
   const e = document.createElement(tag);
@@ -62,35 +100,245 @@ async function getJson(url, fresh = false) {
   }
 }
 
-// --- map layers ---------------------------------------------------------------------
-function addBoundaries() {
-  map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
-  map.addSource("kraje", { type: "geojson", data: "data/kraje.geojson" });
-  map.addLayer({ id: "okresy-fill", type: "fill", source: "okresy", paint: { "fill-color": "#ececec", "fill-opacity": 0.6 } });
-  // radar layers go here, under the lines
-  map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#8a949c", "line-width": 0.4 } });
-  map.addLayer({ id: "kraje-line", type: "line", source: "kraje", paint: { "line-color": "#3a444c", "line-width": 1.1 } });
+const has = (layer) => view.layers.includes(layer);
+const firstTime = () => steps[0]?.time ?? 0;
+const lastTime = () => steps.at(-1)?.time ?? 0;
+const lastObserved = () => steps.findLast((s) => !s.forecast)?.time ?? null;
+const radarUrl = (s) => frameUrl(base, s.forecast ? "nowcast" : "maxz", s.radar);
+
+// --- decoded frames -----------------------------------------------------------------------
+// url → Promise<{codes, w, h} | null>, least recently used dropped beyond CACHE_SIZE
+const CACHE_SIZE = 120;
+const frames = new Map();
+const ready = new Map(); // url → decoded (only those finished)
+let scratch = null;
+
+async function decodeUrl(url) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    const bitmap = await createImageBitmap(blob, { premultiplyAlpha: "none", colorSpaceConversion: "none" });
+    const { width: w, height: h } = bitmap;
+    scratch ??= document.createElement("canvas");
+    scratch.width = w;
+    scratch.height = h;
+    const ctx = scratch.getContext("2d", { willReadFrequently: true });
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close?.();
+    return { codes: decodePixels(ctx.getImageData(0, 0, w, h).data), w, h };
+  } catch {
+    return null;
+  }
 }
 
-/** Show `url` in the raster layer `name` (created on first use), or hide it. */
-function showImage(name, url, opacity) {
-  const id = `${name}-image`;
-  const source = map.getSource(id);
+function frame(url) {
+  let promise = frames.get(url);
+  if (promise) {
+    frames.delete(url); // most recently used last
+    frames.set(url, promise);
+    return promise;
+  }
+  promise = decodeUrl(url).then((decoded) => {
+    if (decoded) ready.set(url, decoded);
+    return decoded;
+  });
+  frames.set(url, promise);
+  while (frames.size > CACHE_SIZE) {
+    const oldest = frames.keys().next().value;
+    frames.delete(oldest);
+    ready.delete(oldest);
+  }
+  return promise;
+}
+
+const motions = new Map(); // stamp → Promise<motion | null>
+const motionReady = new Map();
+function motion(stamp) {
+  if (!motions.has(stamp)) {
+    motions.set(
+      stamp,
+      getJson(`${base}motion/${stamp}.json`).then((m) => {
+        const ok = validMotion(m) ? m : null;
+        motionReady.set(stamp, ok);
+        return ok;
+      }),
+    );
+  }
+  return motions.get(stamp);
+}
+const flows = new Map(); // `${stamp}|${seconds}|${scale}` → flow
+function flowFor(pair, w, h, scale) {
+  const m = motionReady.get(pair.stamp);
+  if (!m) {
+    if (!motionReady.has(pair.stamp)) motion(pair.stamp).then(() => requestDraw());
+    return null;
+  }
+  const key = `${pair.stamp}|${pair.seconds}|${scale}`;
+  if (!flows.has(key)) {
+    if (flows.size > 40) flows.delete(flows.keys().next().value);
+    flows.set(key, upsampleFlow(m, w, h, pair.seconds, scale));
+  }
+  return flows.get(key);
+}
+
+// --- canvases on the map ------------------------------------------------------------------
+class GridCanvas {
+  constructor(id, before) {
+    this.id = id;
+    this.before = before;
+    this.canvas = document.createElement("canvas");
+    this.canvas.width = 1;
+    this.canvas.height = 1;
+    this.scale = 1;
+    this.visible = false;
+    this.key = null;
+  }
+  ensure(w, h, scale) {
+    const ow = Math.ceil(w / scale);
+    const oh = Math.ceil(h / scale);
+    if (this.canvas.width !== ow || this.canvas.height !== oh) {
+      this.canvas.width = ow;
+      this.canvas.height = oh;
+      this.ctx = this.canvas.getContext("2d");
+      this.image = this.ctx.createImageData(ow, oh);
+      this.pixels = new Uint32Array(this.image.data.buffer);
+    }
+    this.ctx ??= this.canvas.getContext("2d");
+    if (!map.getSource(this.id)) {
+      map.addSource(this.id, { type: "canvas", canvas: this.canvas, coordinates: imageCoordinates(boundsOf(index)), animate: false });
+      map.addLayer({ id: this.id, type: "raster", source: this.id, paint: { "raster-fade-duration": 0, "raster-resampling": "linear" } }, this.before);
+    } else {
+      map.getSource(this.id).setCoordinates(imageCoordinates(boundsOf(index)));
+    }
+  }
+  commit(opacity) {
+    this.ctx.putImageData(this.image, 0, 0);
+    const source = map.getSource(this.id);
+    source.play();
+    if (this.opacity !== opacity) map.setPaintProperty(this.id, "raster-opacity", opacity);
+    if (!this.visible) map.setLayoutProperty(this.id, "visibility", "visible");
+    this.opacity = opacity;
+    this.visible = true;
+    // upload once, then stop re-uploading every frame
+    cancelAnimationFrame(this.pauseId);
+    this.pauseId = requestAnimationFrame(() => requestAnimationFrame(() => source.pause()));
+  }
+  hide() {
+    if (this.visible && map.getLayer(this.id)) map.setLayoutProperty(this.id, "visibility", "none");
+    this.visible = false;
+    this.key = null;
+  }
+}
+
+let radarCanvas;
+let rainCanvas;
+let lutRadar;
+let lutRain;
+let categories = CATEGORIES; // as index.json labels the classes
+function makeLuts() {
+  categories = categoriesFrom(index?.scales?.maxz);
+  const f = filterLevels(view.filter, categories);
+  const scale = maxzScale(index, null).map((r) => r[1]);
+  lutRadar = buildLut({ solid: scale.length === 15 ? scale : undefined, minLevel: f.radar, aloft: f.aloft });
+  lutRain = buildLut({ minLevel: f.rain, nodata: 0 });
+  if (radarCanvas) radarCanvas.key = null;
+  if (rainCanvas) rainCanvas.key = null;
+}
+
+// frame time of drawing (ms), to choose the resolution on slow devices
+const perf = { samples: [], scale: 1, draws: 0 };
+window.__radarPerf = perf;
+function measure(ms) {
+  perf.samples.push(ms);
+  if (perf.samples.length > 30) perf.samples.shift();
+  perf.draws++;
+  perf.last = ms;
+  perf.avg = perf.samples.reduce((a, b) => a + b, 0) / perf.samples.length;
+  perf.max = Math.max(...perf.samples);
+  // half resolution (4× fewer pixels) when a full-size frame takes too long
+  if (perf.scale === 1 && perf.samples.length >= 8 && perf.avg > 14) {
+    perf.scale = 2;
+    perf.samples = [];
+    flows.clear();
+  }
+}
+
+/** Draw the radar at `shownMs` (warped between frames); false while frames load. */
+function drawRadar() {
+  if (!has("radar") || !steps.length) {
+    radarCanvas?.hide();
+    return true;
+  }
+  const { i, tau } = locate(steps, shownMs);
+  const a = steps[i];
+  const b = tau > 0 ? steps[i + 1] : null;
+  const urlA = radarUrl(a);
+  const urlB = b ? radarUrl(b) : null;
+  const A = ready.get(urlA);
+  const B = urlB ? ready.get(urlB) : null;
+  if (!A || (urlB && !B)) {
+    Promise.all([frame(urlA), urlB && frame(urlB)]).then(() => requestDraw());
+    return false;
+  }
+  const scale = perf.scale;
+  // the nowcast has no motion files: it uses the newest measured one
+  const pair = b ? motionFor(index?.motion, a, b, b.forecast ? 120 : 30) : null;
+  const flow = pair ? flowFor(pair, A.w, A.h, scale) : null;
+  const key = `${urlA}|${urlB}|${tau.toFixed(4)}|${flow ? 1 : 0}|${scale}`;
+  if (radarCanvas.key === key) return true;
+  const start = performance.now();
+  radarCanvas.ensure(A.w, A.h, scale);
+  warpBlend(radarCanvas.pixels, A.codes, B?.codes ?? null, A.w, A.h, flow, tau, lutRadar, scale);
+  radarCanvas.commit(a.forecast || b?.forecast ? 0.75 : 0.9);
+  measure(performance.now() - start);
+  perf.mode = flow ? "motion" : b ? "crossfade" : "frame";
+  radarCanvas.key = key;
+  return true;
+}
+
+function drawRain() {
+  const current = steps[locate(steps, shownMs).i];
+  if (!has("rain") || !current?.rain) {
+    rainCanvas?.hide();
+    return true;
+  }
+  const url = frameUrl(base, "merge1h", current.rain);
+  const R = ready.get(url);
+  if (!R) {
+    frame(url).then(() => requestDraw());
+    return false;
+  }
+  if (rainCanvas.key === url) return true;
+  rainCanvas.ensure(R.w, R.h, 1);
+  warpBlend(rainCanvas.pixels, R.codes, null, R.w, R.h, null, 0, lutRain, 1);
+  rainCanvas.commit(0.8);
+  rainCanvas.key = url;
+  return true;
+}
+
+/** Show `url` in the raster layer `id` (created on first use), or hide it. */
+const imageState = new Map(); // id → {url, opacity, visible}
+function showImage(id, url, opacity, coordinates, before = "okresy-line") {
+  const state = imageState.get(id) ?? {};
   if (!url) {
-    if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
+    if (state.visible && map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
+    state.visible = false;
+    imageState.set(id, state);
     return;
   }
+  const source = map.getSource(id);
   if (!source) {
-    map.addSource(id, { type: "image", url, coordinates: imageCoordinates(boundsOf(index)) });
-    map.addLayer(
-      { id, type: "raster", source: id, paint: { "raster-opacity": opacity, "raster-fade-duration": 0 } },
-      "okresy-line",
-    );
-  } else {
-    source.updateImage({ url, coordinates: imageCoordinates(boundsOf(index)) });
-    map.setPaintProperty(id, "raster-opacity", opacity);
-    map.setLayoutProperty(id, "visibility", "visible");
+    map.addSource(id, { type: "image", url, coordinates });
+    map.addLayer({ id, type: "raster", source: id, paint: { "raster-opacity": opacity, "raster-fade-duration": 0 } }, before);
+    imageState.set(id, { url, opacity, visible: true, coordinates: String(coordinates) });
+    return;
   }
+  if (state.url !== url || state.coordinates !== String(coordinates)) source.updateImage({ url, coordinates });
+  if (state.opacity !== opacity) map.setPaintProperty(id, "raster-opacity", opacity);
+  if (!state.visible) map.setLayoutProperty(id, "visibility", "visible");
+  imageState.set(id, { url, opacity, visible: true, coordinates: String(coordinates) });
 }
 
 const preloaded = new Set();
@@ -101,7 +349,378 @@ function preload(url) {
   image.src = url;
 }
 
-// --- rendering --------------------------------------------------------------------
+// satellite: the two frames around the time, cross-faded
+function satelliteInfo() {
+  const mode = has("wv") ? "wv" : has("sat") ? "sat" : "off";
+  const product = satelliteProduct(mode === "sat" ? "clouds" : mode, shownMs ?? Date.now(), index?.satellite ?? {});
+  if (!product) return null;
+  const meta = index.satellite[product];
+  const around = bracket(meta?.frames, shownMs, 30);
+  if (!around) return { product, meta, around: null };
+  return { product, meta, around };
+}
+function satUrl(product, meta, stamp) {
+  return `${base}satellite/${product}/${stamp}.${meta?.ext ?? "jpg"}`;
+}
+function drawSatellite() {
+  const info = satelliteInfo();
+  if (!info?.around) {
+    showImage("sat-a", null);
+    showImage("sat-b", null);
+    return info;
+  }
+  const { product, meta, around } = info;
+  const b = meta.bounds;
+  const coordinates = imageCoordinates(
+    Array.isArray(b) && b.length === 2 ? { west: b[0][0], south: b[0][1], east: b[1][0], north: b[1][1] } : boundsOf(index),
+  );
+  showImage("sat-a", satUrl(product, meta, around.a), satOpacity, coordinates, "okresy-line-under");
+  if (around.b) {
+    preload(satUrl(product, meta, around.b));
+    showImage("sat-b", satUrl(product, meta, around.b), satOpacity * around.tau, coordinates, "okresy-line-under");
+  } else showImage("sat-b", null);
+  return info;
+}
+
+function drawEchotop() {
+  const stamp = has("echotop") && !isForecastTime() ? latestAtOrBefore(index?.echotop, shownMs, 10) : null;
+  showImage("echotop", stamp ? frameUrl(base, "echotop", stamp) : null, 0.85, imageCoordinates(boundsOf(index)), "rain-canvas-slot");
+}
+
+let cellsData = new Map(); // stamp → Promise<cells>
+function drawCells() {
+  const stamp = has("cells") && !isForecastTime() ? latestAtOrBefore(index?.cells, shownMs, 10) : null;
+  const source = map.getSource("cells");
+  if (!stamp) {
+    source?.setData({ type: "FeatureCollection", features: [] });
+    return;
+  }
+  if (!cellsData.has(stamp)) cellsData.set(stamp, getJson(`${base}cells/${stamp}.json`));
+  const forMs = shownMs;
+  cellsData.get(stamp).then((cells) => {
+    if (forMs !== shownMs) return;
+    source?.setData(cellFeatures(cells, (shownMs - parseStamp(stamp)) / MINUTE));
+  });
+}
+
+function isForecastTime() {
+  const observed = lastObserved();
+  return observed != null && shownMs > observed;
+}
+
+let drawPending = false;
+function requestDraw() {
+  if (drawPending) return;
+  drawPending = true;
+  requestAnimationFrame(() => {
+    drawPending = false;
+    drawAll();
+  });
+}
+
+/** Everything that depends on the shown time. True when the radar frame was drawn. */
+function drawAll() {
+  if (!steps.length || shownMs == null) {
+    radarCanvas?.hide();
+    rainCanvas?.hide();
+    showImage("sat-a", null);
+    showImage("sat-b", null);
+    showImage("echotop", null);
+    map.getSource("cells")?.setData({ type: "FeatureCollection", features: [] });
+    return true;
+  }
+  const done = drawRadar();
+  drawRain();
+  drawSatellite();
+  drawEchotop();
+  drawCells();
+  renderWhen();
+  prefetch();
+  return done;
+}
+
+/** Decode the next frames (and their motion) ahead of the animation. */
+function prefetch() {
+  const { i } = locate(steps, shownMs);
+  for (const s of steps.slice(i, i + (playing ? 4 : 2))) {
+    if (has("radar")) frame(radarUrl(s));
+    if (has("rain") && s.rain) frame(frameUrl(base, "merge1h", s.rain));
+  }
+  if (has("radar") && index?.motion?.length) {
+    for (let k = i; k < Math.min(steps.length - 1, i + 3); k++) {
+      const pair = motionFor(index.motion, steps[k], steps[k + 1], steps[k + 1].forecast ? 120 : 30);
+      if (pair) motion(pair.stamp);
+    }
+  }
+}
+
+// --- animation ------------------------------------------------------------------------------
+let rafId = null;
+let lastTick = null;
+function tick(now) {
+  if (!playing) return;
+  const dt = lastTick == null ? 0 : Math.min(100, now - lastTick);
+  lastTick = now;
+  const next = advanceClock(clockState, dt, { first: firstTime(), last: lastTime(), rate: MINUTE / msPerDataMinute(speed), holdMs: 1400 });
+  const target = quantize(next.ms);
+  if (target !== shownMs) {
+    const previous = shownMs;
+    shownMs = target;
+    if (!drawAll()) {
+      // wait for the frames instead of skipping them
+      shownMs = previous;
+      next.ms = clockState.ms;
+    }
+  }
+  clockState = next;
+  rafId = requestAnimationFrame(tick);
+}
+
+function play() {
+  if (playing) return stop();
+  if (steps.length < 2) return;
+  playing = true;
+  clockState = { ms: shownMs >= lastTime() ? firstTime() : shownMs, hold: 0 };
+  shownMs = quantize(clockState.ms);
+  lastTick = null;
+  rafId = requestAnimationFrame(tick);
+  renderPlay();
+}
+
+function stop() {
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+  if (playing) {
+    playing = false;
+    renderPlay();
+    writeHash();
+    refreshPoint();
+  }
+}
+
+/** Jump to a time (stops the animation). */
+function goTo(ms) {
+  stop();
+  shownMs = Math.min(lastTime(), Math.max(firstTime(), quantize(ms)));
+  requestDraw();
+  writeHash();
+}
+
+function stepBy(direction) {
+  if (!steps.length) return;
+  const { i, tau } = locate(steps, shownMs);
+  const target = direction < 0 ? (tau > 0 ? i : i - 1) : i + 1;
+  goTo(steps[Math.min(steps.length - 1, Math.max(0, target))].time);
+}
+
+// --- map layers --------------------------------------------------------------------------
+function addLayers() {
+  map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
+  map.addSource("kraje", { type: "geojson", data: "data/kraje.geojson" });
+  map.addLayer({ id: "okresy-fill", type: "fill", source: "okresy", paint: { "fill-color": "#ececec", "fill-opacity": 0.6 } });
+  // order: satellite, radar, echo tops, 1-hour sums, then the lines and the storm cells
+  const empty = { type: "geojson", data: { type: "FeatureCollection", features: [] } };
+  map.addSource("slot", empty);
+  map.addLayer({ id: "okresy-line-under", type: "line", source: "slot" });
+  map.addLayer({ id: "radar-canvas-slot", type: "line", source: "slot" });
+  map.addLayer({ id: "rain-canvas-slot", type: "line", source: "slot" });
+  map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#8a949c", "line-width": 0.4 } });
+  map.addLayer({ id: "kraje-line", type: "line", source: "kraje", paint: { "line-color": "#3a444c", "line-width": 1.1 } });
+  radarCanvas = new GridCanvas("radar-canvas", "rain-canvas-slot");
+  rainCanvas = new GridCanvas("rain-canvas", "okresy-line");
+
+  map.addSource("cells", empty);
+  map.addLayer({
+    id: "cell-tracks", type: "line", source: "cells", filter: ["==", ["get", "kind"], "track"],
+    paint: { "line-color": "#1d2329", "line-width": 1.5, "line-dasharray": [2, 2], "line-opacity": 0.7 },
+  });
+  map.addLayer({
+    id: "cell-arrows", type: "line", source: "cells", filter: ["==", ["get", "kind"], "arrow"],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": ["case", ["get", "hail"], "#b3001b", "#1d2329"], "line-width": 2.5 },
+  });
+  map.addLayer({
+    id: "cell-points", type: "circle", source: "cells", filter: ["==", ["get", "kind"], "cell"],
+    paint: {
+      "circle-radius": ["case", ["get", "hail"], 9, 6],
+      "circle-color": ["case", ["get", "hail"], "#ffffff", "#1d2329"],
+      "circle-stroke-color": ["case", ["get", "hail"], "#d0021b", "#ffffff"],
+      "circle-stroke-width": ["case", ["get", "hail"], 4, 2],
+    },
+  });
+  map.on("mouseenter", "cell-points", () => (map.getCanvas().style.cursor = "pointer"));
+  map.on("mouseleave", "cell-points", () => (map.getCanvas().style.cursor = ""));
+  map.on("click", (event) => {
+    const hit = map.queryRenderedFeatures(
+      [
+        [event.point.x - 10, event.point.y - 10],
+        [event.point.x + 10, event.point.y + 10],
+      ],
+      { layers: ["cell-points"] },
+    )[0];
+    if (hit) showCell(hit);
+    else setPoint(event.lngLat.lng, event.lngLat.lat);
+  });
+}
+
+const cellPopup = new Popup({ closeButton: true, maxWidth: "16rem", className: "cell-popup" });
+function showCell(feature) {
+  const p = feature.properties;
+  const box = element("div");
+  box.append(element("strong", p.hail ? `${t("radar.cell.title")} · ${t("radar.cell.hail")}` : t("radar.cell.title")));
+  const dbz = Number(p.max_dbz);
+  if (Number.isFinite(dbz)) {
+    box.append(element("p", t("radar.cell.maxDbz", { dbz: Math.round(dbz), cat: t(`radar.cat.${categoryOf(dbzLevel(dbz), categories) ?? "drizzle"}`).toLowerCase() })));
+  }
+  if (p.echotop_km != null && p.echotop_km !== "null") box.append(element("p", t("radar.cell.echotop", { km: legendNumber(Number(p.echotop_km)) })));
+  if (p.area_km2 != null && p.area_km2 !== "null") box.append(element("p", t("radar.cell.area", { area: Math.round(Number(p.area_km2)) })));
+  const speedKmh = Number(p.speed_kmh);
+  box.append(
+    element("p", speedKmh >= 3 ? t("radar.cell.motion", { dir: t(`radar.dir.${compass(Number(p.dir_deg))}`), speed: Math.round(speedKmh) }) : t("radar.cell.still")),
+  );
+  cellPopup.setLngLat(feature.geometry.coordinates).setDOMContent(box).addTo(map);
+}
+
+// --- rain at my place ------------------------------------------------------------------------
+let marker = null;
+let pointToken = 0;
+function setPoint(lon, lat) {
+  point = { lon, lat };
+  marker ??= new Marker({ color: "#c0392b" });
+  marker.setLngLat([lon, lat]).addTo(map);
+  if (window.innerWidth <= 700) document.getElementById("show").open = false;
+  refreshPoint();
+}
+
+function closePoint() {
+  point = null;
+  marker?.remove();
+  document.getElementById("point-panel").hidden = true;
+}
+
+async function refreshPoint() {
+  if (!point) return;
+  const panel = document.getElementById("point-panel");
+  panel.hidden = false;
+  const token = ++pointToken;
+  const title = element("div", null, "point-title");
+  title.append(element("strong", t("radar.point.title", { lat: point.lat.toFixed(2), lon: point.lon.toFixed(2) })));
+  const close = element("button", "×", "close");
+  close.type = "button";
+  close.setAttribute("aria-label", t("radar.point.close"));
+  close.addEventListener("click", closePoint);
+  title.append(close);
+  if (!steps.length) {
+    panel.replaceChildren(title, element("p", view.day === "live" ? t("radar.noLive") : t("radar.noDay")));
+    return;
+  }
+  const live = view.day === "live";
+  const anchor = live ? lastObserved() ?? lastTime() : steps[locate(steps, shownMs).i].time;
+  const chosen = allSteps.filter((s) => s.time >= anchor - 2 * 3600000 && s.time <= anchor + 3600000 && (live || !s.forecast));
+  if (panel.dataset.key !== `${point.lon},${point.lat},${anchor}`) {
+    panel.replaceChildren(title, element("p", t("radar.point.loading"), "muted"));
+  }
+  const decoded = await Promise.all(chosen.map((s) => frame(radarUrl(s))));
+  if (token !== pointToken) return;
+  const grid = decoded.find(Boolean);
+  const pixel = grid && lonLatToPixel(point.lon, point.lat, boundsOf(index), grid.w, grid.h);
+  if (!pixel) {
+    panel.replaceChildren(title, element("p", t("radar.point.outside")));
+    return;
+  }
+  const series = chosen
+    .map((s, k) => (decoded[k] ? sample(s.time, decoded[k].codes[pixel.row * decoded[k].w + pixel.col], s.forecast) : null))
+    .filter(Boolean);
+  const lines = [title];
+  if (live) {
+    const said = nowcastSentence(series, anchor, categories);
+    const cat = (key) => t(`radar.cat.${key}`);
+    let text;
+    if (said.key === "now") {
+      text = t("radar.point.now", { cat: cat(said.cat).toLowerCase(), rate: rateLabel(said.rate) });
+      if (said.then === "stops") text += ` ${t("radar.point.stops", { min: said.min })}`;
+      if (said.then === "continues") text += ` ${t("radar.point.continues", { peak: cat(said.peak).toLowerCase() })}`;
+    } else if (said.key === "expected") text = t("radar.point.expected", { cat: cat(said.cat), min: said.min });
+    else text = t(`radar.point.${said.key}`);
+    lines.push(element("p", text, `sentence ${said.key}`));
+  } else lines.push(element("p", t("radar.point.archive"), "sentence"));
+  lines.push(pointChart(series, anchor, live));
+  lines.push(element("p", t("radar.point.note"), "muted"));
+  panel.replaceChildren(...lines);
+  panel.dataset.key = `${point.lon},${point.lat},${anchor}`;
+}
+
+const SVG = "http://www.w3.org/2000/svg";
+function svg(tag, attrs, text) {
+  const e = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+/** Bars of the class at the place (height by class, so drizzle stays visible), now line. */
+function pointChart(series, anchor, live) {
+  const W = 300;
+  const H = 110;
+  const top = 8;
+  const bottom = 18;
+  const left = 30;
+  const first = anchor - 2 * 3600000;
+  const last = anchor + 3600000;
+  const x = (ms) => left + ((ms - first) / (last - first)) * (W - left - 4);
+  const y = (level) => H - bottom - (level / 15) * (H - top - bottom);
+  const chart = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": t("radar.point.chart"), class: "point-chart" });
+  if (live) chart.append(svg("rect", { x: x(anchor), y: top, width: x(last) - x(anchor), height: H - top - bottom, class: "future" }));
+  // mm/h guide lines at light, moderate, heavy, hail
+  for (const dbz of [20, 28, 40, 56]) {
+    const level = dbzLevel(dbz);
+    chart.append(svg("line", { x1: left, x2: W - 4, y1: y(level), y2: y(level), class: "guide" }));
+    chart.append(svg("text", { x: left - 3, y: y(level) + 3, class: "axis", "text-anchor": "end" }, rateLabel(rainRate(dbz))));
+  }
+  chart.append(svg("text", { x: 2, y: top + 2, class: "axis" }, "mm/h"));
+  const barW = Math.max(2, ((W - left) / 36) * 0.8);
+  const solid = maxzScale(index, null).map((r) => r[1]);
+  for (const s of series) {
+    if (!s.level) continue;
+    const colour = s.aloft ? ALOFT_COLOURS[s.level - 1] : solid[s.level - 1] ?? "#888";
+    chart.append(svg("rect", { x: x(s.time) - barW / 2, y: y(s.level), width: barW, height: y(0) - y(s.level), fill: colour, class: s.forecast ? "bar forecast" : "bar" }));
+  }
+  chart.append(svg("line", { x1: left, x2: W - 4, y1: y(0), y2: y(0), class: "base" }));
+  chart.append(svg("line", { x1: x(anchor), x2: x(anchor), y1: top, y2: H - bottom, class: "now" }));
+  if (shownMs >= first && shownMs <= last) chart.append(svg("line", { x1: x(shownMs), x2: x(shownMs), y1: top, y2: H - bottom, class: "shown" }));
+  chart.append(svg("text", { x: x(first), y: H - 4, class: "axis" }, clock(first)));
+  chart.append(svg("text", { x: x(anchor), y: H - 4, class: "axis", "text-anchor": "middle" }, live ? t("radar.nowMark") : clock(anchor)));
+  chart.append(svg("text", { x: W - 4, y: H - 4, class: "axis", "text-anchor": "end" }, clock(last)));
+  return chart;
+}
+
+function locateMe(button) {
+  if (!navigator.geolocation) {
+    button.nextSibling.textContent = t("radar.point.denied", { reason: "—" });
+    return;
+  }
+  const note = button.nextSibling;
+  note.textContent = t("radar.point.locating");
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      note.textContent = "";
+      const { longitude: lon, latitude: lat } = position.coords;
+      setPoint(lon, lat);
+      map.easeTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 8) });
+    },
+    (error) => {
+      note.textContent = t("radar.point.denied", { reason: error.message || error.code });
+    },
+    { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 },
+  );
+}
+
+// --- controls ------------------------------------------------------------------------------
+const dateFormat = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", {
+  weekday: "short", day: "numeric", month: language === "cs" ? "long" : "short", timeZone: "Europe/Prague",
+});
+const shortDate = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+
 function renderSource() {
   const source = document.getElementById("source");
   source.replaceChildren(
@@ -119,14 +738,19 @@ function renderSource() {
     }),
   );
   const picker = document.getElementById("day");
-  picker.hidden = view.day === "live";
+  document.getElementById("day-pick").hidden = view.day === "live";
   if (days.length) {
     picker.min = days[0];
     picker.max = days.at(-1);
   }
   if (view.day !== "live") picker.value = view.day;
+  const range = document.getElementById("day-range");
+  range.textContent = days.length
+    ? `${t("radar.dayRange", { from: shortDate.format(Date.parse(days[0])), to: shortDate.format(Date.parse(days.at(-1))) })} · ${t("radar.dayHint")}`
+    : t("radar.dayNone");
+  document.getElementById("window").hidden = view.day !== "live";
+  document.getElementById("window-hint").textContent = t("radar.hoursHint");
   const hours = document.getElementById("hours");
-  hours.hidden = view.day !== "live";
   hours.setAttribute("aria-label", t("radar.hoursLabel"));
   hours.replaceChildren(
     ...HOURS.map((n) => {
@@ -139,38 +763,163 @@ function renderSource() {
   );
 }
 
-function renderLayers() {
-  const box = document.getElementById("layers");
-  box.replaceChildren(
-    ...LAYERS.map((layer) => {
-      const label = element("label", null, "check");
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = view.layers.includes(layer);
-      input.addEventListener("change", () => {
-        const shown = input.checked ? [...view.layers, layer] : view.layers.filter((l) => l !== layer);
-        update({ layers: LAYERS.filter((l) => shown.includes(l)) });
-      });
-      label.append(input, element("span", t(`radar.layer.${layer}`)));
-      return label;
+function renderSpeed() {
+  const select = document.getElementById("speed");
+  select.setAttribute("aria-label", t("radar.speed"));
+  select.title = t("radar.speed");
+  select.replaceChildren(
+    ...SPEEDS.map((s) => {
+      const option = element("option", `${s}×`);
+      option.value = String(s);
+      option.selected = s === speed;
+      return option;
     }),
   );
+}
+
+function check(layer, label) {
+  const wrap = element("label", null, "check");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = has(layer);
+  input.addEventListener("change", () => {
+    const shown = input.checked ? [...view.layers, layer] : view.layers.filter((l) => l !== layer);
+    update({ layers: shown });
+  });
+  wrap.append(input, element("span", label));
+  return wrap;
+}
+
+function renderLayers() {
+  const box = document.getElementById("layers");
+  const parts = [check("radar", t("radar.layer.radar"))];
+  // show from
+  const filter = element("label", null, "filter");
+  filter.append(element("span", t("radar.filter")));
+  const select = document.createElement("select");
+  select.id = "filter";
+  for (const key of FILTER_KEYS) {
+    const option = element("option", t(`radar.filter.${key}`));
+    option.value = key;
+    option.selected = key === view.filter;
+    select.append(option);
+  }
+  select.addEventListener("change", () => {
+    store("filter", select.value);
+    update({ filter: select.value });
+  });
+  filter.append(select);
+  parts.push(filter);
+  parts.push(check("rain", t("radar.layer.rain")));
+  if (index?.echotop?.length) parts.push(check("echotop", t("radar.layer.echotop")));
+  if (index?.cells?.length) parts.push(check("cells", t("radar.layer.cells")));
+  const products = Object.entries(index?.satellite ?? {}).filter(([, m]) => m?.frames?.length).map(([p]) => p);
+  if (products.length) {
+    const sat = element("div", null, "sat-row");
+    sat.append(element("span", t("radar.sat")));
+    const group = element("span", null, "segmented small");
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", t("radar.sat"));
+    const current = has("wv") ? "wv" : has("sat") ? "sat" : "off";
+    for (const mode of ["off", "sat", "wv"]) {
+      if (mode === "wv" && !products.includes("wv062")) continue;
+      const button = element("button", t(`radar.sat.${mode}`));
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(mode === current));
+      button.addEventListener("click", () => {
+        const rest = view.layers.filter((l) => !SAT_LAYERS.includes(l));
+        update({ layers: mode === "off" ? rest : [...rest, mode] });
+      });
+      group.append(button);
+    }
+    sat.append(group);
+    if (current !== "off") {
+      const opacity = document.createElement("input");
+      opacity.type = "range";
+      opacity.min = "0.2";
+      opacity.max = "1";
+      opacity.step = "0.05";
+      opacity.value = String(satOpacity);
+      opacity.setAttribute("aria-label", t("radar.sat.opacity"));
+      opacity.title = t("radar.sat.opacity");
+      opacity.addEventListener("input", () => {
+        satOpacity = Number(opacity.value);
+        store("satOpacity", satOpacity);
+        drawSatellite();
+      });
+      sat.append(opacity);
+    }
+    parts.push(sat);
+  }
+  if (view.day !== "live" && (!products.length || !index?.cells?.length)) parts.push(element("p", t("radar.notAvailable"), "note"));
+  box.replaceChildren(...parts);
+  renderLegend();
+}
+
+function renderLegend() {
   const legend = document.getElementById("radar-legend");
-  legend.replaceChildren();
-  if (view.layers.includes("radar")) legend.append(scale(DBZ_SCALE, t("radar.legendRadar"), (v) => `${v}`, true));
-  if (view.layers.includes("rain")) legend.append(scale(MM_SCALE, t("radar.legendRain"), legendNumber, false));
-  if (view.layers.includes("radar")) legend.append(element("p", t("radar.masked"), "note"));
+  const parts = [];
+  const f = filterLevels(view.filter, categories);
+  if (has("radar")) {
+    const box = element("div", null, "radar-legend-box");
+    box.append(element("strong", t("radar.legendRadar")));
+    const labels = { en: {}, cs: {} };
+    for (const key of ["drizzle", "light", "moderate", "heavy", "veryHeavy", "hail"]) labels.en[key] = labels.cs[key] = t(`radar.cat.${key}`);
+    // our words for the labels we know (the same as in the sentences), the backend's otherwise
+    const scale = maxzScale(index, labels).map((row) => {
+      const key = labelKey(row[3]);
+      return key ? [row[0], row[1], row[2], labels.en[key], labels.cs[key]] : row;
+    });
+    const rows = legendRows(scale, language);
+    const list = element("ul", null, "legend-rows");
+    for (const row of rows) {
+      const item = element("li");
+      // every class of the row below the "show from" setting
+      if (row.dbzTo != null && dbzLevel(row.dbzTo) <= f.radar) item.className = "off";
+      const swatch = element("span", null, "swatch");
+      swatch.style.background = row.colours.length > 1 ? `linear-gradient(90deg, ${row.colours.join(", ")})` : row.colours[0];
+      swatch.title = `${row.dbz}${row.dbzTo ? `–${row.dbzTo}` : "+"} dBZ`;
+      const words = element("span", row.label.charAt(0).toUpperCase() + row.label.slice(1), "words");
+      const mm = element("span", row.to != null ? t("radar.range", { from: rateLabel(row.from), to: rateLabel(row.to) }) : t("radar.rangeTop", { from: rateLabel(row.from) }), "mm");
+      item.append(swatch, words, mm);
+      list.append(item);
+    }
+    box.append(list);
+    const aloft = element("p", null, f.aloft ? "aloft" : "aloft off");
+    const swatch = element("span", null, "swatch");
+    swatch.style.background = `linear-gradient(90deg, ${ALOFT_COLOURS.slice(0, 12).join(", ")})`;
+    aloft.append(swatch, element("span", t("radar.aloft")));
+    box.append(aloft);
+    if (view.filter !== "all") box.append(element("p", t("radar.filterNote", { mm: legendNumber(MM_SCALE[f.rain - 1][0]) }), "note strong"));
+    box.append(element("p", `${t("radar.winter")} ${t("radar.dbz")}`, "note"));
+    parts.push(box);
+  }
+  if (has("rain")) {
+    parts.push(scaleBar(simpleScale(index, "merge1h", MM_SCALE), `${t("radar.legendRain")} (mm)`, legendNumber));
+    parts.push(element("p", t("radar.rainExplain"), "note"));
+  }
+  if (has("echotop") && index?.echotop?.length) {
+    const echotop = simpleScale(index, "echotop", null);
+    if (echotop) parts.push(scaleBar(echotop, t("radar.legendEchotop"), (v) => legendNumber(v)));
+    parts.push(element("p", t("radar.echotopExplain"), "note"));
+  }
+  if (has("cells") && index?.cells?.length) parts.push(element("p", t("radar.cellsExplain"), "note"));
+  const sat = satelliteInfo();
+  if (sat) parts.push(element("p", t(`radar.sat.product.${sat.product}`), "note"));
+  legend.replaceChildren(...parts);
 }
 
 /** A horizontal colour bar with the lower bound of each colour under it. */
-function scale(colours, unit, label, withRate) {
+function scaleBar(colours, unit, label) {
   const box = element("div", null, "radar-scale");
   const bar = element("div", null, "bar");
   const numbers = element("div", null, "numbers");
+  bar.style.gridTemplateColumns = `repeat(${colours.length}, 1fr)`;
+  numbers.style.gridTemplateColumns = `repeat(${colours.length}, 1fr)`;
   for (const [value, colour] of colours) {
     const cell = element("span");
     cell.style.background = colour;
-    cell.title = withRate ? `${value} dBZ ≈ ${legendNumber(rainRate(value))} ${t("radar.rate")}` : `${legendNumber(value)} mm`;
+    cell.title = label(value);
     bar.append(cell);
     numbers.append(element("span", label(value)));
   }
@@ -178,162 +927,289 @@ function scale(colours, unit, label, withRate) {
   return box;
 }
 
-function renderTicks() {
+function renderPointHint() {
+  const hint = document.getElementById("point-hint");
+  const button = element("button", t("radar.point.locate"), "locate");
+  button.type = "button";
+  const note = element("span", "", "muted");
+  button.addEventListener("click", () => locateMe(button));
+  hint.replaceChildren(element("span", `${t("radar.point.hint")} `), button, note);
+}
+
+/** Percent position on the timeline, corrected for the 16 px thumb of the range input. */
+function trackPosition(ms) {
+  const span = lastTime() - firstTime();
+  const p = span > 0 ? (ms - firstTime()) / span : 0;
+  return `calc(${(p * 100).toFixed(3)}% + ${((0.5 - p) * 16).toFixed(1)}px)`;
+}
+
+function renderTimeline() {
+  const slider = document.getElementById("time");
+  const span = Math.round((lastTime() - firstTime()) / MINUTE);
+  slider.max = String(Math.max(span, 0));
+  slider.disabled = steps.length < 2;
   const ticks = document.getElementById("ticks");
+  const labels = document.getElementById("tick-labels");
   ticks.replaceChildren();
+  labels.replaceChildren();
   if (steps.length < 2) return;
-  const first = steps[0].time;
-  const span = steps.at(-1).time - first;
-  const nowcast = steps.findIndex((s) => s.forecast);
-  if (nowcast > 0) {
+  const observed = lastObserved();
+  if (observed != null && observed < lastTime()) {
     const zone = element("span", null, "forecast-zone");
-    zone.style.left = `${((steps[nowcast - 1].time - first) / span) * 100}%`;
+    zone.style.left = trackPosition(observed);
     zone.style.right = "0";
     ticks.append(zone);
   }
+  // the frames themselves, as small dots
+  for (const s of steps) {
+    const dot = element("span", null, s.forecast ? "frame forecast" : "frame");
+    dot.style.left = trackPosition(s.time);
+    ticks.append(dot);
+  }
+  const maxLabels = window.innerWidth <= 500 ? 4 : 8;
+  for (const tick of hourTicks(firstTime(), lastTime(), maxLabels)) {
+    const mark = element("span", null, "hour");
+    mark.style.left = trackPosition(tick.ms);
+    ticks.append(mark);
+    const label = element("span", `${String(tick.hour).padStart(2, "0")}:00`, "hour-label");
+    label.style.left = trackPosition(tick.ms);
+    labels.append(label);
+  }
+  if (view.day === "live") {
+    const now = Math.min(lastTime(), Math.max(firstTime(), Date.now()));
+    const mark = element("span", null, "now");
+    mark.style.left = trackPosition(now);
+    ticks.append(mark);
+    const label = element("span", t("radar.nowMark"), "now-label");
+    label.style.left = trackPosition(now);
+    ticks.append(label);
+  }
 }
 
-function renderStep() {
+function relLabel(ms) {
+  const r = relativeTime(ms, Date.now());
+  return t(`radar.rel.${r.key}`, { n: r.n });
+}
+
+/** The big time label, the slider, the headline: what the map shows right now. */
+function renderWhen() {
   const slider = document.getElementById("time");
-  slider.max = String(Math.max(steps.length - 1, 0));
-  slider.value = String(Math.max(step, 0));
-  slider.disabled = steps.length < 2;
-  const output = document.getElementById("clock");
+  const clockEl = document.getElementById("clock");
+  const date = document.getElementById("date");
+  const rel = document.getElementById("rel");
+  const kind = document.getElementById("kind");
   const headline = document.getElementById("headline");
-  const current = steps[step];
-  document.body.classList.toggle("forecast", Boolean(current?.forecast));
-  if (!current) {
-    output.textContent = "";
+  if (!steps.length || shownMs == null) {
+    for (const e of [clockEl, date, rel, kind]) e.textContent = "";
+    kind.hidden = true;
     headline.replaceChildren(element("p", view.day === "live" ? t("radar.noLive") : t("radar.noDay")));
-    showImage("radar", null);
-    showImage("rain", null);
+    document.body.classList.remove("forecast");
     return;
   }
-  output.textContent = `${clock(current.time)}`;
-  const lines = [element("h2", `${clock(current.time)} · ${current.forecast ? "" : localDay(current.time)}`.replace(/ · $/, ""))];
-  const badge = element("span", current.forecast ? t("radar.forecast", { lead: current.lead }) : t("radar.measured"), current.forecast ? "badge forecast" : "badge");
-  lines.push(badge);
-  if (current.forecast) {
-    lines.push(element("p", t("radar.forecastNote", { time: clock(parseStamp(index.nowcast.base)) }), "line"));
+  kind.hidden = false;
+  if (!slider.matches(":active")) slider.value = String(Math.round((shownMs - firstTime()) / MINUTE));
+  const forecast = isForecastTime();
+  const { i } = locate(steps, shownMs);
+  const lead = forecast ? Math.round((shownMs - lastObserved()) / MINUTE) : 0;
+  clockEl.textContent = clock(shownMs);
+  date.textContent = dateFormat.format(shownMs);
+  const sinceNow = Date.now() - shownMs;
+  rel.textContent = Math.abs(sinceNow) < 2 * 86400000 ? relLabel(shownMs) : "";
+  kind.textContent = forecast ? t("radar.forecast", { lead }) : t("radar.measured");
+  kind.className = forecast ? "badge forecast" : "badge";
+  slider.setAttribute("aria-valuetext", `${clock(shownMs)} ${date.textContent}, ${kind.textContent}`);
+  document.body.classList.toggle("forecast", forecast);
+
+  // headline on the map: what, and how fresh the data are
+  const lines = [];
+  const h2 = element("h2");
+  h2.append(element("span", clock(shownMs)), element("span", forecast ? t("radar.forecastShort") : t("radar.measured"), forecast ? "badge forecast" : "badge"));
+  lines.push(h2);
+  if (forecast && index?.nowcast?.base) lines.push(element("p", t("radar.forecastNote", { time: clock(parseStamp(index.nowcast.base)) }), "line"));
+  if (has("rain")) {
+    const current = steps[i];
+    lines.push(element("p", current?.rain ? t("radar.rainAt", { time: clock(parseStamp(current.rain)) }) : t("radar.rainNone"), "line"));
   }
-  if (view.layers.includes("rain")) {
-    lines.push(element("p", current.rain ? t("radar.rainAt", { time: clock(parseStamp(current.rain)) }) : t("radar.rainNone"), "line"));
+  const sat = has("sat") || has("wv") ? satelliteInfo() : null;
+  if (sat && !sat.around) lines.push(element("p", t("radar.sat.none"), "line muted"));
+  else if (sat?.around) lines.push(element("p", t("radar.sat.at", { time: clock(parseStamp(sat.around.tau >= 0.5 && sat.around.b ? sat.around.b : sat.around.a)) }), "line muted"));
+  if (view.day === "live") {
+    const observed = lastObserved();
+    if (observed != null) {
+      const age = minutesBetween(observed, Date.now());
+      const fresh = element("p", t("radar.newest", { time: clock(observed), ago: t("radar.ago", { min: age }) }), age > STALE_MIN ? "line fresh stale" : "line fresh");
+      lines.push(fresh);
+      if (age > STALE_MIN) lines.push(element("p", t("radar.stale", { min: age }), "line warning"));
+    }
   }
   lines.push(element("p", t("radar.prague"), "line muted"));
   headline.replaceChildren(...lines);
-
-  const folder = current.forecast ? "nowcast" : FOLDER.radar;
-  showImage("radar", view.layers.includes("radar") ? frameUrl(base, folder, current.radar) : null, current.forecast ? 0.7 : 0.85);
-  showImage("rain", view.layers.includes("rain") && current.rain ? frameUrl(base, FOLDER.rain, current.rain) : null, 0.8);
-  // the next frames, for a smooth animation
-  for (const next of steps.slice(step + 1, step + 4)) {
-    if (view.layers.includes("radar")) preload(frameUrl(base, next.forecast ? "nowcast" : FOLDER.radar, next.radar));
-    if (view.layers.includes("rain") && next.rain) preload(frameUrl(base, FOLDER.rain, next.rain));
-  }
 }
 
 function renderStatus() {
   const status = document.getElementById("status");
+  status.classList.remove("stale");
   if (view.day !== "live") {
     status.textContent = t("radar.statusDay", { day: view.day });
     return;
   }
-  const last = steps.findLast((s) => !s.forecast);
-  status.textContent = last
-    ? t("radar.status", { time: clock(last.time), ago: t("radar.ago", { min: minutesBetween(last.time, Date.now()) }) })
-    : t("radar.noLive");
+  const observed = lastObserved();
+  if (observed == null) {
+    status.textContent = t("radar.noLive");
+    return;
+  }
+  const age = minutesBetween(observed, Date.now());
+  status.textContent = t("radar.status", { time: clock(observed), ago: t("radar.ago", { min: age }) });
+  status.classList.toggle("stale", age > STALE_MIN);
 }
 
 function renderPlay() {
   const button = document.getElementById("play");
   button.textContent = playing ? t("radar.pause") : t("radar.play");
-  button.setAttribute("aria-pressed", String(Boolean(playing)));
+  button.setAttribute("aria-pressed", String(playing));
   button.disabled = steps.length < 2;
 }
 
 function writeHash() {
-  const time = view.time && step >= 0 && !steps[step]?.forecast ? steps[step].radar : null;
+  const time = !playing && shownMs != null && steps.length && shownMs !== lastObserved() && !isForecastTime() ? toStamp(shownMs) : null;
+  view.time = time;
   history.replaceState(null, "", viewHash({ ...view, time }));
 }
 
-// --- state ----------------------------------------------------------------------
+// --- state ----------------------------------------------------------------------------
 async function load(fresh = false) {
   base = sourceUrl(view.day, LIVE);
   index = await getJson(`${base}index.json`, fresh);
   steps = timeline(index, { hours: view.day === "live" ? view.hours : null });
-  step = closestStep(steps, view.time ? parseStamp(view.time) : null);
+  allSteps = timeline(index);
+  cellsData = new Map();
+  motions.clear();
+  motionReady.clear();
+  flows.clear();
+  makeLuts();
+}
+
+function initialTime() {
+  if (!steps.length) return null;
+  const wanted = view.time ? parseStamp(view.time) : null;
+  const at = wanted ?? lastObserved() ?? lastTime();
+  return Math.min(lastTime(), Math.max(firstTime(), quantize(at)));
 }
 
 async function update(change) {
   const reload = "day" in change || "hours" in change;
   view = { ...view, ...change };
+  view.filter = parseFilter(view.filter);
   if (reload) {
     stop();
     await load();
+    shownMs = initialTime();
   }
+  if ("filter" in change && !reload) makeLuts();
   renderSource();
   renderLayers();
-  renderTicks();
-  renderStep();
+  renderTimeline();
   renderStatus();
   renderPlay();
+  if (!drawAll()) requestDraw();
   writeHash();
-}
-
-function stop() {
-  if (playing) clearInterval(playing);
-  playing = null;
-}
-
-function play() {
-  if (playing) {
-    stop();
-    renderPlay();
-    return;
-  }
-  if (step >= steps.length - 1) step = -1;
-  playing = setInterval(() => {
-    step = step >= steps.length - 1 ? 0 : step + 1;
-    renderStep();
-  }, FRAME_MS);
-  renderPlay();
+  if (reload || "filter" in change) refreshPoint();
 }
 
 document.getElementById("play").addEventListener("click", play);
-document.getElementById("time").addEventListener("input", (event) => {
-  stop();
-  step = Number(event.target.value);
-  view.time = steps[step]?.forecast ? null : steps[step]?.radar;
-  renderStep();
-  renderPlay();
-  writeHash();
+document.getElementById("speed").addEventListener("change", (event) => {
+  speed = Number(event.target.value);
+  store("speed", speed);
 });
+const slider = document.getElementById("time");
+slider.addEventListener("input", () => goTo(firstTime() + Number(slider.value) * MINUTE));
+slider.addEventListener("change", () => refreshPoint());
 document.getElementById("day").addEventListener("change", (event) => {
   if (event.target.value) update({ day: event.target.value, time: null });
 });
 window.addEventListener("hashchange", () => {
   const next = parseView(window.location.hash);
-  if (viewHash(next) !== viewHash({ ...view, time: view.time })) update(next);
+  next.filter = parseFilter(next.filter ?? view.filter);
+  if (viewHash(next) !== viewHash(view)) update(next);
+});
+
+// keyboard: space plays, arrows step by frame, Home/End jump to the first frame / now
+document.addEventListener("keydown", (event) => {
+  if (event.altKey || event.ctrlKey || event.metaKey) return;
+  const target = event.target;
+  const tag = target?.tagName;
+  const onSlider = target === slider;
+  const typing = (tag === "INPUT" && !onSlider && target.type !== "checkbox") || tag === "SELECT" || tag === "TEXTAREA" || target?.isContentEditable;
+  if (typing) return;
+  if (event.key === " " || event.code === "Space") {
+    if (tag === "BUTTON" || tag === "SUMMARY" || (tag === "INPUT" && target.type === "checkbox")) return;
+    event.preventDefault();
+    play();
+  } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    if (!onSlider && tag === "INPUT") return;
+    event.preventDefault();
+    stepBy(event.key === "ArrowLeft" ? -1 : 1);
+  } else if (event.key === "Home" || event.key === "End") {
+    if (!onSlider && tag === "INPUT") return;
+    event.preventDefault();
+    goTo(event.key === "Home" ? firstTime() : lastObserved() ?? lastTime());
+  }
 });
 
 // keep the live view current; a viewer at "now" stays at now
 setInterval(async () => {
   if (view.day !== "live" || playing) return;
-  const atNow = step === closestStep(steps, null);
+  const atNow = shownMs === quantize(lastObserved() ?? 0);
   await load(true);
-  if (atNow) step = closestStep(steps, null);
-  renderTicks();
-  renderStep();
+  if (atNow || shownMs == null) shownMs = initialTime();
+  shownMs = Math.min(lastTime(), Math.max(firstTime(), shownMs));
+  if (atNow) shownMs = quantize(lastObserved() ?? lastTime());
+  renderLayers();
+  renderTimeline();
   renderStatus();
+  requestDraw();
+  refreshPoint();
 }, REFRESH_MS);
+// the age of the newest frame
+setInterval(() => {
+  renderStatus();
+  if (!playing) renderWhen();
+}, 30000);
 
 async function main() {
+  renderSpeed();
+  renderPointHint();
   const [, daysJson] = await Promise.all([mapLoaded, getJson("radar/days.json")]);
   days = Array.isArray(daysJson) ? daysJson : [];
   // phones: the box starts folded so the map stays visible
   if (window.innerWidth <= 700) document.getElementById("show").open = false;
-  addBoundaries();
+  addLayers();
   await update({ day: view.day });
+  window.addEventListener("resize", () => renderTimeline());
 }
 
 main();
+
+// for tests in a headless browser: jump to a time / play
+/** Draw every minute of the shown window once, synchronously: frame times for a report. */
+async function bench(scale = perf.scale) {
+  stop();
+  await Promise.all(steps.map((s) => frame(radarUrl(s))));
+  await Promise.all((index?.motion ?? []).map((m) => motion(m)));
+  const saved = [perf.scale, shownMs];
+  perf.scale = scale;
+  const times = [];
+  for (let ms = firstTime(); ms <= lastTime(); ms += MINUTE) {
+    shownMs = ms;
+    const start = performance.now();
+    drawRadar();
+    times.push(performance.now() - start);
+  }
+  [perf.scale, shownMs] = saved;
+  requestDraw();
+  times.sort((a, b) => a - b);
+  return { n: times.length, median: times[times.length >> 1], p95: times[Math.floor(times.length * 0.95)], max: times.at(-1) };
+}
+
+// for checks in a browser: jump to a time, play, place a point, measure
+window.__radar = { goTo, play, stop, setPoint, bench, state: () => ({ shownMs, playing, steps: steps.length, perf }) };
