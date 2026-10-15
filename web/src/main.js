@@ -52,7 +52,13 @@ async function getJson(path) {
 const cache = new Map();
 function scores(view, level, variable = view.variable) {
   const path = `data/scores/${view.window}/${level}/${variable}.json`;
-  if (!cache.has(path)) cache.set(path, getJson(path).then(records));
+  if (!cache.has(path)) {
+    // a failed fetch is not remembered: the next view tries again
+    cache.set(path, getJson(path).then((doc) => {
+      if (!doc) cache.delete(path);
+      return records(doc);
+    }));
+  }
   return cache.get(path);
 }
 
@@ -434,13 +440,20 @@ map.on("load", async () => {
   current.level = (await scores(view, "okres")).length ? "okres" : "kraj";
   addLayers(current.level === "okres" ? "okresy" : "kraje");
 
+  // only the latest render applies: quick changes of the selects must not mix their data
+  let renderToken = 0;
   async function render() {
-    current.rows = await scores(view, current.level);
+    const token = ++renderToken;
+    const rows = await scores(view, current.level);
+    if (token !== renderToken) return;
+    current.rows = rows;
     const leadDays = availableLeadDays(current.rows);
     if (!leadDays.includes(view.leadDay)) view.leadDay = leadDays[0];
     fillSelect("lead", leadDays.map((d) => [d, `D+${d}`]), view.leadDay);
     current.regions = bestByRegion(current.rows, view.leadDay);
-    current.stations = bestByRegion(await scores(view, "station"), view.leadDay);
+    const stationRows = await scores(view, "station");
+    if (token !== renderToken) return;
+    current.stations = bestByRegion(stationRows, view.leadDay);
     map.setPaintProperty("regions-fill", "fill-color", fillExpression(current.regions, current.colors));
     map.getSource("stations").setData(stationFeatures(current.stationTable, current.stations, current.colors));
     if (current.highlight && ![...current.regions.values()].some((e) => e.model === current.highlight)) current.highlight = null;
