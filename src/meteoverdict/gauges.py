@@ -87,6 +87,25 @@ def _historical(client: httpx.Client, wsi: str) -> pl.DataFrame | None:
     return _normalize(rows, "historical")
 
 
+def drop_after_gaps(rows: pl.DataFrame) -> pl.DataFrame:
+    """Drop a gauge's daily total that follows a gap in its own readings.
+
+    Manual gauges are read once a day by volunteer observers; after days without a
+    reading, ČHMÚ's not yet completed months often hold one value that is the total of
+    several days (Chýnov, 15/16 Sept 2026: 43.7 mm after six missing days, 0.0-0.1 mm at
+    five automatic stations around it that day). Such values, and a selection of only the
+    wet days, make the models look too dry. A value is dropped when the same gauge
+    reported earlier in the data and then skipped one or more days; once ČHMÚ fills the
+    missing days it counts again (docs/station-check.md). The checked historical archive
+    (``source`` "historical") is left as it is, and so is a gauge's first value.
+    """
+    if rows.height == 0:
+        return rows
+    previous = pl.col("time").shift(1).over("station_id", order_by="time")
+    after_gap = (pl.col("time") - previous) > timedelta(days=1)
+    return rows.filter(~after_gap.fill_null(False) | (pl.col("source") == "historical"))
+
+
 def fetch_gauge_precipitation(
     client: httpx.Client,
     station_ids: Iterable[str],
@@ -124,12 +143,13 @@ def fetch_gauge_precipitation(
     with ThreadPoolExecutor(max_workers=workers) as pool:
         frames = [pl.DataFrame(schema=SCHEMA), *pool.map(one, list(station_ids))]
     window = (pl.col("time") - timedelta(days=1)).dt.date().is_between(start, end)
-    return (
+    rows = (
         pl.concat(frames)
         .filter(window)
         .unique(["station_id", "time", "variable"], keep="first", maintain_order=True)
         .sort("station_id", "time")
     )
+    return drop_after_gaps(rows)
 
 
 def window(day: date) -> tuple[datetime, datetime]:
