@@ -16,7 +16,25 @@ header {
   gap: 0.5rem 1rem;
   padding: 0.5rem 1rem;
 }
+/* the same menu on every page, right after the title; the language button at the end of
+   that row; the page's own controls always on a full row of their own below it */
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.9rem;
+}
+.site-nav a[aria-current="page"] {
+  font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+}
+#language {
+  order: 1;
+  margin-left: auto;
+}
 #controls {
+  order: 2;
+  flex-basis: 100%;
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1rem;
