@@ -4,32 +4,52 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MeteoVerdict: weather radar</title>
-    <meta name="description" content="ČHMÚ weather radar over Czechia: the last hours, the nowcast for the next hour, hourly precipitation and archived days." />
+    <meta name="description" content="ČHMÚ weather radar over Czechia: the last hours played smoothly, the nowcast for the next hour, rain at your place, storm cells, satellite clouds, hourly precipitation and archived days." />
   </head>
   <body class="tv radar">
     <header>
       <h1><a href="./">MeteoVerdict</a></h1>
       <p id="status">Loading…</p>
-      <a href="./" data-i18n="page.map">Map</a>
-      <a href="tv.html" data-i18n="page.tv">Forecast</a>
-      <a href="compare.html" data-i18n="page.compare">Compare models</a>
-      <a href="api.html" data-i18n="page.api">Open data</a>
+      <nav class="site-nav" aria-label="MeteoVerdict">
+        <a href="./" data-i18n="page.map">Map</a>
+        <a href="tv.html" data-i18n="page.tv">Forecast</a>
+        <a href="radar.html" data-i18n="page.radar" aria-current="page">Radar</a>
+        <a href="compare.html" data-i18n="page.compare">Compare models</a>
+        <a href="station.html" data-i18n="page.station">Stations</a>
+        <a href="api.html" data-i18n="page.api">Open data</a>
+      </nav>
       <button type="button" id="language">Česky</button>
     </header>
-    <nav id="ribbon">
+    <nav id="ribbon" aria-label="Time">
       <div class="radar-when">
-        <div class="when-row">
-          <div id="source" class="segmented"></div>
-          <input type="date" id="day" data-i18n-title="radar.dayLabel" />
-          <div id="hours" class="segmented"></div>
+        <div class="when-row source-row">
+          <div id="source" class="segmented" role="group" data-i18n-aria="radar.sourceLabel"></div>
+          <span id="day-pick">
+            <input type="date" id="day" data-i18n-title="radar.dayLabel" />
+            <small id="day-range" class="hint"></small>
+          </span>
+          <span id="window">
+            <span id="window-label" data-i18n="radar.hoursLabel">Replay the last</span>
+            <span id="hours" class="segmented" role="group"></span>
+            <small id="window-hint" class="hint"></small>
+          </span>
         </div>
-        <div class="when-row timebar">
-          <button type="button" id="play" class="play">▶</button>
-          <div class="slider">
-            <input type="range" id="time" min="0" max="0" value="0" data-i18n-aria="radar.time" />
-            <div id="ticks"></div>
+        <div class="when-row now-row">
+          <button type="button" id="play" class="play" aria-keyshortcuts="Space">▶</button>
+          <label class="speed"><span class="sr-only" data-i18n="radar.speed">Speed</span><select id="speed"></select></label>
+          <div id="when" role="status">
+            <strong id="clock"></strong>
+            <span id="date"></span>
+            <span id="rel"></span>
+            <span id="kind" class="badge"></span>
           </div>
-          <output id="clock" for="time"></output>
+        </div>
+        <div class="timeline">
+          <div class="track">
+            <div id="ticks" aria-hidden="true"></div>
+            <input type="range" id="time" min="0" max="0" value="0" step="1" data-i18n-aria="radar.timeline" />
+          </div>
+          <div id="tick-labels" aria-hidden="true"></div>
         </div>
       </div>
     </nav>
@@ -40,12 +60,15 @@
           <summary data-i18n="radar.onMap">On the map</summary>
           <div id="layers"></div>
           <div id="radar-legend"></div>
+          <p id="point-hint"></p>
         </details>
       </aside>
+      <aside id="point-panel" hidden aria-live="polite"></aside>
     </main>
     <footer>
       <span data-i18n="footer.radar">Radar</span>:
       <a href="https://opendata.chmi.cz/meteorology/weather/radar/">ČHMÚ</a> (CC BY 4.0) ·
+      <span data-i18n="footer.satellite">Satellite</span>: ČHMÚ, EUMETSAT ·
       <span data-i18n="footer.boundaries">Boundaries</span>: ČÚZK (CC BY 4.0) ·
       <a href="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/data-sources.md#radar-archive" data-i18n="footer.method">Source and method</a>
     </footer>

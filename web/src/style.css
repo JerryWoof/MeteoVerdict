@@ -16,7 +16,25 @@ header {
   gap: 0.5rem 1rem;
   padding: 0.5rem 1rem;
 }
+/* the same menu on every page, right after the title; the language button at the end of
+   that row; the page's own controls always on a full row of their own below it */
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.9rem;
+}
+.site-nav a[aria-current="page"] {
+  font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+}
+#language {
+  order: 1;
+  margin-left: auto;
+}
 #controls {
+  order: 2;
+  flex-basis: 100%;
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1rem;
@@ -939,74 +957,191 @@ body.station #facts {
 }
 
 /* weather radar (radar.html), on the TV map's layout */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 .radar-when {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.35rem;
 }
 .radar-when .when-row {
   margin-top: 0;
 }
-.radar-when input[type="date"] {
+.radar-when .hint {
+  color: #5b6670;
+  font-size: 0.75rem;
+}
+#day-pick,
+#window {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+}
+#window-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.radar-when input[type="date"],
+.radar-when select,
+#layers select {
   font: inherit;
   font-size: 0.85rem;
   padding: 0.25rem 0.4rem;
   border: 1px solid #9aa7b1;
   border-radius: 6px;
+  background: #ffffff;
 }
 .segmented button:disabled {
   color: #9aa7b1;
   cursor: default;
 }
-.timebar {
+/* what the map shows: the big time label */
+.now-row {
   flex-wrap: nowrap;
 }
-.timebar .slider {
-  position: relative;
-  flex: 1;
-  min-width: 8rem;
+#when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.6rem;
+  min-width: 0;
 }
-.timebar input[type="range"] {
+#clock {
+  font-size: 1.6rem;
+  line-height: 1.1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+#date {
+  font-weight: 600;
+}
+#rel {
+  color: #4b5863;
+}
+#when .badge,
+#headline .badge {
+  display: inline-block;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  background: #1d2329;
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+#when .badge.forecast,
+#headline .badge.forecast {
+  background: #b35c00;
+}
+/* the timeline: hours, frames, the nowcast hatched, now */
+.timeline {
+  position: relative;
+  padding: 0.75rem 0 1.1rem;
+}
+.timeline .track {
+  position: relative;
+}
+.timeline input[type="range"] {
+  display: block;
   width: 100%;
   margin: 0;
+  height: 1.6rem;
   position: relative;
   z-index: 1;
+  background: transparent;
+  accent-color: #1d2329;
 }
 #ticks {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
-/* the nowcast part of the slider */
-#ticks .forecast-zone {
+#ticks > span {
   position: absolute;
-  top: 15%;
-  bottom: 15%;
-  border-radius: 999px;
+  transform: translateX(-50%);
+}
+#ticks .forecast-zone {
+  transform: none;
+  top: 30%;
+  bottom: 30%;
+  border-radius: 0 999px 999px 0;
   background: repeating-linear-gradient(-45deg, #f2c48c, #f2c48c 4px, #fbe3c4 4px, #fbe3c4 8px);
 }
-#clock {
-  min-width: 3.2rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+#ticks .frame {
+  bottom: 0;
+  width: 1px;
+  height: 0.3rem;
+  background: #9aa7b1;
 }
-#headline .badge {
-  display: inline-block;
-  margin: 0.1rem 0 0.3rem;
-  padding: 0.1rem 0.6rem;
-  border-radius: 999px;
-  background: #1d2329;
-  color: #ffffff;
-  font-weight: 600;
-}
-#headline .badge.forecast {
+#ticks .frame.forecast {
   background: #d9822b;
 }
+#ticks .hour {
+  bottom: -0.15rem;
+  width: 1px;
+  height: 0.55rem;
+  background: #1d2329;
+}
+#ticks .now {
+  top: -0.1rem;
+  bottom: -0.2rem;
+  width: 2px;
+  background: #c0392b;
+}
+#tick-labels {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1rem;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: #4b5863;
+}
+#tick-labels span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+#ticks .now-label {
+  top: -0.95rem;
+  color: #c0392b;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+#headline h2 {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
 #headline .muted,
-.radar-scale + .note,
-#radar-legend .note {
+#radar-legend .note,
+#point-panel .muted {
   color: #5b6670;
   font-size: 0.75rem;
+}
+#headline .fresh {
+  font-size: 0.78rem;
+  color: #2d6a3a;
+}
+#headline .fresh.stale,
+#headline .warning,
+#status.stale {
+  color: #a3191e;
+  font-weight: 600;
+}
+#headline .warning {
+  background: #fde8e6;
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
 }
 /* a dashed frame around the map while it shows the nowcast */
 body.radar.forecast #map::after {
@@ -1021,13 +1156,93 @@ body.radar.forecast #map::after {
   display: flex;
   gap: 0.4rem;
   align-items: center;
-  margin: 0.2rem 0;
+  margin: 0.25rem 0;
+}
+#layers .filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.4rem;
+  align-items: center;
+  margin: 0.1rem 0 0.35rem 1.4rem;
+  font-size: 0.8rem;
+}
+#layers .filter select {
+  font-size: 0.8rem;
+  padding: 0.1rem 0.2rem;
+  max-width: 100%;
+}
+#layers .sat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
+  align-items: center;
+  margin: 0.35rem 0;
+}
+#layers .sat-row input[type="range"] {
+  width: 5rem;
+}
+.segmented.small button {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.78rem;
+}
+.radar-legend-box > strong {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+}
+.legend-rows {
+  list-style: none;
+  margin: 0.25rem 0;
+  padding: 0;
+  font-size: 0.78rem;
+}
+.legend-rows li {
+  display: grid;
+  grid-template-columns: 2.6rem 1fr auto;
+  gap: 0.4rem;
+  align-items: center;
+  margin: 0.1rem 0;
+}
+.legend-rows li.off,
+#radar-legend .aloft.off {
+  opacity: 0.35;
+  text-decoration: line-through;
+}
+.legend-rows .swatch,
+#radar-legend .aloft .swatch {
+  display: inline-block;
+  height: 0.8rem;
+  border-radius: 2px;
+  outline: 1px solid rgba(0, 0, 0, 0.12);
+}
+.legend-rows .mm {
+  color: #4b5863;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#radar-legend .aloft {
+  display: grid;
+  grid-template-columns: 2.6rem 1fr;
+  gap: 0.4rem;
+  align-items: start;
+  font-size: 0.75rem;
+  margin: 0.3rem 0;
+}
+#radar-legend .aloft .swatch {
+  margin-top: 0.15rem;
+}
+#radar-legend .note {
+  margin: 0.25rem 0 0;
+}
+#radar-legend .note.strong {
+  color: #1d2329;
+  font-weight: 600;
 }
 .radar-scale {
-  margin-top: 0.4rem;
+  margin-top: 0.5rem;
 }
 .radar-scale strong {
-  font-size: 0.75rem;
+  font-size: 0.78rem;
 }
 .radar-scale .bar,
 .radar-scale .numbers {
@@ -1051,18 +1266,159 @@ body.radar.forecast #map::after {
 .radar-scale .numbers span:nth-child(even) {
   visibility: hidden;
 }
-#radar-legend .note {
-  margin: 0.3rem 0 0;
-}
+/* desktop: the time on the left, the layers on the right under the zoom buttons,
+   the rain at a place bottom left */
 body.radar #show-box {
-  width: 17rem;
+  left: auto;
+  right: 0.75rem;
+  top: 5.2rem;
+  bottom: auto;
+  width: 19rem;
+  max-height: calc(100% - 7.5rem);
+  overflow-y: auto;
+}
+#point-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+}
+#point-hint .locate {
+  font: inherit;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid #9aa7b1;
+  border-radius: 999px;
+  background: #ffffff;
+  cursor: pointer;
+}
+/* rain at a place */
+#point-panel {
+  position: absolute;
+  z-index: 2;
+  left: 0.75rem;
+  bottom: 1.6rem;
+  width: 20rem;
+  padding: 0.5rem 0.7rem;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(29, 35, 41, 0.18);
+  font-size: 0.85rem;
+}
+#point-panel .point-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+#point-panel .close {
+  border: none;
+  background: none;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+#point-panel .sentence {
+  margin: 0.3rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+#point-panel .sentence.expected,
+#point-panel .sentence.now {
+  color: #1f4f8f;
+}
+.point-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.point-chart .future {
+  fill: #fbe3c4;
+  opacity: 0.6;
+}
+.point-chart .guide {
+  stroke: #e3ddd0;
+  stroke-width: 1;
+}
+.point-chart .base {
+  stroke: #9aa7b1;
+}
+.point-chart .now {
+  stroke: #c0392b;
+  stroke-width: 1.5;
+}
+.point-chart .shown {
+  stroke: #1d2329;
+  stroke-dasharray: 2 2;
+}
+.point-chart .bar.forecast {
+  opacity: 0.75;
+}
+.point-chart .axis {
+  font-size: 9px;
+  fill: #4b5863;
+}
+.cell-popup .maplibregl-popup-content {
+  font-size: 0.82rem;
+  padding: 0.5rem 1.6rem 0.4rem 0.7rem;
+}
+.cell-popup p {
+  margin: 0.15rem 0;
 }
 @media (max-width: 700px) {
   .radar-when .when-row {
+    display: flex;
     flex-wrap: wrap;
+    gap: 0.35rem 0.5rem;
   }
-  .radar-when .timebar {
+  .radar-when .now-row {
     flex-wrap: nowrap;
+  }
+  .radar-when .segmented {
+    flex: 0 1 auto;
+  }
+  #window-hint,
+  #day-range {
+    flex-basis: 100%;
+  }
+  #clock {
+    font-size: 1.3rem;
+  }
+  #when {
+    gap: 0 0.4rem;
+    font-size: 0.8rem;
+  }
+  .play {
+    order: 0;
+    padding: 0.3rem 0.6rem;
+  }
+  body.radar #show-box {
+    left: 0.5rem;
+    right: auto;
+    top: auto;
+    bottom: 1.8rem;
+    width: auto;
+    max-width: calc(100% - 1rem);
+    max-height: 55%;
+  }
+  #point-panel {
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 1.8rem;
+    width: auto;
+    max-height: 60%;
+    overflow-y: auto;
+  }
+  #headline h2 {
+    font-size: 0.95rem;
+    margin: 0;
+  }
+  /* phones: the headline keeps what matters (time, freshness, warnings) */
+  #headline {
+    padding: 0.3rem 0.6rem;
+  }
+  #headline .muted {
+    display: none;
+  }
+  #headline .line {
+    margin: 0.1rem 0 0;
   }
 }
 /* event skill for farmers (compare.html) */
@@ -1155,4 +1511,11 @@ body.radar #show-box {
   .blend-test-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* the score map's okres panel: links to the pages of its stations, under the name */
+.station-pages {
+  margin: 0.1rem 0 0.4rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
 }
