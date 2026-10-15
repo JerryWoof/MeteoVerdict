@@ -81,7 +81,8 @@ let shownMs = null; // the data time on the map (a whole minute)
 let playing = false;
 let clockState = { ms: 0, hold: 0 };
 let speed = SPEEDS.includes(Number(stored("speed", 1))) ? Number(stored("speed", 1)) : 1;
-let satOpacity = Math.min(1, Math.max(0.2, Number(stored("satOpacity", 0.8)) || 0.8));
+// half strength by default: the clouds under the radar, not over it
+let satOpacity = Math.min(1, Math.max(0.2, Number(stored("satOpacity", 0.5)) || 0.5));
 let point = null; // {lon, lat} of the rain-at-my-place panel
 
 function element(tag, text, className) {
@@ -331,7 +332,10 @@ function showImage(id, url, opacity, coordinates, before = "okresy-line") {
   const source = map.getSource(id);
   if (!source) {
     map.addSource(id, { type: "image", url, coordinates });
-    map.addLayer({ id, type: "raster", source: id, paint: { "raster-opacity": opacity, "raster-fade-duration": 0 } }, before);
+    // satellite images in grey: ČHMÚ's night product is a false-colour RGB (pink ground,
+    // purple clouds) that drowns the radar colours; grey keeps clouds as clouds
+    const grey = id.startsWith("sat") ? { "raster-saturation": -1 } : {};
+    map.addLayer({ id, type: "raster", source: id, paint: { "raster-opacity": opacity, "raster-fade-duration": 0, ...grey } }, before);
     imageState.set(id, { url, opacity, visible: true, coordinates: String(coordinates) });
     return;
   }
