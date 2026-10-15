@@ -336,7 +336,9 @@ def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -
         "attribution": (
             "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com "
             "(CC BY 4.0) from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, KNMI, DMI, "
-            "ČHMÚ and the UK Met Office (CC BY-SA 4.0). Boundaries: ČÚZK (CC BY 4.0)."
+            "ČHMÚ, Environment and Climate Change Canada, the Japan Meteorological Agency, "
+            "the China Meteorological Administration and the UK Met Office (CC BY-SA 4.0). "
+            "Boundaries: ČÚZK (CC BY 4.0)."
         ),
     }
 

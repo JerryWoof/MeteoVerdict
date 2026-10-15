@@ -21,6 +21,9 @@ LEAD_MARGIN_H = 6
 #: live 2026-10-13: the 2026-04-01 12 UTC runs are missing, 2026-04-02 00 UTC are there).
 RUNS_FROM = date(2026, 4, 2)
 
+#: UTC hours of the runs in Open-Meteo's Single Runs API (``run_hours`` narrows them).
+RUN_HOURS = (0, 6, 12, 18)
+
 #: Forecast variables we verify (Open-Meteo names).
 VARIABLES = ("temperature_2m", "precipitation", "wind_speed_10m")
 
@@ -41,6 +44,7 @@ _OPTIONAL = {
     "coarser_after_h",
     "coarser_step_h",
     "runs_from",
+    "run_hours",
 }
 
 
@@ -65,6 +69,8 @@ class Model:
     coarser_step_h: int | None = None
     #: first day (00 UTC run) in Open-Meteo's Single Runs archive; None = ``RUNS_FROM``
     runs_from: date | None = None
+    #: UTC hours of its runs in the Single Runs API (GEM Global: 00 and 12 only)
+    run_hours: tuple[int, ...] = RUN_HOURS
 
     def available_from(self, variable: str) -> date:
         """First day with D+1 forecasts of ``variable`` in the Previous Runs archive."""
@@ -120,6 +126,13 @@ def _parse(entry: Any, index: int) -> Model:
         raise ModelCatalogError(f"models[{index}]: step_hours and forecast_days must be numbers")
     if not isinstance(entry.get("runs_from", date.min), date):
         raise ModelCatalogError(f"models[{index}]: runs_from must be a YYYY-MM-DD date")
+    run_hours = entry.get("run_hours", list(RUN_HOURS))
+    if (
+        not isinstance(run_hours, list)
+        or not run_hours
+        or any(isinstance(h, bool) or h not in RUN_HOURS for h in run_hours)
+    ):
+        raise ModelCatalogError(f"models[{index}]: run_hours must be a list of {RUN_HOURS}")
     if not isinstance(entry.get("enabled", True), bool):
         raise ModelCatalogError(f"models[{index}]: enabled must be true or false")
     variable_from = entry.get("variable_from") or {}
@@ -130,7 +143,9 @@ def _parse(entry: Any, index: int) -> Model:
         raise ModelCatalogError(
             f"models[{index}]: variable_from must map {VARIABLES} to dates after archive_from"
         )
-    model = Model(**{**entry, "variable_from": variable_from})
+    model = Model(
+        **{**entry, "variable_from": variable_from, "run_hours": tuple(sorted(set(run_hours)))}
+    )
     if model.step_hours not in (1, 3, 6) or model.forecast_days < 1:
         raise ModelCatalogError(f"{model.id}: implausible step_hours or forecast_days")
     if (model.coarser_after_h is None) != (model.coarser_step_h is None) or (
