@@ -6,7 +6,8 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
 import {
-  biasByElevation, fmt, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
+  BLEND_TEST_SERIES, BLEND_TEST_VARIABLES, biasByElevation, blendTestLines, blendTestRows, blendTestVariable,
+  blendVerdict, blendVerdicts, fmt, okresVerdictCounts, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
   leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, unpublishedHours,
 } from "./compare.js";
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
@@ -280,6 +281,99 @@ function renderByLead(rows, view, names, colors) {
   );
 }
 
+// --- does our forecast beat the best model? (blend-test.json; hidden until it exists) --
+const blendTestDoc = getJson("data/scores/blend-test.json");
+const SERIES_COLORS = { combined: "#c0392b", best_oos: "#1f78b4", blend: "#1d2329", best_hindsight: "#7f8c8d" };
+
+function verdictText(v, unit, long = false) {
+  const values = { amount: fmt(v.amount), unit, low: fmt(v.low), high: fmt(v.high) };
+  if (v.verdict === "same") {
+    values.amount = fmt(v.amount, true);
+    values.low = fmt(v.low, true);
+    values.high = fmt(v.high, true);
+  }
+  return t(`blendTest.${v.verdict}${long ? "Long" : ""}`, values);
+}
+
+async function renderBlendTest(view) {
+  const section = document.getElementById("blend-test-section");
+  const doc = await blendTestDoc;
+  const verdicts = blendVerdicts(blendTestRows(doc, "cz"));
+  section.hidden = verdicts.length === 0;
+  if (section.hidden) return;
+  const unit = (variable) => doc.units?.[variable] ?? "";
+  // verdict table: a row per variable, a column per lead day
+  const leads = [...new Set(verdicts.map((v) => v.lead_day))].sort((a, b) => a - b);
+  const head = document.createElement("tr");
+  head.append(cell("th", t("blendTest.variable")), ...leads.map((d) => cell("th", `D+${d}`)));
+  const body = BLEND_TEST_VARIABLES.filter((variable) => verdicts.some((v) => v.variable === variable)).map((variable) => {
+    const tr = document.createElement("tr");
+    tr.append(cell("th", t(`variable.${variable}`)));
+    for (const lead of leads) {
+      const v = verdicts.find((x) => x.variable === variable && x.lead_day === lead);
+      const td = cell("td", null, v ? `verdict ${v.verdict}` : "");
+      if (v) {
+        td.title = `${verdictText(v, unit(variable), true)} · ${v.days} d`;
+        td.append(cell("strong", verdictText(v, unit(variable))), document.createElement("br"));
+        const range = v.verdict === "same"
+          ? t("blendTest.sameInterval", { amount: fmt(v.amount, true), unit: unit(variable), low: fmt(v.low, true), high: fmt(v.high, true) })
+          : t("blendTest.interval", { low: fmt(v.low), high: fmt(v.high) });
+        td.append(cell("small", range));
+      } else {
+        td.textContent = "–";
+      }
+      tr.append(td);
+    }
+    return tr;
+  });
+  document.getElementById("blend-test-table").replaceChildren(head, ...body);
+  // the chosen okres (or how the okresy came out) at the page's variable and lead day
+  const variable = blendTestVariable(view.variable);
+  const okresRow = levelOf(view.region) !== "okres" ? null : blendTestRows(doc, view.region).find((r) => r.variable === variable && r.lead_day === view.leadDay);
+  const line = document.getElementById("blend-test-okres");
+  if (okresRow && blendVerdict(okresRow)) {
+    line.textContent = t("blendTest.okres", {
+      region: displayName(okresRow.region_name), variable: t(`variable.${variable}`).toLowerCase(), lead: view.leadDay,
+      verdict: verdictText(blendVerdict(okresRow), unit(variable), true),
+    });
+  } else {
+    const counts = okresVerdictCounts(doc, variable, view.leadDay);
+    line.textContent = counts.better + counts.same + counts.worse
+      ? t("blendTest.okresy", { variable: t(`variable.${variable}`).toLowerCase(), lead: view.leadDay, ...counts })
+      : "";
+  }
+  // MAE by lead day of the page's variable: ours, the best model then, the mean, hindsight
+  const lines = blendTestLines(blendTestRows(doc, "cz"), variable);
+  const label = (s) => t(`blendTest.series.${s}`);
+  const chart = document.getElementById("blend-test-chart");
+  chart.replaceChildren(
+    cell("h3", t("blendTest.chartTitle", { variable: t(`variable.${variable}`) })),
+    Plot.plot({
+      width: Math.max(280, Math.min(480, chart.clientWidth || 400)),
+      height: 240,
+      marginLeft: 45,
+      x: { label: t("control.lead"), ticks: leads, tickFormat: (d) => `D+${d}` },
+      y: { label: `MAE (${unit(variable)})`, grid: true },
+      color: {
+        domain: BLEND_TEST_SERIES.map(label),
+        range: BLEND_TEST_SERIES.map((s) => SERIES_COLORS[s]),
+        legend: true,
+      },
+      marks: [
+        ...[["best_hindsight", 1.5, "4,3"], ["blend", 1.5, null], ["best_oos", 2, null], ["combined", 3, null]].map(
+          ([series, strokeWidth, strokeDasharray]) => Plot.lineY(lines.filter((r) => r.series === series), {
+            x: "lead_day", y: "mae", stroke: (r) => label(r.series), marker: "circle", tip: true, strokeWidth,
+            strokeDasharray,
+          }),
+        ),
+      ],
+    }),
+  );
+  document.getElementById("blend-test-basis").textContent = t("blendTest.basis", {
+    days: doc.test_days, from: doc.from, to: doc.to, warmup: doc.warm_up_days, min: doc.min_training_days,
+  });
+}
+
 // --- run-based errors by lead hour (leads.json; hidden until it exists) -------------
 const leadsDoc = getJson("data/scores/leads.json");
 const HIGHLIGHT = 3; // the best models over the lead hours get bold lines
@@ -403,6 +497,7 @@ async function main() {
     document.getElementById("ranking-title").textContent = t("compare.rankingIn", {
       region: view.region === "cz" ? "Česko" : displayName(regionList(rows).find((r) => r.code === view.region)?.name ?? view.region),
     });
+    renderBlendTest(view);
     renderSummary(rows, view, names, colors);
     renderTable(rows, view, names);
     renderIntervals(rows, view, names, colors);
