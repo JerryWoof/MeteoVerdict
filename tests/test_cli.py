@@ -41,6 +41,7 @@ COMMANDS = [
     "chmi-archive",
     "chmi-mirror",
     "station-pages",
+    "station-check",
 ]
 
 
@@ -727,3 +728,9 @@ def test_farm_writes_the_json(tmp_path):
     assert first == {"dwd_icon_eu": 1, "ncep_gfs_global": 0}
     assert {r["event"] for r in rows} == {"rain3h"}
     assert doc["models"]["dwd_icon_eu"]["name"] == "DWD ICON-EU"
+
+
+def test_station_check_needs_scores(tmp_path):
+    result = runner.invoke(app, ["station-check", "--data-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "no scores" in plain(result.output)

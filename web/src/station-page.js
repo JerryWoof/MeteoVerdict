@@ -205,8 +205,9 @@ function describe(station) {
   const { kind, automatic } = classifyStation(station);
   const parts = [];
   if (station.elevation != null) parts.push(`${formatNumber(Math.round(station.elevation))} m`);
-  parts.push(t(`map.kind.${kind}`));
-  if (!automatic) parts.push(t("map.daily"));
+  parts.push(t(`map.one.${kind}`));
+  // the manual kinds say "daily" already
+  if (!automatic && !["precipitation", "climate_manual"].includes(kind)) parts.push(t("map.daily"));
   return parts.join(" · ");
 }
 

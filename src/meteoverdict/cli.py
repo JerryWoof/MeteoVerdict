@@ -35,6 +35,7 @@ from meteoverdict import (
     runs,
     satellite,
     scoring,
+    station_check,
     station_pages,
     stations,
     store,
@@ -1253,6 +1254,46 @@ def aggregate_cmd(
         raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
     day = as_of.date() if as_of else None
     _publish_aggregates(files, pl.read_parquet(stations_path), data_dir, out, day, resamples)
+
+
+@app.command("station-check")
+def station_check_cmd(
+    data_dir: Annotated[Path, typer.Option(help="Folder with scores/.")] = Path("data"),
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    out: Annotated[
+        Path | None, typer.Option(help="Write the Markdown report here (default: print it).")
+    ] = None,
+    resamples: Annotated[int, typer.Option(help="Bootstrap resamples for the ranking.")] = 1000,
+    top: Annotated[int, typer.Option(help="How many suspicious stations to list.")] = 10,
+) -> None:
+    """Does it matter which stations score the models? Rankings with only the main WMO
+    stations, the automatic climate stations or the manual rain gauges against all
+    stations, and stations whose errors stand out (docs/station-check.md)."""
+    files = sorted((data_dir / "scores").glob("*.parquet"))
+    if not files:
+        typer.echo(f"mvd station-check: no scores in {data_dir / 'scores'}", err=True)
+        raise typer.Exit(code=1)
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    table = pl.read_parquet(stations_path)
+    with _chmi_client() as client:
+        meta2 = _meta2_tables(client)
+    kinds = station_check.networks(table, meta2)
+    scores = pl.scan_parquet(files)
+    subsets = {"all": None, **station_check.subsets_by_network(kinds)}
+    ranks = station_check.compare_subsets(scores, table, subsets, resamples=resamples)
+    summary = station_check.summarize(ranks)
+    errors = station_check.station_errors(scores)
+    daily = station_check.daily_errors(scores)
+    flagged = station_check.suspicious_stations(errors, daily, table, kinds)
+    text = station_check.report(summary, flagged, top)
+    if out:
+        out.write_text(text, "utf-8")
+        typer.echo(f"wrote {out}")
+    else:
+        typer.echo(text)
 
 
 @app.command()

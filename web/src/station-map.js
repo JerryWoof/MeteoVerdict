@@ -3,19 +3,36 @@
 // measuring …" filter and the station nearest a point. No MapLibre here, so the node
 // tests can run them.
 
-/** Kinds of station, in legend order. "station" is the fallback while the index does
- * not list elements yet (then only professional stations stand out). */
-export const KINDS = ["professional", "climate", "precipitation", "other", "station"];
+/** Kinds of station, in legend order: those of `stations.NETWORKS` (index.json's
+ * `network`, from ČHMÚ's metadata, docs/data-sources.md#kinds-of-station), then
+ * "station", the fallback for an index without networks or elements. All of them are
+ * ČHMÚ's own network. */
+export const KINDS = [
+  "main",
+  "climate",
+  "snow",
+  "precipitation_auto",
+  "precipitation",
+  "climate_manual",
+  "other",
+  "station",
+];
 
 export const KIND_COLORS = {
-  professional: "#d95f02",
+  main: "#d95f02",
   climate: "#1f78b4",
-  precipitation: "#33a02c",
-  other: "#7b5ea7",
+  snow: "#7b5ea7",
+  precipitation_auto: "#33a02c",
+  precipitation: "#1b5e20",
+  climate_manual: "#6baed6",
+  other: "#8a949c",
   station: "#1f78b4",
 };
 
+/** Kinds that report every 10 minutes. */
+const AUTOMATIC_KINDS = new Set(["main", "climate", "snow", "precipitation_auto"]);
 const TEMPERATURE = ["T", "TMA", "TMI"];
+const MAIN_PREFIX = "0-20000-";
 
 /** What the map can filter by: a group of ČHMÚ element codes, the first the one a
  * click on the station then opens. */
@@ -33,16 +50,19 @@ export const MEASURES = {
   evaporation: ["VY"],
 };
 
-/** Kind of a station and whether it is automatic (it reports every 10 minutes).
- * Professional: a WMO station (WIGOS 0-20000-…); climate: measures air temperature;
- * precipitation: precipitation (and snow) only; other: anything else. */
+/** Kind of a station (one of KINDS) and whether it is automatic. The index's
+ * `network` when it has one; an older index: main for a WMO id (WIGOS 0-20000-…), else
+ * guessed from the elements and whether there are 10-minute values. */
 export function classifyStation(station) {
+  if (KINDS.includes(station.network) && station.network !== "station") {
+    return { kind: station.network, automatic: AUTOMATIC_KINDS.has(station.network) };
+  }
   const automatic = Boolean(station.views?.includes("10min"));
   let kind;
-  if (station.id.startsWith("0-20000-")) kind = "professional";
+  if (station.id.startsWith(MAIN_PREFIX)) kind = "main";
   else if (!Array.isArray(station.elements)) kind = "station";
-  else if (TEMPERATURE.some((c) => station.elements.includes(c))) kind = "climate";
-  else if (station.elements.includes("SRA")) kind = "precipitation";
+  else if (TEMPERATURE.some((c) => station.elements.includes(c))) kind = automatic ? "climate" : "climate_manual";
+  else if (station.elements.includes("SRA")) kind = automatic ? "precipitation_auto" : "precipitation";
   else kind = "other";
   return { kind, automatic };
 }
