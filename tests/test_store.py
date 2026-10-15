@@ -179,3 +179,19 @@ def test_publish_latest_replaces_the_bundle(tmp_path):
     names = sorted(a["name"] for a in gh.assets.values())
     assert names == ["aggregates.parquet", "site-data.zip"]  # replaced, not duplicated
     assert b"agg v2" in [a["content"] for a in gh.assets.values()]
+
+
+def test_publish_folder_zips_into_data_latest(tmp_path):
+    import io
+    import zipfile
+
+    gh = FakeGitHub()
+    folder = tmp_path / "station"
+    folder.mkdir()
+    (folder / "index.json").write_text("{}")
+    (folder / "0-20000-0-11520.json").write_text('{"series": {}}')
+    store.publish_folder(gh.store(), folder, "station-data.zip")
+    [asset] = gh.assets.values()
+    assert asset["name"] == "station-data.zip"
+    with zipfile.ZipFile(io.BytesIO(asset["content"])) as z:
+        assert sorted(z.namelist()) == ["0-20000-0-11520.json", "index.json"]

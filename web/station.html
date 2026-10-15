@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MeteoVerdict: ČHMÚ station</title>
+    <meta name="description" content="Every element a ČHMÚ station measures, with its history: the last days every 10 minutes, the last month hourly, recent years daily and decades monthly." />
+  </head>
+  <body class="page station">
+    <header>
+      <h1><a href="./">MeteoVerdict</a></h1>
+      <p id="status"></p>
+      <a href="./" data-i18n="page.map">Map</a>
+      <a href="compare.html" data-i18n="page.compare">Compare models</a>
+      <a href="tv.html" data-i18n="page.tv">Forecast</a>
+      <form id="controls" role="search" autocomplete="off">
+        <label><span data-i18n="station.search">Find a station</span>
+          <input id="search" type="search" list="station-list" data-i18n-placeholder="station.placeholder" placeholder="name, e.g. Libuš" /></label>
+        <datalist id="station-list"></datalist>
+      </form>
+      <a href="api.html" data-i18n="page.api">Open data</a>
+      <button type="button" id="language">Česky</button>
+    </header>
+    <main class="content station-page">
+      <h2 id="title" data-i18n="station.title">ČHMÚ station</h2>
+      <p id="facts" class="note"></p>
+      <p id="message" class="note"></p>
+      <form id="pick" hidden>
+        <label><span data-i18n="station.element">Element</span> <select id="element"></select></label>
+        <span id="how" class="muted small"></span>
+      </form>
+      <div id="charts"></div>
+      <h2 id="elements-title" data-i18n="station.elements" hidden>All elements of this station</h2>
+      <table id="elements" class="doc-table station-elements"></table>
+      <p class="note" data-i18n="station.note"></p>
+    </main>
+    <footer>
+      <span data-i18n="footer.observations">Observations</span>:
+      <a href="https://opendata.chmi.cz/meteorology/climate/">ČHMÚ</a> (Czech Hydrometeorological Institute,
+      <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>;
+      <span data-i18n="station.changes">values as published, converted to a compact format</span>) ·
+      <a href="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/data-sources.md#chmi-archive" data-i18n="station.archive">The archive</a>
+    </footer>
+    <script type="module" src="/src/station-page.js"></script>
+  </body>
+</html>

@@ -9,10 +9,10 @@ export default defineConfig({
     emptyOutDir: true,
     chunkSizeWarningLimit: 1200,
     // the score map, the model comparison, the detailed forecast per okres, the
-    // TV-style forecast map and the open data page
+    // TV-style forecast map, the open data page and the station page
     rollupOptions: {
       input: {
-        map: "index.html", compare: "compare.html", forecast: "forecast.html", tv: "tv.html", api: "api.html",
+        map: "index.html", compare: "compare.html", forecast: "forecast.html", tv: "tv.html", api: "api.html", station: "station.html",
       },
     },
   },
