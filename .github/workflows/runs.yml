@@ -74,7 +74,9 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: true
       - name: Install project

@@ -734,3 +734,32 @@ def test_station_check_needs_scores(tmp_path):
     result = runner.invoke(app, ["station-check", "--data-dir", str(tmp_path)])
     assert result.exit_code == 1
     assert "no scores" in plain(result.output)
+
+
+def test_satellite_release_notes_credit_eumetsat_with_the_year():
+    # docs/licensing.md: "contains modified EUMETSAT Meteosat data <year>"
+    notes = cli.satellite_release_notes("satellite-2025-12")
+    assert "Contains modified EUMETSAT Meteosat data 2025 " in notes
+    assert "creativecommons.org/licenses/by/4.0" in notes
+
+
+def test_outlook_meter_counts_open_meteo_calls_with_retries():
+    meter = cli._OpenMeteoMeter()
+    answers = iter([httpx.Response(503), httpx.Response(200, json={})])
+
+    def handler(request):
+        if request.url.host == "api.github.com":
+            return httpx.Response(200, json={})
+        return next(answers)
+
+    params = {"latitude": "50,49,48", "models": "a,b", "hourly": "x"}
+    with httpx.Client(
+        transport=httpx.MockTransport(handler), event_hooks={"request": [meter]}
+    ) as client:
+        client.get("https://api.open-meteo.com/v1/forecast", params=params)
+        client.get("https://api.open-meteo.com/v1/forecast", params=params)  # the retry
+        client.get("https://api.github.com/repos/o/r/releases")  # not counted
+    one = cli.outlook.cost(3, 2)  # 3 points x 5 variables x 2 models / 10, 6 days
+    assert meter.requests == 2
+    assert meter.calls == pytest.approx(2 * one)
+    assert meter.line() == f"Open-Meteo: {2 * one:g} calls in 2 requests"

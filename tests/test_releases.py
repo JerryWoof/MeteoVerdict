@@ -56,3 +56,50 @@ def test_put_creates_the_release_and_uploads(tmp_path):
 def test_names_follow_pagination():
     store, _, _ = fake_github(existing_assets=230)
     assert len(store.names("aladin-2026-10")) == 230
+
+
+def notes_github(body: str):
+    """One existing release (id 7) whose body is ``body``; records the PATCHes."""
+    patches: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/repos/o/r/releases/tags/satellite-2025-12":
+            return httpx.Response(200, json={"id": 7, "body": body})
+        if request.method == "PATCH" and path == "/repos/o/r/releases/7":
+            patches.append(json.loads(request.content))
+            return httpx.Response(200, json={"id": 7})
+        if path == "/repos/o/r/releases/7/assets":
+            return httpx.Response(200, json=[])
+        if request.url.host == "uploads.github.com":
+            return httpx.Response(201, json={})
+        return httpx.Response(500)
+
+    return httpx.Client(transport=httpx.MockTransport(handler)), patches
+
+
+def test_put_corrects_the_notes_of_an_existing_release(tmp_path):
+    client, patches = notes_github("old notes")
+    store = GitHubReleaseStore(client, "o/r", "t0ken", notes=lambda tag: f"notes of {tag}")
+    path = tmp_path / "x.tar"
+    path.write_bytes(b"data")
+    store.put("satellite-2025-12", "x.tar", path)
+    store.put("satellite-2025-12", "y.tar", path)
+    assert patches == [{"body": "notes of satellite-2025-12"}]  # once
+
+
+def test_notes_already_right_or_none_are_left_alone(tmp_path):
+    path = tmp_path / "x.tar"
+    path.write_bytes(b"data")
+    client, patches = notes_github("notes")
+    GitHubReleaseStore(client, "o/r", "t0ken", notes="notes").put("satellite-2025-12", "x", path)
+    client, patches_without = notes_github("old notes")
+    GitHubReleaseStore(client, "o/r", "t0ken").put("satellite-2025-12", "x", path)
+    assert patches == patches_without == []
+
+
+def test_reading_does_not_touch_the_notes():
+    client, patches = notes_github("old notes")
+    store = GitHubReleaseStore(client, "o/r", "t0ken", notes="notes")
+    assert store.names("satellite-2025-12") == set()
+    assert patches == []
