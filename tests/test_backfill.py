@@ -32,6 +32,7 @@ class Fake:
         quota_after: int | None = None,
         now_month: str | None = None,
         error: type[forecasts.QuotaError] = forecasts.QuotaError,
+        unreadable_month: str | None = None,
     ):
         self.error = error
         self.obs_calls: list[tuple[date, date]] = []
@@ -40,9 +41,12 @@ class Fake:
         self.gauge_obs_calls: list[tuple[date, date]] = []
         self.quota_after = quota_after
         self.now_month = now_month
+        self.unreadable_month = unreadable_month
 
-    def observations(self, client, ids, start, end):
+    def observations(self, client, ids, start, end, unreadable=None):
         self.obs_calls.append((start, end))
+        if self.unreadable_month == f"{start:%Y-%m}":
+            unreadable.append(f"https://x/10m-s-{start:%Y%m}.json")
         source = "now" if self.now_month == f"{start:%Y-%m}" else "recent"
         rows = [("s", t, "temperature_2m", 10.0, 0, source) for t in hourly(start, end)]
         return pl.DataFrame(rows, schema=observations.SCHEMA, orient="row")
@@ -154,6 +158,28 @@ def test_a_month_only_in_now_is_not_final(tmp_path, fake):
     assert state.obs_months == {"2026-08"}
     september = [s for s in state.scored if s.startswith("2026-09")]
     assert september == []  # windows that need September observations stay open
+
+
+def test_a_month_fetched_in_part_is_not_final(tmp_path, fake):
+    # a run up to 20 Sept has fetched September only up to then
+    fake()
+    run(tmp_path, last=date(2026, 9, 20))
+    state = backfill.State.load(tmp_path / "backfill-state.json")
+    assert state.obs_months == {"2026-08"}
+    f = fake()
+    run(tmp_path)
+    assert (date(2026, 9, 1), date(2026, 9, 30)) in f.obs_calls
+    assert backfill.State.load(tmp_path / "backfill-state.json").obs_months == {
+        "2026-08",
+        "2026-09",
+    }
+
+
+def test_a_month_with_an_unreadable_file_is_not_final(tmp_path, fake):
+    fake(unreadable_month="2026-09")
+    run(tmp_path)
+    state = backfill.State.load(tmp_path / "backfill-state.json")
+    assert state.obs_months == {"2026-08"}
 
 
 def test_sync_pulls_before_and_pushes_after_each_window(tmp_path, fake):
