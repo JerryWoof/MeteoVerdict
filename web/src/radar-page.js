@@ -9,7 +9,7 @@ import {
   minutesBetween, parseStamp, parseView, rainRate, sourceUrl, timeline, toStamp, viewHash,
 } from "./radar.js";
 import {
-  ALOFT_COLOURS, CATEGORIES, FILTER_KEYS, buildLut, categoriesFrom, categoryOf, decodePixels, dbzLevel,
+  ALOFT_COLOURS, CATEGORIES, FILTER_KEYS, NODATA, buildLut, categoriesFrom, categoryOf, decodePixels, dbzLevel,
   filterLevels, labelKey, legendRows, maxzScale, parseFilter, rateLabel, simpleScale,
 } from "./radar-palette.js";
 import {
@@ -112,6 +112,7 @@ const radarUrl = (s) => frameUrl(base, s.forecast ? "nowcast" : "maxz", s.radar)
 const CACHE_SIZE = 120;
 const frames = new Map();
 const ready = new Map(); // url → decoded (only those finished)
+const failed = new Set(); // urls that could not be loaded
 let scratch = null;
 
 async function decodeUrl(url) {
@@ -143,6 +144,12 @@ function frame(url) {
   }
   promise = decodeUrl(url).then((decoded) => {
     if (decoded) ready.set(url, decoded);
+    else {
+      // gone (the live folder drops old nowcasts every 5 min) or broken: never wait for
+      // it again, and fetch a fresh frame list
+      failed.add(url);
+      refreshSoon();
+    }
     return decoded;
   });
   frames.set(url, promise);
@@ -236,6 +243,21 @@ class GridCanvas {
 let radarCanvas;
 let rainCanvas;
 let lutRadar;
+let hiddenByFilter = false; // the frame has echoes, but the "show from" setting hides (almost) all
+
+/** True when a frame has echoes and the colour table hides practically all of them: at
+ * most 25 pixels (about 25 km²) stay visible, out of at least ten times as many. */
+function allHidden(codes, lut) {
+  let echoes = 0;
+  let shown = 0;
+  for (let p = 0; p < codes.length; p++) {
+    const c = codes[p];
+    if (c === 0 || c === NODATA) continue;
+    echoes++;
+    if (lut[c] !== 0 && ++shown > 25) return false;
+  }
+  return echoes > 0 && echoes >= 10 * shown;
+}
 let lutRain;
 let categories = CATEGORIES; // as index.json labels the classes
 function makeLuts() {
@@ -272,30 +294,28 @@ function drawRadar() {
     radarCanvas?.hide();
     return true;
   }
-  const { i, tau } = locate(steps, shownMs);
+  // plain frames, one after another: the frame at or before the time shown (no motion
+  // morphing, no cross-fading: the user found the movement distracting)
+  const { i } = locate(steps, shownMs);
   const a = steps[i];
-  const b = tau > 0 ? steps[i + 1] : null;
   const urlA = radarUrl(a);
-  const urlB = b ? radarUrl(b) : null;
+  if (failed.has(urlA)) return true; // missing: keep what is drawn and go on
   const A = ready.get(urlA);
-  const B = urlB ? ready.get(urlB) : null;
-  if (!A || (urlB && !B)) {
-    Promise.all([frame(urlA), urlB && frame(urlB)]).then(() => requestDraw());
+  if (!A) {
+    frame(urlA).then(() => requestDraw());
     return false;
   }
   const scale = perf.scale;
-  // the nowcast has no motion files: it uses the newest measured one
-  const pair = b ? motionFor(index?.motion, a, b, b.forecast ? 120 : 30) : null;
-  const flow = pair ? flowFor(pair, A.w, A.h, scale) : null;
-  const key = `${urlA}|${urlB}|${tau.toFixed(4)}|${flow ? 1 : 0}|${scale}`;
+  const key = `${urlA}|${scale}`;
   if (radarCanvas.key === key) return true;
   const start = performance.now();
   radarCanvas.ensure(A.w, A.h, scale);
-  warpBlend(radarCanvas.pixels, A.codes, B?.codes ?? null, A.w, A.h, flow, tau, lutRadar, scale);
-  radarCanvas.commit(a.forecast || b?.forecast ? 0.75 : 0.9);
+  warpBlend(radarCanvas.pixels, A.codes, null, A.w, A.h, null, 0, lutRadar, scale);
+  radarCanvas.commit(a.forecast ? 0.75 : 0.9);
   measure(performance.now() - start);
-  perf.mode = flow ? "motion" : b ? "crossfade" : "frame";
+  perf.mode = "frame";
   radarCanvas.key = key;
+  hiddenByFilter = allHidden(A.codes, lutRadar);
   return true;
 }
 
@@ -378,11 +398,11 @@ function drawSatellite() {
   const coordinates = imageCoordinates(
     Array.isArray(b) && b.length === 2 ? { west: b[0][0], south: b[0][1], east: b[1][0], north: b[1][1] } : boundsOf(index),
   );
-  showImage("sat-a", satUrl(product, meta, around.a), satOpacity, coordinates, "okresy-line-under");
-  if (around.b) {
-    preload(satUrl(product, meta, around.b));
-    showImage("sat-b", satUrl(product, meta, around.b), satOpacity * around.tau, coordinates, "okresy-line-under");
-  } else showImage("sat-b", null);
+  // the nearest image, no cross-fade
+  const nearest = around.b && around.tau >= 0.5 ? around.b : around.a;
+  showImage("sat-a", satUrl(product, meta, nearest), satOpacity, coordinates, "okresy-line-under");
+  showImage("sat-b", null);
+  if (around.b) preload(satUrl(product, meta, around.b));
   return info;
 }
 
@@ -449,12 +469,6 @@ function prefetch() {
   for (const s of steps.slice(i, i + (playing ? 4 : 2))) {
     if (has("radar")) frame(radarUrl(s));
     if (has("rain") && s.rain) frame(frameUrl(base, "merge1h", s.rain));
-  }
-  if (has("radar") && index?.motion?.length) {
-    for (let k = i; k < Math.min(steps.length - 1, i + 3); k++) {
-      const pair = motionFor(index.motion, steps[k], steps[k + 1], steps[k + 1].forecast ? 120 : 30);
-      if (pair) motion(pair.stamp);
-    }
   }
 }
 
@@ -1030,6 +1044,7 @@ function renderWhen() {
   h2.append(element("span", clock(shownMs)), element("span", forecast ? t("radar.forecastShort") : t("radar.measured"), forecast ? "badge forecast" : "badge"));
   lines.push(h2);
   if (forecast && index?.nowcast?.base) lines.push(element("p", t("radar.forecastNote", { time: clock(parseStamp(index.nowcast.base)) }), "line"));
+  if (has("radar") && hiddenByFilter) lines.push(element("p", t("radar.allHidden"), "line warning"));
   if (has("rain")) {
     const current = steps[i];
     lines.push(element("p", current?.rain ? t("radar.rainAt", { time: clock(parseStamp(current.rain)) }) : t("radar.rainNone"), "line"));
@@ -1159,6 +1174,25 @@ document.addEventListener("keydown", (event) => {
     goTo(event.key === "Home" ? firstTime() : lastObserved() ?? lastTime());
   }
 });
+
+// a frame went missing: reload the frame list (at most every 20 s)
+let refreshTimer = null;
+let lastRefresh = 0;
+function refreshSoon() {
+  if (refreshTimer || view.day !== "live") return;
+  const wait = Math.max(0, 20000 - (Date.now() - lastRefresh));
+  refreshTimer = setTimeout(async () => {
+    refreshTimer = null;
+    lastRefresh = Date.now();
+    const keep = shownMs;
+    await load(true);
+    failed.clear();
+    shownMs = Math.min(lastTime(), Math.max(firstTime(), keep ?? initialTime()));
+    renderTimeline();
+    renderStatus();
+    requestDraw();
+  }, wait);
+}
 
 // keep the live view current; a viewer at "now" stays at now
 setInterval(async () => {
