@@ -39,8 +39,12 @@ function el(tag, text, className) {
 
 const DATE = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", { dateStyle: "medium" });
 const DATE_TIME = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", {
-  dateStyle: "medium", timeStyle: "short",
+  dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Prague",
 });
+const updated = (generated) => {
+  const time = generated ? new Date(generated) : null;
+  return time && !Number.isNaN(time.getTime()) ? t("station.updated", { time: DATE_TIME.format(time) }) : "";
+};
 
 // --- search: the index of all stations ------------------------------------------------
 let index = [];
@@ -327,7 +331,10 @@ function browse() {
   stationMap.fitAll();
 }
 
+// only the latest navigation renders: a slow station file must not overwrite a newer one
+let showToken = 0;
 async function show() {
+  const token = ++showToken;
   const hash = parseStationHash(window.location.hash);
   const id = hash.id;
   if (!id) {
@@ -340,8 +347,14 @@ async function show() {
     stationMap.select(id, { animate: !wasBrowsing });
     $("search").value = index.find((s) => s.id === id)?.name ?? "";
     $("message").textContent = t("station.loading");
-    doc = await getJson(`${DATA}/${id}.json`);
+    const loaded = await getJson(`${DATA}/${id}.json`);
+    if (token !== showToken) return;
+    doc = loaded?.station ? { ...loaded, elements: loaded.elements ?? {} } : null;
     if (!doc) {
+      $("title").textContent = id;
+      document.title = "MeteoVerdict";
+      $("facts").textContent = "";
+      $("status").textContent = "";
       $("message").textContent = t("station.notFound", { id });
       $("charts").replaceChildren();
       $("elements").replaceChildren();
@@ -353,7 +366,7 @@ async function show() {
     $("title").textContent = name;
     document.title = `MeteoVerdict: ${name}`;
     $("facts").textContent = facts(doc.station);
-    $("status").textContent = t("station.updated", { time: DATE_TIME.format(new Date(doc.generated)) });
+    $("status").textContent = updated(doc.generated);
     renderElements();
   }
   const element = hash.element && doc.elements[hash.element] ? hash.element : defaultElement(doc);
@@ -363,13 +376,13 @@ async function show() {
 }
 
 $("element").addEventListener("change", (event) => {
-  window.location.hash = `${doc.station.id}/${event.target.value}`;
+  if (doc) window.location.hash = `${doc.station.id}/${event.target.value}`;
 });
 window.addEventListener("hashchange", show);
 
 getJson(`${DATA}/index.json`).then(async (loaded) => {
   index = loaded?.stations ?? [];
-  if (loaded?.generated) $("status").textContent = t("station.updated", { time: DATE_TIME.format(new Date(loaded.generated)) });
+  if (loaded?.generated) $("status").textContent = updated(loaded.generated);
   // an index from before it carried coordinates: take them from the score map's table
   const table = index.some((s) => s.lat == null) ? await getJson("data/scores/stations.json") : null;
   placed = withCoordinates(index, table);
