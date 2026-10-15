@@ -125,3 +125,53 @@ def fetch_station_tables(client: httpx.Client, today: date) -> tuple[pl.DataFram
 def write_stations(stations: pl.DataFrame, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     stations.write_parquet(path)
+
+
+# --- kind of station ------------------------------------------------------------------
+#: Kinds of ČHMÚ station (all are ČHMÚ's own network), from the WIGOS id and the elements
+#: ``meta2`` lists (docs/data-sources.md#kinds-of-station):
+#:
+#: * ``main``: main (synoptic) station with a WMO number, WIGOS ``0-20000-0-<WMO>``;
+#: * ``climate``: automatic climate station, air temperature every 10 minutes;
+#: * ``climate_manual``: climate station with daily (manual) values only;
+#: * ``snow``: automatic snow station in the mountains: snow depth and temperature every
+#:   10 minutes, no precipitation or wind;
+#: * ``precipitation_auto``: automatic precipitation station (10-minute precipitation,
+#:   no air temperature);
+#: * ``precipitation``: precipitation station read once a day (at 07 local time) by an
+#:   observer, no 10-minute data;
+#: * ``other``: anything else (e.g. no elements listed).
+NETWORKS = (
+    "main",
+    "climate",
+    "climate_manual",
+    "snow",
+    "precipitation_auto",
+    "precipitation",
+    "other",
+)
+MAIN_PREFIX = "0-20000-"
+
+
+def network(wsi: str, elements: dict[str, dict]) -> str:
+    """Kind of station (one of ``NETWORKS``) from its WIGOS id and its elements, as
+    ``station_pages.element_table`` gives them (``types`` 10M/1H/DLY/PHENO and
+    ``until``, None while still measured). Elements still measured count; a closed
+    station (none still measured) is judged by everything it ever measured."""
+    if wsi.startswith(MAIN_PREFIX):
+        return "main"
+    open_ = {c: e for c, e in elements.items() if e.get("until") is None}
+    current = open_ or elements
+    automatic = {c for c, e in current.items() if "10M" in (e.get("types") or [])}
+    daily = {c for c, e in current.items() if "DLY" in (e.get("types") or [])}
+    if "T" in automatic:
+        if "SCEa" in automatic and not automatic & {"SRA10M", "F"}:
+            return "snow"
+        return "climate"
+    if "SRA10M" in automatic:
+        return "precipitation_auto"
+    if "T" in daily:
+        return "climate_manual"
+    if "SRA" in daily:
+        return "precipitation"
+    return "other"

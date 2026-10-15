@@ -28,6 +28,7 @@ from pathlib import Path
 import polars as pl
 
 from meteoverdict import chmi_archive
+from meteoverdict.stations import network as station_network
 
 TEN_MINUTE_DAYS = 3
 HOURLY_DAYS = 30
@@ -337,9 +338,11 @@ def build(
             k: info.get(k)
             for k in ("id", "gh_id", "name", "lat", "lon", "elevation", "okres", "kraj", "active")
         }
+        elements = element_table(meta2, wsi)
+        station["network"] = station_network(wsi, elements)
         doc = station_doc(
             station,
-            element_table(meta2, wsi),
+            elements,
             station_fine,
             daily,
             monthly,
@@ -362,8 +365,8 @@ def build(
 
 def index_entry(info: dict, doc: dict) -> dict:
     """A station in ``index.json``, for the search and the station map: where it is, its
-    views, and the elements it has values of (not the ceilometer's or phenomena, which
-    the map does not filter by)."""
+    kind (``stations.NETWORKS``), its views, and the elements it has values of (not the
+    ceilometer's or phenomena, which the map does not filter by)."""
     elements = [
         code
         for code, entry in doc["elements"].items()
@@ -378,6 +381,7 @@ def index_entry(info: dict, doc: dict) -> dict:
         "lon": info.get("lon"),
         "elevation": info.get("elevation"),
         "active": info.get("active"),
+        "network": doc["station"].get("network"),
         "views": list(doc["series"]),
         "elements": elements,
     }
