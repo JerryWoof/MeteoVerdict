@@ -36,6 +36,9 @@ COMMANDS = [
     "report",
     "daily",
     "backfill",
+    "chmi-archive",
+    "chmi-mirror",
+    "station-pages",
 ]
 
 
@@ -605,3 +608,44 @@ def test_fetch_runs_github_needs_credentials(monkeypatch, tmp_path):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     result = runner.invoke(app, ["fetch-runs", "--github-release", "--data-dir", str(tmp_path)])
     assert result.exit_code == 2
+
+
+def test_chmi_archive_needs_one_target(tmp_path):
+    result = runner.invoke(app, ["chmi-archive"])
+    assert result.exit_code != 0
+    assert "--out-dir" in plain(result.output)
+    result = runner.invoke(app, ["chmi-archive", "--out-dir", str(tmp_path), "--part", "radar"])
+    assert result.exit_code != 0
+    assert "unknown part" in plain(result.output)
+
+
+def test_chmi_archive_into_a_folder(monkeypatch, tmp_path):
+    from meteoverdict import chmi_archive
+
+    seen = {}
+
+    def fake_archive(client, store, workdir, parts, **kwargs):
+        seen.update(store=store, parts=parts, **kwargs)
+        return chmi_archive.Result(done=["a"], rows=10, bytes=2_000_000)
+
+    monkeypatch.setattr(chmi_archive, "archive", fake_archive)
+    result = runner.invoke(
+        app,
+        [
+            "chmi-archive",
+            "--out-dir",
+            str(tmp_path),
+            "--part",
+            "history",
+            "--max-minutes",
+            "5",
+            "--station",
+            "0-20000-0-11520",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert isinstance(seen["store"], chmi_archive.LocalStore)
+    assert seen["parts"] == ["history"]
+    assert seen["max_minutes"] == 5
+    assert seen["stations"] == {"0-20000-0-11520"}
+    assert "archived 1 files" in plain(result.output)

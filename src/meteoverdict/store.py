@@ -154,3 +154,10 @@ def publish_latest(store: GitHubReleaseStore, data_dir: Path, site_dir: Path) ->
         store.put(LATEST_TAG, "site-data.zip", archive, label=sha256(archive))
     aggregates = data_dir / "aggregates.parquet"
     store.put(LATEST_TAG, "aggregates.parquet", aggregates, label=sha256(aggregates))
+
+
+def publish_folder(store: GitHubReleaseStore, folder: Path, name: str) -> None:
+    """Zip ``folder`` and replace the asset ``name`` in ``data-latest``."""
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = Path(shutil.make_archive(str(Path(tmp) / Path(name).stem), "zip", folder))
+        store.put(LATEST_TAG, name, archive, label=sha256(archive))
