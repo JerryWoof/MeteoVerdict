@@ -84,3 +84,29 @@ def test_scheduled_runs_skip_the_historical_csv():
     )
     assert rows["time"].min() == datetime(2026, 8, 2, 6, tzinfo=UTC)  # July is not in recent/
     assert not any(p.endswith("-SRA.csv") for p in seen)
+
+
+def test_a_total_after_missing_days_is_dropped():
+    # a manual gauge: days 1, 2, (3, 4 missing), 5, 6 → the value of day 5 is probably the
+    # total of days 3 to 5 and is left out
+    def row(day, value, source="recent", station="g"):
+        return {
+            "station_id": station,
+            "time": datetime(2026, 9, day + 1, 6, tzinfo=UTC),
+            "variable": "precipitation_24h",
+            "value": value,
+            "quality": 0,
+            "source": source,
+        }
+
+    rows = pl.DataFrame([row(1, 0.0), row(2, 1.2), row(5, 43.7), row(6, 0.4)], schema=SCHEMA)
+    assert gauges.drop_after_gaps(rows)["value"].to_list() == pytest.approx([0.0, 1.2, 0.4])
+    # a gauge's first value stays (nothing before it to have a gap after), and so does the
+    # checked historical archive
+    assert gauges.drop_after_gaps(rows.filter(pl.col("value") > 40)).height == 1
+    old = pl.DataFrame([row(1, 0.0, "historical"), row(5, 3.0, "historical")], schema=SCHEMA)
+    assert gauges.drop_after_gaps(old).height == 2
+    # gaps are per gauge
+    two = pl.DataFrame([row(1, 0.0), row(2, 0.1, station="h"), row(3, 0.2)], schema=SCHEMA)
+    assert gauges.drop_after_gaps(two)["value"].to_list() == pytest.approx([0.0, 0.1])
+    assert gauges.drop_after_gaps(rows.clear()).height == 0
