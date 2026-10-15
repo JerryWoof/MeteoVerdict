@@ -7,9 +7,9 @@ then notifies the owner) and stops the daily commit. Warnings are reported only.
   score older than ``MAX_FC_AGE_DAYS`` days (complete backfill windows lag up to 14);
 * stale publication: the published scores (``meta.json``) end more than
   ``MAX_AS_OF_LAG_DAYS`` days before they were generated, so the ranking and the
-  combination weights miss the latest days (October 2026: ``as_of`` stayed at 30 Sep
+  combination weights miss the latest days (in October 2026 ``as_of`` stayed at 30 Sep
   while the daily run "re-scored" up to 14 Oct, as no October day had both forecasts
-  and observations);
+  and observations yet: normal for up to ~20 days, as forecasts come in 14-day windows);
 * missing stations: under ``MIN_REPORTING`` of the verified stations reported in the
   last ``RECENT_DAYS`` days (the stations missing are listed as a warning);
 * suspicious stations: temperature MAE over the last 90 days (all models) above
@@ -33,7 +33,9 @@ from meteoverdict import metrics, partitions
 
 MAX_OBS_AGE_H = 30
 MAX_FC_AGE_DAYS = 21
-MAX_AS_OF_LAG_DAYS = 3
+# forecasts arrive in complete 14-day backfill windows, and scheduled runs start hours
+# late: a lag of up to ~20 days is normal, more means scoring or publishing is stuck
+MAX_AS_OF_LAG_DAYS = 21
 RECENT_DAYS = 3
 MIN_REPORTING = 0.8
 SUSPICIOUS_FACTOR = 3.0
