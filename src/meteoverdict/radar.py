@@ -124,11 +124,15 @@ PRESETS = {
 DERIVED = {
     "merge1h-hourly": ("merge1h-hdf5",),
     "merge1h-stations": ("merge1h-hdf5",),
-    "web": ("maxz-png_masked", "merge1h-png"),
+    "web": ("maxz-png_masked", "merge1h-png", "maxz-hdf5", "echotop-hdf5"),
 }
 DERIVED_SUFFIX = {"merge1h-hourly": "npz", "merge1h-stations": "parquet", "web": "tar"}
 #: what the page shows: layer → product of its frames
 WEB_LAYERS = {"maxz": "maxz-png_masked", "merge1h": "merge1h-png"}
+#: made from the HDF5 composites (module ``storms``): layer → file suffix
+DERIVED_LAYERS = {"echotop": "png", "motion": "json", "cells": "json"}
+#: the HDF5 composites they are made from
+HDF5_LAYERS = {"maxz": "maxz-hdf5", "echotop": "echotop-hdf5"}
 NOWCAST = "fct_maxz-png_masked"
 
 ATTRIBUTION = (
@@ -271,7 +275,10 @@ def nowcast_frames(tar_bytes: bytes) -> list[tuple[datetime, int, bytes]]:
 
 
 def frame_index(root: Path, nowcast: dict | None = None, now: datetime | None = None) -> dict:
-    """``index.json`` of a frame folder: the frame times of every layer."""
+    """``index.json`` of a frame folder: the frame times of every layer, the colour
+    scales and where the satellite frames lie (docs/data-sources.md#radar-live-data-contract)."""
+    from meteoverdict import satellite, storms
+
     index: dict = {
         "version": 1,
         "bounds": [[GRID_WEST, GRID_SOUTH], [GRID_EAST, GRID_NORTH]],
@@ -279,16 +286,181 @@ def frame_index(root: Path, nowcast: dict | None = None, now: datetime | None = 
     }
     if now is not None:
         index["generated"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    for layer in WEB_LAYERS:
+    for layer, suffix in {**dict.fromkeys(WEB_LAYERS, "png"), **DERIVED_LAYERS}.items():
         folder = root / layer
-        index[layer] = sorted(p.stem for p in folder.glob("*.png")) if folder.exists() else []
+        index[layer] = sorted(p.stem for p in folder.glob(f"*.{suffix}")) if folder.exists() else []
     if nowcast is not None:
         index["nowcast"] = nowcast
+    index["satellite"] = satellite.index_entry(root)
+    frames = [f for entry in index["satellite"].values() for f in entry["frames"]]
+    if frames:
+        index["satellite_attribution"] = satellite.attribution(int(max(frames)[:4]))
+    index["scales"] = storms.SCALES
     return index
 
 
-def write_json(path: Path, data: dict) -> None:
+def write_json(path: Path, data: dict | list) -> None:
     path.write_text(json.dumps(data, separators=(",", ":")) + "\n", encoding="utf-8")
+
+
+def _prune(folder: Path, suffix: str, cutoff: datetime) -> None:
+    for path in folder.glob(f"*.{suffix}"):
+        if parse_stamp(path.stem) < cutoff:
+            path.unlink()
+
+
+class HdfLoader:
+    """The HDF5 composites of ``HDF5_LAYERS`` by time, downloaded once (kept in
+    ``cache`` if given, so a loop does not fetch them again)."""
+
+    def __init__(
+        self,
+        client: httpx.Client,
+        listings: dict[str, dict[datetime, str]],
+        cache: Path | None = None,
+    ) -> None:
+        self.client, self.listings, self.cache = client, listings, cache
+        self.memory: dict[tuple[str, datetime], bytes] = {}
+
+    def _name(self, layer: str, when: datetime) -> str | None:
+        return self.listings.get(HDF5_LAYERS[layer], {}).get(when)
+
+    def _path(self, layer: str, name: str) -> Path | None:
+        return self.cache / layer / name if self.cache is not None else None
+
+    def _have(self, layer: str, when: datetime, name: str) -> bool:
+        path = self._path(layer, name)
+        return (layer, when) in self.memory or (path is not None and path.exists())
+
+    def _keep(self, layer: str, when: datetime, name: str, content: bytes) -> None:
+        path = self._path(layer, name)
+        if path is None:
+            self.memory[(layer, when)] = content
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+
+    def prefetch(self, wanted: Iterable[tuple[str, datetime]]) -> None:
+        """Download these files in parallel (those not there yet)."""
+        by_layer: dict[str, list[tuple[datetime, str]]] = {}
+        for layer, when in sorted(set(wanted)):
+            name = self._name(layer, when)
+            if name and not self._have(layer, when, name):
+                by_layer.setdefault(layer, []).append((when, name))
+        for layer, files in by_layer.items():
+            product = BY_KEY[HDF5_LAYERS[layer]]
+            contents = fetch_all(self.client, product, [n for _, n in files])
+            for (when, name), content in zip(files, contents, strict=True):
+                self._keep(layer, when, name, content)
+
+    def __call__(self, layer: str, when: datetime) -> bytes | None:
+        name = self._name(layer, when)
+        if name is None:
+            return None
+        if (layer, when) in self.memory:
+            return self.memory[(layer, when)]
+        path = self._path(layer, name)
+        if path is not None and path.exists():
+            return path.read_bytes()
+        content = download(self.client, file_url(BY_KEY[HDF5_LAYERS[layer]], name))
+        self._keep(layer, when, name, content)
+        return content
+
+    def latest(self, layer: str) -> datetime | None:
+        """Time of the newest file of ``layer`` on the server."""
+        listing = self.listings.get(HDF5_LAYERS[layer], {})
+        return max(listing) if listing else None
+
+    def prune(self, cutoff: datetime) -> None:
+        """Delete cached files older than ``cutoff``."""
+        if self.cache is None:
+            return
+        for layer, key in HDF5_LAYERS.items():
+            regex = BY_KEY[key].regex()
+            for path in (self.cache / layer).glob("*"):
+                match = regex.fullmatch(path.name)
+                if match and parse_stamp("".join(match.groups())) < cutoff:
+                    path.unlink()
+
+
+def derive_frames(
+    root: Path,
+    times: Iterable[datetime],
+    load: Callable[[str, datetime], bytes | None],
+    since: datetime,
+    log: Callable[[str], None] = print,
+) -> int:
+    """Write the missing ``echotop/<stamp>.png``, ``motion/<stamp>.json`` and
+    ``cells/<stamp>.json`` of the radar frames at ``times`` from ``since`` on (earlier
+    times only serve as the frame before). ``load(layer, time)`` returns the HDF5 file
+    of ``maxz`` or ``echotop`` (None if there is none). Returns the frames made."""
+    from meteoverdict import storms
+
+    for layer in DERIVED_LAYERS:
+        (root / layer).mkdir(parents=True, exist_ok=True)
+    times = sorted(set(times))
+    plan = []
+    for i, when in enumerate(times):
+        if when < since:
+            continue
+        name = stamp(when)
+        before = times[i - 1] if i else None
+        if before is not None and (when - before).total_seconds() > storms.MAX_GAP_S:
+            before = None
+        need = {
+            "echotop": not (root / "echotop" / f"{name}.png").exists(),
+            "motion": before is not None and not (root / "motion" / f"{name}.json").exists(),
+            "cells": not (root / "cells" / f"{name}.json").exists(),
+        }
+        if any(need.values()):
+            plan.append((when, before, need))
+    prefetch = getattr(load, "prefetch", None)
+    if prefetch is not None:
+        wanted = [("echotop", w) for w, _, need in plan if need["echotop"] or need["cells"]]
+        for when, before, need in plan:
+            if need["motion"] or need["cells"]:
+                wanted += [("maxz", when)] + ([("maxz", before)] if before else [])
+        try:
+            prefetch(wanted)
+        except httpx.HTTPError as exc:  # each frame tries again below
+            log(f"failed to prefetch HDF5: {exc}")
+    latest = getattr(load, "latest", None)
+    latest_top = latest("echotop") if latest is not None else None
+    made = 0
+    for when, before, need in plan:
+        name = stamp(when)
+        try:
+            top_file = load("echotop", when) if need["echotop"] or need["cells"] else None
+            if top_file is None and latest_top is not None and when > latest_top:
+                continue  # its echo top is not out yet: the cells wait for it
+            top = storms.read_composite(top_file) if top_file else None
+            if need["echotop"] and top is not None:
+                (root / "echotop" / f"{name}.png").write_bytes(storms.echotop_png(top))
+            current_file = load("maxz", when) if need["motion"] or need["cells"] else None
+            if current_file is not None:
+                current = storms.read_composite(current_file).values
+                previous = flow = None
+                previous_file = load("maxz", before) if before else None
+                if previous_file:
+                    previous = storms.read_composite(previous_file).values
+                    flow = storms.dense_flow(previous, current)
+                if need["motion"] and flow is not None:
+                    u, v = storms.coarse_motion(flow, previous, current)
+                    dt_s = int((when - before).total_seconds())
+                    write_json(root / "motion" / f"{name}.json", storms.motion_json(u, v, dt_s))
+                if need["cells"]:
+                    context = None
+                    if previous is not None:
+                        path = root / "cells" / f"{stamp(before)}.json"
+                        known = json.loads(path.read_text()) if path.exists() else []
+                        context = (before, previous, known)
+                    tops = top.values if top else None
+                    cells = storms.storm_cells(when, current, tops, context, flow)
+                    write_json(root / "cells" / f"{name}.json", cells)
+            made += 1
+        except (httpx.HTTPError, OSError, ValueError, KeyError) as exc:
+            log(f"failed derived frames {name}: {exc}")
+    return made
 
 
 def update_live(
@@ -297,13 +469,20 @@ def update_live(
     now: datetime,
     hours: float = 24,
     log: Callable[[str], None] = print,
+    cache: Path | None = None,
+    satellite_hours: float | None = None,
 ) -> dict:
     """Bring the live folder up to date: frames of the last ``hours`` and the newest nowcast.
 
     Downloads only frames that are missing, deletes the older ones, rewrites
     ``index.json``. Layout as in ``web-YYYYMMDD.tar``: ``maxz/<stamp>.png``,
-    ``merge1h/<stamp>.png`` and ``nowcast/<stamp>.png`` (valid time).
+    ``merge1h/<stamp>.png``, ``nowcast/<stamp>.png`` (valid time), ``echotop/``,
+    ``motion/``, ``cells/`` and ``satellite/<product>/`` (the last ``satellite_hours``,
+    default ``hours``). ``cache``: a folder outside ``root`` for the HDF5 files, so a
+    loop does not download them again.
     """
+    from meteoverdict import satellite
+
     cutoff = now - timedelta(hours=hours)
     for layer, key in WEB_LAYERS.items():
         product = BY_KEY[key]
@@ -321,6 +500,23 @@ def update_live(
             if parse_stamp(old) < cutoff:
                 (folder / f"{old}.png").unlink()
         log(f"live {layer}: {len(missing)} new, {len(wanted)} in the last {hours:g} h")
+
+    listings = {}
+    for key in HDF5_LAYERS.values():
+        try:
+            listings[key] = list_files(client, BY_KEY[key])
+        except httpx.HTTPError as exc:  # the frames above are still worth publishing
+            log(f"failed to list {key}: {exc}")
+            listings[key] = {}
+    loader = HdfLoader(client, listings, cache)
+    times = [t for t in listings[HDF5_LAYERS["maxz"]] if t >= cutoff - timedelta(minutes=15)]
+    made = derive_frames(root, times, loader, cutoff, log)
+    loader.prune(now - timedelta(hours=1))
+    for layer, suffix in DERIVED_LAYERS.items():
+        _prune(root / layer, suffix, cutoff)
+    log(f"live echotop, motion, cells: {made} frames made")
+    since = now - timedelta(hours=hours if satellite_hours is None else satellite_hours)
+    satellite.web_frames(client, root, since, log=log)
 
     nowcast = None
     runs = list_files(client, BY_KEY[NOWCAST])
@@ -346,10 +542,12 @@ def update_live(
     index = frame_index(root, nowcast, now)
     write_json(root / "index.json", index)
     (root / "README.md").write_text(
-        "# MeteoVerdict radar, live\n\nThe radar frames of the last hours and the newest "
-        "nowcast for https://jerrywoof.github.io/MeteoVerdict/radar.html, replaced every "
-        "few minutes by the Radar workflow (this branch has a single commit).\n\n"
-        f"{ATTRIBUTION}\n",
+        "# MeteoVerdict radar, live\n\nThe radar frames of the last hours (reflectivity, "
+        "MERGE precipitation, echo tops, motion fields, storm cells), the newest nowcast "
+        "and Meteosat images for https://jerrywoof.github.io/MeteoVerdict/radar.html, "
+        "replaced every 5 minutes by the Radar workflow (this branch has a single "
+        "commit). Format: docs/data-sources.md#radar-live-data-contract in the main "
+        f"branch.\n\n{ATTRIBUTION}\n\n{index.get('satellite_attribution', '')}\n",
         encoding="utf-8",
     )
     return index
@@ -504,11 +702,13 @@ def archive(
     days: list[date] | None = None,
     derived: bool = True,
     log: Callable[[str], None] = print,
+    redo: tuple[str, ...] = (),
 ) -> ArchiveResult:
     """Archive every complete day on the server that is not in ``store`` yet, oldest first.
 
     ``days`` restricts the run to those days (they must still be on the server).
     Derived assets are made when their source products are listed on the server.
+    ``redo``: asset keys (e.g. ``web``) to make again even if the store has them.
     """
     result = ArchiveResult()
     wanted_derived = _derived_wanted(stations) if derived else []
@@ -531,12 +731,12 @@ def archive(
         if tag not in have:
             have[tag] = store.names(tag)
         by_day = {k: {t: n for t, n in v.items() if t.date() == day} for k, v in listings.items()}
-        missing = [k for k in products if asset_name(k, day) not in have[tag] and by_day[k]]
-        result.skipped += sum(asset_name(k, day) in have[tag] for k in products)
+        stored = {k for k in (*products, *wanted_derived) if asset_name(k, day) in have[tag]}
+        stored -= set(redo)
+        missing = [k for k in products if k not in stored and by_day[k]]
+        result.skipped += sum(k in stored for k in products)
         missing_derived = [
-            k
-            for k in wanted_derived
-            if asset_name(k, day) not in have[tag] and all(by_day[s] for s in DERIVED[k])
+            k for k in wanted_derived if k not in stored and all(by_day[s] for s in DERIVED[k])
         ]
         need = set(missing) | {s for k in missing_derived for s in DERIVED[k]}
         if not need:
@@ -565,7 +765,7 @@ def archive(
                 name = asset_name(key, day)
                 path = Path(tmp) / name
                 try:
-                    label = _derive(key, files, stations, path)
+                    label = _derive(key, files, stations, path, client, day, log)
                 except Exception as exc:  # keep going: the raw files are archived
                     log(f"failed {name}: {exc}")
                     result.failed.append(name)
@@ -592,21 +792,12 @@ def _derive(
     files: dict[str, list[tuple[str, bytes, datetime]]],
     stations: pl.DataFrame | None,
     path: Path,
+    client: httpx.Client | None = None,
+    day: date | None = None,
+    log: Callable[[str], None] = print,
 ) -> str:
     if key == "web":
-        members = []
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            for layer, source in WEB_LAYERS.items():
-                (root / layer).mkdir()
-                for _, content, when in files[source]:
-                    frame = web_frame(content, LAYER_NO_COVERAGE_ALPHA[layer])
-                    (root / layer / f"{stamp(when)}.png").write_bytes(frame)
-                    members.append((f"{layer}/{stamp(when)}.png", frame, when))
-            index = json.dumps(frame_index(root), separators=(",", ":")).encode()
-        last = max(m[2] for m in members)
-        count = write_tar(path, [("index.json", index, last), *members])
-        return f"files={count}"
+        return _web_day(files, path, client, day, log)
     fields = hourly([read_merge(c) for _, c, _ in files["merge1h-hdf5"]])
     if not fields:
         raise ValueError("no MERGE field at a full hour")
@@ -619,15 +810,62 @@ def _derive(
     return f"hours={len(fields)}"
 
 
+def _web_day(
+    files: dict[str, list[tuple[str, bytes, datetime]]],
+    path: Path,
+    client: httpx.Client | None,
+    day: date | None,
+    log: Callable[[str], None],
+) -> str:
+    """``web-YYYYMMDD.tar``: the page's frames of a day (``index.json`` first)."""
+    from meteoverdict import satellite
+
+    hdf5 = {
+        (layer, when): content
+        for layer, key in HDF5_LAYERS.items()
+        for _, content, when in files.get(key, [])
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        for layer, source in WEB_LAYERS.items():
+            (root / layer).mkdir()
+            for _, content, when in files[source]:
+                frame = web_frame(content, LAYER_NO_COVERAGE_ALPHA[layer])
+                (root / layer / f"{stamp(when)}.png").write_bytes(frame)
+        times = [when for layer, when in hdf5 if layer == "maxz"]
+        if times:
+            derive_frames(root, times, lambda layer, when: hdf5.get((layer, when)), min(times), log)
+        if client is not None and day is not None:
+            start = datetime(day.year, day.month, day.day, tzinfo=UTC)
+            end = start + timedelta(days=1)
+            satellite.web_frames(client, root, start, end, prune=False, log=log)
+        members = []
+        for file in sorted(p for p in root.rglob("*") if p.is_file()):
+            name = file.relative_to(root).as_posix()
+            members.append((name, file.read_bytes(), parse_stamp(file.stem)))
+        index = json.dumps(frame_index(root), separators=(",", ":")).encode()
+    last = max(m[2] for m in members)
+    count = write_tar(path, [("index.json", index, last), *members])
+    return f"files={count}"
+
+
 # --- local mirror ---------------------------------------------------------------------
 
 
-def mirror(store, out_dir: Path, since: str = "", log: Callable[[str], None] = print) -> int:
-    """Copy every ``radar-YYYY-MM`` release asset to ``out_dir/<tag>/<name>`` (resumable:
-    files already there with the same size are skipped). ``since``: first month."""
+def mirror(
+    store,
+    out_dir: Path,
+    since: str = "",
+    log: Callable[[str], None] = print,
+    prefixes: tuple[str, ...] = ("radar-",),
+) -> int:
+    """Copy every asset of the releases ``<prefix>YYYY-MM`` (``radar-``, ``satellite-``)
+    to ``out_dir/<tag>/<name>`` (resumable: files already there with the same size are
+    skipped). ``since``: first month."""
     count = 0
-    for tag in store.tags("radar-"):
-        if since and tag < f"radar-{since}":
+    tags = [(prefix, tag) for prefix in prefixes for tag in store.tags(prefix)]
+    for prefix, tag in tags:
+        if since and tag < f"{prefix}{since}":
             continue
         for name, asset in sorted(store.assets(tag).items()):
             dest = out_dir / tag / name

@@ -33,6 +33,7 @@ from meteoverdict import (
     ranking,
     regions,
     runs,
+    satellite,
     scoring,
     station_pages,
     stations,
@@ -223,6 +224,10 @@ def archive_radar(
             help="Upload to GitHub Releases of $GITHUB_REPOSITORY using $GITHUB_TOKEN.",
         ),
     ] = False,
+    redo: Annotated[
+        list[str] | None,
+        typer.Option(help="Make this asset again even if stored (e.g. web; repeatable)."),
+    ] = None,
 ) -> None:
     """Archive ČHMÚ radar composites per product and day before they expire (~7 days)."""
     if (out_dir is None) == (not github_release):
@@ -244,7 +249,15 @@ def archive_radar(
         else:
             store_ = radar.LocalStore(out_dir)
         result = radar.archive(
-            client, store_, keys, _now(), table, days, not no_derived, log=typer.echo
+            client,
+            store_,
+            keys,
+            _now(),
+            table,
+            days,
+            not no_derived,
+            log=typer.echo,
+            redo=tuple(redo or ()),
         )
     total = sum(result.sizes.values())
     typer.echo(
@@ -259,14 +272,24 @@ def archive_radar(
 def radar_live(
     folder: Annotated[Path, typer.Option("--dir", help="The live folder (branch radar-live).")],
     hours: Annotated[float, typer.Option(help="Keep the frames of the last … hours.")] = 24,
+    satellite_hours: Annotated[
+        float | None, typer.Option(help="Keep the satellite images of the last … hours.")
+    ] = None,
+    cache: Annotated[
+        Path | None,
+        typer.Option(help="Keep the downloaded HDF5 files here (outside --dir) for the next run."),
+    ] = None,
 ) -> None:
     """Update the radar page's live frames (last hours and the newest nowcast) in a folder."""
     folder.mkdir(parents=True, exist_ok=True)
     transport = httpx.HTTPTransport(retries=3)
     with httpx.Client(timeout=60, transport=transport, follow_redirects=True) as client:
-        index = radar.update_live(client, folder, _now(), hours, log=typer.echo)
+        index = radar.update_live(client, folder, _now(), hours, typer.echo, cache, satellite_hours)
+    satellite_frames = {k: len(v["frames"]) for k, v in index["satellite"].items()}
     typer.echo(
         f"{len(index['maxz'])} radar frames, {len(index['merge1h'])} MERGE frames, "
+        f"{len(index['echotop'])} echo tops, {len(index['motion'])} motion fields, "
+        f"{len(index['cells'])} cell sets, satellite {satellite_frames}, "
         f"nowcast {(index.get('nowcast') or {}).get('base', 'none')}"
     )
 
@@ -275,12 +298,88 @@ def radar_live(
 def mirror_radar(
     out_dir: Annotated[Path, typer.Option(help="Local copy: <dir>/radar-YYYY-MM/<asset>.")],
     since: Annotated[str, typer.Option(help="First month (YYYY-MM); default all.")] = "",
+    satellite_: Annotated[
+        bool,
+        typer.Option(
+            "--satellite/--no-satellite",
+            help="Also copy the satellite archive (releases satellite-YYYY-MM).",
+        ),
+    ] = False,
+    only_satellite: Annotated[
+        bool, typer.Option("--only-satellite", help="Copy only the satellite archive.")
+    ] = False,
 ) -> None:
     """Copy the radar archive (releases radar-YYYY-MM) to a local disk, skipping copies."""
+    prefixes = ("satellite-",) if only_satellite else ("radar-",)
+    if satellite_ and not only_satellite:
+        prefixes = ("radar-", "satellite-")
     with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
         store_ = GitHubReleaseStore(client, *_github_credentials())
-        count = radar.mirror(store_, out_dir, since, log=typer.echo)
+        count = radar.mirror(store_, out_dir, since, log=typer.echo, prefixes=prefixes)
     typer.echo(f"downloaded {count} files to {out_dir}")
+
+
+SATELLITE_RELEASE_NOTES = (
+    "Meteosat images published by ČHMÚ (opendata.chmi.cz/meteorology/weather/satellite/"
+    "geo/), one uncompressed tar per product, region and UTC day (e.g. "
+    "night-M-ce-20261014.tar: the JPG files of that day as published, every 15 minutes), "
+    "archived by `mvd archive-satellite`. Contains EUMETSAT Meteosat data (EUMETSAT "
+    "Advanced Image Products, Core data, CC BY 4.0 under the EUMETSAT Data Policy), "
+    "processed by the Czech Hydrometeorological Institute (ČHMÚ), CC BY 4.0 "
+    "(https://creativecommons.org/licenses/by/4.0/). Changes: packed per day. Format: "
+    "docs/data-sources.md#satellite-images."
+)
+
+
+@app.command("archive-satellite")
+def archive_satellite(
+    products: Annotated[
+        str, typer.Option(help="Comma-separated: vis-ir, night-M, wv062 (default all).")
+    ] = ",".join(satellite.PRODUCTS),
+    regions: Annotated[
+        str, typer.Option(help="Comma-separated: ce, cz, eu (default all).")
+    ] = ",".join(satellite.REGIONS),
+    day: Annotated[
+        list[datetime] | None,
+        typer.Option(formats=["%Y-%m-%d"], help="Only this UTC day (repeatable)."),
+    ] = None,
+    out_dir: Annotated[
+        Path | None, typer.Option(help="Write to <dir>/satellite-YYYY-MM/ (the release layout).")
+    ] = None,
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Upload to GitHub Releases of $GITHUB_REPOSITORY using $GITHUB_TOKEN.",
+        ),
+    ] = False,
+) -> None:
+    """Archive ČHMÚ's Meteosat images per product, region and day before they expire (~8 days)."""
+    if (out_dir is None) == (not github_release):
+        raise typer.BadParameter("use exactly one of --out-dir and --github-release")
+    keys = tuple(p.strip() for p in products.split(",") if p.strip())
+    areas = tuple(r.strip() for r in regions.split(",") if r.strip())
+    if not keys or set(keys) - set(satellite.PRODUCTS):
+        raise typer.BadParameter(f"products: {', '.join(satellite.PRODUCTS)}")
+    if not areas or set(areas) - set(satellite.REGIONS):
+        raise typer.BadParameter(f"regions: {', '.join(satellite.REGIONS)}")
+    days = sorted({d.date() for d in day}) if day else None
+    transport = httpx.HTTPTransport(retries=3)
+    with httpx.Client(timeout=120, transport=transport, follow_redirects=True) as client:
+        if github_release:
+            store_ = GitHubReleaseStore(
+                client, *_github_credentials(), notes=SATELLITE_RELEASE_NOTES
+            )
+        else:
+            store_ = radar.LocalStore(out_dir)
+        result = satellite.archive(client, store_, _now(), keys, areas, days, log=typer.echo)
+    total = sum(result.sizes.values())
+    typer.echo(
+        f"archived {len(result.archived)} ({total / 1e6:.1f} MB), already there "
+        f"{result.skipped}, failed {len(result.failed)}"
+    )
+    if result.failed:
+        raise typer.Exit(code=1)
 
 
 def _chmi_client(timeout: float = 300) -> httpx.Client:
