@@ -350,16 +350,7 @@ def build(
         path = out / f"{wsi}.json"
         path.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), "utf-8")
         written.append(path)
-        index.append(
-            {
-                "id": wsi,
-                "name": info.get("name"),
-                "okres": info.get("okres"),
-                "elevation": info.get("elevation"),
-                "active": info.get("active"),
-                "views": list(doc["series"]),
-            }
-        )
+        index.append(index_entry(info, doc))
     (out / "index.json").write_text(
         json.dumps({"generated": doc_time(generated), "stations": index}, ensure_ascii=False),
         "utf-8",
@@ -367,6 +358,29 @@ def build(
     total = sum(p.stat().st_size for p in written)
     log(f"wrote {len(written)} station files, {total / 1e6:.1f} MB")
     return written
+
+
+def index_entry(info: dict, doc: dict) -> dict:
+    """A station in ``index.json``, for the search and the station map: where it is, its
+    views, and the elements it has values of (not the ceilometer's or phenomena, which
+    the map does not filter by)."""
+    elements = [
+        code
+        for code, entry in doc["elements"].items()
+        if entry.get("views") and not code.startswith("C-") and "PHENO" not in entry["types"]
+    ]
+    return {
+        "id": info["id"],
+        "name": info.get("name"),
+        "okres": info.get("okres"),
+        "kraj": info.get("kraj"),
+        "lat": info.get("lat"),
+        "lon": info.get("lon"),
+        "elevation": info.get("elevation"),
+        "active": info.get("active"),
+        "views": list(doc["series"]),
+        "elements": elements,
+    }
 
 
 def doc_time(t: datetime) -> str:
