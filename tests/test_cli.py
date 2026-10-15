@@ -29,6 +29,7 @@ COMMANDS = [
     "models",
     "archive-aladin",
     "leads",
+    "farm",
     "blend-test",
     "fetch-runs",
     "fetch-obs",
@@ -572,10 +573,10 @@ def test_fetch_runs_dry_run_prints_the_cost(tmp_path):
     args = ["fetch-runs", "--dry-run", "--data-dir", str(tmp_path), "--run", "2026-10-12T06"]
     result = runner.invoke(app, args)
     assert result.exit_code == 0, result.output
-    # 06 UTC: 18 models (GEM Global runs at 00 and 12 UTC only), 3 x 18 / 10 per station
+    # 06 UTC: 18 models (GEM Global runs at 00 and 12 UTC only), 4 x 18 / 10 per station
     out = plain(result.output)
-    assert "1 runs to fetch at 100 stations, about 540 Open-Meteo calls" in out
-    assert "(570 per run of all 19 models" in out
+    assert "1 runs to fetch at 100 stations, about 720 Open-Meteo calls" in out
+    assert "(760 per run of all 19 models" in out
 
 
 def test_fetch_runs_shared_budget_needs_a_readable_backfill_state(tmp_path):
@@ -627,3 +628,58 @@ def test_fetch_runs_github_needs_credentials(monkeypatch, tmp_path):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     result = runner.invoke(app, ["fetch-runs", "--github-release", "--data-dir", str(tmp_path)])
     assert result.exit_code == 2
+
+
+def test_farm_publish_needs_github_release():
+    result = runner.invoke(app, ["farm", "--publish"])
+    assert result.exit_code != 0
+
+
+def test_farm_without_runs_fails(tmp_path):
+    result = runner.invoke(app, ["farm", "--data-dir", str(tmp_path)])
+    assert result.exit_code == 1
+
+
+def test_farm_writes_the_json(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    run = now.replace(hour=now.hour // 6 * 6) - timedelta(hours=12)
+    steps = list(range(1, 7))
+    rain = {"dwd_icon_eu": [1.0, 0.0, 0.0, 0, 0, 0], "ncep_gfs_global": [0.0] * 6}
+    rows = pl.concat(
+        pl.DataFrame(
+            {
+                "run": [run] * 6,
+                "model": model,
+                "station_id": "a",
+                "lead_h": pl.Series(steps, dtype=pl.Int16),
+                "valid_time": [run + timedelta(hours=h) for h in steps],
+                "temperature_2m": pl.Series([10.0] * 6, dtype=pl.Float32),
+                "precipitation": pl.Series(rain[model], dtype=pl.Float32),
+                "wind_speed_10m": pl.Series([2.0] * 6, dtype=pl.Float32),
+                "wind_gusts_10m": pl.Series([5.0] * 6, dtype=pl.Float32),
+            }
+        )
+        for model in rain
+    )
+    (tmp_path / "runs").mkdir()
+    rows.write_parquet(tmp_path / "runs" / f"{run:%Y-%m}.parquet")
+    (tmp_path / "obs").mkdir()
+    pl.DataFrame(
+        {
+            "station_id": "a",
+            "time": [run + timedelta(hours=h) for h in steps],
+            "variable": "precipitation",
+            "value": [0.3, 0.3, 0.0, 0.0, 0.0, 0.0],
+        }
+    ).write_parquet(tmp_path / "obs" / f"{run:%Y-%m}.parquet")
+    out = tmp_path / "site" / "farm.json"
+    result = runner.invoke(app, ["farm", "--data-dir", str(tmp_path), "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    doc = json.loads(out.read_text())
+    rows = [dict(zip(doc["columns"], r, strict=True)) for r in doc["rows"]]
+    first = {r["model"]: r["hits"] for r in rows if r["threshold"] == 0.5 and r["bin"] == "1-6"}
+    assert first == {"dwd_icon_eu": 1, "ncep_gfs_global": 0}
+    assert {r["event"] for r in rows} == {"rain3h"}
+    assert doc["models"]["dwd_icon_eu"]["name"] == "DWD ICON-EU"

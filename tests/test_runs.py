@@ -49,7 +49,12 @@ def answer(params, without=(), no_data_at=()):
                 continue
             last = LAST.get(model, 120)
             for var in params["hourly"].split(","):
-                base = {"temperature_2m": 10.0, "precipitation": 0.0, "wind_speed_10m": 2.0}[var]
+                base = {
+                    "temperature_2m": 10.0,
+                    "precipitation": 0.0,
+                    "wind_speed_10m": 2.0,
+                    "wind_gusts_10m": 5.0,
+                }[var]
                 values = [base + n if h <= last else None for h in range(hours)]
                 name = var if len(models) == 1 else f"{var}_{model}"
                 hourly[name] = values
@@ -223,9 +228,16 @@ def test_models_by_run_and_native_hours():
 
 
 def test_cost():
-    assert runs.request_weight(100, 11) == pytest.approx(330)  # 3 x 11 / 10 per station
+    assert runs.VARIABLES == (
+        "temperature_2m",
+        "precipitation",
+        "wind_speed_10m",
+        "wind_gusts_10m",
+    )
+    assert runs.request_weight(100, 11) == pytest.approx(440)  # 4 x 11 / 10 per station
+    assert runs.request_weight(100, 9) == pytest.approx(360)  # runs without ALADIN
     assert runs.request_weight(100, 1) == pytest.approx(100)  # never below 1 per station
-    assert runs.run_cost(150, 11) == pytest.approx(495)
+    assert runs.run_cost(150, 11) == pytest.approx(660)  # 4 variables
     # 4 variables x 19 models would be 7.6 a station: 760 a run of 100 stations
     assert runs.request_weight(100, 19, variables=4) == pytest.approx(760)
 
@@ -304,8 +316,13 @@ def test_fetch_run_drops_a_model_without_the_run():
     assert api.requests[0]["elevation"] == "300.0,nan"
     assert api.requests[0]["forecast_hours"] == "121"
     assert api.requests[0]["wind_speed_unit"] == "ms"
-    # both requests count: 2 stations x 3 x 19 / 10, then 2 x 3 x 18 / 10
-    assert spent.used == pytest.approx(11.4 + 10.8)
+    assert api.requests[0]["hourly"] == (
+        "temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m"
+    )
+    gusts = rows.filter(pl.col("model") == "dwd_icon_eu")["wind_gusts_10m"]
+    assert gusts.null_count() == 0 and gusts.min() > 0
+    # both requests count: 2 stations x 4 x 19 / 10, then 2 x 4 x 18 / 10
+    assert spent.used == pytest.approx(15.2 + 14.4)
 
 
 @pytest.mark.parametrize(
@@ -342,7 +359,7 @@ def test_a_large_run_is_split_into_requests():
         rows, fetched, _ = runs.fetch_run(c, many, RUN, MODELS, spent)
     assert len(fetched) == 19 and rows["station_id"].n_unique() == 100
     assert [len(r["latitude"].split(",")) for r in api.requests] == [50, 50]
-    assert spent.used == pytest.approx(570)
+    assert spent.used == pytest.approx(760)
 
 
 def test_fetch_run_splits_stations_when_one_model_has_no_data():

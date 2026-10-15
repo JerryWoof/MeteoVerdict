@@ -20,6 +20,7 @@ from meteoverdict import (
     blend,
     blendtest,
     combine,
+    farm,
     forecasts,
     gauges,
     leads,
@@ -260,6 +261,58 @@ def leads_cmd(
     for line in lines:
         typer.echo(line)
     typer.echo(f"→ {', '.join(map(str, written))}")
+
+
+@app.command("farm")
+def farm_cmd(
+    runs_days: Annotated[
+        int, typer.Option(help="Score the single runs of all models of the last N days.")
+    ] = 90,
+    data_dir: Annotated[Path, typer.Option(help="Folder with obs/ and runs/.")] = Path("data"),
+    out: Annotated[Path, typer.Option(help="The JSON file.")] = Path("site/data/farm.json"),
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Download the single runs (runs-YYYY-MM) and observations (data-YYYY-MM) "
+            "from GitHub Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+        ),
+    ] = False,
+    publish: Annotated[
+        bool,
+        typer.Option("--publish", help="Put farm.json into the release data-latest."),
+    ] = False,
+) -> None:
+    """Event skill for farmers from the single runs: frost nights (<= 0 and -2 °C), gusts
+    (>= 10, 15, 20 m/s in 3 h) and 3-hour rain (>= 0.5, 2, 5 mm) by lead time bin."""
+    if publish and not github_release:
+        raise typer.BadParameter("--publish needs --github-release")
+    now = datetime.now(UTC)
+    since = now.replace(minute=0, second=0, microsecond=0) - timedelta(days=runs_days)
+    months = partitions.months(since.date(), now.date())
+    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+        releases = _release_store(client) if github_release else None
+        if releases:
+            runs.RunsSync(releases, data_dir, typer.echo).pull(months)
+            store.download(releases, data_dir, months, typer.echo, kinds=("obs",))
+        single = leads.scan_runs(data_dir / "runs", since, now)
+        obs = partitions.scan_months(data_dir / "obs", since.date(), now.date())
+        table = None
+        if single is not None and obs is not None:
+            models = [m for m in catalogue.load_models() if m.enabled]
+            table, info = farm.farm_scores(single, obs, models)
+        if table is None or table.height == 0:
+            typer.echo(
+                f"mvd farm: no runs with observations since {since:%Y-%m-%d %H} UTC", err=True
+            )
+            raise typer.Exit(code=1)
+        doc = farm.document(table, info, datetime.now(UTC), _model_names())
+        path = farm.write(doc, out)
+        if publish:
+            releases.put(store.LATEST_TAG, path.name, path)
+    for line in farm.summary(table):
+        typer.echo(line)
+    typer.echo(f"{info['runs']} runs, {info['stations']} stations → {path}")
 
 
 @app.command("blend-test")

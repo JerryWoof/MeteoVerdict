@@ -3,8 +3,8 @@
 The D+N scores use the Previous Runs API (``forecasts``), which blends runs. To verify
 every model run by run and lead hour by lead hour (``leads``), ``mvd fetch-runs`` asks
 the Single Runs API (``run=YYYY-MM-DDTHH:00``, the run's start) for each 00, 06, 12 and
-18 UTC run: all enabled models in one request, temperature, precipitation and wind at
-the ~100 stations of ``data/run-stations.csv`` (with their elevation), 121 hours from
+18 UTC run: all enabled models in one request, temperature, precipitation, wind and
+wind gusts at the ~100 stations of ``data/run-stations.csv`` (with their elevation), 121 hours from
 the run's start (lead 0 to 120; lead 0 is not stored).
 
 Cost (Open-Meteo's weighted calls, ``forecasts.call_weight``): per station
@@ -46,7 +46,8 @@ import httpx
 import polars as pl
 
 from meteoverdict import backfill, forecasts, partitions, store
-from meteoverdict.models import VARIABLES, Model
+from meteoverdict.models import VARIABLES as VERIFIED
+from meteoverdict.models import Model
 
 URL = "https://single-runs-api.open-meteo.com/v1/forecast"
 RUN_HOURS = (0, 6, 12, 18)
@@ -84,6 +85,12 @@ ALIASES = {
     "meteofrance_arpege_world025": "meteofrance_arpege_world",  # checked live 2026-10-15
 }
 
+#: Variables asked for: the verified ones (``models.VARIABLES``) plus the wind gusts for
+#: the farmers' event scores (``farm``). Open-Meteo's hourly ``wind_gusts_10m`` is the
+#: maximum gust in the preceding hour (Open-Meteo docs, "Preceding hour max"). Runs
+#: fetched before the gusts were added have them null.
+VARIABLES = (*VERIFIED, "wind_gusts_10m")
+
 KEYS = ["run", "model", "station_id", "lead_h"]  # sorted by run first: cheap run filters
 SCHEMA = {
     "run": pl.Datetime("us", "UTC"),
@@ -94,6 +101,7 @@ SCHEMA = {
     "temperature_2m": pl.Float32,
     "precipitation": pl.Float32,
     "wind_speed_10m": pl.Float32,
+    "wind_gusts_10m": pl.Float32,
 }
 
 STATE_NAME = "runs-state.json"
