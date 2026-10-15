@@ -528,12 +528,18 @@ def update_live(
         if previous and previous.get("base") == stamp(base) and folder.exists():
             nowcast = previous
         else:
-            shutil.rmtree(folder, ignore_errors=True)
-            folder.mkdir(parents=True)
+            folder.mkdir(parents=True, exist_ok=True)
             frames = nowcast_frames(download(client, file_url(BY_KEY[NOWCAST], name)))
             for when, _, content in frames:
                 frame = web_frame(content, LAYER_NO_COVERAGE_ALPHA["nowcast"])
                 (folder / f"{stamp(when)}.png").write_bytes(frame)
+            # the previous nowcast's frames stay one more round: a CDN may serve the old
+            # index.json for minutes after this one is published
+            keep = {stamp(w) for w, _, _ in frames}
+            keep |= {f["time"] for f in (previous or {}).get("frames", [])}
+            for path in folder.glob("*.png"):
+                if path.stem not in keep:
+                    path.unlink()
             nowcast = {
                 "base": stamp(base),
                 "frames": [{"time": stamp(w), "lead": lead} for w, lead, _ in frames],
