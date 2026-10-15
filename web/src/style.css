@@ -932,3 +932,53 @@ img.eink {
   font-size: 0.9rem;
   margin: 0.2rem 0 0.5rem;
 }
+/* does our forecast beat the best model? (compare.html) */
+.blend-test {
+  margin-top: 0.8rem;
+  padding: 0.6rem 0.9rem;
+  background: #ffffff;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(29, 35, 41, 0.12);
+}
+.blend-test h2 {
+  margin: 0 0 0.3rem;
+}
+.blend-test h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.blend-test-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 1rem;
+  align-items: start;
+}
+#blend-test-table {
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+#blend-test-table th,
+#blend-test-table td {
+  padding: 0.3rem 0.45rem;
+  border: 1px solid #e3ddd0;
+  text-align: left;
+  vertical-align: top;
+}
+#blend-test-table td small {
+  color: #4b5863;
+}
+#blend-test-table td.better {
+  background: #e3f1e0;
+}
+#blend-test-table td.worse {
+  background: #f8e1de;
+}
+#blend-test-table td.same {
+  background: #f1efe9;
+}
+@media (max-width: 700px) {
+  .blend-test-grid {
+    grid-template-columns: 1fr;
+  }
+}

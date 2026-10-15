@@ -1,3 +1,4 @@
+import dataclasses
 import json
 from datetime import UTC, date, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
@@ -206,13 +207,20 @@ def test_history_floor_is_the_first_aladin_run():
     aladin = [m for m in MODELS if m.id.startswith("chmi_aladin")]
     assert aladin and {m.single_runs_from for m in aladin} == {runs.HISTORY_FROM}
     history = runs.history_runs(NOW)
-    assert all(len(runs.wanted(MODELS, r)) == len(MODELS) for r in history)
+    assert all(
+        runs.wanted(MODELS, r) == [m for m in MODELS if r.hour in m.run_hours] for r in history
+    )
 
 
 def test_models_by_run_and_native_hours():
     april = datetime(2026, 4, 15, 12, tzinfo=UTC)
     assert "chmi_aladin_cz_1km" not in {m.id for m in runs.wanted(MODELS, april)}
-    assert len(runs.wanted(MODELS, RUN)) == 11
+    assert "gem_global" not in {m.id for m in runs.wanted(MODELS, april)}  # from 2026-05-28
+    assert len(MODELS) == 19
+    # GEM Global runs at 00 and 12 UTC only
+    assert "gem_global" not in {m.id for m in runs.wanted(MODELS, RUN)}
+    assert len(runs.wanted(MODELS, RUN)) == 18
+    assert len(runs.wanted(MODELS, RUN.replace(hour=12))) == 19
     aifs, icon = BY_ID["ecmwf_aifs025_single"], BY_ID["dwd_icon_eu"]
     assert [h for h in range(1, 13) if aifs.native_hour(h)] == [6, 12]
     assert icon.native_hour(78) and not icon.native_hour(79) and icon.native_hour(81)
@@ -229,7 +237,26 @@ def test_cost():
     assert runs.request_weight(100, 11) == pytest.approx(440)  # 4 x 11 / 10 per station
     assert runs.request_weight(100, 9) == pytest.approx(360)  # runs without ALADIN
     assert runs.request_weight(100, 1) == pytest.approx(100)  # never below 1 per station
-    assert runs.run_cost(150, 11) == pytest.approx(660)
+    assert runs.run_cost(150, 11) == pytest.approx(660)  # 4 variables
+    # 4 variables x 19 models would be 7.6 a station: 760 a run of 100 stations
+    assert runs.request_weight(100, 19, variables=4) == pytest.approx(760)
+
+
+@pytest.mark.parametrize(
+    ("stations", "models", "sizes"),
+    [
+        (100, 11, [100]),  # 330 calls: one request
+        (100, 19, [50, 50]),  # 570: two equal requests below MAX_REQUEST
+        (101, 19, [51, 50]),
+        (250, 1, [84, 83, 83]),  # 100 stations a request at most
+        (3, 19, [3]),
+        (0, 19, []),
+    ],
+)
+def test_requests_stay_below_the_per_minute_limit(stations, models, sizes):
+    assert runs.batches(stations, models) == sizes
+    assert all(runs.request_weight(n, models) <= runs.MAX_REQUEST for n in sizes)
+    assert all(n <= runs.BATCH for n in sizes)
 
 
 # --- answers -----------------------------------------------------------------------------
@@ -294,8 +321,45 @@ def test_fetch_run_drops_a_model_without_the_run():
     )
     gusts = rows.filter(pl.col("model") == "dwd_icon_eu")["wind_gusts_10m"]
     assert gusts.null_count() == 0 and gusts.min() > 0
-    # both requests count: 2 stations x 4.4, then 2 x 4.0
-    assert spent.used == pytest.approx(8.8 + 8.0)
+    # both requests count: 2 stations x 4 x 19 / 10, then 2 x 4 x 18 / 10
+    assert spent.used == pytest.approx(15.2 + 14.4)
+
+
+@pytest.mark.parametrize(
+    ("reported", "model"),
+    [
+        ("cmc_gem_gdps_15km", "gem_global"),
+        ("meteofrance_arpege_world025", "meteofrance_arpege_world"),
+        ("dwd_icon", "dwd_icon"),
+        ("dwd_icon_eu_native", "dwd_icon_eu"),
+        ("jma_gsm", "jma_gsm"),
+    ],
+)
+def test_reported_names_of_missing_runs(reported, model):
+    # the names Open-Meteo reports for a missing run (checked live 2026-10-13/15)
+    api = FakeApi(gone={"2026-10-12T06:00": {reported}})
+    with client(api) as c:
+        _, fetched, gone = runs.fetch_run(c, STATIONS, RUN, MODELS, budget())
+    assert gone == {model} and model not in fetched
+
+
+def test_a_large_run_is_split_into_requests():
+    many = pl.DataFrame(
+        {
+            "id": [f"s{i}" for i in range(100)],
+            "lat": [50.0] * 100,
+            "lon": [14.4] * 100,
+            "elevation": [300.0] * 100,
+        }
+    )
+    api = FakeApi()
+    spent = budget()
+    spent.clock = iter(range(0, 10**6, 100)).__next__  # 100 s between requests: no waiting
+    with client(api) as c:
+        rows, fetched, _ = runs.fetch_run(c, many, RUN, MODELS, spent)
+    assert len(fetched) == 19 and rows["station_id"].n_unique() == 100
+    assert [len(r["latitude"].split(",")) for r in api.requests] == [50, 50]
+    assert spent.used == pytest.approx(760)
 
 
 def test_fetch_run_splits_stations_when_one_model_has_no_data():
@@ -333,6 +397,22 @@ def test_collect_recent_first_then_history_and_resume(tmp_path):
     with client(api) as c:
         again = runs.collect(c, STATIONS, two, tmp_path, budget(4), NOW)
     assert again.runs == ["2026101206", "2026101200"]  # continues, nothing twice
+
+
+def test_a_model_added_later_is_fetched_newest_run_first(tmp_path):
+    two, added = [BY_ID["dwd_icon_eu"], BY_ID["ecmwf_ifs"]], BY_ID["dwd_icon"]
+    api = FakeApi()
+    with client(api) as c:
+        runs.collect(c, STATIONS, two, tmp_path, budget(), NOW, modes=("recent",))
+    done = len(api.requests)
+    with client(api) as c:
+        result = runs.collect(
+            c, STATIONS, [*two, added], tmp_path, budget(), NOW, modes=("recent",)
+        )
+    asked = api.requests[done:]
+    assert {r["models"] for r in asked} == {"dwd_icon"}  # only the new model
+    assert [r["run"] for r in asked] == sorted((r["run"] for r in asked), reverse=True)
+    assert result.runs[0] == "2026101300"
 
 
 def test_gaps_of_young_runs_are_asked_again(tmp_path):
@@ -457,50 +537,105 @@ def backfill_state(tmp_path, last, models=MODELS):
     return state
 
 
-def test_extra_budget_only_when_the_backfill_is_idle(tmp_path):
+def shared(state, day, part=(0, 2500), share=4500.0):
+    return runs.shared_budget(850, share, part, lambda: state, MODELS, BACKFILL_FROM, day)
+
+
+def test_shared_budget_takes_what_the_backfill_leaves(tmp_path):
     today = date(2026, 10, 14)  # windows from 1 Aug end 14 Aug … 9 Oct, next 23 Oct
     done = backfill_state(tmp_path, today)
-
-    def budget(state, extra=3000.0, day=today):
-        return runs.handover_budget(750, extra, lambda: state, MODELS, BACKFILL_FROM, day)
-
-    calls, why = budget(done)
-    assert calls == 3750
-    assert (
-        why == "3750 calls (750 normal + 3000 extra: backfill idle (all 5 complete "
-        "windows since 2026-08-01 fetched))"
+    calls, why = shared(done, today)
+    assert calls == 3350
+    assert why == (
+        "3350 calls (850 normal + 2500 shared; 4500 of 4500 left, this run takes 0-2500: "
+        "the backfill's current windows (last 90 days) are done)"
     )
-    assert budget(done, extra=0) == (750, "750 calls (normal)")
-    # a model enabled later makes every window pending again
-    calls, why = budget(backfill_state(tmp_path, today, MODELS[:-1]))
-    assert calls == 750 and "5 backfill windows pending (newest 2026-09-26..2026-10-09)" in why
-    # the backfill asked Open-Meteo today (e.g. finished a window this morning)
-    done.calls_on = "2026-10-14"
-    assert budget(done)[0] == 750 and "used Open-Meteo calls today" in budget(done)[1]
-    done.calls_on = "2026-10-13"
-    assert budget(done)[0] == 3750
+    assert shared(done, today, part=(2500, 4500))[0] == 850 + 2000
+    assert shared(done, today, share=0) == (850, "850 calls (normal)")
+    # the backfill finished its current windows this morning with 3000 calls: 1500 left
+    done.calls_on, done.calls_used = "2026-10-14", 3000.0
+    calls, why = shared(done, today)
+    assert calls == 850 + 1500
+    assert "1500 of 4500 left, this run takes 0-2500: the backfill used 3000 of the 4500" in why
+    calls, why = shared(done, today, part=(2500, 4500))
+    assert calls == 850 and "1500 of 4500 left, this run takes 2500-4500" in why
+    # ... without recording how much (an older version): nothing
+    done.calls_used = None
+    assert shared(done, today)[0] == 850
+    # yesterday's calls do not count today
+    done.calls_on, done.calls_used = "2026-10-13", 4500.0
+    assert shared(done, today)[0] == 3350
     # the window 10..23 Oct is fetched tomorrow: today stays normal
-    calls, why = budget(done, day=date(2026, 10, 23))
-    assert calls == 750 and "2026-10-10..2026-10-23 becomes due tomorrow" in why
-    calls, why = budget(done, day=date(2026, 10, 24))
+    calls, why = shared(done, date(2026, 10, 23))
+    assert calls == 850 and "2026-10-10..2026-10-23 becomes due tomorrow" in why
+    calls, why = shared(done, date(2026, 10, 24))
     # with the 28-day gauge window 26 Sep..23 Oct, the window before it is pending too
-    assert calls == 750 and "2 backfill windows pending (newest 2026-10-10..2026-10-23)" in why
+    assert calls == 850
+    assert "2 current backfill windows pending (newest 2026-10-10..2026-10-23)" in why
 
 
-def test_extra_budget_falls_back_when_the_state_cannot_be_read(tmp_path):
+def test_shared_budget_ignores_older_windows_but_not_new_models(tmp_path):
+    today, first = date(2026, 10, 14), date(2026, 5, 1)
+    done = backfill.State(tmp_path / "s.json")
+    windows = backfill.complete_windows(first, today)
+    for start, end in windows:
+        done.fc_done |= {backfill.fc_key(m, start, end) for m in MODELS}
+        span = backfill.gauge_window(first, today, start)
+        if span:
+            done.fc_done |= {backfill.gauge_key(m, *span) for m in MODELS}
+    # older windows pending (here: the oldest one, more than 90 days back) do not count
+    oldest = windows[0]
+    assert not backfill.is_current(oldest[1], today - timedelta(days=1))
+    done.fc_done -= {backfill.fc_key(m, *oldest) for m in MODELS}
+    assert backfill.pending_windows(MODELS, first, today, done) == [oldest]
+    assert backfill.share_left(MODELS, first, today, done, 4500)[0] == 4500
+    # a model added later is pending in every current window: nothing until fetched
+    calls, why = shared(backfill_state(tmp_path, today, MODELS[:-1]), today)
+    assert calls == 850 and "5 current backfill windows pending" in why
+
+
+def test_shared_budget_falls_back_when_the_state_cannot_be_read(tmp_path):
     def broken():
         raise httpx.ConnectError("no route to GitHub")
 
-    calls, why = runs.handover_budget(750, 3000, broken, MODELS, BACKFILL_FROM, date(2026, 10, 14))
-    assert calls == 750
-    assert (
-        why == "750 calls (normal; extra 3000 not used: backfill state not readable: "
-        "no route to GitHub)"
+    calls, why = runs.shared_budget(
+        850, 4500, (0, 2500), broken, MODELS, BACKFILL_FROM, date(2026, 10, 14)
+    )
+    assert calls == 850
+    assert why == (
+        "850 calls (normal; no shared calls: backfill state not readable: no route to GitHub)"
     )
     # a missing state loads as empty: everything pending, so normal too
     empty = backfill.State.load(tmp_path / "nothing.json")
-    calls, _ = runs.handover_budget(750, 3000, lambda: empty, MODELS, BACKFILL_FROM, date.today())
-    assert calls == 750
+    assert shared(empty, date.today())[0] == 850
+
+
+def test_history_done_for_the_backfill(tmp_path):
+    state = runs.State(tmp_path / runs.STATE_NAME)
+    history = runs.history_runs(NOW)
+    ok, why = runs.history_done(lambda: state, MODELS, NOW)
+    assert (
+        not ok and why == f"single-runs history first: {len(history)} runs since 2026-06-23 pending"
+    )
+    for run in history[: -runs.HISTORY_SLACK]:
+        state.fetched[runs.key(run)] = {m.id for m in runs.wanted(MODELS, run)}
+    assert runs.history_pending(state, MODELS, NOW) == runs.HISTORY_SLACK
+    assert runs.history_done(lambda: state, MODELS, NOW) == (
+        True,
+        f"single-runs history complete ({runs.HISTORY_SLACK} runs pending)",
+    )
+    # a model added later makes the history pending again
+    newcomer = dataclasses.replace(BY_ID["dwd_icon"], id="new_model")
+    assert not runs.history_done(lambda: state, [*MODELS, newcomer], NOW)[0]
+    assert runs.history_pending(state, [*MODELS, newcomer], NOW) == len(history)
+
+    def broken():
+        raise ValueError("bad json")
+
+    assert runs.history_done(broken, MODELS, NOW) == (
+        False,
+        "single-runs state not readable: bad json",
+    )
 
 
 def test_summary_states_the_budget(tmp_path):

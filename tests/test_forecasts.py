@@ -110,6 +110,9 @@ def test_budget_paces_below_the_minute_limit_and_stops_at_max():
     assert clock.slept and clock.now >= 60  # the third 50 had to wait a minute
     with pytest.raises(fc.QuotaError, match="budget of 1000"):
         budget.spend(900)
+    # a single request above the minute's pace could never be sent: an error, no endless wait
+    with pytest.raises(ValueError, match="over the per-minute pace"):
+        budget.spend(101)
 
 
 def open_meteo(responses):
