@@ -19,6 +19,7 @@ from meteoverdict import (
     aladin,
     blend,
     blendtest,
+    chmi_archive,
     combine,
     farm,
     forecasts,
@@ -33,6 +34,7 @@ from meteoverdict import (
     regions,
     runs,
     scoring,
+    station_pages,
     stations,
     store,
 )
@@ -40,7 +42,8 @@ from meteoverdict import backfill as backfill_mod
 from meteoverdict import daily as daily_mod
 from meteoverdict import models as catalogue
 from meteoverdict import report as report_mod
-from meteoverdict.chmi import ChmiFormatError, fetch_current_meta
+from meteoverdict.chmi import BASE_URL as CHMI_BASE_URL
+from meteoverdict.chmi import ChmiFormatError, fetch_current_meta, parse_collection
 from meteoverdict.releases import GitHubReleaseStore
 
 app = typer.Typer(
@@ -278,6 +281,156 @@ def mirror_radar(
         store_ = GitHubReleaseStore(client, *_github_credentials())
         count = radar.mirror(store_, out_dir, since, log=typer.echo)
     typer.echo(f"downloaded {count} files to {out_dir}")
+
+
+def _chmi_client(timeout: float = 300) -> httpx.Client:
+    transport = httpx.HTTPTransport(retries=3)
+    return httpx.Client(timeout=timeout, transport=transport, follow_redirects=True)
+
+
+def _archive_releases(client: httpx.Client) -> GitHubReleaseStore:
+    return GitHubReleaseStore(client, *_github_credentials(), notes=chmi_archive.RELEASE_NOTES)
+
+
+@app.command("chmi-archive")
+def chmi_archive_cmd(
+    parts: Annotated[
+        list[str],
+        typer.Option(
+            "--part",
+            help="What to archive (repeatable): days (now/, every day), recent (changed "
+            "months of recent/), history (closed years per station), months (closed "
+            "10-minute and hourly months).",
+        ),
+    ] = ["days", "recent"],  # noqa: B006 (typer needs a list default)
+    out_dir: Annotated[
+        Path | None, typer.Option(help="Archive into this folder (<tag>/<name>).")
+    ] = None,
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Archive into GitHub Releases of $GITHUB_REPOSITORY using $GITHUB_TOKEN.",
+        ),
+    ] = False,
+    max_minutes: Annotated[
+        float | None, typer.Option(help="Stop starting new files after this many minutes.")
+    ] = None,
+    first_year: Annotated[
+        int, typer.Option(help="Oldest year of 10-minute and hourly months.")
+    ] = chmi_archive.FIRST_MONTH_YEAR,
+    station: Annotated[
+        list[str] | None,
+        typer.Option(help="Only these stations' history (WSI, repeatable; for trials)."),
+    ] = None,
+    workdir: Annotated[Path, typer.Option(help="Folder for temporary files.")] = Path(
+        "data/chmi-work"
+    ),
+) -> None:
+    """Archive all ČHMÚ climatological station data (every element) as Parquet."""
+    if (out_dir is None) == (not github_release):
+        raise typer.BadParameter("use exactly one of --out-dir and --github-release")
+    unknown = set(parts) - set(chmi_archive.PARTS)
+    if unknown:
+        raise typer.BadParameter(f"unknown part {sorted(unknown)}; use {chmi_archive.PARTS}")
+    with _chmi_client() as client:
+        if github_release:
+            target = chmi_archive.ReleaseStore(_archive_releases(client))
+        else:
+            target = chmi_archive.LocalStore(out_dir)
+        result = chmi_archive.archive(
+            client,
+            target,
+            workdir,
+            parts,
+            max_minutes=max_minutes,
+            first_year=first_year,
+            stations=set(station) if station else None,
+            log=typer.echo,
+        )
+    typer.echo(
+        f"archived {len(result.done)} files ({result.rows:,} rows, {result.bytes / 1e6:.0f} MB), "
+        f"failed {len(result.failed)}, left for later {result.pending}, "
+        f"unreadable files left out {result.unreadable}"
+    )
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as f:
+            f.write(
+                f"## ČHMÚ archive ({', '.join(parts)})\n\n"
+                f"- archived {len(result.done)} files, {result.rows:,} rows, "
+                f"{result.bytes / 1e6:.0f} MB\n- failed {len(result.failed)}\n"
+                f"- left for the next run: {result.pending}\n"
+                f"- unreadable files left out: {result.unreadable}\n"
+            )
+    if result.failed:
+        raise typer.Exit(code=1)
+
+
+@app.command("chmi-mirror")
+def chmi_mirror(
+    dest: Annotated[Path, typer.Argument(help="Local folder; files go to <tag>/<name>.")],
+) -> None:
+    """Copy the whole ČHMÚ archive (releases chmi-*) to a local disk; unchanged files are
+    skipped, so it can run again to update the copy. Read only towards GitHub."""
+    with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
+        copied = chmi_archive.mirror(_archive_releases(client), dest, log=typer.echo)
+    typer.echo(f"copied {len(copied)} files to {dest}")
+
+
+def _meta2_tables(client: httpx.Client) -> pl.DataFrame:
+    """ČHMÚ's element metadata: the historical periods and today's list, stacked."""
+    response = client.get(f"{CHMI_BASE_URL}/historical/metadata/meta2.json")
+    response.raise_for_status()
+    historical = parse_collection(response.json())
+    current = fetch_current_meta(client, 2, datetime.now(UTC).date())
+    cast = [pl.col(c).cast(pl.String) for c in ("HEIGHT",) if c in historical.columns]
+    return pl.concat(
+        [historical.with_columns(cast), current.with_columns(pl.col("HEIGHT").cast(pl.String))],
+        how="diagonal_relaxed",
+    )
+
+
+@app.command("station-pages")
+def station_pages_cmd(
+    archive: Annotated[
+        Path, typer.Option(help="Archive folder (<tag>/<name>), e.g. from chmi-archive.")
+    ] = Path("data/chmi"),
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    out: Annotated[Path, typer.Option(help="Folder for the station JSON.")] = Path(
+        "site/data/station"
+    ),
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="First download the archive files needed from GitHub Releases.",
+        ),
+    ] = False,
+    publish: Annotated[
+        bool,
+        typer.Option(help="Upload the JSON as station-data.zip to the release data-latest."),
+    ] = False,
+) -> None:
+    """Per-station JSON with every element and its history, for web/station.html."""
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    table = pl.read_parquet(stations_path)
+    today = datetime.now(UTC).date()
+    with _chmi_client() as client:
+        meta2 = _meta2_tables(client)
+        if github_release:
+            closed = chmi_archive.last_closed_year(client)
+            years = list(range(closed + 1, today.year + 1))
+            wanted = station_pages.wanted_assets(table["id"].to_list(), today, years)
+            chmi_archive.sync(_archive_releases(client), archive, wanted, log=typer.echo)
+    station_pages.build(archive, table, meta2, out, today, log=typer.echo)
+    if publish:
+        with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
+            store.publish_folder(_release_store(client), out, "station-data.zip")
+        typer.echo(f"published station-data.zip to the release {store.LATEST_TAG}")
 
 
 @app.command("leads")

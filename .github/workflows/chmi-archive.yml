@@ -1,0 +1,47 @@
+name: CHMI archive
+
+# Archive all ČHMÚ climatological station data (every element of every station) as
+# Parquet in the releases chmi-* (docs/data-sources.md#chmi-archive). Twice a day:
+# - days: 10-minute and hourly data of each complete UTC day from now/, which ČHMÚ
+#   keeps for only about three days (two runs a day, so one failed run loses nothing);
+# - recent: the months of recent/ that ČHMÚ changed (new days of the daily data,
+#   checked months after the 3rd of the month); the first runs catch up the last
+#   12 months within the time budget;
+# then rebuild the station pages (station-data.zip in data-latest), after which the
+# Pages workflow redeploys the site. The history backfill is chmi-backfill.yml, in the
+# same concurrency group, so the two never write the archive state at the same time.
+# No Open-Meteo calls.
+on:
+  schedule:
+    - cron: "41 1,13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write # create releases and upload assets
+
+concurrency:
+  group: chmi-archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    name: Archive the latest ČHMÚ data
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install project
+        run: uv sync --frozen
+      - name: Archive the last days and the changed months of recent/
+        run: uv run --frozen mvd chmi-archive --part days --part recent --github-release --max-minutes 90
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Station table
+        run: uv run --frozen mvd stations --out data/stations.parquet
+      - name: Station pages
+        run: uv run --frozen mvd station-pages --github-release --publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

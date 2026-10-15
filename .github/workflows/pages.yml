@@ -1,7 +1,8 @@
 name: Pages
 
 # Build the web map (web/) with the latest scores and publish it on GitHub Pages.
-# Runs after the daily update and the outlook, on changes to the map, and by hand.
+# Runs after the daily update, the outlook and the ČHMÚ archive (station pages), on
+# changes to the map, and by hand.
 # Until Pages is enabled for the repository (Settings → Pages → Source: GitHub Actions)
 # it only builds and says so, instead of failing.
 on:
@@ -9,7 +10,7 @@ on:
     branches: [main]
     paths: ["web/**", "src/meteoverdict/data/*.geojson", ".github/workflows/pages.yml"]
   workflow_run:
-    workflows: [Daily, Outlook]
+    workflows: [Daily, Outlook, CHMI archive]
     types: [completed]
   workflow_dispatch:
 
@@ -50,6 +51,13 @@ jobs:
             unzip -o -q /tmp/site-data.zip -d site/data
           else
             echo "no published scores yet; the map shows the boundaries only"
+          fi
+          if gh release download data-latest --pattern station-data.zip --dir /tmp 2>/dev/null; then
+            mkdir -p site/data/station
+            unzip -o -q /tmp/station-data.zip -d site/data/station
+            echo "station pages from data-latest ($(ls site/data/station | wc -l) files)"
+          else
+            echo "no station pages yet; station.html says so"
           fi
           for name in outlook.json outlook-hourly.json leads.json farm.json blend-test.json; do
             if gh release download data-latest --pattern "$name" --dir site/data --clobber 2>/dev/null; then
