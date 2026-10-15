@@ -10,15 +10,19 @@
     <header>
       <h1><a href="./">MeteoVerdict</a></h1>
       <p id="status"></p>
-      <a href="./" data-i18n="page.map">Map</a>
-      <a href="compare.html" data-i18n="page.compare">Compare models</a>
-      <a href="tv.html" data-i18n="page.tv">Forecast</a>
+      <nav class="site-nav" aria-label="MeteoVerdict">
+        <a href="./" data-i18n="page.map">Map</a>
+        <a href="tv.html" data-i18n="page.tv">Forecast</a>
+        <a href="radar.html" data-i18n="page.radar">Radar</a>
+        <a href="compare.html" data-i18n="page.compare">Compare models</a>
+        <a href="station.html" data-i18n="page.station" aria-current="page">Stations</a>
+        <a href="api.html" data-i18n="page.api">Open data</a>
+      </nav>
       <form id="controls" role="search" autocomplete="off">
         <label><span data-i18n="station.search">Find a station</span>
           <input id="search" type="search" list="station-list" data-i18n-placeholder="station.placeholder" placeholder="name, e.g. Libuš" /></label>
         <datalist id="station-list"></datalist>
       </form>
-      <a href="api.html" data-i18n="page.api">Open data</a>
       <button type="button" id="language">Česky</button>
     </header>
     <main class="content station-page">
