@@ -29,6 +29,7 @@ COMMANDS = [
     "models",
     "archive-aladin",
     "leads",
+    "blend-test",
     "fetch-runs",
     "fetch-obs",
     "fetch-fc",
@@ -430,6 +431,17 @@ def test_aggregate_reads_score_files_of_different_ages(tmp_path):
 def test_leads_publish_needs_github_release():
     result = runner.invoke(app, ["leads", "--publish"])
     assert result.exit_code == 2
+
+
+def test_blend_test_rejects_bad_options(tmp_path):
+    assert runner.invoke(app, ["blend-test", "--publish"]).exit_code == 2
+    stations_file = tmp_path / "stations.parquet"
+    stations_file.touch()
+    args = ["blend-test", "--stations", str(stations_file), "--data-dir", str(tmp_path)]
+    assert runner.invoke(app, [*args, "--window", "month"]).exit_code == 2
+    result = runner.invoke(app, args)
+    assert result.exit_code == 1
+    assert "no scores" in result.stderr
 
 
 def test_leads_without_archive_fails(tmp_path):
