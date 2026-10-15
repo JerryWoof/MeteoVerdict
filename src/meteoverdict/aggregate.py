@@ -4,7 +4,8 @@ Levels: ``station``, ``okres``, ``kraj``, ``elevation`` (lowland/upland/mountain
 ``cz`` (all stations). Windows, all ending at ``as_of`` (the last scored day): ``90d``
 (the last 90 days), ``season`` (the meteorological season so far: DJF, MAM, JJA, SON)
 and ``all``; and per season over all years (roadmap 5.1): ``djf``, ``mam``, ``jja`` and
-``son``, every day of that season up to ``as_of``.
+``son``, every day of that season up to ``as_of`` (their ``from``/``to``: the first and
+last scored day inside the season's months).
 
 Fair comparison: for each window, variable, lead day and region, only the station-days
 that **every** model present in that region has scores for are used. So a model with a
@@ -64,7 +65,11 @@ def window_start(window: str, as_of: date, first_day: date) -> date:
 
 
 def window_days(window: str, as_of: date, first_day: date) -> tuple[date, pl.Expr]:
-    """First day of a window and the filter on ``date`` that selects its days."""
+    """First day of a window and the filter on ``date`` that selects its days.
+
+    A season over all years (``djf`` …) has gaps, so its first day here is ``first_day``;
+    ``aggregate`` reports the first and last scored day inside its months instead.
+    """
     if window in SEASONS:
         months = pl.col("date").dt.month().is_in(SEASONS[window])
         return first_day, pl.col("date").is_between(first_day, as_of) & months
@@ -216,6 +221,12 @@ def aggregate(
     for window in windows:
         start, days = window_days(window, as_of, first_day)
         in_window = scores.filter(days).join(info, on="station_id", how="inner")
+        # the window may start before the first scored day
+        span = (max(start, first_day), as_of)
+        if window in SEASONS:  # e.g. jja in October: its last scored day is 31 Aug
+            dates = pl.col("date")
+            span = in_window.select(dates.min().alias("from"), dates.max().alias("to"))
+            span = span.collect().row(0)
         for level in levels:
             fair = common_days(with_regions(in_window, level, distance), by="region")
             frames.append(
@@ -229,9 +240,8 @@ def aggregate(
                 .with_columns(
                     pl.lit(level).alias("level"),
                     pl.lit(window).alias("window"),
-                    # the window may start before the first scored day
-                    pl.lit(max(start, first_day)).alias("from"),
-                    pl.lit(as_of).alias("to"),
+                    pl.lit(span[0], pl.Date).alias("from"),
+                    pl.lit(span[1], pl.Date).alias("to"),
                 )
             )
     out = _metrics(pl.concat(frames, how="diagonal_relaxed")).with_columns(
