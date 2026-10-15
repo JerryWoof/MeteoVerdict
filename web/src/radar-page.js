@@ -1213,3 +1213,7 @@ async function bench(scale = perf.scale) {
 
 // for checks in a browser: jump to a time, play, place a point, measure
 window.__radar = { goTo, play, stop, setPoint, bench, state: () => ({ shownMs, playing, steps: steps.length, perf }) };
+
+// EUMETSAT's data policy asks for "contains modified EUMETSAT Meteosat data <year>"
+const satYear = document.getElementById("sat-year");
+if (satYear) satYear.textContent = String(new Date().getFullYear());
