@@ -10,8 +10,14 @@
     <header>
       <h1><a href="./">MeteoVerdict</a></h1>
       <p id="status">Loading…</p>
-      <a href="./" data-i18n="page.map">Map</a>
-      <a href="tv.html" data-i18n="page.tv">Forecast</a>
+      <nav class="site-nav" aria-label="MeteoVerdict">
+        <a href="./" data-i18n="page.map">Map</a>
+        <a href="tv.html" data-i18n="page.tv">Forecast</a>
+        <a href="radar.html" data-i18n="page.radar">Radar</a>
+        <a href="compare.html" data-i18n="page.compare" aria-current="page">Compare models</a>
+        <a href="station.html" data-i18n="page.station">Stations</a>
+        <a href="api.html" data-i18n="page.api">Open data</a>
+      </nav>
       <form id="controls">
         <label><span data-i18n="control.region">Region</span> <select id="region"></select></label>
         <label><span data-i18n="control.variable">Variable</span> <select id="variable"></select></label>
@@ -19,8 +25,6 @@
         <label><span data-i18n="control.window">Period</span> <select id="window"></select>
           <span class="help" tabindex="0" role="note" data-i18n-title="window.help">?</span></label>
       </form>
-      <a href="radar.html" data-i18n="page.radar">Radar</a>
-      <a href="api.html" data-i18n="page.api">Open data</a>
       <button type="button" id="language">Česky</button>
     </header>
     <main class="content wide">
