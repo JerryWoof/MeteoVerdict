@@ -29,6 +29,15 @@ test("colours follow the model order and skip the blend", () => {
   assert.deepEqual(Object.keys(modelColors(MODELS)), ["icon", "ifs"]);
 });
 
+test("every model of the catalogue gets its own colour", () => {
+  // 20 models in models.yaml (19 enabled, 1 disabled) plus the blend
+  const many = Object.fromEntries([...Array(20).keys()].map((i) => [`m${i}`, `M${i}`]));
+  const colors = modelColors({ ...many, blend: "Mean" });
+  assert.equal(new Set(Object.values(colors)).size, 20);
+  assert.equal(colors.blend, undefined);
+  assert.ok(!Object.values(colors).includes(NO_DATA) && !Object.values(colors).includes(TOO_FEW));
+});
+
 test("best model per region at one lead day, with ties but without the blend", () => {
   const best = bestByRegion(records(DOC), 1);
   assert.deepEqual(best.get("CZ020"), {

@@ -99,6 +99,9 @@ class Budget:
     def spend(self, weight: float) -> None:
         if self.used + weight > self.max_calls:
             raise QuotaError(f"budget of {self.max_calls:g} calls reached ({self.used:g} used)")
+        if weight > min(self.per_minute, self.per_hour):
+            # no wait would ever make room; the caller must split the request
+            raise ValueError(f"one request of {weight:g} calls is over the per-minute pace")
         for window, limit in ((60.0, self.per_minute), (3600.0, self.per_hour)):
             while True:
                 now = self.clock()

@@ -154,12 +154,13 @@ def test_models_lists_enabled_models_with_lead_days():
     assert "archive from 2024-01-19" in icon_d2
     arpege = next(line for line in lines if line.startswith("meteofrance_arpege_europe "))
     assert "wind_speed_10m from 2026-08-07" in arpege
-    assert not any("knmi_harmonie_arome_europe" in line for line in lines)
+    assert any(line.startswith("knmi_harmonie_arome_europe ") for line in lines)
+    assert not any("gem_regional" in line for line in lines)
 
 
 def test_models_all_includes_disabled():
     result = runner.invoke(app, ["models", "--all"])
-    assert "knmi_harmonie_arome_europe" in result.stdout
+    assert "gem_regional" in result.stdout
     assert "(disabled)" in result.stdout
 
 
@@ -559,19 +560,22 @@ def test_fetch_runs_dry_run_prints_the_cost(tmp_path):
     args = ["fetch-runs", "--dry-run", "--data-dir", str(tmp_path), "--run", "2026-10-12T06"]
     result = runner.invoke(app, args)
     assert result.exit_code == 0, result.output
-    assert "1 runs to fetch at 100 stations, about 330 Open-Meteo calls" in plain(result.output)
+    # 06 UTC: 18 models (GEM Global runs at 00 and 12 UTC only), 3 x 18 / 10 per station
+    out = plain(result.output)
+    assert "1 runs to fetch at 100 stations, about 540 Open-Meteo calls" in out
+    assert "(570 per run of all 19 models" in out
 
 
-def test_fetch_runs_extra_budget_needs_a_readable_backfill_state(tmp_path):
+def test_fetch_runs_shared_budget_needs_a_readable_backfill_state(tmp_path):
     args = ["fetch-runs", "--dry-run", "--data-dir", str(tmp_path), "--run", "2026-10-12T06"]
-    result = runner.invoke(app, [*args, "--extra-calls-if-backfill-idle", "3000"])
+    result = runner.invoke(app, [*args, "--shared-calls", "4500"])
     assert result.exit_code == 0, result.output
     out = plain(result.output)
-    assert "budget: 450 calls (normal; extra 3000 not used: backfill state not readable" in out
+    assert "budget: 450 calls (normal; no shared calls: backfill state not readable" in out
     assert "budget 450)" in out
 
 
-def test_fetch_runs_extra_budget_when_the_backfill_is_idle(tmp_path):
+def test_fetch_runs_shared_budget_when_the_backfill_is_idle(tmp_path):
     today = datetime.now(UTC).date()
     first = today - timedelta(days=40)
     models = [m for m in load_models() if m.enabled]
@@ -583,21 +587,27 @@ def test_fetch_runs_extra_budget_when_the_backfill_is_idle(tmp_path):
             state.fc_done |= {backfill_mod.gauge_key(m, *span) for m in models}
     state.save()
     args = ["fetch-runs", "--dry-run", "--data-dir", str(tmp_path), "--run", "2026-10-12T06"]
-    extra = ["--extra-calls-if-backfill-idle", "3000", "--backfill-from", f"{first}"]
+    extra = ["--shared-calls", "4500", "--shared-to", "2500", "--backfill-from", f"{first}"]
     result = runner.invoke(app, [*args, *extra])
     assert result.exit_code == 0, result.output
-    assert "budget: 3450 calls (450 normal + 3000 extra: backfill idle" in plain(result.output)
+    assert (
+        "budget: 2950 calls (450 normal + 2500 shared; 4500 of 4500 left, this run takes "
+        "0-2500: the backfill's current windows (last 90 days) are done)"
+    ) in plain(result.output)
+    # the second part of the day, from 2500 on
+    result = runner.invoke(app, [*args, *extra[:2], "--shared-from", "2500", *extra[4:]])
+    assert "budget: 2450 calls (450 normal + 2000 shared; 4500 of 4500 left" in plain(result.output)
 
 
 def test_fetch_runs_without_budget_does_nothing(monkeypatch, tmp_path):
     summary = tmp_path / "summary.md"
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
     args = ["fetch-runs", "--data-dir", str(tmp_path), "--max-calls", "0"]
-    result = runner.invoke(app, [*args, "--extra-calls-if-backfill-idle", "3000"])
+    result = runner.invoke(app, [*args, "--shared-calls", "4500"])
     assert result.exit_code == 0, result.output
     assert "0 runs fetched, 0 calls used" in plain(result.output)
     text = summary.read_text()
-    assert "- Budget: 0 calls (normal; extra 3000 not used: backfill state not readable" in text
+    assert "- Budget: 0 calls (normal; no shared calls: backfill state not readable" in text
     assert not (tmp_path / "runs").exists()
 
 

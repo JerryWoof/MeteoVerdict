@@ -302,17 +302,24 @@ def fetch_runs(
             "ALADIN (runs.HISTORY_FROM).",
         ),
     ] = None,
-    extra_calls_if_backfill_idle: Annotated[
+    shared_calls: Annotated[
         float,
         typer.Option(
-            help="Calls added to --max-calls when the D+N backfill has nothing pending "
-            "(its state in the release data-state with --github-release, else "
-            "backfill-state.json in --data-dir); the normal budget if it cannot be read.",
+            help="The daily budget shared with the D+N backfill: what the backfill leaves "
+            "of it today (its state in the release data-state with --github-release, else "
+            "backfill-state.json in --data-dir) can be added to --max-calls; nothing if "
+            "the state cannot be read.",
         ),
     ] = 0,
+    shared_from: Annotated[
+        float, typer.Option(help="This run's part of what is left starts here …")
+    ] = 0,
+    shared_to: Annotated[
+        float | None, typer.Option(help="… and ends here (default: --shared-calls).")
+    ] = None,
     backfill_from: Annotated[
         datetime,
-        typer.Option(formats=["%Y-%m-%d"], help="The backfill's --from (for the idle check)."),
+        typer.Option(formats=["%Y-%m-%d"], help="The backfill's --from (for the shared budget)."),
     ] = datetime(2024, 1, 1),
 ) -> None:
     """Fetch single model runs (H+1 … H+120) at the station subset from Open-Meteo's
@@ -336,9 +343,10 @@ def fetch_runs(
             )
             sync = runs.RunsSync(notes_store, data_dir, log=typer.echo)
             sync.pull_state()
-        max_calls, budget_note = runs.handover_budget(
+        max_calls, budget_note = runs.shared_budget(
             max_calls,
-            extra_calls_if_backfill_idle,
+            shared_calls,
+            (shared_from, shared_calls if shared_to is None else shared_to),
             lambda: _backfill_state(client if github_release else None, data_dir),
             models,
             backfill_from.date(),
@@ -362,7 +370,7 @@ def fetch_runs(
             return
         budget = forecasts.Budget(max_calls=max_calls)
         result = runs.Result()
-        if max_calls > 0:  # a schedule with only the extra budget: nothing when not idle
+        if max_calls > 0:  # a schedule with only shared calls: nothing when none are left
             result = runs.collect(
                 client,
                 stations_table,
@@ -400,6 +408,20 @@ def _backfill_state(client: httpx.Client | None, data_dir: Path) -> backfill_mod
     if not path.exists():
         raise FileNotFoundError(path)
     return backfill_mod.State.load(path)
+
+
+def _runs_state(client: httpx.Client | None, data_dir: Path) -> runs.State:
+    """The single runs' progress: from the release runs-state (``client``), else local."""
+    path = data_dir / runs.STATE_NAME
+    if client is not None:
+        releases = _release_store(client)
+        if runs.STATE_NAME not in releases.assets(runs.STATE_TAG):
+            raise FileNotFoundError(f"{runs.STATE_NAME} not in the release {runs.STATE_TAG}")
+        path = data_dir / "runs-check" / runs.STATE_NAME  # apart from any local runs
+        releases.download(runs.STATE_TAG, runs.STATE_NAME, path)
+    if not path.exists():
+        raise FileNotFoundError(path)
+    return runs.State.load(path)
 
 
 store_app = typer.Typer(help="Raw data store in GitHub Releases (data-YYYY-MM).")
@@ -859,8 +881,21 @@ def backfill(
             "GITHUB_REPOSITORY).",
         ),
     ] = False,
+    older_windows: Annotated[
+        str,
+        typer.Option(
+            help="Windows older than the current ones (last 90 days): always, never, or "
+            "after-runs-history (only once the single-runs history is complete: its state "
+            "in the release runs-state with --github-release, else runs-state.json in "
+            "--data-dir; never if it cannot be read).",
+        ),
+    ] = "always",
 ) -> None:
     """Backfill history newest first, in 14-day windows, resumable (state in the data dir)."""
+    if older_windows not in ("always", "never", "after-runs-history"):
+        raise typer.BadParameter(
+            "use always, never or after-runs-history", param_hint="--older-windows"
+        )
     first, last = start.date(), end.date() if end else _yesterday()
     _check_range(first, last, hint="--from/--to")
     if not stations_path.exists():
@@ -875,6 +910,14 @@ def backfill(
             sync.pull_state()
         meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
         points = observations.verification_stations(table, meta2)
+        older, why = older_windows == "always", "--older-windows never"
+        if older_windows == "after-runs-history":
+            older, why = runs.history_done(
+                lambda: _runs_state(client if github_release else None, data_dir),
+                models,
+                datetime.now(UTC),
+            )
+        typer.echo(f"older windows: {'allowed' if older else 'held back'} ({why})")
         budget = forecasts.Budget(max_calls=max_calls)
         result = backfill_mod.run(
             client,
@@ -887,6 +930,8 @@ def backfill(
             sync,
             log=typer.echo,
             gauge_points=_gauge_points(table, meta2, points),
+            older=older,
+            held_back="" if older else why,
         )
     typer.echo(
         f"{result.windows_done} windows done, {budget.used:g} calls used"
