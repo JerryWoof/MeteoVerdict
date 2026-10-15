@@ -23,7 +23,8 @@ def test_shipped_catalogue_is_valid_and_contains_roadmap_candidates():
     models = load_models()
     assert {m.id for m in enabled_models()} >= ROADMAP_CANDIDATES
     for m in models:
-        assert m.archive_from >= date(2024, 1, 1)  # Previous Runs archive starts 2024
+        # mostly 2024; JMA GSM back to the probe's start (2021-01-01)
+        assert m.archive_from >= date(2021, 1, 1)
         assert 1 <= len(m.lead_days) <= MAX_LEAD_DAY
 
 
@@ -35,6 +36,14 @@ def test_shipped_catalogue_is_valid_and_contains_roadmap_candidates():
         ("chmi_aladin_cz_1km", (1, 2)),  # 3-day forecast
         ("meteofrance_arpege_europe", (1, 2, 3)),  # 4-day forecast
         ("ecmwf_ifs", (1, 2, 3, 4, 5)),  # 15 days, capped to the v1 scope
+        # added 2026-10-15, measured on September 2026
+        ("cma_grapes_global", (1, 2, 3, 4)),  # 10-day forecast, D+5 empty in the archive
+        ("meteofrance_arpege_world", (1, 2, 3)),  # 4-day forecast
+        ("dwd_icon", (1, 2, 3, 4, 5)),
+        ("gem_global", (1, 2, 3, 4, 5)),
+        ("jma_gsm", (1, 2, 3, 4, 5)),
+        ("ncep_aigfs025", (1, 2, 3, 4, 5)),
+        ("knmi_harmonie_arome_europe", (1,)),
     ],
 )
 def test_lead_days_are_the_measured_ones(model_id, lead_days):
@@ -78,6 +87,9 @@ def test_custom_catalogue_defaults_to_enabled(tmp_path):
         (VALID.replace("step_hours: 1", "step_hours: 2"), "implausible"),
         (VALID.replace("forecast_days: 2", "forecast_days: 2 days"), "must be numbers"),
         (VALID + "    enabled: maybe\n", "true or false"),
+        (VALID + "    run_hours: [0, 3]\n", "run_hours"),
+        (VALID + "    run_hours: []\n", "run_hours"),
+        (VALID + "    run_hours: 12\n", "run_hours"),
         (VALID.replace("forecast_days: 2", "forecast_days: 0.5"), "implausible"),
         (VALID.replace("max_lead_day: 1", "max_lead_day: 3"), "max_lead_day must be 1..2"),
         (VALID.replace("max_lead_day: 1", "max_lead_day: 0"), "max_lead_day"),
@@ -120,6 +132,12 @@ def test_bad_variable_from_is_rejected(tmp_path, variable_from):
         ("ncep_gfs_global", [1, 1, 1, 1, 3]),  # after 120 h
         ("ukmo_global_deterministic_10km", [1, 1, 3, 3, 3]),  # after 54 h
         ("ecmwf_aifs025_single", [6] * 5),
+        ("dwd_icon", [1, 1, 1, 3, 3]),  # after 78 h
+        ("gem_global", [1, 1, 1, 3, 3]),  # after 84 h (measured)
+        ("meteofrance_arpege_world", [1, 3, 3]),  # after 48 h
+        ("cma_grapes_global", [3] * 4),
+        ("jma_gsm", [6] * 5),
+        ("ncep_aigfs025", [6] * 5),
     ],
 )
 def test_native_step_per_lead_day(model_id, steps):
@@ -132,3 +150,12 @@ def test_coarser_fields_go_together(tmp_path):
         load_models(write(tmp_path, VALID + "    coarser_after_h: 24\n"))
     with pytest.raises(ModelCatalogError, match="go together"):
         load_models(write(tmp_path, VALID + "    coarser_after_h: 24\n    coarser_step_h: 2\n"))
+
+
+def test_run_hours_default_and_narrowed(tmp_path):
+    (model,) = load_models(write(tmp_path, VALID))
+    assert model.run_hours == (0, 6, 12, 18)
+    (model,) = load_models(write(tmp_path, VALID + "    run_hours: [12, 0]\n"))
+    assert model.run_hours == (0, 12)
+    gem = next(m for m in load_models() if m.id == "gem_global")
+    assert gem.run_hours == (0, 12)

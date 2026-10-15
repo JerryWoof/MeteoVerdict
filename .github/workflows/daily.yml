@@ -5,8 +5,10 @@ name: Daily
 # then commit the "last updated" badge and meta.json, and publish the
 # full data to the release data-latest. Last, the error by lead hour of every model
 # (leads.json, from the single runs of runs.yml) and of ALADIN from our own archive
-# (leads-aladin.json), and the farmers' event skill (farm.json: frost, gusts, 3-hour
-# rain from the same single runs), each allowed to fail without failing the run.
+# (leads-aladin.json), the farmers' event skill (farm.json: frost, gusts, 3-hour
+# rain from the same single runs) and the out-of-sample test of our combined forecast
+# against the best single model (blend-test.json), each allowed to fail without
+# failing the run.
 # No Open-Meteo calls: forecasts come from the backfill and single-runs workflows.
 on:
   schedule:
@@ -70,5 +72,12 @@ jobs:
         continue-on-error: true
         timeout-minutes: 30
         run: uv run --frozen mvd farm --github-release --publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Does our combined forecast beat the best model? (out of sample)
+        # optional, like the lead hours: a failure here must not fail the daily update
+        continue-on-error: true
+        timeout-minutes: 30
+        run: uv run --frozen mvd blend-test --github-release --publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -8,9 +8,11 @@ wind gusts at the ~100 stations of ``data/run-stations.csv`` (with their elevati
 the run's start (lead 0 to 120; lead 0 is not stored).
 
 Cost (Open-Meteo's weighted calls, ``forecasts.call_weight``): per station
-4 variables x 11 models / 10 = 4.4, so about 440 calls a run (330 before the gusts were
-added on 2026-10-15); 121 hours are less than
-14 days, so asking for the whole 5 days costs no more than one day.
+variables x models / 10, e.g. 4 x 19 / 10 = 7.6, so about 760 calls a run (720 for the
+06 and 18 UTC runs, which GEM Global does not have: ``Model.run_hours``); 121 hours are
+less than 14 days, so asking for the whole 5 days costs no more than one day. One request
+stays at or below ``MAX_REQUEST`` calls (Open-Meteo allows 600 a minute), so the stations
+of a run are split into equal batches.
 
 If one requested model does not have the run, Open-Meteo fails the whole request
 (HTTP 400 "The requested model run is not available. Model: X"): X is dropped and the
@@ -23,8 +25,9 @@ so runs are fetched once and a run stopped by the call budget continues next tim
 then "history" newest first back to ``HISTORY_FROM`` (not to the archive start
 ``models.RUNS_FROM``; see ``HISTORY_FROM``).
 
-The call budget of a scheduled run can grow by the backfill's share when the backfill
-has nothing to do (``handover_budget``).
+The call budget of a scheduled run can grow by what the D+N backfill leaves of the
+daily shared budget (``shared_budget``, ``backfill.share_left``); the backfill in turn
+fetches its older windows only once this history is complete (``history_pending``).
 
 See docs/data-sources.md#single-runs-mvd-fetch-runs.
 """
@@ -51,13 +54,19 @@ RUN_HOURS = (0, 6, 12, 18)
 MAX_LEAD_H = 120  # 5 days
 FORECAST_HOURS = MAX_LEAD_H + 1  # Open-Meteo's answer starts at the run's start (lead 0)
 #: A run is fetched once it is this old: every model has reached Open-Meteo by then
-#: (checked 2026-10-13: at 8.4 h the 06 UTC run was complete for all 11 models).
+#: (checked 2026-10-13: at 8.4 h the 06 UTC run was complete for the first 11 models).
 MIN_AGE_H = 10
 #: "Recent" runs: up to this old (missed schedules catch up), newer than history.
 RECENT_H = 48
 #: A model missing from a run younger than this is asked again later, not a gap yet.
 PENDING_H = 24
-BATCH = 100  # stations per request
+BATCH = 100  # stations per request at most
+#: Weighted calls per request at most: below Open-Meteo's 600 a minute and the pace of
+#: ``forecasts.Budget`` (550 a minute)
+MAX_REQUEST = 500
+#: The history counts as complete with at most this many runs left (a run that keeps
+#: failing must not hold back the D+N backfill's older windows for good)
+HISTORY_SLACK = 4
 #: Oldest run the history goes back to by default: the first run with ALADIN (both
 #: domains) in Open-Meteo's Single Runs archive (models.yaml ``runs_from``). The archive
 #: itself starts on ``models.RUNS_FROM`` (2026-04-02), but earlier runs lack the two
@@ -72,6 +81,8 @@ ALIASES = {
     "dwd_icon_eu_native": "dwd_icon_eu",
     "ncep_gfs013": "ncep_gfs_global",
     "ncep_gfs025": "ncep_gfs_global",
+    "cmc_gem_gdps_15km": "gem_global",  # checked live 2026-10-15
+    "meteofrance_arpege_world025": "meteofrance_arpege_world",  # checked live 2026-10-15
 }
 
 #: Variables asked for: the verified ones (``models.VARIABLES``) plus the wind gusts for
@@ -101,8 +112,10 @@ RELEASE_NOTES = (
     "Single model runs at about 100 ČHMÚ stations, one Parquet file per month of run "
     "start (runs-YYYY-MM.parquet), written by `mvd fetch-runs` from the Open-Meteo "
     "Single Runs API (free, non-commercial tier). Forecasts: Open-Meteo.com, CC BY 4.0, "
-    "from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, ČHMÚ and the UK Met Office "
-    "(CC BY-SA 4.0). Format: docs/data-sources.md#single-runs-mvd-fetch-runs. "
+    "from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, ČHMÚ, KNMI, DMI, "
+    "Environment and Climate Change Canada (Data Server End-use Licence), the Japan "
+    "Meteorological Agency, the China Meteorological Administration and the UK Met "
+    "Office (CC BY-SA 4.0). Format: docs/data-sources.md#single-runs-mvd-fetch-runs. "
     "These files are published under CC BY-SA 4.0 "
     "(https://creativecommons.org/licenses/by-sa/4.0/); see docs/licensing.md."
 )
@@ -258,8 +271,8 @@ def history_runs(now: datetime, first: date = HISTORY_FROM) -> list[datetime]:
 
 
 def wanted(models: list[Model], run: datetime) -> list[Model]:
-    """Models whose Single Runs archive covers ``run`` (``runs_from``)."""
-    return [m for m in models if m.single_runs_from <= run.date()]
+    """Models whose Single Runs archive covers ``run`` (``runs_from``, ``run_hours``)."""
+    return [m for m in models if m.single_runs_from <= run.date() and run.hour in m.run_hours]
 
 
 # --- progress ------------------------------------------------------------------------
@@ -304,11 +317,21 @@ def request_weight(locations: int, models: int, variables: int = len(VARIABLES))
     return forecasts.call_weight(locations, variables * models, math.ceil(FORECAST_HOURS / 24))
 
 
+def batches(n_stations: int, n_models: int) -> list[int]:
+    """Stations per request: equal parts of at most ``BATCH`` stations and
+    ``MAX_REQUEST`` calls."""
+    if n_stations <= 0:
+        return []
+    per_station = request_weight(1, n_models)
+    size = max(1, min(BATCH, math.floor(MAX_REQUEST / per_station)))
+    parts = math.ceil(n_stations / size)
+    base, extra = divmod(n_stations, parts)
+    return [base + 1] * extra + [base] * (parts - extra)
+
+
 def run_cost(n_stations: int, n_models: int) -> float:
     """Weighted calls of one run for all stations (when every model has it)."""
-    return sum(
-        request_weight(min(BATCH, n_stations - i), n_models) for i in range(0, n_stations, BATCH)
-    )
+    return sum(request_weight(n, n_models) for n in batches(n_stations, n_models))
 
 
 def parse(payload: list | dict, station_ids: list[str], models: list[Model], run: datetime):
@@ -367,9 +390,10 @@ def _match(reported: str, todo: list[Model]) -> Model | None:
 
 
 def _fetch(client, rows, run, todo, budget, log) -> list[pl.DataFrame]:
-    frames = []
-    for i in range(0, len(rows), BATCH):
-        frames += _fetch_batch(client, rows[i : i + BATCH], run, todo, budget, log)
+    frames, i = [], 0
+    for size in batches(len(rows), len(todo)):
+        frames += _fetch_batch(client, rows[i : i + size], run, todo, budget, log)
+        i += size
     return frames
 
 
@@ -599,27 +623,53 @@ def summary(
 # --- the budget ----------------------------------------------------------------------
 
 
-def handover_budget(
+def history_pending(
+    state: State, models: list[Model], now: datetime, first: date = HISTORY_FROM
+) -> int:
+    """History runs (older than the recent ones, back to ``first``) still to fetch."""
+    return sum(bool(state.todo(r, wanted(models, r))) for r in history_runs(now, first))
+
+
+def history_done(
+    read_state: Callable[[], State], models: list[Model], now: datetime
+) -> tuple[bool, str]:
+    """Whether the single-runs history back to ``HISTORY_FROM`` is complete (at most
+    ``HISTORY_SLACK`` runs left), and why; not complete when the state cannot be read
+    (the safe answer: the D+N backfill then keeps to its current windows)."""
+    try:
+        left = history_pending(read_state(), models, now)
+    except Exception as exc:  # anything: holding back is always safe
+        return False, f"single-runs state not readable: {exc}"
+    if left > HISTORY_SLACK:
+        return False, f"single-runs history first: {left} runs since {HISTORY_FROM} pending"
+    return True, f"single-runs history complete ({left} runs pending)"
+
+
+def shared_budget(
     base: float,
-    extra: float,
+    share: float,
+    part: tuple[float, float],
     read_state: Callable[[], backfill.State],
     models: list[Model],
     backfill_from: date,
     today: date,
 ) -> tuple[float, str]:
-    """``(calls, why)``: ``base`` plus ``extra`` when the D+N backfill is idle
-    (``backfill.handover``), else ``base``; also ``base`` when its state cannot be read.
-
-    ``read_state`` gives the backfill's state (from the release ``data-state``).
-    """
-    if extra <= 0:
+    """``(calls, why)``: ``base`` plus this run's ``part`` (from, to) of what the D+N
+    backfill leaves today of the daily shared budget ``share`` (``backfill.share_left``):
+    ``max(0, min(left, to) - from)``. Two runs with parts (0, a) and (a, share) never
+    take more than ``left`` together. Only ``base`` when the backfill's state cannot be
+    read. ``read_state`` gives the backfill's state (from the release ``data-state``)."""
+    if share <= 0 or part[1] <= part[0]:
         return base, f"{base:g} calls (normal)"
-    normal = f"{base:g} calls (normal; extra {extra:g} not used"
+    normal = f"{base:g} calls (normal; no shared calls"
     try:
-        state = read_state()
-        idle, why = backfill.handover(models, backfill_from, today, state)
+        left, why = backfill.share_left(models, backfill_from, today, read_state(), share)
     except Exception as exc:  # anything: the normal budget is always safe
         return base, f"{normal}: backfill state not readable: {exc})"
-    if not idle:
-        return base, f"{normal}: {why})"
-    return base + extra, f"{base + extra:g} calls ({base:g} normal + {extra:g} extra: {why})"
+    extra = max(0.0, min(left, part[1]) - part[0])
+    span = f"{left:g} of {share:g} left, this run takes {part[0]:g}-{part[1]:g}"
+    if extra <= 0:
+        return base, f"{normal}: {span}; {why})"
+    return base + extra, (
+        f"{base + extra:g} calls ({base:g} normal + {extra:g} shared; {span}: {why})"
+    )

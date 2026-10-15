@@ -198,3 +198,76 @@ export function unpublishedHours(doc, fallback = 4) {
     .filter((d) => d != null);
   return delays.length ? Math.max(...delays) : fallback;
 }
+
+// --- does our combined forecast beat the best model? (blend-test.json, `mvd blend-test`)
+// Out of sample: on each past day the combination used only scores known before it,
+// and is compared with the model our ranking had as best at that time (best_oos).
+
+export const BLEND_TEST_VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitation_daily"];
+export const BLEND_TEST_SERIES = ["combined", "best_oos", "blend", "best_hindsight"];
+
+/** The tested variable closest to a page variable (temperature by hour, wind, rain). */
+export function blendTestVariable(variable) {
+  if (variable.startsWith("precipitation")) return "precipitation_daily";
+  if (variable.startsWith("wind")) return "wind_speed_10m";
+  return "temperature_2m";
+}
+
+/** The rows of one region (Czechia: "cz") of blend-test.json, as objects. */
+export function blendTestRows(doc, region = "cz") {
+  const table = doc?.groups;
+  if (!table?.rows?.length) return [];
+  return table.rows
+    .map((row) => Object.fromEntries(table.columns.map((c, i) => [c, row[i]])))
+    .filter((r) => r.region === region);
+}
+
+/**
+ * The verdict of one row: "better" when the 95 % interval of (our MAE − the best
+ * model's MAE) lies below 0, "worse" above 0, otherwise "same" (no significant
+ * difference). `amount` is how much better (positive) or worse, with its interval
+ * in the same direction (low ≤ high).
+ */
+export function blendVerdict(row) {
+  const { diff_combined: diff, low_combined: low, high_combined: high } = row ?? {};
+  if (diff == null) return null;
+  if (high != null && high < 0) return { verdict: "better", amount: -diff, low: -high, high: -low };
+  if (low != null && low > 0) return { verdict: "worse", amount: diff, low, high };
+  return { verdict: "same", amount: diff, low, high };
+}
+
+/** Verdicts by variable and lead day: [{variable, lead_day, days, verdict, amount, low, high}]. */
+export function blendVerdicts(rows) {
+  return rows
+    .map((r) => ({ variable: r.variable, lead_day: r.lead_day, days: r.days, best: r.best_oos, ...blendVerdict(r) }))
+    .filter((r) => r.verdict)
+    .sort((a, b) => BLEND_TEST_VARIABLES.indexOf(a.variable) - BLEND_TEST_VARIABLES.indexOf(b.variable)
+      || a.lead_day - b.lead_day);
+}
+
+/** MAE by lead day of one variable for the chart: [{series, lead_day, mae}]. */
+export function blendTestLines(rows, variable) {
+  const out = [];
+  for (const r of rows.filter((x) => x.variable === variable)) {
+    for (const series of BLEND_TEST_SERIES) {
+      const mae = r[`mae_${series}`];
+      if (mae != null) out.push({ series, lead_day: r.lead_day, mae });
+    }
+  }
+  return out.sort((a, b) => BLEND_TEST_SERIES.indexOf(a.series) - BLEND_TEST_SERIES.indexOf(b.series)
+    || a.lead_day - b.lead_day);
+}
+
+/** Counts per verdict over the okresy at one variable and lead day: {better, same, worse}. */
+export function okresVerdictCounts(doc, variable, leadDay) {
+  const table = doc?.groups;
+  const counts = { better: 0, same: 0, worse: 0 };
+  if (!table?.rows) return counts;
+  for (const row of table.rows) {
+    const r = Object.fromEntries(table.columns.map((c, i) => [c, row[i]]));
+    if (r.level !== "okres" || r.variable !== variable || r.lead_day !== leadDay) continue;
+    const v = blendVerdict(r);
+    if (v) counts[v.verdict] += 1;
+  }
+  return counts;
+}
