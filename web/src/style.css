@@ -923,9 +923,12 @@ img.eink {
   gap: 0.5rem 1rem;
   margin: 0.5rem 0 0.75rem;
 }
+#pick[hidden] {
+  display: none;
+}
 #pick select {
   margin-left: 0.3rem;
-  max-width: 100%;
+  max-width: calc(100% - 0.3rem);
 }
 .station-chart h3 {
   font-size: 0.95rem;
@@ -1518,4 +1521,138 @@ body.radar #show-box {
   margin: 0.1rem 0 0.4rem;
   font-size: 0.85rem;
   line-height: 1.5;
+}
+
+/* the station page's map: large while no station is chosen, compact beside the station */
+.station-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+  gap: 0 1.25rem;
+  align-items: start;
+}
+.station-top.browse {
+  grid-template-columns: minmax(0, 1fr);
+}
+.station-map-panel {
+  margin-top: 1rem;
+  min-width: 0;
+}
+.station-top.browse .station-map-panel {
+  margin-top: 0;
+}
+.station-map-panel[hidden] {
+  display: none;
+}
+.station-map {
+  position: relative;
+  height: 16rem;
+  border: 1px solid #c9cfd4;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f4f1ea;
+}
+.station-top.browse .station-map {
+  height: clamp(320px, 62vh, 640px);
+}
+/* from the keyboard: a cross marks the middle, where Enter picks the nearest station */
+.station-map.keyboard::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  pointer-events: none;
+  background:
+    linear-gradient(#1d2329, #1d2329) center / 2px 100% no-repeat,
+    linear-gradient(#1d2329, #1d2329) center / 100% 2px no-repeat;
+  opacity: 0.7;
+}
+.station-map canvas:focus-visible {
+  outline: 3px solid #1f78b4;
+  outline-offset: -3px;
+}
+.station-map-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 1rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}
+.station-map-tools select {
+  margin-left: 0.3rem;
+  max-width: 100%;
+}
+.station-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+}
+.station-map-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.station-map-legend .dot {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: var(--dot);
+  box-shadow: 0 0 0 1px #ffffff;
+}
+.station-map-legend .dot.hollow {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 2px var(--dot);
+}
+.station-map-ramp {
+  display: inline-block;
+  width: 8rem;
+  height: 0.6rem;
+  border-radius: 2px;
+}
+.station-map-keys {
+  margin: 0.3rem 0 0;
+}
+.station-map-actions {
+  margin: 0.25rem 0 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 1rem;
+  font-size: 0.85rem;
+}
+.station-map-actions:not(:has(:not([hidden]))) {
+  display: none;
+}
+.station-map-popup .maplibregl-popup-content {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+/* compact: the map's tools stacked in the narrow column */
+.station-top:not(.browse) .station-map-tools label {
+  flex-basis: 100%;
+}
+.station-top:not(.browse) .station-map-keys {
+  display: none;
+}
+@media (max-width: 700px) {
+  .station-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .station-map-panel {
+    margin-top: 0.25rem;
+  }
+  /* Czechia is about twice as wide as high */
+  .station-top.browse .station-map {
+    height: clamp(260px, 72vw, 520px);
+  }
+  .station-map {
+    height: 15rem;
+  }
 }

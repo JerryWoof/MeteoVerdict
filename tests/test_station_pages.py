@@ -228,6 +228,10 @@ def test_build_station_files(tmp_path: Path):
     assert "CC BY 4.0" in doc["source"]
     index = json.loads((tmp_path / "out" / "index.json").read_text())
     assert [s["id"] for s in index["stations"]] == [LIBUS]
+    entry = index["stations"][0]
+    assert (entry["lat"], entry["lon"], entry["kraj"]) == (50.0, 14.4, "Praha")
+    assert "T" in entry["elements"]
+    assert not any(code.startswith("C-") for code in entry["elements"])
 
 
 def test_wanted_assets():
