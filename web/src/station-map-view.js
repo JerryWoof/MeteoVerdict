@@ -119,8 +119,8 @@ export function createStationMap({ container, t, onPick, describe }) {
       type: "circle",
       source: "stations",
       layout: {
-        // professional stations on top, then automatic ones
-        "circle-sort-key": ["+", ["get", "automatic"], ["case", ["==", ["get", "kind"], "professional"], 2, 0]],
+        // main stations on top, then automatic ones
+        "circle-sort-key": ["+", ["get", "automatic"], ["case", ["==", ["get", "kind"], "main"], 2, 0]],
       },
       paint: {
         "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 2.6, 7, 4, 10, 6.5],

@@ -231,6 +231,8 @@ def test_build_station_files(tmp_path: Path):
     entry = index["stations"][0]
     assert (entry["lat"], entry["lon"], entry["kraj"]) == (50.0, 14.4, "Praha")
     assert "T" in entry["elements"]
+    assert entry["network"] == "main"  # a WMO id
+    assert doc["station"]["network"] == "main"
     assert not any(code.startswith("C-") for code in entry["elements"])
 
 

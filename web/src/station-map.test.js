@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  ELEVATION_STOPS, classifyStation, colorExpression, elementFor, elevationGradient, filterStations, hasElements,
+  ELEVATION_STOPS, KINDS, KIND_COLORS, classifyStation, colorExpression, elementFor, elevationGradient, filterStations, hasElements,
   kindCounts, measureCounts, measures, nearestStation, stationFeatures, withCoordinates,
 } from "./station-map.js";
+import { STRINGS } from "./i18n.js";
 
 const LIBUS = {
   id: "0-20000-0-11520", name: "Praha, Libuš", lat: 50.0078, lon: 14.4469, elevation: 302,
@@ -15,14 +16,37 @@ const RAIN = { id: "0-203-0-10803062001", name: "Bavorov", lat: 49.12, lon: 14.0
 const ODD = { id: "0-203-0-1", name: "Radiace", lat: 49.5, lon: 16, elevation: null, views: ["10min"], elements: ["RGLB10"] };
 
 test("kinds of station", () => {
-  assert.deepEqual(classifyStation(LIBUS), { kind: "professional", automatic: true });
+  // from the index's network (ČHMÚ metadata)
+  const snow = { id: "0-203-0-10102004001", network: "snow", views: ["10min"], elements: ["T", "SCEa"] };
+  assert.deepEqual(classifyStation(snow), { kind: "snow", automatic: true });
+  assert.deepEqual(classifyStation({ ...RAIN, network: "precipitation" }), { kind: "precipitation", automatic: false });
+  assert.deepEqual(classifyStation({ ...LIBUS, network: "main" }), { kind: "main", automatic: true });
+  assert.deepEqual(classifyStation({ id: "0-203-0-3", network: "precipitation_auto" }), { kind: "precipitation_auto", automatic: true });
+  assert.deepEqual(classifyStation({ id: "0-203-0-4", network: "climate_manual" }), { kind: "climate_manual", automatic: false });
+  // an index without networks: guessed from the id, elements and 10-minute values
+  assert.deepEqual(classifyStation(LIBUS), { kind: "main", automatic: true });
   assert.deepEqual(classifyStation(AUTO_CLIMATE), { kind: "climate", automatic: true });
   assert.deepEqual(classifyStation(RAIN), { kind: "precipitation", automatic: false });
+  assert.deepEqual(classifyStation({ ...RAIN, views: ["10min", "daily"] }), { kind: "precipitation_auto", automatic: true });
+  assert.deepEqual(classifyStation({ ...AUTO_CLIMATE, views: ["daily"] }), { kind: "climate_manual", automatic: false });
   assert.deepEqual(classifyStation(ODD), { kind: "other", automatic: true });
-  // an index without elements: only professional stations stand out
+  // unknown network: the guess
+  assert.deepEqual(classifyStation({ ...RAIN, network: "amateur" }), { kind: "precipitation", automatic: false });
+  // an index without elements: only main stations stand out
   assert.deepEqual(classifyStation({ id: "0-203-0-2", views: ["daily"] }), { kind: "station", automatic: false });
-  assert.deepEqual(classifyStation({ id: "0-20000-0-11406" }), { kind: "professional", automatic: false });
-  assert.deepEqual(kindCounts([LIBUS, RAIN, RAIN, AUTO_CLIMATE]), [["professional", 1], ["climate", 1], ["precipitation", 2]]);
+  assert.deepEqual(classifyStation({ id: "0-20000-0-11406" }), { kind: "main", automatic: false });
+  assert.deepEqual(kindCounts([RAIN, LIBUS, RAIN, AUTO_CLIMATE, snow]), [["main", 1], ["climate", 1], ["snow", 1], ["precipitation", 2]]);
+});
+
+test("every kind has a colour and both languages name it", () => {
+  for (const kind of KINDS) {
+    assert.match(KIND_COLORS[kind], /^#[0-9a-f]{6}$/);
+    for (const language of ["cs", "en"]) {
+      assert.ok(STRINGS[language][`map.kind.${kind}`], `${language} map.kind.${kind}`);
+      assert.ok(STRINGS[language][`map.one.${kind}`], `${language} map.one.${kind}`);
+    }
+  }
+  assert.ok(STRINGS.en["map.network"].includes("no amateur stations"));
 });
 
 test("coordinates from the stations table where the index has none", () => {
@@ -66,7 +90,7 @@ test("map points", () => {
   const { type, features } = stationFeatures([LIBUS, RAIN, ODD]);
   assert.equal(type, "FeatureCollection");
   assert.deepEqual(features[0].geometry, { type: "Point", coordinates: [14.4469, 50.0078] });
-  assert.deepEqual(features[0].properties, { id: LIBUS.id, name: "Praha, Libuš", kind: "professional", automatic: 1, elevation: 302 });
+  assert.deepEqual(features[0].properties, { id: LIBUS.id, name: "Praha, Libuš", kind: "main", automatic: 1, elevation: 302 });
   assert.equal(features[1].properties.automatic, 0);
   assert.equal(features[2].properties.elevation, null);
 });
