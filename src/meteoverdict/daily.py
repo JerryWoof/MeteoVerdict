@@ -65,5 +65,33 @@ def run(
         return partitions.months(first, day)
     table = scoring.daily_scores(obs_scan, fc_scan, models, first, day)
     partitions.write_monthly(table, data_dir / "scores", scoring.KEYS, "date")
-    log(f"re-scored {first}..{day}: {table.height} rows")
+    last_scored = table["date"].max() if table.height else None
+    log(f"re-scored {first}..{day}: {table.height} rows, last scored day {last_scored}")
+    if last_scored is None or last_scored < day:
+        after = last_scored or first - timedelta(days=1)
+        log(f"nothing scored after {after}: {coverage(obs_scan, fc_scan, after, day)}")
     return partitions.months(first, day)
+
+
+def coverage(obs: pl.LazyFrame, fc: pl.LazyFrame, after: date, day: date) -> str:
+    """Days after ``after`` up to ``day`` with forecasts and with observations: a day is
+    scored only when it has both (forecasts come in complete 14-day backfill windows,
+    observations of days ``now/`` no longer keeps only once ČHMÚ publishes the month)."""
+    span = pl.col("time").dt.date().is_between(after + timedelta(days=1), day)
+
+    def days(frame: pl.LazyFrame) -> str:
+        found = frame.filter(span).select(pl.col("time").dt.date().unique().sort())
+        return day_ranges(found.collect().to_series().to_list())
+
+    return f"forecasts for {days(fc)}, observations for {days(obs)}"
+
+
+def day_ranges(days: list[date]) -> str:
+    """``2026-10-01..2026-10-04, 2026-10-10`` for sorted days; ``no day`` for none."""
+    ranges: list[list[date]] = []
+    for d in days:
+        if ranges and d - ranges[-1][1] == timedelta(days=1):
+            ranges[-1][1] = d
+        else:
+            ranges.append([d, d])
+    return ", ".join(f"{a}..{b}" if a != b else str(a) for a, b in ranges) or "no day"

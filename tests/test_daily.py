@@ -47,6 +47,34 @@ def test_run_captures_observations_and_rescores(tmp_path, monkeypatch):
     assert months[-1] == "2026-10" and len(months) >= 4
 
 
+def test_run_says_which_days_were_not_scored_and_why(tmp_path, monkeypatch):
+    # 15 Oct 2026: forecasts reached 4 Oct (backfill window 21 Sep..4 Oct), observations
+    # were captured from 10 Oct; "re-scored ..10-14" hid that nothing after 30 Sep was
+    day = date(2026, 10, 14)
+    monkeypatch.setattr(
+        daily.observations,
+        "fetch_observations",
+        lambda client, ids, start, end: obs_rows(hours(start, (end - start).days + 1)),
+    )
+    observations.write_monthly(obs_rows(hours(date(2026, 9, 28), 3)), tmp_path / "obs")
+    observations.write_monthly(obs_rows(hours(date(2026, 10, 10), 2)), tmp_path / "obs")
+    write_forecasts(tmp_path, date(2026, 9, 28), 7)
+    logged = []
+    daily.run(None, pl.DataFrame({"id": ["a", "b", "c"]}), [ICON], day, tmp_path, logged.append)
+    assert not (tmp_path / "scores" / "2026-10.parquet").exists()
+    assert logged[-2].endswith("last scored day 2026-09-30")
+    assert logged[-1] == (
+        "nothing scored after 2026-09-30: forecasts for 2026-10-01..2026-10-04, "
+        "observations for 2026-10-10..2026-10-14"
+    )
+
+
+def test_day_ranges():
+    days = [date(2026, 10, 1), date(2026, 10, 2), date(2026, 10, 5)]
+    assert daily.day_ranges(days) == "2026-10-01..2026-10-02, 2026-10-05"
+    assert daily.day_ranges([]) == "no day"
+
+
 def test_daily_command_publishes_the_scores_and_the_badge(tmp_path, monkeypatch):
     from typer.testing import CliRunner
 

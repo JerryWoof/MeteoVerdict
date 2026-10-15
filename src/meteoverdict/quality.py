@@ -5,6 +5,11 @@ then notifies the owner) and stops the daily commit. Warnings are reported only.
 
 * stale data: newest observation older than ``MAX_OBS_AGE_H`` hours, newest forecast or
   score older than ``MAX_FC_AGE_DAYS`` days (complete backfill windows lag up to 14);
+* stale publication: the published scores (``meta.json``) end more than
+  ``MAX_AS_OF_LAG_DAYS`` days before they were generated, so the ranking and the
+  combination weights miss the latest days (October 2026: ``as_of`` stayed at 30 Sep
+  while the daily run "re-scored" up to 14 Oct, as no October day had both forecasts
+  and observations);
 * missing stations: under ``MIN_REPORTING`` of the verified stations reported in the
   last ``RECENT_DAYS`` days (the stations missing are listed as a warning);
 * suspicious stations: temperature MAE over the last 90 days (all models) above
@@ -17,6 +22,7 @@ Implausible observation values are already dropped when observations are read
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -27,6 +33,7 @@ from meteoverdict import metrics, partitions
 
 MAX_OBS_AGE_H = 30
 MAX_FC_AGE_DAYS = 21
+MAX_AS_OF_LAG_DAYS = 3
 RECENT_DAYS = 3
 MIN_REPORTING = 0.8
 SUSPICIOUS_FACTOR = 3.0
@@ -52,18 +59,45 @@ def _listing(ids: list[str]) -> str:
 EXPECTED_DAYS = 30  # a station is expected to report if it did in the last 30 days
 
 
+def as_of_lag(meta: dict) -> Finding | None:
+    """An error when ``meta["as_of"]`` (last scored day) is more than
+    ``MAX_AS_OF_LAG_DAYS`` days before ``meta["generated"]``."""
+    as_of = date.fromisoformat(meta["as_of"])
+    generated = datetime.fromisoformat(meta["generated"]).date()
+    lag = (generated - as_of).days
+    if lag <= MAX_AS_OF_LAG_DAYS:
+        return None
+    return Finding(
+        "error",
+        f"published scores are as of {as_of}, {lag} days before they were generated "
+        f"({generated}); more than {MAX_AS_OF_LAG_DAYS} days means the latest days have "
+        "no forecasts or no observations",
+    )
+
+
 def check(
-    data_dir: Path, station_ids: list[str] | None = None, now: datetime | None = None
+    data_dir: Path,
+    station_ids: list[str] | None = None,
+    now: datetime | None = None,
+    meta_path: Path | None = None,
 ) -> list[Finding]:
-    """Run all checks; ``station_ids`` defaults to the stations that reported recently."""
+    """Run all checks; ``station_ids`` defaults to the stations that reported recently;
+    ``meta_path``: the published ``meta.json`` whose ``as_of`` is checked."""
     now = now or datetime.now(UTC)
     today = now.date()
     findings: list[Finding] = []
+    if meta_path is not None:
+        if meta_path.exists():
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            if (late := as_of_lag(meta)) is not None:
+                findings.append(late)
+        else:
+            findings.append(Finding("warning", f"{meta_path} not found; as_of not checked"))
     first = today - timedelta(days=100)
 
     obs = _scan(data_dir, "obs", first, today)
     if obs is None:
-        return [Finding("error", "no observations in the last 100 days")]
+        return [*findings, Finding("error", "no observations in the last 100 days")]
     if station_ids is None:
         expected_since = now - timedelta(days=EXPECTED_DAYS)
         station_ids = (
