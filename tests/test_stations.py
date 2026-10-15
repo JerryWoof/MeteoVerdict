@@ -8,9 +8,11 @@ import pytest
 
 from meteoverdict.chmi import ChmiFormatError, parse_collection
 from meteoverdict.stations import (
+    NETWORKS,
     SCHEMA,
     build_stations,
     fetch_station_tables,
+    network,
     write_stations,
 )
 
@@ -155,3 +157,29 @@ def test_fetch_does_not_hide_server_errors():
     client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
     with pytest.raises(httpx.HTTPStatusError):
         fetch_station_tables(client, date(2026, 10, 12))
+
+
+def _el(types, until=None):
+    return {"types": types, "until": until}
+
+
+def test_network_kinds():
+    climate = {"T": _el(["10M", "DLY"]), "F": _el(["10M"]), "SRA10M": _el(["10M"])}
+    assert network("0-20000-0-11520", climate) == "main"  # WMO id, whatever it measures
+    assert network("0-203-0-11401", climate) == "climate"
+    assert network("0-203-0-11494", {"T": _el(["10M"]), "H": _el(["10M"])}) == "climate"
+    snow = {"T": _el(["10M"]), "SCEa": _el(["10M"]), "H": _el(["10M"])}
+    assert network("0-203-0-10102004001", snow) == "snow"
+    # snow depth with precipitation is a climate station
+    assert network("0-203-0-1", {**snow, "SRA10M": _el(["10M"])}) == "climate"
+    gauge = {"SRA10M": _el(["10M"]), "SCEa": _el(["10M"]), "SRA": _el(["DLY"])}
+    assert network("0-203-0-2", gauge) == "precipitation_auto"
+    manual = {"SRA": _el(["DLY"]), "SNO": _el(["DLY"]), "T": _el(["DLY"], "1990-12-31")}
+    assert network("0-203-0-3", manual) == "precipitation"  # temperature ended long ago
+    assert network("0-203-0-4", {"T": _el(["DLY"]), "SRA": _el(["DLY"])}) == "climate_manual"
+    # a closed station: everything it ever measured
+    closed = {"T": _el(["10M"], "2024-05-31"), "SRA10M": _el(["10M"], "2024-05-31")}
+    assert network("0-203-0-5", closed) == "climate"
+    assert network("0-203-0-6", {}) == "other"
+    assert network("0-203-0-7", {"RGLB10": _el(["10M"])}) == "other"
+    assert set(NETWORKS) >= {"main", "climate", "snow", "precipitation_auto", "precipitation"}
