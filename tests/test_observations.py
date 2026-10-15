@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -197,3 +197,33 @@ def test_chmi_server_errors_are_retried_and_raised_when_they_persist():
     transport = httpx.MockTransport(lambda request: httpx.Response(502))
     with httpx.Client(transport=transport) as client, pytest.raises(httpx.HTTPStatusError):
         observations._get(client, "https://x/a.json", lambda _: None)
+
+
+def test_hourly_gust_is_the_largest_fmax_of_the_hour():
+    def slot(minute_offset, value, quality=0.0):
+        t = datetime(2026, 10, 14, 0, tzinfo=UTC) + timedelta(minutes=minute_offset)
+        return [LIBUS, "Fmax", f"{t:%Y-%m-%dT%H:%M:%SZ}", value, "", quality]
+
+    raw = pl.DataFrame(
+        # hour ending 01:00: 00:10 … 01:00, all six; hour ending 02:00: one suspect value
+        [slot(m, str(3.0 + m / 10)) for m in range(10, 70, 10)]
+        + [slot(m, "9.9", 1.0 if m == 80 else 0.0) for m in range(70, 130, 10)]
+        + [[LIBUS, "F", "2026-10-14T01:00:00Z", "1.5", "", 0.0]],
+        schema=["STATION", "ELEMENT", "DT", "VAL", "FLAG", "QUALITY"],
+        orient="row",
+    )
+    hourly = obs.to_hourly(obs.normalize(raw, "now"))
+    gusts = values(hourly, "wind_gusts_10m")
+    assert gusts == {datetime(2026, 10, 14, 1, tzinfo=UTC): pytest.approx(9.0)}
+    assert values(hourly, "wind_speed_10m") == {datetime(2026, 10, 14, 1, tzinfo=UTC): 1.5}
+
+
+def test_gusts_do_not_change_the_automatic_stations():
+    meta2 = pl.DataFrame(
+        {
+            "WSI": ["a", "b"],
+            "OBS_TYPE": ["10M", "10M"],
+            "EG_EL_ABBREVIATION": ["T", "Fmax"],
+        }
+    )
+    assert obs.automatic_station_ids(meta2) == {"a"}

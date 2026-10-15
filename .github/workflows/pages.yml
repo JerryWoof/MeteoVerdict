@@ -51,7 +51,7 @@ jobs:
           else
             echo "no published scores yet; the map shows the boundaries only"
           fi
-          for name in outlook.json outlook-hourly.json leads.json; do
+          for name in outlook.json outlook-hourly.json leads.json farm.json blend-test.json; do
             if gh release download data-latest --pattern "$name" --dir site/data --clobber 2>/dev/null; then
               echo "$name from data-latest"
             else

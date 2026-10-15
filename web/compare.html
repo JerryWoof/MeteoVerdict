@@ -24,6 +24,19 @@
       <button type="button" id="language">Česky</button>
     </header>
     <main class="content wide">
+      <section id="blend-test-section" class="blend-test" hidden>
+        <h2 data-i18n="blendTest.title">Does our forecast beat the best model?</h2>
+        <p class="note" data-i18n="blendTest.intro"></p>
+        <div class="blend-test-grid">
+          <div>
+            <div class="scroll"><table id="blend-test-table"></table></div>
+            <p class="note" id="blend-test-okres"></p>
+          </div>
+          <div id="blend-test-chart"></div>
+        </div>
+        <p class="note" id="blend-test-basis"></p>
+        <p class="note" data-i18n="blendTest.caveats"></p>
+      </section>
       <section class="overview">
         <div>
           <div id="mini-map" aria-label="Map: best model per okres"></div>
@@ -50,6 +63,19 @@
         <div id="lead-hours"></div>
         <p class="note" data-i18n="compare.leadHoursFair"></p>
         <p class="note" data-i18n="compare.leadHoursSource"></p>
+      </section>
+      <section id="farm-section" hidden>
+        <h2 data-i18n="farm.title">For farmers: frost, gusts, 3-hour rain (run-based)</h2>
+        <p class="note" data-i18n="farm.intro"></p>
+        <p class="note" id="farm-basis"></p>
+        <label class="lead-hours-runs"><span data-i18n="farm.event">Event</span>
+          <select id="farm-event"></select></label>
+        <p id="farm-reading" class="farm-reading"></p>
+        <div class="scroll"><table id="farm-table" class="farm-table"></table></div>
+        <p class="note" id="farm-small"></p>
+        <p class="note" data-i18n="farm.howToRead"></p>
+        <p class="note" data-i18n="farm.definitions"></p>
+        <p class="note" data-i18n="farm.fair"></p>
       </section>
       <section id="elevation-section">
         <h2 data-i18n="compare.bias">Bias by elevation</h2>

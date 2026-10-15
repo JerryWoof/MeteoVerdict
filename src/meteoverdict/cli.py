@@ -18,7 +18,9 @@ from meteoverdict import (
     aggregate,
     aladin,
     blend,
+    blendtest,
     combine,
+    farm,
     forecasts,
     gauges,
     leads,
@@ -369,6 +371,145 @@ def leads_cmd(
     typer.echo(f"→ {', '.join(map(str, written))}")
 
 
+@app.command("farm")
+def farm_cmd(
+    runs_days: Annotated[
+        int, typer.Option(help="Score the single runs of all models of the last N days.")
+    ] = 90,
+    data_dir: Annotated[Path, typer.Option(help="Folder with obs/ and runs/.")] = Path("data"),
+    out: Annotated[Path, typer.Option(help="The JSON file.")] = Path("site/data/farm.json"),
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Download the single runs (runs-YYYY-MM) and observations (data-YYYY-MM) "
+            "from GitHub Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+        ),
+    ] = False,
+    publish: Annotated[
+        bool,
+        typer.Option("--publish", help="Put farm.json into the release data-latest."),
+    ] = False,
+) -> None:
+    """Event skill for farmers from the single runs: frost nights (<= 0 and -2 °C), gusts
+    (>= 10, 15, 20 m/s in 3 h) and 3-hour rain (>= 0.5, 2, 5 mm) by lead time bin."""
+    if publish and not github_release:
+        raise typer.BadParameter("--publish needs --github-release")
+    now = datetime.now(UTC)
+    since = now.replace(minute=0, second=0, microsecond=0) - timedelta(days=runs_days)
+    months = partitions.months(since.date(), now.date())
+    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+        releases = _release_store(client) if github_release else None
+        if releases:
+            runs.RunsSync(releases, data_dir, typer.echo).pull(months)
+            store.download(releases, data_dir, months, typer.echo, kinds=("obs",))
+        single = leads.scan_runs(data_dir / "runs", since, now)
+        obs = partitions.scan_months(data_dir / "obs", since.date(), now.date())
+        table = None
+        if single is not None and obs is not None:
+            models = [m for m in catalogue.load_models() if m.enabled]
+            table, info = farm.farm_scores(single, obs, models)
+        if table is None or table.height == 0:
+            typer.echo(
+                f"mvd farm: no runs with observations since {since:%Y-%m-%d %H} UTC", err=True
+            )
+            raise typer.Exit(code=1)
+        doc = farm.document(table, info, datetime.now(UTC), _model_names())
+        path = farm.write(doc, out)
+        if publish:
+            releases.put(store.LATEST_TAG, path.name, path)
+    for line in farm.summary(table):
+        typer.echo(line)
+    typer.echo(f"{info['runs']} runs, {info['stations']} stations → {path}")
+
+
+@app.command("blend-test")
+def blend_test_cmd(
+    data_dir: Annotated[Path, typer.Option(help="Folder with obs/, gauges/, fc/ and scores/.")] = (
+        Path("data")
+    ),
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    out: Annotated[Path, typer.Option(help="The JSON file.")] = Path("site/data/blend-test.json"),
+    days: Annotated[
+        int, typer.Option(help="Test the last N scored days (training uses the window before).")
+    ] = 180,
+    window: Annotated[
+        str, typer.Option(help="Training window of the weights, e.g. 90d (as live), 45d, 30d.")
+    ] = combine.WINDOW,
+    min_training_days: Annotated[
+        int, typer.Option(help="Warm-up: scored training days needed before a day is tested.")
+    ] = blendtest.MIN_TRAINING_DAYS,
+    resamples: Annotated[int, typer.Option(help="Bootstrap resamples of whole days.")] = 1000,
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Download the months' observations, forecasts and scores from GitHub "
+            "Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+        ),
+    ] = False,
+    publish: Annotated[
+        bool, typer.Option("--publish", help="Put the JSON file into the release data-latest.")
+    ] = False,
+) -> None:
+    """Out of sample: does our combined forecast beat the best single model? (roadmap 6.4)"""
+    if publish and not github_release:
+        raise typer.BadParameter("--publish needs --github-release")
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    if not (window.endswith("d") and window[:-1].isdigit() and int(window[:-1]) > 0):
+        raise typer.BadParameter(f"window must be a number of days like 90d, not {window!r}")
+    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+        releases = _release_store(client) if github_release else None
+        if releases:
+            remote = store.remote_months(releases)
+            store.download(releases, data_dir, remote, typer.echo, kinds=("scores",))
+        files = sorted((data_dir / "scores").glob("*.parquet"))
+        if not files:
+            typer.echo(f"mvd blend-test: no scores in {data_dir / 'scores'}", err=True)
+            raise typer.Exit(code=1)
+        variables = list(blendtest.SCORE_VARIABLES.values())
+        scores = (
+            pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
+            .filter(pl.col("variable").is_in(variables))
+            .collect()
+        )
+        last = scores["date"].max()
+        first = max(scores["date"].min(), last - timedelta(days=days - 1))
+        if releases:
+            months = partitions.months(first, last + timedelta(days=1))
+            store.download(releases, data_dir, months, typer.echo, kinds=("obs", "gauges", "fc"))
+        obs = observations.scan(data_dir, first, last + timedelta(days=1))
+        fc = partitions.scan_months(data_dir / "fc", first, last + timedelta(days=1))
+        if obs is None or fc is None:
+            typer.echo("mvd blend-test: no observations or forecasts for the test period", err=True)
+            raise typer.Exit(code=1)
+        table = pl.read_parquet(stations_path)
+        test_days, groups, models, info = blendtest.run(
+            scores, fc, obs, table, first, last, window, min_training_days, resamples,
+            log=typer.echo,
+        )  # fmt: skip
+        if not groups:
+            typer.echo("mvd blend-test: nothing to test yet (warm-up)", err=True)
+            raise typer.Exit(code=1)
+        doc = blendtest.document(
+            test_days, groups, models, info, _model_names(), datetime.now(UTC), window,
+            min_training_days, resamples,
+        )  # fmt: skip
+        path = blendtest.write(doc, out)
+        if publish:
+            releases.put(store.LATEST_TAG, path.name, path)
+    typer.echo(
+        f"{doc['test_days']} test days {doc['from']} … {doc['to']} "
+        f"({doc['warm_up_days']} scored days before them left out as warm-up)"
+    )
+    for line in blendtest.summary(groups):
+        typer.echo(line)
+    typer.echo(f"→ {path}")
+
+
 @app.command("fetch-runs")
 def fetch_runs(
     run: Annotated[
@@ -410,17 +551,24 @@ def fetch_runs(
             "ALADIN (runs.HISTORY_FROM).",
         ),
     ] = None,
-    extra_calls_if_backfill_idle: Annotated[
+    shared_calls: Annotated[
         float,
         typer.Option(
-            help="Calls added to --max-calls when the D+N backfill has nothing pending "
-            "(its state in the release data-state with --github-release, else "
-            "backfill-state.json in --data-dir); the normal budget if it cannot be read.",
+            help="The daily budget shared with the D+N backfill: what the backfill leaves "
+            "of it today (its state in the release data-state with --github-release, else "
+            "backfill-state.json in --data-dir) can be added to --max-calls; nothing if "
+            "the state cannot be read.",
         ),
     ] = 0,
+    shared_from: Annotated[
+        float, typer.Option(help="This run's part of what is left starts here …")
+    ] = 0,
+    shared_to: Annotated[
+        float | None, typer.Option(help="… and ends here (default: --shared-calls).")
+    ] = None,
     backfill_from: Annotated[
         datetime,
-        typer.Option(formats=["%Y-%m-%d"], help="The backfill's --from (for the idle check)."),
+        typer.Option(formats=["%Y-%m-%d"], help="The backfill's --from (for the shared budget)."),
     ] = datetime(2024, 1, 1),
 ) -> None:
     """Fetch single model runs (H+1 … H+120) at the station subset from Open-Meteo's
@@ -444,9 +592,10 @@ def fetch_runs(
             )
             sync = runs.RunsSync(notes_store, data_dir, log=typer.echo)
             sync.pull_state()
-        max_calls, budget_note = runs.handover_budget(
+        max_calls, budget_note = runs.shared_budget(
             max_calls,
-            extra_calls_if_backfill_idle,
+            shared_calls,
+            (shared_from, shared_calls if shared_to is None else shared_to),
             lambda: _backfill_state(client if github_release else None, data_dir),
             models,
             backfill_from.date(),
@@ -470,7 +619,7 @@ def fetch_runs(
             return
         budget = forecasts.Budget(max_calls=max_calls)
         result = runs.Result()
-        if max_calls > 0:  # a schedule with only the extra budget: nothing when not idle
+        if max_calls > 0:  # a schedule with only shared calls: nothing when none are left
             result = runs.collect(
                 client,
                 stations_table,
@@ -508,6 +657,20 @@ def _backfill_state(client: httpx.Client | None, data_dir: Path) -> backfill_mod
     if not path.exists():
         raise FileNotFoundError(path)
     return backfill_mod.State.load(path)
+
+
+def _runs_state(client: httpx.Client | None, data_dir: Path) -> runs.State:
+    """The single runs' progress: from the release runs-state (``client``), else local."""
+    path = data_dir / runs.STATE_NAME
+    if client is not None:
+        releases = _release_store(client)
+        if runs.STATE_NAME not in releases.assets(runs.STATE_TAG):
+            raise FileNotFoundError(f"{runs.STATE_NAME} not in the release {runs.STATE_TAG}")
+        path = data_dir / "runs-check" / runs.STATE_NAME  # apart from any local runs
+        releases.download(runs.STATE_TAG, runs.STATE_NAME, path)
+    if not path.exists():
+        raise FileNotFoundError(path)
+    return runs.State.load(path)
 
 
 store_app = typer.Typer(help="Raw data store in GitHub Releases (data-YYYY-MM).")
@@ -967,8 +1130,21 @@ def backfill(
             "GITHUB_REPOSITORY).",
         ),
     ] = False,
+    older_windows: Annotated[
+        str,
+        typer.Option(
+            help="Windows older than the current ones (last 90 days): always, never, or "
+            "after-runs-history (only once the single-runs history is complete: its state "
+            "in the release runs-state with --github-release, else runs-state.json in "
+            "--data-dir; never if it cannot be read).",
+        ),
+    ] = "always",
 ) -> None:
     """Backfill history newest first, in 14-day windows, resumable (state in the data dir)."""
+    if older_windows not in ("always", "never", "after-runs-history"):
+        raise typer.BadParameter(
+            "use always, never or after-runs-history", param_hint="--older-windows"
+        )
     first, last = start.date(), end.date() if end else _yesterday()
     _check_range(first, last, hint="--from/--to")
     if not stations_path.exists():
@@ -983,6 +1159,14 @@ def backfill(
             sync.pull_state()
         meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
         points = observations.verification_stations(table, meta2)
+        older, why = older_windows == "always", "--older-windows never"
+        if older_windows == "after-runs-history":
+            older, why = runs.history_done(
+                lambda: _runs_state(client if github_release else None, data_dir),
+                models,
+                datetime.now(UTC),
+            )
+        typer.echo(f"older windows: {'allowed' if older else 'held back'} ({why})")
         budget = forecasts.Budget(max_calls=max_calls)
         result = backfill_mod.run(
             client,
@@ -995,6 +1179,8 @@ def backfill(
             sync,
             log=typer.echo,
             gauge_points=_gauge_points(table, meta2, points),
+            older=older,
+            held_back="" if older else why,
         )
     typer.echo(
         f"{result.windows_done} windows done, {budget.used:g} calls used"

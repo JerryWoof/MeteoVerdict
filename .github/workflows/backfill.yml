@@ -4,6 +4,16 @@ name: Backfill
 # MAX_CALLS weighted Open-Meteo calls (the free tier allows 10,000 a day and 300,000 a
 # month), then stops; progress and month files live in GitHub Releases, so the next run
 # continues where this one stopped. See docs/data-sources.md#backfill-mvd-backfill.
+#
+# Priorities (docs/data-sources.md#open-meteo-budget): (1) the outlook and (2) the newest
+# single runs have budgets of their own; MAX_CALLS is the daily SHARED budget for
+# (3) the current windows (the last 90 days: the 90-day ranking and the combination
+# weights; also every newly added model there), then (4a) the single-runs history back to
+# 2026-06-23 (runs.yml takes what this run leaves today) and only then (4b) the older
+# windows back to 2024-01-01 (`--older-windows after-runs-history`: only once the
+# single-runs history is complete, read from the release runs-state; held back if that
+# cannot be read). The job summary says which windows were allowed and why, and the
+# calls used today (`calls_used` in the state, which runs.yml reads).
 on:
   schedule:
     - cron: "41 2 * * *"
@@ -11,7 +21,7 @@ on:
     inputs:
       max_calls:
         description: "Open-Meteo calls this run may use"
-        default: "6800"
+        default: "4500"
 
 permissions:
   contents: write # release assets
@@ -21,16 +31,13 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # 6,800 a day plus the outlook's ~850 (outlook.yml) and the single runs' 1,800
-  # (runs.yml) stays under the free tier's 10,000 a day and 300,000 a month
-  # (9,450 x 31 = ~293,000); Open-Meteo counts per IP, and runners share IPs, so a run
+  # Daily budget, 19 models: outlook <= 1,600 (2 x ~732) + newest single runs 3,400
+  # (4 x 850) + this shared 4,500 = <= 9,500 a day, <= 294,500 in 31 days (free tier:
+  # 10,000 and 300,000). A new 14-day window costs ~12,000 (+ ~5,400 for the rain gauges'
+  # 28-day window with every other one): about three days of the share, then the rest goes
+  # to the single-runs history. Open-Meteo counts per IP, and runners share IPs, so a run
   # may still meet the daily limit: it then stops cleanly and the next run continues.
-  # Once the history is complete, the backfill only needs a new window every 14 days
-  # (~6,900, + ~3,100 for the gauges every other window, over two days); on days with
-  # nothing pending, runs.yml takes up to 6,000 of this share for the single-runs history
-  # (`--extra-calls-if-backfill-idle`, reading the state this workflow keeps in
-  # data-state; docs/data-sources.md#open-meteo-budget).
-  MAX_CALLS: ${{ inputs.max_calls || '6800' }}
+  MAX_CALLS: ${{ inputs.max_calls || '4500' }}
 
 jobs:
   backfill:
@@ -47,6 +54,8 @@ jobs:
       - name: Station table
         run: uv run --frozen mvd stations --out data/stations.parquet
       - name: Backfill
-        run: uv run --frozen mvd backfill --from 2024-01-01 --github-release --max-calls "$MAX_CALLS"
+        run: |
+          uv run --frozen mvd backfill --from 2024-01-01 --github-release \
+            --max-calls "$MAX_CALLS" --older-windows after-runs-history
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

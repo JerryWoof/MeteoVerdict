@@ -7,6 +7,10 @@ The verified variables come from the 10-minute files (see docs/data-sources.md):
 * ``precipitation``: sum of the six ``SRA10M`` values ending at the hour (HH-1:10 to HH:00),
   only when all six are present. This equals ČHMÚ's own hourly ``SRA1H`` and matches
   Open-Meteo, whose hourly precipitation is the sum over the preceding hour.
+* ``wind_gusts_10m``: the largest of the six ``Fmax`` values (maximum gust in each
+  10 minutes, m/s) ending at the hour (HH-1:10 to HH:00), only when all six are present.
+  This matches Open-Meteo's hourly ``wind_gusts_10m``, the maximum of the preceding
+  hour. Used by the farmers' event scores (``farm``), not by the D+N scores.
 
 Times are UTC. Per station and month the data comes from ``recent/`` (checked data of
 the last 12 months), ``historical/`` (closed years) or, for days not published there
@@ -29,7 +33,18 @@ import polars as pl
 from meteoverdict import partitions
 from meteoverdict.chmi import BASE_URL, parse_collection
 
-ELEMENTS = {"T": "temperature_2m", "F": "wind_speed_10m", "SRA10M": "precipitation"}
+ELEMENTS = {
+    "T": "temperature_2m",
+    "F": "wind_speed_10m",
+    "SRA10M": "precipitation",
+    "Fmax": "wind_gusts_10m",
+}
+#: The elements of the verified variables: they decide which stations are automatic.
+#: ``Fmax`` (gusts, an extra) is left out so the station list stays as it was.
+VERIFIED_ELEMENTS = ("T", "F", "SRA10M")
+#: Hourly values built from the six 10-minute values of the hour ending at HH:00, only
+#: when all six are there: variable -> aggregation.
+HOURLY_FROM_SIX = {"precipitation": "sum", "wind_gusts_10m": "max"}
 #: now/ keeps about three days; older day files are never asked for.
 NOW_KEEPS_DAYS = 4
 
@@ -39,6 +54,7 @@ PLAUSIBLE = {
     "temperature_2m": (-50.0, 50.0),
     "wind_speed_10m": (0.0, 75.0),
     "precipitation": (0.0, 120.0),
+    "wind_gusts_10m": (0.0, 75.0),
 }
 
 #: QUALITY codes (meta4) we keep: 0 good, 3 estimated, 5 unknown (unchecked now/ data).
@@ -158,34 +174,35 @@ def normalize(raw: pl.DataFrame, source: str) -> pl.DataFrame:
 
 
 def to_hourly(ten_minute: pl.DataFrame) -> pl.DataFrame:
-    """Hourly values: instant T and F at HH:00, precipitation summed over the hour."""
+    """Hourly values: instant T and F at HH:00, precipitation summed and gusts maximised
+    over the hour ending at HH:00 (all six 10-minute values required)."""
     full_hour = pl.col("time").dt.minute() == 0
     instant = ten_minute.filter(
         pl.col("variable").is_in(["temperature_2m", "wind_speed_10m"]), full_hour
     )
-    rain = ten_minute.filter(pl.col("variable") == "precipitation")
-    hourly_rain = (
-        # the slot ending at HH:10 … HH+1:00 belongs to the hour ending HH+1:00
-        rain.with_columns((pl.col("time") - pl.duration(minutes=1)).dt.truncate("1h").alias("h"))
-        .group_by("station_id", "h")
-        .agg(
-            pl.col("value").sum(),
-            pl.col("quality").max(),
-            pl.col("source").first(),
-            pl.len().alias("n"),
+    parts = [instant.select(list(SCHEMA))]
+    for variable, how in HOURLY_FROM_SIX.items():
+        slots = ten_minute.filter(pl.col("variable") == variable)
+        value = pl.col("value").sum() if how == "sum" else pl.col("value").max()
+        parts.append(
+            # the slot ending at HH:10 … HH+1:00 belongs to the hour ending HH+1:00
+            slots.with_columns(
+                (pl.col("time") - pl.duration(minutes=1)).dt.truncate("1h").alias("h")
+            )
+            .group_by("station_id", "h")
+            .agg(value, pl.col("quality").max(), pl.col("source").first(), pl.len().alias("n"))
+            .filter(pl.col("n") == 6)
+            .select(
+                "station_id",
+                (pl.col("h") + pl.duration(hours=1)).alias("time"),
+                pl.lit(variable).alias("variable"),
+                "value",
+                "quality",
+                "source",
+            )
+            .cast(SCHEMA)
         )
-        .filter(pl.col("n") == 6)
-        .select(
-            "station_id",
-            (pl.col("h") + pl.duration(hours=1)).alias("time"),
-            pl.lit("precipitation").alias("variable"),
-            "value",
-            "quality",
-            "source",
-        )
-    )
-    hourly = pl.concat([instant.select(list(SCHEMA)), hourly_rain.cast(SCHEMA)])
-    return hourly.filter(plausible())
+    return pl.concat(parts).filter(plausible())
 
 
 def plausible() -> pl.Expr:
@@ -234,7 +251,7 @@ def automatic_station_ids(meta2: pl.DataFrame) -> set[str]:
     """
     return set(
         meta2.filter(
-            pl.col("OBS_TYPE") == "10M", pl.col("EG_EL_ABBREVIATION").is_in(list(ELEMENTS))
+            pl.col("OBS_TYPE") == "10M", pl.col("EG_EL_ABBREVIATION").is_in(VERIFIED_ELEMENTS)
         )["WSI"].to_list()
     )
 
