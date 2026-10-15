@@ -9,6 +9,7 @@ import {
   biasByElevation, fmt, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
   leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, unpublishedHours,
 } from "./compare.js";
+import { binLabel, count, etsColor, etsTextColor, farmChoices, farmGrid, plain, score } from "./farm.js";
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
@@ -361,6 +362,97 @@ async function renderLeadHours(view, names, colors) {
   );
 }
 
+// --- event skill for farmers (farm.json; hidden until it exists) --------------------
+const farmDoc = getJson("data/scores/farm.json");
+const farmView = { key: null };
+
+function farmEventLabel(choice, doc) {
+  const unit = doc.events?.[choice.event];
+  const value = Number(choice.threshold).toLocaleString("en-US");
+  return t(`farm.event.${choice.event}`, { value, op: unit?.op === "<=" ? "≤" : "≥" });
+}
+
+function farmTip(row, choice, label) {
+  const p = plain(row);
+  return [
+    `${label(row.model)}, ${binLabel(row.bin)}`,
+    t("farm.tipCaught", { caught: count(p.caught), events: count(p.events), what: t(`farm.noun.${choice.event}`) }),
+    t("farm.tipFalse", { falseWarnings: count(p.falseWarnings), warnings: count(p.warnings) }),
+    `POD ${score(row.pod)} · FAR ${score(row.far)} · CSI ${score(row.csi)} · ETS ${score(row.ets)} · ` +
+      `${t("farm.bias")} ${score(row.bias)}`,
+    t(`farm.units.${choice.event}`, { units: count(row.units), runs: count(row.runs), stations: count(row.stations) }),
+  ].join("\n");
+}
+
+async function renderFarm(names) {
+  const section = document.getElementById("farm-section");
+  const doc = await farmDoc;
+  const choices = farmChoices(doc);
+  section.hidden = choices.length === 0;
+  if (section.hidden) return;
+  if (!choices.some((c) => c.key === farmView.key)) farmView.key = choices[0].key;
+  const choice = choices.find((c) => c.key === farmView.key);
+  fillSelect("farm-event", choices.map((c) => [c.key, farmEventLabel(c, doc)]), farmView.key);
+  document.getElementById("farm-event").onchange = (event) => {
+    farmView.key = event.target.value;
+    renderFarm(names);
+  };
+  const label = (m) => doc.models?.[m]?.name ?? names[m] ?? m;
+  const first = (doc.first_run ?? "").slice(0, 10);
+  const last = (doc.last_run ?? "").slice(0, 10);
+  document.getElementById("farm-basis").textContent = t("farm.basis", {
+    runs: count(doc.runs), stations: count(doc.stations), first, last,
+  });
+  const grid = farmGrid(doc, choice.event, choice.threshold);
+  const table = document.getElementById("farm-table");
+  const head = document.createElement("tr");
+  head.append(cell("th", t("table.model")), ...grid.bins.map((b) => cell("th", binLabel(b), "num")));
+  const body = grid.models.map((model) => {
+    const tr = document.createElement("tr");
+    tr.append(cell("th", label(model), "model"));
+    grid.perBin.forEach((bin) => {
+      const row = grid.cells.get(`${model}|${bin.bin}`);
+      if (!row) {
+        tr.append(cell("td", "", "num empty"));
+        return;
+      }
+      const best = bin.best.includes(model);
+      const td = cell("td", `${best ? "★ " : ""}${score(row.ets)}`, `num${best ? " best" : ""}`);
+      td.style.background = etsColor(row.ets);
+      td.style.color = etsTextColor(row.ets);
+      td.title = farmTip(row, choice, label);
+      td.tabIndex = 0;
+      tr.append(td);
+    });
+    return tr;
+  });
+  const foot = document.createElement("tr");
+  foot.className = "events";
+  foot.append(cell("th", t(`farm.observed.${choice.event}`)));
+  for (const bin of grid.perBin) {
+    foot.append(cell("td", t("farm.eventsOf", { events: count(bin.events), units: count(bin.units) }) +
+      (bin.small ? " ⚠" : ""), `num${bin.small ? " small" : ""}`));
+  }
+  table.replaceChildren(head, ...body, foot);
+  // one sentence in plain words: the best model where most events were observed
+  const busiest = [...grid.perBin].filter((b) => b.best.length).sort((a, b) => b.events - a.events)[0];
+  const reading = document.getElementById("farm-reading");
+  if (busiest) {
+    const row = grid.cells.get(`${busiest.best[0]}|${busiest.bin}`);
+    const p = plain(row);
+    reading.textContent = t("farm.reading", {
+      bin: binLabel(busiest.bin), model: label(row.model), caught: count(p.caught), events: count(p.events),
+      what: t(`farm.noun.${choice.event}`), falseWarnings: count(p.falseWarnings), warnings: count(p.warnings),
+    });
+  } else {
+    reading.textContent = t("farm.noEvents");
+  }
+  const small = grid.perBin.filter((b) => b.small).map((b) => binLabel(b.bin));
+  document.getElementById("farm-small").textContent = small.length
+    ? t("farm.small", { n: doc.small_sample ?? 20, bins: small.join(", ") })
+    : "";
+}
+
 function renderBias(rows, view, names, colors) {
   const section = document.getElementById("elevation-section");
   section.hidden = view.region !== "cz";
@@ -433,6 +525,7 @@ async function main() {
     });
   }
   await render();
+  renderFarm(names);
   await mapLoaded;
   addLayers((code) => {
     view.region = view.region === code ? "cz" : code;

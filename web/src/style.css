@@ -890,3 +890,45 @@ img.eink {
   margin: 0.25rem 0 0.5rem;
   font-size: 0.9rem;
 }
+
+/* event skill for farmers (compare.html) */
+.farm-table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.farm-table th,
+.farm-table td {
+  padding: 0.3rem 0.55rem;
+  border-bottom: 1px solid #ddd8cc;
+  text-align: left;
+  white-space: nowrap;
+}
+.farm-table .num {
+  text-align: right;
+}
+.farm-table td.num {
+  min-width: 4.2rem;
+  border-left: 2px solid #f4f1ea;
+}
+.farm-table td.best {
+  font-weight: 700;
+  outline: 2px solid #1d2329;
+  outline-offset: -2px;
+}
+.farm-table td.empty {
+  background: transparent;
+}
+.farm-table tr.events th,
+.farm-table tr.events td {
+  font-size: 0.78rem;
+  color: #5b6670;
+  border-bottom: none;
+}
+.farm-table tr.events td.small {
+  color: #a5521b;
+}
+.farm-reading {
+  font-size: 0.9rem;
+  margin: 0.2rem 0 0.5rem;
+}

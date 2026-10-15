@@ -48,7 +48,12 @@ def answer(params, without=(), no_data_at=()):
                 continue
             last = LAST.get(model, 120)
             for var in params["hourly"].split(","):
-                base = {"temperature_2m": 10.0, "precipitation": 0.0, "wind_speed_10m": 2.0}[var]
+                base = {
+                    "temperature_2m": 10.0,
+                    "precipitation": 0.0,
+                    "wind_speed_10m": 2.0,
+                    "wind_gusts_10m": 5.0,
+                }[var]
                 values = [base + n if h <= last else None for h in range(hours)]
                 name = var if len(models) == 1 else f"{var}_{model}"
                 hourly[name] = values
@@ -215,9 +220,16 @@ def test_models_by_run_and_native_hours():
 
 
 def test_cost():
-    assert runs.request_weight(100, 11) == pytest.approx(330)  # 3 x 11 / 10 per station
+    assert runs.VARIABLES == (
+        "temperature_2m",
+        "precipitation",
+        "wind_speed_10m",
+        "wind_gusts_10m",
+    )
+    assert runs.request_weight(100, 11) == pytest.approx(440)  # 4 x 11 / 10 per station
+    assert runs.request_weight(100, 9) == pytest.approx(360)  # runs without ALADIN
     assert runs.request_weight(100, 1) == pytest.approx(100)  # never below 1 per station
-    assert runs.run_cost(150, 11) == pytest.approx(495)
+    assert runs.run_cost(150, 11) == pytest.approx(660)
 
 
 # --- answers -----------------------------------------------------------------------------
@@ -277,8 +289,13 @@ def test_fetch_run_drops_a_model_without_the_run():
     assert api.requests[0]["elevation"] == "300.0,nan"
     assert api.requests[0]["forecast_hours"] == "121"
     assert api.requests[0]["wind_speed_unit"] == "ms"
-    # both requests count: 2 stations x 3.3, then 2 x 3.0
-    assert spent.used == pytest.approx(6.6 + 6.0)
+    assert api.requests[0]["hourly"] == (
+        "temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m"
+    )
+    gusts = rows.filter(pl.col("model") == "dwd_icon_eu")["wind_gusts_10m"]
+    assert gusts.null_count() == 0 and gusts.min() > 0
+    # both requests count: 2 stations x 4.4, then 2 x 4.0
+    assert spent.used == pytest.approx(8.8 + 8.0)
 
 
 def test_fetch_run_splits_stations_when_one_model_has_no_data():
