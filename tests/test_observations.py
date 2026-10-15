@@ -184,8 +184,11 @@ def test_a_chmi_file_that_is_not_json_is_retried_then_skipped():
     assert waits == [2]
 
     transport = httpx.MockTransport(lambda request: httpx.Response(200, content=b"<html>"))
+    unreadable = []
     with httpx.Client(transport=transport) as client:
         assert observations._get(client, "https://x/a.json", waits.append) is None
+        assert observations._get(client, "https://x/b.json", waits.append, unreadable) is None
+    assert unreadable == ["https://x/b.json"]  # not the same as a file that does not exist
 
 
 def test_chmi_server_errors_are_retried_and_raised_when_they_persist():
