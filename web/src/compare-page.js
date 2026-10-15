@@ -6,9 +6,11 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
 import {
-  biasByElevation, fmt, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
+  BLEND_TEST_SERIES, BLEND_TEST_VARIABLES, biasByElevation, blendTestLines, blendTestRows, blendTestVariable,
+  blendVerdict, blendVerdicts, fmt, okresVerdictCounts, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
   leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, unpublishedHours,
 } from "./compare.js";
+import { binLabel, count, etsColor, etsTextColor, farmChoices, farmGrid, plain, score } from "./farm.js";
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
@@ -280,6 +282,99 @@ function renderByLead(rows, view, names, colors) {
   );
 }
 
+// --- does our forecast beat the best model? (blend-test.json; hidden until it exists) --
+const blendTestDoc = getJson("data/scores/blend-test.json");
+const SERIES_COLORS = { combined: "#c0392b", best_oos: "#1f78b4", blend: "#1d2329", best_hindsight: "#7f8c8d" };
+
+function verdictText(v, unit, long = false) {
+  const values = { amount: fmt(v.amount), unit, low: fmt(v.low), high: fmt(v.high) };
+  if (v.verdict === "same") {
+    values.amount = fmt(v.amount, true);
+    values.low = fmt(v.low, true);
+    values.high = fmt(v.high, true);
+  }
+  return t(`blendTest.${v.verdict}${long ? "Long" : ""}`, values);
+}
+
+async function renderBlendTest(view) {
+  const section = document.getElementById("blend-test-section");
+  const doc = await blendTestDoc;
+  const verdicts = blendVerdicts(blendTestRows(doc, "cz"));
+  section.hidden = verdicts.length === 0;
+  if (section.hidden) return;
+  const unit = (variable) => doc.units?.[variable] ?? "";
+  // verdict table: a row per variable, a column per lead day
+  const leads = [...new Set(verdicts.map((v) => v.lead_day))].sort((a, b) => a - b);
+  const head = document.createElement("tr");
+  head.append(cell("th", t("blendTest.variable")), ...leads.map((d) => cell("th", `D+${d}`)));
+  const body = BLEND_TEST_VARIABLES.filter((variable) => verdicts.some((v) => v.variable === variable)).map((variable) => {
+    const tr = document.createElement("tr");
+    tr.append(cell("th", t(`variable.${variable}`)));
+    for (const lead of leads) {
+      const v = verdicts.find((x) => x.variable === variable && x.lead_day === lead);
+      const td = cell("td", null, v ? `verdict ${v.verdict}` : "");
+      if (v) {
+        td.title = `${verdictText(v, unit(variable), true)} · ${v.days} d`;
+        td.append(cell("strong", verdictText(v, unit(variable))), document.createElement("br"));
+        const range = v.verdict === "same"
+          ? t("blendTest.sameInterval", { amount: fmt(v.amount, true), unit: unit(variable), low: fmt(v.low, true), high: fmt(v.high, true) })
+          : t("blendTest.interval", { low: fmt(v.low), high: fmt(v.high) });
+        td.append(cell("small", range));
+      } else {
+        td.textContent = "–";
+      }
+      tr.append(td);
+    }
+    return tr;
+  });
+  document.getElementById("blend-test-table").replaceChildren(head, ...body);
+  // the chosen okres (or how the okresy came out) at the page's variable and lead day
+  const variable = blendTestVariable(view.variable);
+  const okresRow = levelOf(view.region) !== "okres" ? null : blendTestRows(doc, view.region).find((r) => r.variable === variable && r.lead_day === view.leadDay);
+  const line = document.getElementById("blend-test-okres");
+  if (okresRow && blendVerdict(okresRow)) {
+    line.textContent = t("blendTest.okres", {
+      region: displayName(okresRow.region_name), variable: t(`variable.${variable}`).toLowerCase(), lead: view.leadDay,
+      verdict: verdictText(blendVerdict(okresRow), unit(variable), true),
+    });
+  } else {
+    const counts = okresVerdictCounts(doc, variable, view.leadDay);
+    line.textContent = counts.better + counts.same + counts.worse
+      ? t("blendTest.okresy", { variable: t(`variable.${variable}`).toLowerCase(), lead: view.leadDay, ...counts })
+      : "";
+  }
+  // MAE by lead day of the page's variable: ours, the best model then, the mean, hindsight
+  const lines = blendTestLines(blendTestRows(doc, "cz"), variable);
+  const label = (s) => t(`blendTest.series.${s}`);
+  const chart = document.getElementById("blend-test-chart");
+  chart.replaceChildren(
+    cell("h3", t("blendTest.chartTitle", { variable: t(`variable.${variable}`) })),
+    Plot.plot({
+      width: Math.max(280, Math.min(480, chart.clientWidth || 400)),
+      height: 240,
+      marginLeft: 45,
+      x: { label: t("control.lead"), ticks: leads, tickFormat: (d) => `D+${d}` },
+      y: { label: `MAE (${unit(variable)})`, grid: true },
+      color: {
+        domain: BLEND_TEST_SERIES.map(label),
+        range: BLEND_TEST_SERIES.map((s) => SERIES_COLORS[s]),
+        legend: true,
+      },
+      marks: [
+        ...[["best_hindsight", 1.5, "4,3"], ["blend", 1.5, null], ["best_oos", 2, null], ["combined", 3, null]].map(
+          ([series, strokeWidth, strokeDasharray]) => Plot.lineY(lines.filter((r) => r.series === series), {
+            x: "lead_day", y: "mae", stroke: (r) => label(r.series), marker: "circle", tip: true, strokeWidth,
+            strokeDasharray,
+          }),
+        ),
+      ],
+    }),
+  );
+  document.getElementById("blend-test-basis").textContent = t("blendTest.basis", {
+    days: doc.test_days, from: doc.from, to: doc.to, warmup: doc.warm_up_days, min: doc.min_training_days,
+  });
+}
+
 // --- run-based errors by lead hour (leads.json; hidden until it exists) -------------
 const leadsDoc = getJson("data/scores/leads.json");
 const HIGHLIGHT = 3; // the best models over the lead hours get bold lines
@@ -361,6 +456,97 @@ async function renderLeadHours(view, names, colors) {
   );
 }
 
+// --- event skill for farmers (farm.json; hidden until it exists) --------------------
+const farmDoc = getJson("data/scores/farm.json");
+const farmView = { key: null };
+
+function farmEventLabel(choice, doc) {
+  const unit = doc.events?.[choice.event];
+  const value = Number(choice.threshold).toLocaleString("en-US");
+  return t(`farm.event.${choice.event}`, { value, op: unit?.op === "<=" ? "≤" : "≥" });
+}
+
+function farmTip(row, choice, label) {
+  const p = plain(row);
+  return [
+    `${label(row.model)}, ${binLabel(row.bin)}`,
+    t("farm.tipCaught", { caught: count(p.caught), events: count(p.events), what: t(`farm.noun.${choice.event}`) }),
+    t("farm.tipFalse", { falseWarnings: count(p.falseWarnings), warnings: count(p.warnings) }),
+    `POD ${score(row.pod)} · FAR ${score(row.far)} · CSI ${score(row.csi)} · ETS ${score(row.ets)} · ` +
+      `${t("farm.bias")} ${score(row.bias)}`,
+    t(`farm.units.${choice.event}`, { units: count(row.units), runs: count(row.runs), stations: count(row.stations) }),
+  ].join("\n");
+}
+
+async function renderFarm(names) {
+  const section = document.getElementById("farm-section");
+  const doc = await farmDoc;
+  const choices = farmChoices(doc);
+  section.hidden = choices.length === 0;
+  if (section.hidden) return;
+  if (!choices.some((c) => c.key === farmView.key)) farmView.key = choices[0].key;
+  const choice = choices.find((c) => c.key === farmView.key);
+  fillSelect("farm-event", choices.map((c) => [c.key, farmEventLabel(c, doc)]), farmView.key);
+  document.getElementById("farm-event").onchange = (event) => {
+    farmView.key = event.target.value;
+    renderFarm(names);
+  };
+  const label = (m) => doc.models?.[m]?.name ?? names[m] ?? m;
+  const first = (doc.first_run ?? "").slice(0, 10);
+  const last = (doc.last_run ?? "").slice(0, 10);
+  document.getElementById("farm-basis").textContent = t("farm.basis", {
+    runs: count(doc.runs), stations: count(doc.stations), first, last,
+  });
+  const grid = farmGrid(doc, choice.event, choice.threshold);
+  const table = document.getElementById("farm-table");
+  const head = document.createElement("tr");
+  head.append(cell("th", t("table.model")), ...grid.bins.map((b) => cell("th", binLabel(b), "num")));
+  const body = grid.models.map((model) => {
+    const tr = document.createElement("tr");
+    tr.append(cell("th", label(model), "model"));
+    grid.perBin.forEach((bin) => {
+      const row = grid.cells.get(`${model}|${bin.bin}`);
+      if (!row) {
+        tr.append(cell("td", "", "num empty"));
+        return;
+      }
+      const best = bin.best.includes(model);
+      const td = cell("td", `${best ? "★ " : ""}${score(row.ets)}`, `num${best ? " best" : ""}`);
+      td.style.background = etsColor(row.ets);
+      td.style.color = etsTextColor(row.ets);
+      td.title = farmTip(row, choice, label);
+      td.tabIndex = 0;
+      tr.append(td);
+    });
+    return tr;
+  });
+  const foot = document.createElement("tr");
+  foot.className = "events";
+  foot.append(cell("th", t(`farm.observed.${choice.event}`)));
+  for (const bin of grid.perBin) {
+    foot.append(cell("td", t("farm.eventsOf", { events: count(bin.events), units: count(bin.units) }) +
+      (bin.small ? " ⚠" : ""), `num${bin.small ? " small" : ""}`));
+  }
+  table.replaceChildren(head, ...body, foot);
+  // one sentence in plain words: the best model where most events were observed
+  const busiest = [...grid.perBin].filter((b) => b.best.length).sort((a, b) => b.events - a.events)[0];
+  const reading = document.getElementById("farm-reading");
+  if (busiest) {
+    const row = grid.cells.get(`${busiest.best[0]}|${busiest.bin}`);
+    const p = plain(row);
+    reading.textContent = t("farm.reading", {
+      bin: binLabel(busiest.bin), model: label(row.model), caught: count(p.caught), events: count(p.events),
+      what: t(`farm.noun.${choice.event}`), falseWarnings: count(p.falseWarnings), warnings: count(p.warnings),
+    });
+  } else {
+    reading.textContent = t("farm.noEvents");
+  }
+  const small = grid.perBin.filter((b) => b.small).map((b) => binLabel(b.bin));
+  document.getElementById("farm-small").textContent = small.length
+    ? t("farm.small", { n: doc.small_sample ?? 20, bins: small.join(", ") })
+    : "";
+}
+
 function renderBias(rows, view, names, colors) {
   const section = document.getElementById("elevation-section");
   section.hidden = view.region !== "cz";
@@ -403,6 +589,7 @@ async function main() {
     document.getElementById("ranking-title").textContent = t("compare.rankingIn", {
       region: view.region === "cz" ? "Česko" : displayName(regionList(rows).find((r) => r.code === view.region)?.name ?? view.region),
     });
+    renderBlendTest(view);
     renderSummary(rows, view, names, colors);
     renderTable(rows, view, names);
     renderIntervals(rows, view, names, colors);
@@ -433,6 +620,7 @@ async function main() {
     });
   }
   await render();
+  renderFarm(names);
   await mapLoaded;
   addLayers((code) => {
     view.region = view.region === code ? "cz" : code;

@@ -29,6 +29,8 @@ COMMANDS = [
     "models",
     "archive-aladin",
     "leads",
+    "farm",
+    "blend-test",
     "fetch-runs",
     "fetch-obs",
     "fetch-fc",
@@ -157,12 +159,13 @@ def test_models_lists_enabled_models_with_lead_days():
     assert "archive from 2024-01-19" in icon_d2
     arpege = next(line for line in lines if line.startswith("meteofrance_arpege_europe "))
     assert "wind_speed_10m from 2026-08-07" in arpege
-    assert not any("knmi_harmonie_arome_europe" in line for line in lines)
+    assert any(line.startswith("knmi_harmonie_arome_europe ") for line in lines)
+    assert not any("gem_regional" in line for line in lines)
 
 
 def test_models_all_includes_disabled():
     result = runner.invoke(app, ["models", "--all"])
-    assert "knmi_harmonie_arome_europe" in result.stdout
+    assert "gem_regional" in result.stdout
     assert "(disabled)" in result.stdout
 
 
@@ -435,6 +438,17 @@ def test_leads_publish_needs_github_release():
     assert result.exit_code == 2
 
 
+def test_blend_test_rejects_bad_options(tmp_path):
+    assert runner.invoke(app, ["blend-test", "--publish"]).exit_code == 2
+    stations_file = tmp_path / "stations.parquet"
+    stations_file.touch()
+    args = ["blend-test", "--stations", str(stations_file), "--data-dir", str(tmp_path)]
+    assert runner.invoke(app, [*args, "--window", "month"]).exit_code == 2
+    result = runner.invoke(app, args)
+    assert result.exit_code == 1
+    assert "no scores" in result.stderr
+
+
 def test_leads_without_archive_fails(tmp_path):
     args = ["leads", "--archive-dir", str(tmp_path / "a"), "--data-dir", str(tmp_path)]
     result = runner.invoke(app, args)
@@ -562,19 +576,22 @@ def test_fetch_runs_dry_run_prints_the_cost(tmp_path):
     args = ["fetch-runs", "--dry-run", "--data-dir", str(tmp_path), "--run", "2026-10-12T06"]
     result = runner.invoke(app, args)
     assert result.exit_code == 0, result.output
-    assert "1 runs to fetch at 100 stations, about 330 Open-Meteo calls" in plain(result.output)
+    # 06 UTC: 18 models (GEM Global runs at 00 and 12 UTC only), 4 x 18 / 10 per station
+    out = plain(result.output)
+    assert "1 runs to fetch at 100 stations, about 720 Open-Meteo calls" in out
+    assert "(760 per run of all 19 models" in out
 
 
-def test_fetch_runs_extra_budget_needs_a_readable_backfill_state(tmp_path):
+def test_fetch_runs_shared_budget_needs_a_readable_backfill_state(tmp_path):
     args = ["fetch-runs", "--dry-run", "--data-dir", str(tmp_path), "--run", "2026-10-12T06"]
-    result = runner.invoke(app, [*args, "--extra-calls-if-backfill-idle", "3000"])
+    result = runner.invoke(app, [*args, "--shared-calls", "4500"])
     assert result.exit_code == 0, result.output
     out = plain(result.output)
-    assert "budget: 450 calls (normal; extra 3000 not used: backfill state not readable" in out
+    assert "budget: 450 calls (normal; no shared calls: backfill state not readable" in out
     assert "budget 450)" in out
 
 
-def test_fetch_runs_extra_budget_when_the_backfill_is_idle(tmp_path):
+def test_fetch_runs_shared_budget_when_the_backfill_is_idle(tmp_path):
     today = datetime.now(UTC).date()
     first = today - timedelta(days=40)
     models = [m for m in load_models() if m.enabled]
@@ -586,21 +603,27 @@ def test_fetch_runs_extra_budget_when_the_backfill_is_idle(tmp_path):
             state.fc_done |= {backfill_mod.gauge_key(m, *span) for m in models}
     state.save()
     args = ["fetch-runs", "--dry-run", "--data-dir", str(tmp_path), "--run", "2026-10-12T06"]
-    extra = ["--extra-calls-if-backfill-idle", "3000", "--backfill-from", f"{first}"]
+    extra = ["--shared-calls", "4500", "--shared-to", "2500", "--backfill-from", f"{first}"]
     result = runner.invoke(app, [*args, *extra])
     assert result.exit_code == 0, result.output
-    assert "budget: 3450 calls (450 normal + 3000 extra: backfill idle" in plain(result.output)
+    assert (
+        "budget: 2950 calls (450 normal + 2500 shared; 4500 of 4500 left, this run takes "
+        "0-2500: the backfill's current windows (last 90 days) are done)"
+    ) in plain(result.output)
+    # the second part of the day, from 2500 on
+    result = runner.invoke(app, [*args, *extra[:2], "--shared-from", "2500", *extra[4:]])
+    assert "budget: 2450 calls (450 normal + 2000 shared; 4500 of 4500 left" in plain(result.output)
 
 
 def test_fetch_runs_without_budget_does_nothing(monkeypatch, tmp_path):
     summary = tmp_path / "summary.md"
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
     args = ["fetch-runs", "--data-dir", str(tmp_path), "--max-calls", "0"]
-    result = runner.invoke(app, [*args, "--extra-calls-if-backfill-idle", "3000"])
+    result = runner.invoke(app, [*args, "--shared-calls", "4500"])
     assert result.exit_code == 0, result.output
     assert "0 runs fetched, 0 calls used" in plain(result.output)
     text = summary.read_text()
-    assert "- Budget: 0 calls (normal; extra 3000 not used: backfill state not readable" in text
+    assert "- Budget: 0 calls (normal; no shared calls: backfill state not readable" in text
     assert not (tmp_path / "runs").exists()
 
 
@@ -649,3 +672,58 @@ def test_chmi_archive_into_a_folder(monkeypatch, tmp_path):
     assert seen["max_minutes"] == 5
     assert seen["stations"] == {"0-20000-0-11520"}
     assert "archived 1 files" in plain(result.output)
+
+
+def test_farm_publish_needs_github_release():
+    result = runner.invoke(app, ["farm", "--publish"])
+    assert result.exit_code != 0
+
+
+def test_farm_without_runs_fails(tmp_path):
+    result = runner.invoke(app, ["farm", "--data-dir", str(tmp_path)])
+    assert result.exit_code == 1
+
+
+def test_farm_writes_the_json(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    run = now.replace(hour=now.hour // 6 * 6) - timedelta(hours=12)
+    steps = list(range(1, 7))
+    rain = {"dwd_icon_eu": [1.0, 0.0, 0.0, 0, 0, 0], "ncep_gfs_global": [0.0] * 6}
+    rows = pl.concat(
+        pl.DataFrame(
+            {
+                "run": [run] * 6,
+                "model": model,
+                "station_id": "a",
+                "lead_h": pl.Series(steps, dtype=pl.Int16),
+                "valid_time": [run + timedelta(hours=h) for h in steps],
+                "temperature_2m": pl.Series([10.0] * 6, dtype=pl.Float32),
+                "precipitation": pl.Series(rain[model], dtype=pl.Float32),
+                "wind_speed_10m": pl.Series([2.0] * 6, dtype=pl.Float32),
+                "wind_gusts_10m": pl.Series([5.0] * 6, dtype=pl.Float32),
+            }
+        )
+        for model in rain
+    )
+    (tmp_path / "runs").mkdir()
+    rows.write_parquet(tmp_path / "runs" / f"{run:%Y-%m}.parquet")
+    (tmp_path / "obs").mkdir()
+    pl.DataFrame(
+        {
+            "station_id": "a",
+            "time": [run + timedelta(hours=h) for h in steps],
+            "variable": "precipitation",
+            "value": [0.3, 0.3, 0.0, 0.0, 0.0, 0.0],
+        }
+    ).write_parquet(tmp_path / "obs" / f"{run:%Y-%m}.parquet")
+    out = tmp_path / "site" / "farm.json"
+    result = runner.invoke(app, ["farm", "--data-dir", str(tmp_path), "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    doc = json.loads(out.read_text())
+    rows = [dict(zip(doc["columns"], r, strict=True)) for r in doc["rows"]]
+    first = {r["model"]: r["hits"] for r in rows if r["threshold"] == 0.5 and r["bin"] == "1-6"}
+    assert first == {"dwd_icon_eu": 1, "ncep_gfs_global": 0}
+    assert {r["event"] for r in rows} == {"rain3h"}
+    assert doc["models"]["dwd_icon_eu"]["name"] == "DWD ICON-EU"

@@ -59,7 +59,7 @@ jobs:
           else
             echo "no station pages yet; station.html says so"
           fi
-          for name in outlook.json outlook-hourly.json leads.json; do
+          for name in outlook.json outlook-hourly.json leads.json farm.json blend-test.json; do
             if gh release download data-latest --pattern "$name" --dir site/data --clobber 2>/dev/null; then
               echo "$name from data-latest"
             else
@@ -73,10 +73,35 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Build
         working-directory: web
+        env:
+          # the radar page's live frames (pushed by the Radar workflow)
+          VITE_RADAR_LIVE: https://raw.githubusercontent.com/${{ github.repository }}/radar-live/
         run: |
           npm ci --no-audit --no-fund
           npm test
           npm run build
+      - name: Radar days (web-YYYYMMDD.tar of the last 60 days from the releases radar-YYYY-MM)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/radar web/dist/radar/days
+          for back in 0 1 2; do
+            tag="radar-$(date -u -d "$(date -u +%Y-%m-01) -${back} month" +%Y-%m)"
+            gh release download "$tag" --pattern 'web-*.tar' --dir /tmp/radar --skip-existing 2>/dev/null \
+              || echo "no $tag yet"
+          done
+          cutoff=$(date -u -d '60 days ago' +%Y%m%d)
+          : > /tmp/radar/days.txt
+          for tar in /tmp/radar/web-*.tar; do
+            [ -e "$tar" ] || continue
+            day=$(basename "$tar" .tar); day=${day#web-}
+            [[ "$day" < "$cutoff" ]] && continue
+            mkdir -p "web/dist/radar/days/$day"
+            tar -xf "$tar" -C "web/dist/radar/days/$day"
+            echo "${day:0:4}-${day:4:2}-${day:6:2}" >> /tmp/radar/days.txt
+          done
+          sort /tmp/radar/days.txt | jq -R . | jq -s -c . > web/dist/radar/days.json
+          echo "radar days: $(wc -l < /tmp/radar/days.txt), $(du -sh web/dist/radar | cut -f1)"
       - uses: actions/upload-pages-artifact@v3
         if: steps.pages.outputs.enabled == 'true'
         with:
