@@ -184,7 +184,10 @@ function renderWeights(table, names) {
   target.replaceChildren(head, ...rows);
 }
 
+// only the latest okres renders: a slow fetch must not overwrite a newer choice
+let showToken = 0;
 async function show(point, names, colors, outlook) {
+  const token = ++showToken;
   const message = document.getElementById("message");
   document.getElementById("title").textContent = t("forecast.titleFor", { okres: point.name });
   for (const id of ["days", "charts", "weights"]) document.getElementById(id).replaceChildren();
@@ -194,12 +197,14 @@ async function show(point, names, colors, outlook) {
   }
   message.textContent = t("forecast.loading");
   const table = weightTable(await getJson(`data/scores/forecast/${point.code}.json`));
+  if (token !== showToken) return;
   const models = weightedModels(table);
   if (models.length === 0) {
     message.textContent = t("forecast.noWeights");
     return;
   }
   const doc = await getJson(forecastUrl(point, models));
+  if (token !== showToken) return;
   if (!doc?.hourly) {
     message.textContent = t("forecast.unavailable");
     return;
