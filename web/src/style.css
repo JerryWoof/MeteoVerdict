@@ -891,6 +891,133 @@ img.eink {
   font-size: 0.9rem;
 }
 
+/* weather radar (radar.html), on the TV map's layout */
+.radar-when {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.radar-when .when-row {
+  margin-top: 0;
+}
+.radar-when input[type="date"] {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #9aa7b1;
+  border-radius: 6px;
+}
+.segmented button:disabled {
+  color: #9aa7b1;
+  cursor: default;
+}
+.timebar {
+  flex-wrap: nowrap;
+}
+.timebar .slider {
+  position: relative;
+  flex: 1;
+  min-width: 8rem;
+}
+.timebar input[type="range"] {
+  width: 100%;
+  margin: 0;
+  position: relative;
+  z-index: 1;
+}
+#ticks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* the nowcast part of the slider */
+#ticks .forecast-zone {
+  position: absolute;
+  top: 15%;
+  bottom: 15%;
+  border-radius: 999px;
+  background: repeating-linear-gradient(-45deg, #f2c48c, #f2c48c 4px, #fbe3c4 4px, #fbe3c4 8px);
+}
+#clock {
+  min-width: 3.2rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+#headline .badge {
+  display: inline-block;
+  margin: 0.1rem 0 0.3rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  background: #1d2329;
+  color: #ffffff;
+  font-weight: 600;
+}
+#headline .badge.forecast {
+  background: #d9822b;
+}
+#headline .muted,
+.radar-scale + .note,
+#radar-legend .note {
+  color: #5b6670;
+  font-size: 0.75rem;
+}
+/* a dashed frame around the map while it shows the nowcast */
+body.radar.forecast #map::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 3px dashed #d9822b;
+  pointer-events: none;
+}
+#layers .check {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin: 0.2rem 0;
+}
+.radar-scale {
+  margin-top: 0.4rem;
+}
+.radar-scale strong {
+  font-size: 0.75rem;
+}
+.radar-scale .bar,
+.radar-scale .numbers {
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+}
+.radar-scale .bar span {
+  height: 0.7rem;
+}
+.radar-scale .bar span:last-child {
+  outline: 1px solid #c9ced3;
+  outline-offset: -1px;
+}
+.radar-scale .numbers span {
+  font-size: 0.6rem;
+  font-variant-numeric: tabular-nums;
+  color: #5b6670;
+  overflow: visible;
+  white-space: nowrap;
+}
+.radar-scale .numbers span:nth-child(even) {
+  visibility: hidden;
+}
+#radar-legend .note {
+  margin: 0.3rem 0 0;
+}
+body.radar #show-box {
+  width: 17rem;
+}
+@media (max-width: 700px) {
+  .radar-when .when-row {
+    flex-wrap: wrap;
+  }
+  .radar-when .timebar {
+    flex-wrap: nowrap;
+  }
+}
 /* event skill for farmers (compare.html) */
 .farm-table {
   border-collapse: collapse;

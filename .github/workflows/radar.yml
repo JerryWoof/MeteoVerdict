@@ -1,0 +1,97 @@
+name: Radar
+
+# ČHMÚ keeps its radar composites on opendata.chmi.cz for only about seven days.
+#
+# - Every 10 minutes ("live"): bring the frames of the radar page up to date (last 24 h
+#   and the newest nowcast) and force-push them as a single commit to the branch
+#   radar-live, which the page reads through raw.githubusercontent.com (CORS, ~5 min
+#   cache). GitHub Pages is not redeployed for this.
+# - Every 6 hours ("archive"): pack every complete UTC day not archived yet into the
+#   monthly release radar-YYYY-MM (one tar per product and day, plus MERGE at the
+#   stations and the page's frames for that day). Days already there are skipped, so a
+#   missed run catches up on the next one; the server keeps a day for ~6 more days.
+#
+# The two jobs have their own concurrency groups, so a slow archive never delays the
+# live frames. See docs/data-sources.md#radar-archive.
+on:
+  schedule:
+    - cron: "*/10 * * * *" # live
+    - cron: "37 */6 * * *" # archive
+  workflow_dispatch:
+    inputs:
+      archive:
+        description: Also archive complete days into the releases
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # push radar-live, create releases and upload assets
+
+jobs:
+  live:
+    name: Live frames
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/10 * * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: radar-live
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install project
+        run: uv sync --frozen
+      - name: Frames already published
+        run: |
+          mkdir live
+          if git ls-remote --exit-code --heads origin radar-live >/dev/null; then
+            git fetch --quiet --depth 1 origin radar-live
+            git archive FETCH_HEAD | tar -x -C live
+          else
+            echo "no radar-live branch yet; starting empty"
+          fi
+      - name: Update the frames
+        run: uv run --frozen mvd radar-live --dir live --hours 24
+      - name: Publish (one commit, force-pushed)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: live
+        run: |
+          git init --quiet -b radar-live
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit --quiet -m "radar: live frames $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push --quiet --force \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" radar-live
+          du -sh --exclude=.git .
+
+  archive:
+    name: Archive complete days
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.archive) ||
+      github.event.schedule == '37 */6 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    concurrency:
+      group: radar-archive
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install project
+        run: uv sync --frozen
+      - name: Station table
+        run: uv run --frozen mvd stations --out data/stations.parquet
+      - name: Archive days
+        # the observed products (~12 GB a year); the nowcasts (~50 GB a year) are left
+        # to a local disk: `mvd archive-radar --products forecast --out-dir …`
+        run: >-
+          uv run --frozen mvd archive-radar --products observed
+          --stations data/stations.parquet --github-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
