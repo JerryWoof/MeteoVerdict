@@ -12,3 +12,6 @@ Real data, downloaded, not typed:
 | `meta.json` | the published `meta.json` of 12 Oct 2026 |
 | `outlook-hourly.json` | `outlook-hourly.json` written by `mvd outlook` on 12 Oct 2026 10:49 UTC, only Benešov and Litoměřice |
 | `scores-90d-okres-temperature_2m_{00,06,12,18}utc.json` | the published synoptic-hour temperature scores (`90d/okres`) of 12 Oct 2026, only Litoměřice and Benešov |
+| `radar-index.json` | the `index.json` of the `radar-live` folder written by `mvd radar-live` on 15 Oct 2026 21:10 UTC (the data contract with echo tops, motion, cells, satellite and scales), only the last 4 radar frames, 2 MERGE sums, 3 nowcast frames and 2 satellite frames per product |
+| `radar-motion.json` | `motion/202610152110.json` of the same folder |
+| `radar-cells.json` | **synthetic** `cells/<stamp>.json` in the same format (the real folder had no storm cells that night): four cells moving north-east, one with hail |
