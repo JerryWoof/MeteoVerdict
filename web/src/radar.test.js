@@ -109,3 +109,13 @@ test("view state in the URL", () => {
   // one satellite product at a time
   assert.deepEqual(parseView("#live/3/sat+wv+echotop").layers, ["sat", "echotop"]);
 });
+
+test("timeline: an old nowcast is left out, the animation ends at now", () => {
+  // the newest image is 10:35; a nowcast from 10:15 (20 min) is still shown, one from 10:10 not
+  const at = (base) => ({ ...INDEX, nowcast: { base, frames: [{ time: "202610151045", lead: 10 }] } });
+  assert.equal(timeline(at("202610151015")).at(-1).radar, "202610151045");
+  assert.equal(timeline(at("202610151010")).at(-1).radar, "202610151035");
+  assert.ok(timeline(at("202610151010")).every((s) => !s.forecast));
+  // no nowcast at all
+  assert.equal(timeline({ maxz: INDEX.maxz }).at(-1).radar, "202610151035");
+});
