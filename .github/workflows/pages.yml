@@ -14,10 +14,8 @@ on:
     types: [completed]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# each job asks for what it needs: the build (which runs npm packages) only reads
+permissions: {}
 
 concurrency:
   group: pages
@@ -28,10 +26,15 @@ jobs:
     name: Build the map
     runs-on: ubuntu-latest
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: read # checkout, release downloads
+      pages: read # "Is GitHub Pages enabled?" (the API answers 404 without it)
     outputs:
       enabled: ${{ steps.pages.outputs.enabled }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Is GitHub Pages enabled?
         id: pages
         env:
@@ -66,7 +69,7 @@ jobs:
               echo "no $name yet; the pages that use it say so or hide that part"
             fi
           done
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -129,7 +132,7 @@ jobs:
             echo "  $layer: $(du -sch web/dist/radar/days/*/$layer 2>/dev/null | tail -1 | cut -f1)"
           done
           echo "site: $(du -sh web/dist | cut -f1)"
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: steps.pages.outputs.enabled == 'true'
         with:
           path: web/dist
@@ -139,9 +142,12 @@ jobs:
     needs: build
     if: needs.build.outputs.enabled == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

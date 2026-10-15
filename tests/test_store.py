@@ -12,6 +12,7 @@ class FakeGitHub:
 
     def __init__(self):
         self.releases: dict[str, int] = {}
+        self.bodies: dict[str, str] = {}  # tag -> release notes
         self.assets: dict[int, dict] = {}  # id -> {name, label, content, release}
         self.calls: list[tuple[str, str]] = []
         self.storage_headers: list[httpx.Headers] = []
@@ -31,7 +32,7 @@ class FakeGitHub:
             tag = path.rsplit("/", 1)[1]
             if tag not in self.releases:
                 return httpx.Response(404)
-            return httpx.Response(200, json={"id": self.releases[tag]})
+            return httpx.Response(200, json={"id": self.releases[tag], "body": self.bodies[tag]})
         if request.method == "GET" and path == "/releases":
             tags = sorted(self.releases)
             page = int(url.params["page"])
@@ -40,6 +41,7 @@ class FakeGitHub:
         if request.method == "POST" and path == "/releases":
             tag = json.loads(request.content)["tag_name"]
             self.releases[tag] = len(self.releases) + 1
+            self.bodies[tag] = json.loads(request.content)["body"]
             return httpx.Response(201, json={"id": self.releases[tag]})
         if path.endswith("/assets") and url.host == "api.github.com":
             release = int(path.split("/")[2])
