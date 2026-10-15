@@ -39,6 +39,7 @@ jobs:
       - name: Archive history and closed months
         run: >-
           uv run --frozen mvd chmi-archive --part history --part months --github-release
-          --max-minutes ${{ inputs.max_minutes || '300' }}
+          --max-minutes "$MAX_MINUTES"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAX_MINUTES: ${{ inputs.max_minutes || '300' }}

@@ -1,5 +1,6 @@
 import io
 import json
+import re
 import tarfile
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -350,6 +351,45 @@ def test_update_live_adds_prunes_and_keeps_the_nowcast(tmp_path):
     assert not (tmp_path / "echotop" / "202610150900.png").exists()
     assert not any("ft60s10.tar" in p and not p.endswith("/") for p in seen)  # same nowcast
     assert not any(p.endswith(".hdf") for p in seen)  # derived frames all there
+
+
+def _shifted_nowcast(minutes: int) -> bytes:
+    """NOWCAST_TAR with every frame's valid time moved by ``minutes``."""
+    out = io.BytesIO()
+    with (
+        tarfile.open(fileobj=io.BytesIO(NOWCAST_TAR)) as src,
+        tarfile.open(fileobj=out, mode="w") as dst,
+    ):
+        for member in src.getmembers():
+            content = src.extractfile(member)
+            match = re.search(r"\.(\d{8}\.\d{4})\.", member.name)
+            if content is None or not match:
+                continue
+            when = datetime.strptime(match[1], "%Y%m%d.%H%M") + timedelta(minutes=minutes)
+            data = content.read()
+            info = tarfile.TarInfo(member.name.replace(match[1], when.strftime("%Y%m%d.%H%M")))
+            info.size = len(data)
+            dst.addfile(info, io.BytesIO(data))
+    return out.getvalue()
+
+
+def test_live_keeps_the_previous_nowcast_one_round(tmp_path):
+    # a cached old index.json must still find its frames after a newer nowcast
+    files = day_files(datetime(2026, 10, 15, 8, tzinfo=UTC))
+    product = "fct_maxz/png_masked"
+    now = datetime(2026, 10, 15, 10, 0, tzinfo=UTC)
+    files[product] = {"pacz2gmaps3.fct_z_max.20261015.0955.ft60s10.tar": NOWCAST_TAR}
+    radar.update_live(fake_server(files)[0], tmp_path, now, hours=1, log=lambda _: None)
+    first = {p.stem for p in (tmp_path / "nowcast").glob("*.png")}
+    files[product] = {"pacz2gmaps3.fct_z_max.20261015.1055.ft60s10.tar": _shifted_nowcast(60)}
+    second = radar.update_live(fake_server(files)[0], tmp_path, now, hours=1, log=lambda _: None)
+    newest = {f["time"] for f in second["nowcast"]["frames"]}
+    assert second["nowcast"]["base"] == "202610151055" and not newest & first
+    assert {p.stem for p in (tmp_path / "nowcast").glob("*.png")} == first | newest
+    files[product] = {"pacz2gmaps3.fct_z_max.20261015.1155.ft60s10.tar": _shifted_nowcast(120)}
+    third = radar.update_live(fake_server(files)[0], tmp_path, now, hours=1, log=lambda _: None)
+    latest = {f["time"] for f in third["nowcast"]["frames"]}
+    assert {p.stem for p in (tmp_path / "nowcast").glob("*.png")} == newest | latest
 
 
 class FakeReleases:

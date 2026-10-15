@@ -154,10 +154,26 @@ def test_season_windows_span_all_years():
     winter = table.filter(
         pl.col("level") == "cz", pl.col("model") == "a", pl.col("window") == "djf"
     )
-    assert winter.select("days", "from", "to").row(0) == (3, date(2024, 12, 31), DAY)
+    # from/to: the first and last scored day inside the season's months
+    span = (3, date(2024, 12, 31), date(2026, 2, 1))
+    assert winter.select("days", "from", "to").row(0) == span
     start, days_filter = agg.window_days("jja", DAY, date(2024, 1, 1))
     picked = pl.DataFrame({"date": days}).filter(days_filter)["date"].to_list()
     assert (start, picked) == (date(2024, 1, 1), [date(2025, 7, 1)])
+
+
+def test_meta_windows_of_the_seasons_span_their_scored_days():
+    # scored 10 Aug to 30 Sep (as published on 15 Oct 2026): jja must not end on 30 Sep
+    days = [date(2026, 8, 10) + timedelta(days=k) for k in range(52)]
+    rows = [(d, "s1", m, 1, 1.0) for d in days for m in ("a", "b")]
+    table = agg.aggregate(score_rows(rows), STATIONS)
+    meta = agg.metadata(table, {}, datetime(2026, 10, 15, 10, 6, tzinfo=UTC))
+    assert meta["as_of"] == "2026-09-30"
+    assert meta["windows"]["jja"] == {"from": "2026-08-10", "to": "2026-08-31"}
+    assert meta["windows"]["son"] == {"from": "2026-09-01", "to": "2026-09-30"}
+    assert meta["windows"]["90d"] == {"from": "2026-08-10", "to": "2026-09-30"}
+    assert meta["windows"]["season"] == {"from": "2026-09-01", "to": "2026-09-30"}
+    assert "djf" not in meta["windows"]  # no scored winter day: no rows
 
 
 def test_no_scores_is_an_error():

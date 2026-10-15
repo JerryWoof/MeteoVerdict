@@ -110,3 +110,27 @@ def test_a_total_after_missing_days_is_dropped():
     two = pl.DataFrame([row(1, 0.0), row(2, 0.1, station="h"), row(3, 0.2)], schema=SCHEMA)
     assert gauges.drop_after_gaps(two)["value"].to_list() == pytest.approx([0.0, 0.1])
     assert gauges.drop_after_gaps(rows.clear()).height == 0
+
+
+def test_a_total_after_a_gap_across_a_month_boundary_is_dropped():
+    # the backfill fetches one month at a time: the September readings decide whether the
+    # first October value follows a gap
+    def month(days):
+        values = [[W, "SRA", "06:00", f"{d}T06:00:00Z", 1.0, "", 0.0] for d in days]
+        header = "STATION,ELEMENT,VTYPE,DT,VAL,FLAG,QUALITY"
+        return {"data": {"data": {"header": header, "values": values}}}
+
+    september = month([f"2026-09-{d:02d}" for d in range(20, 25)])  # until 24 Sept
+    october = month(["2026-10-02", "2026-10-03"])
+    client, seen = server({"202609": september, "202610": october}, csv=None)
+    rows = gauges.fetch_gauge_precipitation(
+        client, [W], date(2026, 10, 1), date(2026, 10, 31), historical=False
+    )
+    assert rows["time"].to_list() == [datetime(2026, 10, 4, 6, tzinfo=UTC)]
+    assert any(p.endswith("-202609.json") for p in seen)
+    # without September (not published yet) the first value stays, as before
+    client, _ = server({"202610": october}, csv=None)
+    rows = gauges.fetch_gauge_precipitation(
+        client, [W], date(2026, 10, 1), date(2026, 10, 31), historical=False
+    )
+    assert rows.height == 2

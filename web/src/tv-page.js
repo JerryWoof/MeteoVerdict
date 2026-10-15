@@ -520,11 +520,12 @@ async function main() {
     status.textContent = t("tv.none");
     return;
   }
-  status.textContent = t("tv.updated", {
-    time: new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Prague" }).format(
-      new Date(outlook.generated),
-    ),
-  });
+  const generated = outlook.generated ? new Date(outlook.generated) : null;
+  status.textContent = generated && !Number.isNaN(generated.getTime())
+    ? t("tv.updated", {
+      time: new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Prague" }).format(generated),
+    })
+    : "";
   const now = Date.now();
   const first = outlook.days.includes(today(now)) ? today(now) : outlook.days[0];
   state = parseView(window.location.hash, outlook, {
