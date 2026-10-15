@@ -1377,9 +1377,12 @@ def check(
     data_dir: Annotated[Path, typer.Option(help="Folder with obs/, fc/ and scores/.")] = Path(
         "data"
     ),
+    meta: Annotated[
+        Path, typer.Option(help="Published meta.json: its as_of must be recent.")
+    ] = Path("site/data/meta.json"),
 ) -> None:
     """Data quality checks: exit 1 on stale data or many missing stations."""
-    findings = quality.check(data_dir)
+    findings = quality.check(data_dir, meta_path=meta)
     text = quality.report(findings)
     typer.echo(text)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
