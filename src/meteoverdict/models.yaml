@@ -1,5 +1,6 @@
 # Weather models compared by MeteoVerdict, as served by the Open-Meteo Previous Runs API.
-# Evidence and sources for every field: docs/data-sources.md#models (checked 2026-10-11).
+# Evidence and sources for every field: docs/data-sources.md#models (checked 2026-10-11;
+# the models after DMI, and KNMI and DMI being enabled, checked 2026-10-15).
 #
 # id               value for the Open-Meteo `models=` parameter
 # grid             spatial resolution, per the Open-Meteo model docs
@@ -16,8 +17,12 @@
 # note             known gaps (also measured with the probe script)
 # runs_from        optional: first day whose runs are in Open-Meteo's Single Runs archive
 #                  (`mvd fetch-runs`), when later than 2026-04-02 (models.RUNS_FROM);
-#                  measured live 2026-10-13
-# enabled          false = covers Czechia but is not part of the v1 comparison
+#                  measured live 2026-10-13 and 2026-10-15
+# run_hours        optional: UTC run hours in the Single Runs API when not all of 00, 06,
+#                  12 and 18 (measured live 2026-10-15)
+# enabled          false = covers Czechia but is not part of the comparison
+#
+# New models go at the end: the web pages colour models in this order.
 
 models:
   - id: chmi_aladin_cz_1km
@@ -156,7 +161,7 @@ models:
     forecast_days: 2.5
     max_lead_day: 1
     archive_from: 2024-06-29
-    enabled: false
+    enabled: true
     variable_from:
       precipitation: 2024-10-10
 
@@ -168,4 +173,93 @@ models:
     forecast_days: 2.5
     max_lead_day: 1
     archive_from: 2024-06-29
+    enabled: true
+
+  - id: dwd_icon
+    name: DWD ICON global
+    provider: DWD
+    grid: 0.1° (~11 km)
+    step_hours: 1
+    coarser_after_h: 78
+    coarser_step_h: 3
+    forecast_days: 7.5
+    max_lead_day: 5
+    archive_from: 2024-01-19
+    enabled: true
+
+  - id: gem_global
+    name: ECCC GEM Global 15 km
+    provider: ECCC (Canada)
+    grid: 0.15° (~15 km)
+    step_hours: 1
+    coarser_after_h: 84
+    coarser_step_h: 3
+    forecast_days: 10
+    max_lead_day: 5
+    archive_from: 2024-01-19
+    runs_from: 2026-05-28
+    run_hours: [0, 12]
+    enabled: true
+    note: runs at 00 and 12 UTC only; output hourly up to 84 h (measured; the docs say 3-hourly)
+
+  - id: jma_gsm
+    name: JMA GSM
+    provider: JMA (Japan)
+    grid: 0.5° (~55 km)
+    step_hours: 6
+    forecast_days: 11
+    max_lead_day: 5
+    archive_from: 2021-01-01
+    runs_from: 2026-05-13
+    enabled: true
+    note: 6-hourly output only; D+1 archive reaches back at least to 2021-01-01 (probe start)
+
+  - id: cma_grapes_global
+    name: CMA GRAPES Global
+    provider: CMA (China)
+    grid: 0.125° (~15 km)
+    step_hours: 3
+    forecast_days: 10
+    max_lead_day: 4
+    archive_from: 2024-01-19
+    enabled: true
+    note: 3-hourly output; gaps (23-69 % of hours) in 2025-08 to 2025-10 and 2026-01
+
+  - id: meteofrance_arpege_world
+    name: Météo-France ARPEGE World
+    provider: Météo-France
+    grid: 0.25° (~25 km)
+    step_hours: 1
+    coarser_after_h: 48
+    coarser_step_h: 3
+    forecast_days: 4
+    max_lead_day: 3
+    archive_from: 2024-01-19
+    enabled: true
+    variable_from:
+      wind_speed_10m: 2026-08-07
+
+  - id: ncep_aigfs025
+    name: NOAA AIGFS 0.25°
+    provider: NOAA NCEP
+    grid: 0.25° (~25 km)
+    step_hours: 6
+    forecast_days: 16
+    max_lead_day: 5
+    archive_from: 2026-01-22
+    enabled: true
+    note: machine-learning model, 6-hourly output; only 19-84 % of hours filled until 2026-06
+
+  - id: gem_regional
+    name: ECCC GEM Regional (RDPS) 10 km
+    provider: ECCC (Canada)
+    grid: 10 km
+    step_hours: 1
+    forecast_days: 3.5
+    max_lead_day: 2
+    archive_from: 2026-09-01
     enabled: false
+    note: >-
+      covers only Czechia north of ~48.8° N (12° E) to ~49.6° N (18.9° E): no data at 115
+      of 501 stations, which the fair comparison would drop for every model; archive start
+      not measured (longer Previous Runs requests returned empty answers, 2026-10-15)

@@ -49,6 +49,7 @@ class Fake:
 
     def forecasts(self, client, points, models, start, end, budget, uncovered=None, **ask):
         (model,) = models
+        budget.spend(10)  # like one request
         if self.quota_after is not None and len(self.fc_calls) >= self.quota_after:
             error = self.error("Daily API request limit exceeded.")
             error.partial = pl.DataFrame(schema=forecasts.SCHEMA)
@@ -298,3 +299,103 @@ def test_stopped_run_records_the_day_of_its_calls(tmp_path, fake):
     budget = forecasts.Budget(max_calls=1e9)
     backfill.run(None, POINTS, MODELS, FIRST, LAST, tmp_path, budget, today=date(2026, 10, 3))
     assert backfill.State.load(tmp_path / "backfill-state.json").calls_on == "2026-10-03"
+
+
+def test_a_model_added_later_is_fetched_for_scored_windows_newest_first(tmp_path, fake):
+    f = fake()
+    budget = forecasts.Budget(max_calls=1e9)
+    backfill.run(None, POINTS, MODELS[:1], FIRST, LAST, tmp_path, budget)
+    state = backfill.State.load(tmp_path / "backfill-state.json")
+    assert len(state.scored) == 4
+    assert backfill.pending_windows(MODELS, FIRST, LAST, state) == WINDOWS[::-1]
+    f.fc_calls.clear()
+    result = backfill.run(None, POINTS, MODELS, FIRST, LAST, tmp_path, budget)
+    assert result.windows_done == 4
+    # only the new model, newest window first, from its archive start on
+    assert [(m, e) for m, _, e in f.fc_calls] == [(MODELS[1].id, e) for _, e in WINDOWS[::-1]]
+    scores = pl.concat([pl.read_parquet(p) for p in (tmp_path / "scores").iterdir()])
+    assert set(scores["model"]) >= {m.id for m in MODELS}  # scored again with it
+    f.fc_calls.clear()
+    backfill.run(None, POINTS, MODELS, FIRST, LAST, tmp_path, budget)
+    assert f.fc_calls == []
+
+
+def test_older_windows_only_when_allowed(tmp_path, fake):
+    f = fake()
+    first, last = date(2026, 5, 1), date(2026, 9, 30)
+    windows = backfill.complete_windows(first, last)
+    current = [(s, e) for s, e in windows if backfill.is_current(e, last)]
+    # the 90-day ranking reaches back to 3 Jul: the windows ending 9 Jul ... 17 Sep
+    assert current[0] == (date(2026, 6, 26), date(2026, 7, 9)) and len(current) == 6
+    assert current[-1] == (date(2026, 9, 4), date(2026, 9, 17))
+    budget = forecasts.Budget(max_calls=1e9)
+    result = backfill.run(
+        None, POINTS, MODELS, first, last, tmp_path, budget, older=False, held_back="runs first"
+    )
+    assert {(s, e) for _, s, e in f.fc_calls} == set(current)
+    assert result.windows_done == 6 and result.older_skipped == len(windows) - 6
+    text = backfill.summary(result, budget.used, tmp_path, first, last)
+    assert "- Priority: the 6 current windows (last 90 days) first; older windows held back" in text
+    assert "runs first" in text
+    state = backfill.State.load(tmp_path / "backfill-state.json")
+    pending = backfill.pending_windows(MODELS, first, last, state, gauges=False)
+    assert backfill.pending_windows(MODELS, first, last, state, False, current_only=True) == []
+    assert len(pending) == len(windows) - 6
+    # allowed: the older ones follow, newest first
+    f.fc_calls.clear()
+    result = backfill.run(None, POINTS, MODELS, first, last, tmp_path, budget)
+    assert [e for _, _, e in f.fc_calls][::2] == [e for _, e in windows[: len(windows) - 6]][::-1]
+    assert "older windows allowed" in backfill.summary(result, 0, tmp_path, first, last)
+
+
+def test_calls_of_the_day_are_recorded(tmp_path, fake):
+    fake(quota_after=3)
+    budget = forecasts.Budget(max_calls=1e9)
+    day = date(2026, 10, 3)
+    backfill.run(None, POINTS, MODELS, FIRST, LAST, tmp_path, budget, today=day)
+    state = backfill.State.load(tmp_path / "backfill-state.json")
+    assert (state.calls_on, state.calls_used) == ("2026-10-03", 40)  # 3 fetched + 1 refused
+    # a second run the same day adds to it, a run the next day starts again
+    fake(quota_after=1)
+    backfill.run(None, POINTS, MODELS, FIRST, LAST, tmp_path, forecasts.Budget(1e9), today=day)
+    assert backfill.State.load(tmp_path / "backfill-state.json").calls_used == 60
+    fake(quota_after=0)
+    later = date(2026, 10, 4)
+    backfill.run(None, POINTS, MODELS, FIRST, LAST, tmp_path, forecasts.Budget(1e9), today=later)
+    state = backfill.State.load(tmp_path / "backfill-state.json")
+    assert (state.calls_on, state.calls_used) == ("2026-10-04", 10)
+    assert "- Calls on 2026-10-04 (UTC): 10" in backfill.summary(
+        backfill.Result(), 10, tmp_path, FIRST, LAST
+    )
+
+
+def test_share_left_after_the_backfill_ran_today(tmp_path, fake):
+    fake()
+    budget = forecasts.Budget(max_calls=1e9)
+    today = LAST + timedelta(days=1)
+    backfill.run(
+        None, POINTS, MODELS, FIRST, LAST, tmp_path, budget, gauge_points=GAUGES, today=today
+    )
+    state = backfill.State.load(tmp_path / "backfill-state.json")
+    left, why = backfill.share_left(MODELS, FIRST, today, state, 4500)
+    assert left == 4500 - budget.used and f"used {budget.used:g} of the 4500" in why
+    # not yet run today and a current window pending: nothing (it may still be running)
+    state.fc_done.discard(backfill.fc_key(MODELS[0], *WINDOWS[-1]))
+    state.calls_on = str(LAST)
+    left, why = backfill.share_left(MODELS, FIRST, today, state, 4500)
+    assert left == 0 and why == "1 current backfill window pending (newest 2026-09-12..2026-09-25)"
+    # run today but still pending (stopped early): nothing either
+    state.calls_on = str(today)
+    left, why = backfill.share_left(MODELS, FIRST, today, state, 4500)
+    assert left == 0 and why.endswith("(it used Open-Meteo today)")
+
+
+def test_old_state_files_load(tmp_path):
+    path = tmp_path / "backfill-state.json"
+    path.write_text(
+        '{"obs_months": [], "fc_done": [], "scored": [], "calls_on": "2026-10-15"}', "utf-8"
+    )
+    state = backfill.State.load(path)
+    assert state.calls_on == "2026-10-15" and state.calls_used is None
+    left, why = backfill.share_left([], FIRST, date(2026, 10, 15), state, 4500)
+    assert left == 0 and "amount not recorded" in why

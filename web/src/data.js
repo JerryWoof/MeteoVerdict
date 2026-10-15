@@ -3,11 +3,15 @@
 export const NO_DATA = "#ececec";
 export const TOO_FEW = "#bdbdbd";
 
-// Qualitative palette (ColorBrewer Paired / Tableau), assigned in the order of the
-// models in meta.json, so a model keeps its colour between updates.
+// Qualitative palette (ColorBrewer Paired, then the Tableau 20 pairs Paired lacks),
+// assigned in the order of the models in meta.json (models.yaml order, new models at the
+// end), so a model keeps its colour between updates. 20 colours: every model of the
+// catalogue (19 enabled, 1 disabled) has its own.
 const PALETTE = [
   "#1f78b4", "#e31a1c", "#33a02c", "#ff7f00", "#6a3d9a", "#b15928",
   "#a6cee3", "#fb9a99", "#b2df8a", "#fdbf6f", "#cab2d6", "#ffff99",
+  "#17becf", "#e377c2", "#bcbd22", "#8c564b",
+  "#9edae5", "#f7b6d2", "#dbdb8d", "#c49c94",
 ];
 
 /** {"columns": [...], "rows": [[...]]} → array of objects */
