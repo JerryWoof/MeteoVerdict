@@ -399,6 +399,28 @@ def test_collect_recent_first_then_history_and_resume(tmp_path):
     assert again.runs == ["2026101206", "2026101200"]  # continues, nothing twice
 
 
+def test_the_newest_pending_run_goes_first_and_older_ones_wait(tmp_path):
+    # 2026-10-15 19:54 (a late schedule): the 12 UTC run is only 7.9 h old, so the
+    # 06 UTC run is the newest one to fetch; the budget fits one run, and the older
+    # pending runs (00 UTC, the day before) are left for later instead of going first
+    now = datetime(2026, 10, 15, 19, 54, tzinfo=UTC)
+    two = [BY_ID["dwd_icon_eu"], BY_ID["ecmwf_ifs"]]
+    api = FakeApi()
+    with client(api) as c:
+        result = runs.collect(c, STATIONS, two, tmp_path, budget(2), now)
+    assert result.runs == ["2026101506"]
+    assert [r["run"] for r in api.requests] == ["2026-10-15T06:00"]
+    assert "budget" in result.stopped
+    state = runs.State.load(tmp_path / runs.STATE_NAME)
+    older = datetime(2026, 10, 15, 0, tzinfo=UTC)
+    assert state.todo(older, two) == two
+    # the next schedule, after the 12 UTC run is 10 h old: that one first, then 00 UTC
+    later = datetime(2026, 10, 15, 22, 20, tzinfo=UTC)
+    with client(api) as c:
+        again = runs.collect(c, STATIONS, two, tmp_path, budget(4), later)
+    assert again.runs == ["2026101512", "2026101500"]
+
+
 def test_a_model_added_later_is_fetched_newest_run_first(tmp_path):
     two, added = [BY_ID["dwd_icon_eu"], BY_ID["ecmwf_ifs"]], BY_ID["dwd_icon"]
     api = FakeApi()

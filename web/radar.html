@@ -65,14 +65,9 @@
       </aside>
       <aside id="point-panel" hidden aria-live="polite"></aside>
     </main>
-    <footer>
-      <span data-i18n="footer.radar">Radar</span>:
-      <a href="https://opendata.chmi.cz/meteorology/weather/radar/">ČHMÚ</a> (CC BY 4.0) ·
-      <span data-i18n="footer.satellite">Satellite</span>: contains modified EUMETSAT Meteosat
-      data <span id="sat-year">2026</span> (CC BY 4.0), processed by
-      <a href="https://opendata.chmi.cz/meteorology/weather/satellite/">ČHMÚ</a> (CC BY 4.0) ·
-      <span data-i18n="footer.boundaries">Boundaries</span>: ČÚZK (CC BY 4.0) ·
-      <a href="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/data-sources.md#radar-archive" data-i18n="footer.method">Source and method</a>
+    <footer data-footer="radar" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/data-sources.md#radar-archive">
+      <!-- filled in by src/footer.js (the credits and licences of every page) -->
+      Radar and satellite images: ČHMÚ, EUMETSAT (CC BY 4.0).
     </footer>
     <script type="module" src="/src/radar-page.js"></script>
   </body>

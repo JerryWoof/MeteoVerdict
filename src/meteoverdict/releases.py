@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx
@@ -11,9 +12,19 @@ UPLOADS = "https://uploads.github.com"
 
 
 class GitHubReleaseStore:
-    """Assets of releases in ``repo`` ("owner/name"); releases are created on demand."""
+    """Assets of releases in ``repo`` ("owner/name"); releases are created on demand.
 
-    def __init__(self, client: httpx.Client, repo: str, token: str, notes: str = "") -> None:
+    ``notes`` is the release body: a text, or a function of the tag. A release this
+    store writes to (``put``) gets its body set to the notes when they differ, so a
+    correction of the notes in the code reaches the releases that already exist."""
+
+    def __init__(
+        self,
+        client: httpx.Client,
+        repo: str,
+        token: str,
+        notes: str | Callable[[str], str] = "",
+    ) -> None:
         self.client = client
         self.repo = repo
         self.notes = notes
@@ -23,6 +34,10 @@ class GitHubReleaseStore:
             "X-GitHub-Api-Version": "2022-11-28",
         }
         self._ids: dict[str, int] = {}
+        self._bodies: dict[str, str] = {}  # tag -> release body as GitHub has it
+
+    def notes_for(self, tag: str) -> str:
+        return self.notes(tag) if callable(self.notes) else self.notes
 
     def _release_id(self, tag: str, create: bool) -> int | None:
         if tag in self._ids:
@@ -30,17 +45,39 @@ class GitHubReleaseStore:
         response = self.client.get(
             f"{API}/repos/{self.repo}/releases/tags/{tag}", headers=self.headers
         )
+        body = None
         if response.status_code == 404:
             if not create:
                 return None
+            body = self.notes_for(tag)
             response = self.client.post(
                 f"{API}/repos/{self.repo}/releases",
                 headers=self.headers,
-                json={"tag_name": tag, "name": tag, "body": self.notes, "make_latest": "false"},
+                json={
+                    "tag_name": tag,
+                    "name": tag,
+                    "body": body,
+                    "make_latest": "false",
+                },
             )
         response.raise_for_status()
-        self._ids[tag] = response.json()["id"]
+        release = response.json()
+        self._ids[tag] = release["id"]
+        self._bodies[tag] = body if body is not None else release.get("body") or ""
         return self._ids[tag]
+
+    def _update_notes(self, tag: str, release: int) -> None:
+        """Set the body of ``tag`` to the notes if it differs (only stores with notes)."""
+        notes = self.notes_for(tag)
+        if not notes or self._bodies.get(tag) == notes:
+            return
+        response = self.client.patch(
+            f"{API}/repos/{self.repo}/releases/{release}",
+            headers=self.headers,
+            json={"body": notes},
+        )
+        response.raise_for_status()
+        self._bodies[tag] = notes
 
     def tags(self, prefix: str = "") -> list[str]:
         """Tags of all releases starting with ``prefix``."""
@@ -85,6 +122,7 @@ class GitHubReleaseStore:
     def put(self, tag: str, name: str, path: Path, label: str = "") -> None:
         """Upload ``path`` as ``name``, replacing an existing asset of that name."""
         release = self._release_id(tag, create=True)
+        self._update_notes(tag, release)
         old = self.assets(tag).get(name)
         if old is not None:  # GitHub cannot overwrite an asset
             response = self.client.delete(
