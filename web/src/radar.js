@@ -64,6 +64,9 @@ export function latestAtOrBefore(stamps, ms, maxAgeMin = 60) {
  * has the MERGE frame (1-hour precipitation) valid then, if any.
  *   {time, radar, rain, forecast, lead}
  */
+/** A nowcast older than this (from its base to the newest measured image) is not shown. */
+export const NOWCAST_MAX_AGE = 20 * 60000;
+
 export function timeline(index, { hours = null } = {}) {
   const radarStamps = [...(index?.maxz ?? [])].sort();
   const rainStamps = index?.merge1h ?? [];
@@ -73,7 +76,11 @@ export function timeline(index, { hours = null } = {}) {
     .map((s) => ({ time: parseStamp(s), radar: s, forecast: false, lead: 0 }))
     .filter((s) => s.time != null && s.time > from - 1);
   const lastObserved = steps.at(-1)?.time ?? -Infinity;
-  for (const f of index?.nowcast?.frames ?? []) {
+  // ČHMÚ's nowcast only when it starts from (nearly) the newest measured image: an old
+  // one would show a "forecast" that is already past; then the animation ends at now
+  const base = parseStamp(index?.nowcast?.base);
+  const fresh = base != null && lastObserved - base <= NOWCAST_MAX_AGE;
+  for (const f of fresh ? index.nowcast.frames ?? [] : []) {
     const time = parseStamp(f.time);
     if (time != null && time > lastObserved) steps.push({ time, radar: f.time, forecast: true, lead: f.lead });
   }
