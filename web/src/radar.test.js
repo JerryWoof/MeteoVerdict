@@ -94,10 +94,18 @@ test("colour scales and legend numbers", () => {
 });
 
 test("view state in the URL", () => {
-  assert.deepEqual(parseView(""), { day: "live", hours: 3, layers: ["radar"], time: null });
-  const view = { day: "2026-10-14", hours: 24, layers: ["radar", "rain"], time: "202610141200" };
+  assert.deepEqual(parseView(""), { day: "live", hours: 3, layers: ["radar"], time: null, filter: null });
+  const view = { day: "2026-10-14", hours: 24, layers: ["radar", "rain"], time: "202610141200", filter: null };
   assert.equal(viewHash(view), "#2026-10-14/24/radar+rain/202610141200");
   assert.deepEqual(parseView(viewHash(view)), view);
-  assert.deepEqual(parseView("#live/5/rain+x"), { day: "live", hours: 3, layers: ["rain"], time: null });
+  assert.deepEqual(parseView("#live/5/rain+x"), { day: "live", hours: 3, layers: ["rain"], time: null, filter: null });
   assert.deepEqual(parseView("#live/6/").layers, []);
+  // new layers and the "show from" setting; old links keep working
+  const shown = { day: "live", hours: 3, layers: ["radar", "sat", "cells"], time: null, filter: "moderate" };
+  assert.equal(viewHash(shown), "#live/3/radar+sat+cells/now/moderate");
+  assert.deepEqual(parseView(viewHash(shown)), shown);
+  assert.equal(viewHash({ ...shown, filter: "all" }), "#live/3/radar+sat+cells");
+  assert.deepEqual(parseView("#live/3/radar/now/bogus").filter, null);
+  // one satellite product at a time
+  assert.deepEqual(parseView("#live/3/sat+wv+echotop").layers, ["sat", "echotop"]);
 });

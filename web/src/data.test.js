@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  stationsIn,
   NO_DATA, TOO_FEW, bestByRegion, fillExpression, modelColors, records,
   regionColor, stationFeatures,
 } from "./data.js";
@@ -89,3 +90,19 @@ test("an okres knows how many stations it borrowed", () => {
   assert.equal(entry.borrowed, 2);
 });
 
+
+test("station pages of an okres: all its stations by name, also by kraj", () => {
+  const table = {
+    columns: ["id", "name", "okres_code", "kraj_code"],
+    rows: [
+      ["b", "Žatec", "CZ0424", "CZ042"],
+      ["a", "Doksany", "CZ0423", "CZ042"],
+      ["c", "Ústí nad Labem", "CZ0427", "CZ042"],
+      ["d", "Bílá Třemešná", "CZ0423", "CZ042"],
+    ],
+  };
+  assert.deepEqual(stationsIn(table, "CZ0423").map((s) => s.name), ["Bílá Třemešná", "Doksany"]);
+  assert.equal(stationsIn(table, "CZ042").length, 4);
+  assert.deepEqual(stationsIn(table, "CZ0999"), []);
+  assert.deepEqual(stationsIn(null, "CZ0423"), []);
+});
