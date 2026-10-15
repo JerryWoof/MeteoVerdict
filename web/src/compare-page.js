@@ -32,7 +32,13 @@ async function getJson(path) {
 const cache = new Map();
 function load(view, level) {
   const path = `data/scores/${view.window}/${level}/${view.variable}.json`;
-  if (!cache.has(path)) cache.set(path, getJson(path).then(records));
+  if (!cache.has(path)) {
+    // a failed fetch is not remembered: the next view tries again
+    cache.set(path, getJson(path).then((doc) => {
+      if (!doc) cache.delete(path);
+      return records(doc);
+    }));
+  }
   return cache.get(path);
 }
 
@@ -90,7 +96,7 @@ function fillRegions(kraje, okresy, current) {
   };
   const cz = document.createElement("option");
   cz.value = "cz";
-  cz.textContent = "Česko";
+  cz.textContent = t("region.cz");
   cz.selected = current === "cz";
   select.replaceChildren(cz, group(t("compare.kraje"), kraje), group(t("compare.okresy"), okresy));
 }
@@ -158,7 +164,7 @@ function paintMap(okresRows, view, colors, names) {
 function renderSummary(rows, view, names, colors) {
   const box = document.getElementById("summary");
   const s = regionSummary(rows, view.leadDay, view.region);
-  const name = view.region === "cz" ? "Česko" : displayName(s?.name ?? view.region);
+  const name = view.region === "cz" ? t("region.cz") : displayName(s?.name ?? view.region);
   const heading = cell("h2", name);
   if (!s) {
     box.replaceChildren(heading, cell("p", t("compare.empty")));
@@ -587,7 +593,7 @@ async function main() {
     fillSelect("lead", leadDays.map((d) => [d, `D+${d}`]), view.leadDay);
     document.getElementById("region").value = view.region;
     document.getElementById("ranking-title").textContent = t("compare.rankingIn", {
-      region: view.region === "cz" ? "Česko" : displayName(regionList(rows).find((r) => r.code === view.region)?.name ?? view.region),
+      region: view.region === "cz" ? t("region.cz") : displayName(regionList(rows).find((r) => r.code === view.region)?.name ?? view.region),
     });
     renderBlendTest(view);
     renderSummary(rows, view, names, colors);
