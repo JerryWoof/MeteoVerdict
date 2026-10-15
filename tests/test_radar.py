@@ -19,6 +19,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "chmi" / "radar"
 MAXZ_PNG = (FIXTURES / "pacz2gmaps3.z_max3d.20261015.1035.0.png").read_bytes()
 MAXZ_HDF = (FIXTURES / "T_PABV23_C_OKPR_20261015103500.hdf").read_bytes()
 MERGE_HDF = (FIXTURES / "T_PASV23_C_OKPR_20261015101000.hdf").read_bytes()
+ECHOTOP_HDF = (FIXTURES / "T_PADV23_C_OKPR_20261015103500.hdf").read_bytes()
 NOWCAST_TAR = (FIXTURES / "pacz2gmaps3.fct_z_max.20261015.1035.ft60s10.tar").read_bytes()
 STATIONS = pl.DataFrame(
     {
@@ -186,12 +187,19 @@ def test_nowcast_frames():
 # --- a fake opendata.chmi.cz --------------------------------------------------------
 
 
+SATELLITE_PATH = "/meteorology/weather/satellite/geo/"
+
+
 def fake_server(files: dict[str, dict[str, bytes]], fail: set[str] = frozenset()):
-    """``files``: product folder → file name → content. ``fail``: names answering 500."""
+    """``files``: product folder (``maxz/png_masked``, satellite: ``satellite/wv062``) →
+    file name → content. ``fail``: names answering 500."""
     seen: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        path = request.url.path.removeprefix("/meteorology/weather/radar/composite/")
+        path = request.url.path
+        if path.startswith(SATELLITE_PATH):
+            path = "satellite/" + path.removeprefix(SATELLITE_PATH)
+        path = path.removeprefix("/meteorology/weather/radar/composite/")
         seen.append(path)
         if path.endswith("/"):
             names = files.get(path.rstrip("/"), {})
@@ -208,14 +216,22 @@ def fake_server(files: dict[str, dict[str, bytes]], fail: set[str] = frozenset()
 
 
 def day_files(day: datetime, hours: int = 2) -> dict[str, dict[str, bytes]]:
-    png, merge_png, merge_hdf = {}, {}, {}
+    png, merge_png, merge_hdf, maxz_hdf, top_hdf = {}, {}, {}, {}, {}
     for i in range(hours * 12):
         t = day + timedelta(minutes=5 * i)
         png[f"pacz2gmaps3.z_max3d.{t:%Y%m%d.%H%M}.0.png"] = MAXZ_PNG
+        maxz_hdf[f"T_PABV23_C_OKPR_{t:%Y%m%d%H%M}00.hdf"] = MAXZ_HDF
+        top_hdf[f"T_PADV23_C_OKPR_{t:%Y%m%d%H%M}00.hdf"] = ECHOTOP_HDF
         if t.minute % 10 == 0:
             merge_png[f"pacz2gmaps3.merge.{t:%Y%m%d.%H%M}.60.png"] = MAXZ_PNG
             merge_hdf[f"T_PASV23_C_OKPR_{t:%Y%m%d%H%M}00.hdf"] = merge_at(t, 3)
-    return {"maxz/png_masked": png, "merge1h/png": merge_png, "merge1h/hdf5": merge_hdf}
+    return {
+        "maxz/png_masked": png,
+        "merge1h/png": merge_png,
+        "merge1h/hdf5": merge_hdf,
+        "maxz/hdf5": maxz_hdf,
+        "echotop/hdf5": top_hdf,
+    }
 
 
 def tar_names(path: Path) -> list[str]:
@@ -250,6 +266,12 @@ def test_archive_packs_days_and_skips_what_is_stored(tmp_path):
     with tarfile.open(folder / "web-20261014.tar") as tar:
         index = json.load(tar.extractfile("index.json"))
     assert index["maxz"][0] == "202610140000" and len(index["merge1h"]) == 12
+    assert len(index["echotop"]) == 24 and len(index["cells"]) == 24
+    assert len(index["motion"]) == 23  # not for the first frame of the day
+    assert "echotop/202610140005.png" in web and "cells/202610140005.json" in web
+    assert "motion/202610140005.json" in web and "motion/202610140000.json" not in web
+    assert set(index["satellite"]) == {"vis-ir", "night-M", "wv062"}
+    assert index["scales"]["maxz"][0][:2] == [4, "#380070"]
     grids = np.load(folder / "merge1h-hourly-20261014.npz")
     assert grids["acrr"].shape == (2, 378, 598) and list(grids["time"]) == [
         "202610140000",
@@ -311,14 +333,23 @@ def test_update_live_adds_prunes_and_keeps_the_nowcast(tmp_path):
     assert (tmp_path / "nowcast" / "202610151045.png").exists()
     assert json.loads((tmp_path / "index.json").read_text())["generated"] == "2026-10-15T10:00:00Z"
     assert "CC BY 4.0" in (tmp_path / "README.md").read_text()
+    assert index["echotop"] == index["maxz"] == index["cells"]
+    assert index["motion"] == index["maxz"]  # the frame before the window is used too
+    motion = json.loads((tmp_path / "motion" / "202610150930.json").read_text())
+    assert (motion["nx"], motion["ny"], motion["dt_s"]) == (19, 12, 300)
+    assert motion["u"] == [0.0] * 19 * 12  # the same file every time: no motion
+    assert json.loads((tmp_path / "cells" / "202610150930.json").read_text()) == []
 
     client, seen = fake_server(files)
     later = radar.update_live(
         client, tmp_path, now + timedelta(minutes=30), hours=1, log=lambda _: None
     )
     assert later["maxz"][0] == "202610150930"
+    assert later["echotop"][0] == later["motion"][0] == later["cells"][0] == "202610150930"
     assert not (tmp_path / "maxz" / "202610150900.png").exists()
+    assert not (tmp_path / "echotop" / "202610150900.png").exists()
     assert not any("ft60s10.tar" in p and not p.endswith("/") for p in seen)  # same nowcast
+    assert not any(p.endswith(".hdf") for p in seen)  # derived frames all there
 
 
 class FakeReleases:
