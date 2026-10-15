@@ -18,6 +18,7 @@ from meteoverdict import (
     aggregate,
     aladin,
     blend,
+    blendtest,
     combine,
     forecasts,
     gauges,
@@ -259,6 +260,93 @@ def leads_cmd(
     for line in lines:
         typer.echo(line)
     typer.echo(f"→ {', '.join(map(str, written))}")
+
+
+@app.command("blend-test")
+def blend_test_cmd(
+    data_dir: Annotated[Path, typer.Option(help="Folder with obs/, gauges/, fc/ and scores/.")] = (
+        Path("data")
+    ),
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    out: Annotated[Path, typer.Option(help="The JSON file.")] = Path("site/data/blend-test.json"),
+    days: Annotated[
+        int, typer.Option(help="Test the last N scored days (training uses the window before).")
+    ] = 180,
+    window: Annotated[
+        str, typer.Option(help="Training window of the weights, e.g. 90d (as live), 45d, 30d.")
+    ] = combine.WINDOW,
+    min_training_days: Annotated[
+        int, typer.Option(help="Warm-up: scored training days needed before a day is tested.")
+    ] = blendtest.MIN_TRAINING_DAYS,
+    resamples: Annotated[int, typer.Option(help="Bootstrap resamples of whole days.")] = 1000,
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Download the months' observations, forecasts and scores from GitHub "
+            "Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+        ),
+    ] = False,
+    publish: Annotated[
+        bool, typer.Option("--publish", help="Put the JSON file into the release data-latest.")
+    ] = False,
+) -> None:
+    """Out of sample: does our combined forecast beat the best single model? (roadmap 6.4)"""
+    if publish and not github_release:
+        raise typer.BadParameter("--publish needs --github-release")
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    if not (window.endswith("d") and window[:-1].isdigit() and int(window[:-1]) > 0):
+        raise typer.BadParameter(f"window must be a number of days like 90d, not {window!r}")
+    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+        releases = _release_store(client) if github_release else None
+        if releases:
+            remote = store.remote_months(releases)
+            store.download(releases, data_dir, remote, typer.echo, kinds=("scores",))
+        files = sorted((data_dir / "scores").glob("*.parquet"))
+        if not files:
+            typer.echo(f"mvd blend-test: no scores in {data_dir / 'scores'}", err=True)
+            raise typer.Exit(code=1)
+        variables = list(blendtest.SCORE_VARIABLES.values())
+        scores = (
+            pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
+            .filter(pl.col("variable").is_in(variables))
+            .collect()
+        )
+        last = scores["date"].max()
+        first = max(scores["date"].min(), last - timedelta(days=days - 1))
+        if releases:
+            months = partitions.months(first, last + timedelta(days=1))
+            store.download(releases, data_dir, months, typer.echo, kinds=("obs", "gauges", "fc"))
+        obs = observations.scan(data_dir, first, last + timedelta(days=1))
+        fc = partitions.scan_months(data_dir / "fc", first, last + timedelta(days=1))
+        if obs is None or fc is None:
+            typer.echo("mvd blend-test: no observations or forecasts for the test period", err=True)
+            raise typer.Exit(code=1)
+        table = pl.read_parquet(stations_path)
+        test_days, groups, models, info = blendtest.run(
+            scores, fc, obs, table, first, last, window, min_training_days, resamples,
+            log=typer.echo,
+        )  # fmt: skip
+        if not groups:
+            typer.echo("mvd blend-test: nothing to test yet (warm-up)", err=True)
+            raise typer.Exit(code=1)
+        doc = blendtest.document(
+            test_days, groups, models, info, _model_names(), datetime.now(UTC), window,
+            min_training_days, resamples,
+        )  # fmt: skip
+        path = blendtest.write(doc, out)
+        if publish:
+            releases.put(store.LATEST_TAG, path.name, path)
+    typer.echo(
+        f"{doc['test_days']} test days {doc['from']} … {doc['to']} "
+        f"({doc['warm_up_days']} scored days before them left out as warm-up)"
+    )
+    for line in blendtest.summary(groups):
+        typer.echo(line)
+    typer.echo(f"→ {path}")
 
 
 @app.command("fetch-runs")

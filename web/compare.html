@@ -23,6 +23,19 @@
       <button type="button" id="language">Česky</button>
     </header>
     <main class="content wide">
+      <section id="blend-test-section" class="blend-test" hidden>
+        <h2 data-i18n="blendTest.title">Does our forecast beat the best model?</h2>
+        <p class="note" data-i18n="blendTest.intro"></p>
+        <div class="blend-test-grid">
+          <div>
+            <div class="scroll"><table id="blend-test-table"></table></div>
+            <p class="note" id="blend-test-okres"></p>
+          </div>
+          <div id="blend-test-chart"></div>
+        </div>
+        <p class="note" id="blend-test-basis"></p>
+        <p class="note" data-i18n="blendTest.caveats"></p>
+      </section>
       <section class="overview">
         <div>
           <div id="mini-map" aria-label="Map: best model per okres"></div>
