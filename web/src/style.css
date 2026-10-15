@@ -7,7 +7,18 @@ body {
   margin: 0;
   display: grid;
   grid-template-rows: auto 1fr auto;
+  /* one column no wider than the screen: a long select or code line must not widen the page */
+  grid-template-columns: minmax(0, 1fr);
   height: 100vh;
+}
+select {
+  max-width: 100%;
+}
+/* header parts and their labels shrink to the screen too, so a long select can */
+header > *,
+header label {
+  min-width: 0;
+  max-width: 100%;
 }
 header {
   display: flex;
@@ -683,6 +694,9 @@ pre.code {
   line-height: 1.45;
 }
 .doc-table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
   font-size: 0.85rem;
   width: 100%;
