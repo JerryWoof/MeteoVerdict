@@ -97,7 +97,9 @@ def drop_after_gaps(rows: pl.DataFrame) -> pl.DataFrame:
     wet days, make the models look too dry. A value is dropped when the same gauge
     reported earlier in the data and then skipped one or more days; once ČHMÚ fills the
     missing days it counts again (docs/station-check.md). The checked historical archive
-    (``source`` "historical") is left as it is, and so is a gauge's first value.
+    (``source`` "historical") is left as it is, and so is a gauge's first value, so
+    ``rows`` should start before the days that are kept (``fetch_gauge_precipitation``
+    reads the month before).
     """
     if rows.height == 0:
         return rows
@@ -118,11 +120,14 @@ def fetch_gauge_precipitation(
 
     Months missing in ``recent/`` come from the ``historical_csv/`` file (2.5 MB per
     station, so the scheduled runs pass ``historical=False`` and read only ``recent/``).
+    The month before ``start`` is read too: a total after a gap across the month boundary
+    is only seen with the readings before it (``drop_after_gaps``).
     """
+    context = (start - timedelta(days=1)).replace(day=1)
 
     def one(wsi: str) -> pl.DataFrame:
         parts, older = [], None
-        y, m = start.year, start.month
+        y, m = context.year, context.month
         while (y, m) <= (end.year, end.month):
             got = _recent(client, wsi, y, m)
             if (got is None or got.height == 0) and historical:
@@ -142,14 +147,14 @@ def fetch_gauge_precipitation(
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         frames = [pl.DataFrame(schema=SCHEMA), *pool.map(one, list(station_ids))]
-    window = (pl.col("time") - timedelta(days=1)).dt.date().is_between(start, end)
+    day = (pl.col("time") - timedelta(days=1)).dt.date()
     rows = (
         pl.concat(frames)
-        .filter(window)
+        .filter(day.is_between(context, end))
         .unique(["station_id", "time", "variable"], keep="first", maintain_order=True)
         .sort("station_id", "time")
     )
-    return drop_after_gaps(rows)
+    return drop_after_gaps(rows).filter(day.is_between(start, end))
 
 
 def window(day: date) -> tuple[datetime, datetime]:
