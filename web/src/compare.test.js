@@ -4,7 +4,8 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 
 import {
-  biasByElevation, fmt, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
+  biasByElevation, blendTestLines, blendTestRows, blendTestVariable, blendVerdict, blendVerdicts, fmt,
+  okresVerdictCounts, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
   leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, unpublishedHours,
 } from "./compare.js";
 import { records } from "./data.js";
@@ -188,4 +189,50 @@ test("best models by their mean rank over the lead hours", () => {
   assert.deepEqual(leadHourRanking([]), []);
   assert.ok(isAladin("chmi_aladin_central_europe_2km"));
   assert.ok(!isAladin("dwd_icon_d2"));
+});
+
+// --- does our forecast beat the best model? -----------------------------------------
+const BLEND_TEST = {
+  test_days: 24,
+  units: { temperature_2m: "°C" },
+  groups: {
+    columns: ["level", "region", "region_name", "variable", "lead_day", "days", "best_oos", "mae_combined",
+      "mae_best_oos", "mae_best_hindsight", "mae_blend", "diff_combined", "low_combined", "high_combined"],
+    rows: [
+      ["cz", "cz", "Česko", "wind_speed_10m", 1, 24, "icon", 1.02, 0.99, 0.98, 1.2, 0.03, 0.001, 0.06],
+      ["cz", "cz", "Česko", "temperature_2m", 2, 23, "icon", 1.33, 1.38, 1.33, 1.36, -0.05, -0.09, -0.01],
+      ["cz", "cz", "Česko", "temperature_2m", 1, 24, "icon", 1.22, 1.24, null, 1.25, -0.02, -0.06, 0.02],
+      ["okres", "CZ0201", "Benešov", "temperature_2m", 1, 20, "ifs", 1.1, 1.3, 1.1, 1.2, -0.2, -0.3, -0.1],
+      ["okres", "CZ0202", "Beroun", "temperature_2m", 1, 20, "ifs", 1.4, 1.3, 1.2, 1.2, 0.1, 0.05, 0.2],
+    ],
+  },
+};
+
+test("blend test: page variables map to the tested ones", () => {
+  assert.equal(blendTestVariable("temperature_2m_06utc"), "temperature_2m");
+  assert.equal(blendTestVariable("temperature_max"), "temperature_2m");
+  assert.equal(blendTestVariable("precipitation_24h"), "precipitation_daily");
+  assert.equal(blendTestVariable("wind_speed_10m_hourly"), "wind_speed_10m");
+});
+
+test("blend test verdicts: better, same, worse with intervals in the verdict's direction", () => {
+  assert.deepEqual(blendVerdict({ diff_combined: -0.05, low_combined: -0.09, high_combined: -0.01 }),
+    { verdict: "better", amount: 0.05, low: 0.01, high: 0.09 });
+  assert.equal(blendVerdict({ diff_combined: -0.02, low_combined: -0.06, high_combined: 0.02 }).verdict, "same");
+  assert.equal(blendVerdict({ diff_combined: 0.03, low_combined: 0.001, high_combined: 0.06 }).verdict, "worse");
+  assert.equal(blendVerdict({ diff_combined: null }), null);
+  assert.equal(blendVerdict(undefined), null);
+  const v = blendVerdicts(blendTestRows(BLEND_TEST, "cz"));
+  assert.deepEqual(v.map((r) => [r.variable, r.lead_day, r.verdict]), [
+    ["temperature_2m", 1, "same"], ["temperature_2m", 2, "better"], ["wind_speed_10m", 1, "worse"],
+  ]);
+  assert.deepEqual(blendVerdicts(blendTestRows(null)), []);
+});
+
+test("blend test chart lines and okres counts", () => {
+  const lines = blendTestLines(blendTestRows(BLEND_TEST, "cz"), "temperature_2m");
+  assert.deepEqual(lines.filter((r) => r.series === "combined").map((r) => [r.lead_day, r.mae]), [[1, 1.22], [2, 1.33]]);
+  assert.equal(lines.filter((r) => r.series === "best_hindsight").length, 1); // null left out
+  assert.deepEqual(okresVerdictCounts(BLEND_TEST, "temperature_2m", 1), { better: 1, same: 0, worse: 1 });
+  assert.deepEqual(okresVerdictCounts(null, "temperature_2m", 1), { better: 0, same: 0, worse: 0 });
 });

@@ -52,8 +52,10 @@ def season_start(day: date) -> date:
 
 
 def window_start(window: str, as_of: date, first_day: date) -> date:
-    if window == "90d":
-        return as_of - timedelta(days=89)
+    """First day of a window: ``90d`` (or any ``<N>d``, the last N days), ``season``
+    or ``all``."""
+    if window.endswith("d") and window[:-1].isdigit() and int(window[:-1]) > 0:
+        return as_of - timedelta(days=int(window[:-1]) - 1)
     if window == "season":
         return season_start(as_of)
     if window == "all":
@@ -201,6 +203,7 @@ def aggregate(
     stations: pl.DataFrame,
     as_of: date | None = None,
     windows: tuple[str, ...] = WINDOWS,
+    levels: tuple[str, ...] = LEVELS,
 ) -> pl.DataFrame:
     """One row per level, region, window, variable, lead day and model."""
     scores = scores.lazy()
@@ -213,7 +216,7 @@ def aggregate(
     for window in windows:
         start, days = window_days(window, as_of, first_day)
         in_window = scores.filter(days).join(info, on="station_id", how="inner")
-        for level in LEVELS:
+        for level in levels:
             fair = common_days(with_regions(in_window, level, distance), by="region")
             frames.append(
                 fair.group_by("region", "region_name", "variable", "lead_day", "model")
@@ -333,7 +336,9 @@ def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -
         "attribution": (
             "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com "
             "(CC BY 4.0) from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, KNMI, DMI, "
-            "ČHMÚ and the UK Met Office (CC BY-SA 4.0). Boundaries: ČÚZK (CC BY 4.0)."
+            "ČHMÚ, Environment and Climate Change Canada, the Japan Meteorological Agency, "
+            "the China Meteorological Administration and the UK Met Office (CC BY-SA 4.0). "
+            "Boundaries: ČÚZK (CC BY 4.0)."
         ),
     }
 

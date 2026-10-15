@@ -17,3 +17,16 @@ The envelope, header strings, field order and value types are as served. The row
 are a subset, and the `values` arrays are shortened. They were first transcribed
 through a web reader; on 2026-10-11 every row, header and envelope field was checked
 against the downloaded files and matched exactly. Keep them small.
+
+## `radar/`
+
+Real files from `https://opendata.chmi.cz/meteorology/weather/radar/composite/`,
+downloaded unchanged on 2026-10-15 (see `docs/data-sources.md#radar-archive`):
+
+| File | Source |
+|---|---|
+| `T_PABV23_C_OKPR_20261015103500.hdf` | `maxz/hdf5/`: max reflectivity, 10:35 UTC |
+| `pacz2gmaps3.z_max3d.20261015.1035.0.png` | `maxz/png/`: the same time as PNG |
+| `T_PASV23_C_OKPR_20261015101000.hdf` | `merge1h/hdf5/`: MERGE 1-hour precipitation ending 10:10 UTC |
+| `pacz2gmaps3.fct_z_max.20261015.1035.ft60s10.tar` | `fct_maxz/png/`: nowcast from 10:35 UTC, 6 PNG frames |
+| `listing-maxz-png_masked.html` | `maxz/png_masked/` directory listing: the first 8 files, then the closing tags |

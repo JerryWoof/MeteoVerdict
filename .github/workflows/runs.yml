@@ -3,30 +3,32 @@ name: Single runs
 # Every model run by run (roadmap: error by hours ahead). Four times a day, about 10 h
 # after each 00, 06, 12 and 18 UTC run (by then every model has reached Open-Meteo), fetch
 # the newest runs from the Open-Meteo Single Runs API at the ~100 stations of
-# src/meteoverdict/data/run-stations.csv (`mvd fetch-runs`: all 11 models, H+1…H+120,
-# about 330 weighted calls a run), then, with what is left of the budget, older runs
-# newest first back to 2026-06-23 00 UTC (the first run with ALADIN; runs.HISTORY_FROM).
-# Month files and progress live in the releases runs-YYYY-MM and runs-state, so a stopped
-# run continues next time. The daily workflow scores them (`mvd leads`).
-# See docs/data-sources.md#single-runs-mvd-fetch-runs.
+# src/meteoverdict/data/run-stations.csv (`mvd fetch-runs`: all 19 models, H+1…H+120;
+# with 4 variables ~760 weighted calls a run, ~720 at 06 and 18 UTC without GEM Global,
+# in requests of at most 500), then, with what is left, older runs newest first back to
+# 2026-06-23 00 UTC (runs.HISTORY_FROM). A model added to models.yaml is fetched for the
+# newest runs first, then back through the history. Month files and progress live in the
+# releases runs-YYYY-MM and runs-state, so a stopped run continues next time. The daily
+# workflow scores them (`mvd leads`). See docs/data-sources.md#single-runs-mvd-fetch-runs.
 #
-# Open-Meteo budget (free tier, non-commercial: 10,000 weighted calls a day and 300,000 a
-# month, shared by all workflows; docs/data-sources.md#open-meteo-budget):
-#   Single runs, normal: 350 at 04:20, 16:20 and 22:20 (the newest run), 750 at 10:20 (the
-#   newest run plus about one older run) = 1,800 a day.
-#   While the D+N backfill has work: backfill 6,800 + outlook ~850 + single runs 1,800
-#   = ~9,450 a day, 9,450 x 31 = ~293,000 a month.
-#   Handover: when the backfill has nothing pending (`--extra-calls-if-backfill-idle`,
-#   read from its state in the release data-state), 10:20 gets +3,000 (3,750 in that
-#   hour) and 13:20 gets 3,000 (0 otherwise): 3,000 a run stays under Open-Meteo's 5,000
-#   an hour. Idle day: outlook ~850 + single runs 1,800 + 6,000 = ~8,650 (margin ~1,350
-#   for the outlook). No extra on a day the backfill called Open-Meteo, has a window
-#   pending, or has one due tomorrow, so no day exceeds ~9,450 and no month ~293,000
-#   (a 28-day cycle with two new windows: ~223,000, i.e. ~247,000 in 31 days).
-#   History back to 2026-06-23: ~450 runs x 330 = ~147,000 calls; ~1 run a day with the
-#   normal budget (early 2028), ~15 a day after the handover (11 idle days of 14 x 19
-#   runs): done about 3-4 weeks after the backfill catches up (early February 2027).
-#   If the backfill state cannot be read, the normal budget is used.
+# Open-Meteo budget (free tier, non-commercial: 10,000 weighted calls a day, 5,000 an hour
+# and 300,000 a month, shared by all workflows; docs/data-sources.md#open-meteo-budget).
+# Priorities: (1) outlook (outlook.yml, <= 2 x 800), (2) the newest runs: 850 at 04:20,
+# 10:20, 16:20 and 22:20 = 3,400 a day, (3) the D+N backfill's current windows,
+# (4a) this history, (4b) the D+N backfill's older windows. (3)-(4b) share 4,500 a day:
+# the backfill (02:41) spends it first on its current windows; 10:20 takes the part
+# 0-2,500 and 13:20 the part 2,500-4,500 of what it left (`--shared-calls`,
+# `--shared-from/--shared-to`, read from its state in the release data-state):
+#   - a current backfill window pending, or one due tomorrow: nothing (also keeps this
+#     history and the backfill's next big day 24 hours apart);
+#   - the backfill called Open-Meteo today: 4,500 minus what it used;
+#   - otherwise all 4,500; nothing when the state cannot be read.
+# The backfill takes its older windows only once this history is complete, then with the
+# whole share, which leaves nothing here. Hours: 10:20 <= 850 + 2,500, 13:20 <= 2,000,
+# both under 5,000. Day: <= 1,600 + 3,400 + 4,500 = 9,500; month <= 294,500.
+# History back to 2026-06-23: ~450 runs x ~740 = ~333,000 calls; with ~3,100 a day on
+# average after the backfill's current windows: complete around mid-February 2027
+# (simulated from the live states of 2026-10-15; docs/data-sources.md).
 on:
   schedule:
     - cron: "20 4,16,22 * * *"
@@ -36,9 +38,12 @@ on:
     inputs:
       max_calls:
         description: "Open-Meteo calls this run may use"
-        default: "350"
-      extra_calls:
-        description: "Calls added when the D+N backfill is idle"
+        default: "850"
+      shared_from:
+        description: "Part of what the D+N backfill left of the shared 4,500: from"
+        default: "0"
+      shared_to:
+        description: "… to (0 = none of it)"
         default: "0"
       mode:
         description: "recent, history or all"
@@ -56,7 +61,9 @@ concurrency:
 env:
   SCHEDULE: ${{ github.event.schedule }}
   INPUT_MAX_CALLS: ${{ inputs.max_calls }}
-  INPUT_EXTRA_CALLS: ${{ inputs.extra_calls }}
+  INPUT_SHARED_FROM: ${{ inputs.shared_from }}
+  INPUT_SHARED_TO: ${{ inputs.shared_to }}
+  SHARED_CALLS: "4500" # MAX_CALLS of backfill.yml
   MODE: ${{ inputs.mode || 'all' }}
   BACKFILL_FROM: "2024-01-01" # the --from of backfill.yml
 
@@ -75,14 +82,15 @@ jobs:
       - name: Fetch runs
         run: |
           case "$SCHEDULE" in
-            "20 10 * * *") calls=750; extra=3000 ;; # after the backfill (02:41) and daily
-            "20 13 * * *") calls=0; extra=3000 ;;   # only the handover, in another hour
-            *) calls=350; extra=0 ;;
+            "20 10 * * *") calls=850; from=0; to=2500 ;;   # after the backfill (02:41)
+            "20 13 * * *") calls=0; from=2500; to=4500 ;;  # the rest, in another hour
+            *) calls=850; from=0; to=0 ;;
           esac
           calls="${INPUT_MAX_CALLS:-$calls}"
-          extra="${INPUT_EXTRA_CALLS:-$extra}"
+          from="${INPUT_SHARED_FROM:-$from}"
+          to="${INPUT_SHARED_TO:-$to}"
           uv run --frozen mvd fetch-runs --github-release --mode "$MODE" \
-            --max-calls "$calls" --extra-calls-if-backfill-idle "$extra" \
-            --backfill-from "$BACKFILL_FROM"
+            --max-calls "$calls" --shared-calls "$SHARED_CALLS" \
+            --shared-from "$from" --shared-to "$to" --backfill-from "$BACKFILL_FROM"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
