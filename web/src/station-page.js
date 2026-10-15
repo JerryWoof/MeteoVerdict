@@ -9,12 +9,16 @@ import {
   VIEWS, defaultElement, elementLabel, elementName, elementOrder, unitOf, formatNumber, isTotal, latestValues,
   parseStationHash, searchStations, seriesPoints, spanLabel, stepTime, viewsWith,
 } from "./station.js";
+import {
+  KIND_COLORS, classifyStation, elementFor, elevationGradient, ELEVATION_STOPS, filterStations, hasElements,
+  kindCounts, measureCounts, withCoordinates,
+} from "./station-map.js";
+import { createStationMap } from "./station-map-view.js";
 import { displayName } from "./tv.js";
 
 const t = setUpLanguage();
 const language = document.documentElement.lang;
 const DATA = "data/scores/station";
-const DEFAULT_STATION = "0-20000-0-11520"; // Praha-Libuš
 const $ = (id) => document.getElementById(id);
 
 async function getJson(path) {
@@ -190,19 +194,157 @@ function fillElements(current) {
   $("pick").hidden = codes.length === 0;
 }
 
+// --- the station map ---------------------------------------------------------------------
+let placed = []; // stations of the index with coordinates
+const top = $("station-top");
+const panel = $("map-panel");
+const toggle = $("map-toggle");
+let mapOpen = window.innerWidth > 700; // with a station shown; phones start with it folded
+
+function describe(station) {
+  const { kind, automatic } = classifyStation(station);
+  const parts = [];
+  if (station.elevation != null) parts.push(`${formatNumber(Math.round(station.elevation))} m`);
+  parts.push(t(`map.kind.${kind}`));
+  if (!automatic) parts.push(t("map.daily"));
+  return parts.join(" · ");
+}
+
+const stationMap = createStationMap({
+  container: $("station-map"),
+  t,
+  describe,
+  onPick: (station) => {
+    const measure = $("map-measure").value;
+    const element = measure ? elementFor(station, measure) : null;
+    window.location.hash = element ? `${station.id}/${element}` : station.id;
+  },
+});
+
+function legendItem(swatch, label) {
+  const item = el("span", null, "station-map-legend-item");
+  item.append(swatch, el("span", label));
+  return item;
+}
+
+function dot(color, hollow) {
+  const d = el("span", null, `dot${hollow ? " hollow" : ""}`);
+  d.style.setProperty("--dot", color);
+  d.setAttribute("aria-hidden", "true");
+  return d;
+}
+
+function renderLegend(shown) {
+  const items = [];
+  if ($("map-colour").value === "elevation") {
+    const bar = el("span", null, "station-map-ramp");
+    bar.style.background = elevationGradient();
+    bar.setAttribute("aria-hidden", "true");
+    const item = el("span", null, "station-map-legend-item");
+    item.append(
+      el("span", t("map.elevation")),
+      el("span", formatNumber(ELEVATION_STOPS[0][0])),
+      bar,
+      el("span", formatNumber(ELEVATION_STOPS.at(-1)[0])),
+    );
+    items.push(item);
+  } else {
+    for (const [kind, count] of kindCounts(shown)) {
+      items.push(legendItem(dot(KIND_COLORS[kind]), `${t(`map.kind.${kind}`)} (${formatNumber(count)})`));
+    }
+  }
+  const neutral = "#5b6670";
+  items.push(legendItem(dot(neutral), t("map.automatic")), legendItem(dot(neutral, true), t("map.manual")));
+  $("map-legend").replaceChildren(...items);
+}
+
+function applyFilter() {
+  const measure = $("map-measure").value;
+  const shown = filterStations(placed, measure);
+  stationMap.setStations(placed, shown);
+  $("map-count").textContent = measure
+    ? t("map.count", { shown: formatNumber(shown.length), all: formatNumber(placed.length) })
+    : "";
+  renderLegend(shown);
+}
+
+function fillMapTools() {
+  const box = $("map-measure-box");
+  box.hidden = !hasElements(placed);
+  if (!box.hidden) {
+    const select = $("map-measure");
+    const all = el("option", t("map.measure.all"));
+    all.value = "";
+    select.replaceChildren(
+      all,
+      ...measureCounts(placed).map(([m, n]) => {
+        const option = el("option", `${t(`map.measure.${m}`)} (${formatNumber(n)})`);
+        option.value = m;
+        return option;
+      }),
+    );
+    select.addEventListener("change", applyFilter);
+  }
+  $("map-colour").addEventListener("change", (event) => {
+    stationMap.setColour(event.target.value);
+    renderLegend(filterStations(placed, $("map-measure").value));
+  });
+  applyFilter();
+}
+
+/** Large map and no station (empty hash), or a station with the map compact beside it. */
+function setMode(browsing) {
+  top.classList.toggle("browse", browsing);
+  toggle.hidden = browsing;
+  $("map-all").hidden = browsing;
+  $("map-hint").hidden = !browsing;
+  $("note").hidden = browsing;
+  panel.hidden = !browsing && !mapOpen;
+  toggle.textContent = t(mapOpen ? "map.hide" : "map.show");
+  toggle.setAttribute("aria-expanded", String(!panel.hidden));
+}
+
+toggle.addEventListener("click", () => {
+  mapOpen = !mapOpen;
+  setMode(false);
+  if (mapOpen) stationMap.select(doc?.station.id ?? null, { animate: false });
+});
+
+function browse() {
+  doc = null;
+  setMode(true);
+  $("title").textContent = t("map.heading");
+  document.title = `MeteoVerdict: ${t("map.heading")}`;
+  $("facts").textContent = index.length ? t("map.browse", { n: formatNumber(index.length) }) : "";
+  $("message").textContent = index.length ? "" : t("station.pick");
+  $("pick").hidden = true;
+  $("charts").replaceChildren();
+  $("elements").replaceChildren();
+  $("elements-title").hidden = true;
+  $("search").value = "";
+  stationMap.select(null);
+  stationMap.fitAll();
+}
+
 async function show() {
   const hash = parseStationHash(window.location.hash);
-  const id = hash.id ?? (index.some((s) => s.id === DEFAULT_STATION) ? DEFAULT_STATION : index[0]?.id);
+  const id = hash.id;
   if (!id) {
-    $("message").textContent = t("station.pick");
+    browse();
     return;
   }
+  const wasBrowsing = top.classList.contains("browse");
+  setMode(false);
   if (doc?.station.id !== id) {
+    stationMap.select(id, { animate: !wasBrowsing });
+    $("search").value = index.find((s) => s.id === id)?.name ?? "";
     $("message").textContent = t("station.loading");
     doc = await getJson(`${DATA}/${id}.json`);
     if (!doc) {
       $("message").textContent = t("station.notFound", { id });
       $("charts").replaceChildren();
+      $("elements").replaceChildren();
+      $("elements-title").hidden = true;
       $("pick").hidden = true;
       return;
     }
@@ -224,8 +366,13 @@ $("element").addEventListener("change", (event) => {
 });
 window.addEventListener("hashchange", show);
 
-getJson(`${DATA}/index.json`).then((loaded) => {
+getJson(`${DATA}/index.json`).then(async (loaded) => {
   index = loaded?.stations ?? [];
+  if (loaded?.generated) $("status").textContent = t("station.updated", { time: DATE_TIME.format(new Date(loaded.generated)) });
+  // an index from before it carried coordinates: take them from the score map's table
+  const table = index.some((s) => s.lat == null) ? await getJson("data/scores/stations.json") : null;
+  placed = withCoordinates(index, table);
   fillSearch();
+  fillMapTools();
   show();
 });
