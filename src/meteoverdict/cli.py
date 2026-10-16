@@ -580,16 +580,34 @@ def leads_cmd(
         bool,
         typer.Option("--publish", help="Put the JSON files into the release data-latest."),
     ] = False,
+    bands: Annotated[
+        bool,
+        typer.Option(
+            help="Also rank the models by lead band (H+1-6 … H+49-72) over the last 90 days "
+            "and every single run since --bands-since: leads-bands-<window>[-kraj].json.",
+        ),
+    ] = True,
+    bands_since: Annotated[
+        datetime | None,
+        typer.Option(help="First run of the band ranking's 'all' window (default: all runs)."),
+    ] = None,
 ) -> None:
     """Error by lead hour, run by run: every model from Open-Meteo's single runs
-    (H+1 … H+120) and ALADIN from our own archive (H+1 … H+72)."""
+    (H+1 … H+120) and ALADIN from our own archive (H+1 … H+72); with --bands also the
+    ranking by lead band."""
     if publish and not github_release:
         raise typer.BadParameter("--publish needs --github-release")
     now = datetime.now(UTC)
     hour = now.replace(minute=0, second=0, microsecond=0)
     since, runs_since = hour - timedelta(days=days), hour - timedelta(days=runs_days)
     first = min(since, runs_since)
-    months = partitions.months(first.date(), now.date())
+    if bands_since is None:
+        bands_since = datetime.combine(runs.HISTORY_FROM, datetime.min.time(), tzinfo=UTC)
+    elif bands_since.tzinfo is None:
+        bands_since = bands_since.replace(tzinfo=UTC)
+    months = partitions.months(
+        min(first, bands_since).date() if bands else first.date(), now.date()
+    )
     generated, names = datetime.now(UTC), _model_names()
     written, lines, delays = [], [], {}
     with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
@@ -624,6 +642,8 @@ def leads_cmd(
                 doc = leads.runs_document(table, info, generated, delays, names)
                 written.append(leads.write(doc, out))
                 lines += ["All models, Open-Meteo single runs:", *leads.summary(table)]
+        if bands:
+            written += _lead_bands(data_dir, bands_since, now, stations_path, out, generated, names)
         if not written:
             typer.echo(
                 f"mvd leads: no runs with observations since {first:%Y-%m-%d %H} UTC", err=True
@@ -635,6 +655,51 @@ def leads_cmd(
     for line in lines:
         typer.echo(line)
     typer.echo(f"→ {', '.join(map(str, written))}")
+
+
+def _lead_bands(
+    data_dir: Path,
+    since: datetime,
+    now: datetime,
+    stations_path: Path,
+    out: Path,
+    generated: datetime,
+    names: dict[str, str],
+) -> list[Path]:
+    """The ranking by lead band (``leads.band_rankings``) into
+    ``leads-bands-<window>.json`` and ``leads-bands-<window>-kraj.json`` beside ``out``."""
+    single = leads.scan_runs(data_dir / "runs", since, now)
+    obs = partitions.scan_months(data_dir / "obs", since.date(), now.date())
+    if single is None or obs is None:
+        typer.echo("mvd leads: no single runs or observations for the lead bands", err=True)
+        return []
+    station_table = (
+        pl.read_parquet(stations_path) if stations_path.exists() else runs.load_stations()
+    )
+    models = [m for m in catalogue.load_models() if m.enabled]
+    results = leads.band_rankings(single, obs, models, station_table, log=typer.echo)
+    region_names = {k.code: k.name for k in regions.load_kraje()}
+    region_names |= {"cz": "Česko", "main": "hlavní stanice (WMO)", "other": "ostatní stanice"}
+    default = leads.band_default(results["90d"][0])
+    written = []
+    for window, (table, facts) in results.items():
+        if table.height == 0:
+            continue
+        docs = leads.band_documents(table, facts, window, generated, region_names, names, default)
+        for name, doc in docs.items():
+            written.append(leads.write(doc, out.with_name(name)))
+        cz = table.filter(
+            pl.col("level") == "cz",
+            pl.col("set") == "hourly",
+            pl.col("variable") == "temperature_2m",
+            pl.col("rank") == 1,
+        )
+        for band, model, mae, days in cz.select("band", "model", "mae", "days").rows():
+            typer.echo(
+                f"bands {window} {band}: best {model} temperature MAE {mae:.2f} ({days} days)"
+            )
+    typer.echo(f"bands: default lead on the page {default or 'D+1'}")
+    return written
 
 
 def _echo_short_runs(command: str, info: dict) -> None:
