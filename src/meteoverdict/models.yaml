@@ -20,7 +20,15 @@
 #                  measured live 2026-10-13 and 2026-10-15
 # run_hours        optional: UTC run hours in the Single Runs API when not all of 00, 06,
 #                  12 and 18 (measured live 2026-10-15)
-# enabled          false = covers Czechia but is not part of the comparison
+# previous_runs_step_h      optional: hours between the runs in the Previous Runs archive
+#                           when below 6 (the runs in between are not in the Single Runs
+#                           data, so `meteoverdict.fresh` rebuilds D+N only at the hours
+#                           where a 00/06/12/18 UTC run is the newest); measured live
+#                           2026-10-16 by comparing both APIs
+# previous_runs_max_lead_h  optional: run hour -> last lead hour of those runs in the
+#                           Previous Runs archive where shorter than in the Single Runs
+#                           API (same check)
+# enabled         false = covers Czechia but is not part of the comparison
 #
 # New models go at the end: the web pages colour models in this order.
 
@@ -55,6 +63,7 @@ models:
     forecast_days: 2
     max_lead_day: 1
     archive_from: 2024-01-19
+    previous_runs_step_h: 3
     enabled: true
 
   - id: dwd_icon_eu
@@ -127,6 +136,7 @@ models:
     forecast_days: 7
     max_lead_day: 5
     archive_from: 2024-08-08
+    previous_runs_max_lead_h: {6: 47, 18: 47}
     enabled: true
     note: large gaps, only 75-84 % of hours filled
 
@@ -150,6 +160,7 @@ models:
     forecast_days: 2.5
     max_lead_day: 1
     archive_from: 2026-03-26
+    previous_runs_step_h: 3
     enabled: true
     note: T2m and precipitation only 60-80 % filled in 2026-03 to 2026-05
 
@@ -161,6 +172,7 @@ models:
     forecast_days: 2.5
     max_lead_day: 1
     archive_from: 2024-06-29
+    previous_runs_step_h: 1
     enabled: true
     variable_from:
       precipitation: 2024-10-10
@@ -173,6 +185,7 @@ models:
     forecast_days: 2.5
     max_lead_day: 1
     archive_from: 2024-06-29
+    previous_runs_step_h: 3
     enabled: true
 
   - id: dwd_icon

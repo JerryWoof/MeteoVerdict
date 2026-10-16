@@ -2,8 +2,9 @@ import json
 from datetime import UTC, date, datetime, timedelta
 
 import polars as pl
+import pytest
 
-from meteoverdict import daily, forecasts, observations, partitions
+from meteoverdict import daily, forecasts, observations, partitions, runs
 from meteoverdict.cli import app
 from meteoverdict.models import load_models
 
@@ -67,6 +68,50 @@ def test_run_says_which_days_were_not_scored_and_why(tmp_path, monkeypatch):
         "nothing scored after 2026-09-30: forecasts for 2026-10-01..2026-10-04, "
         "observations for 2026-10-10..2026-10-14"
     )
+
+
+def test_recent_days_are_scored_from_the_single_runs(tmp_path, monkeypatch):
+    # forecasts of the backfill reach 4 Oct; the single runs (4 a day) cover the rest
+    day = date(2026, 10, 15)
+    eu = next(m for m in load_models() if m.id == "dwd_icon_eu")
+    monkeypatch.setattr(
+        daily.observations,
+        "fetch_observations",
+        lambda client, ids, start, end: obs_rows(hours(start, (end - start).days + 1)),
+    )
+    observations.write_monthly(obs_rows(hours(date(2026, 10, 3), 2)), tmp_path / "obs")
+    rows = [(s, t, eu.id, 1, 11.0, None, None) for t in hours(date(2026, 10, 1), 4) for s in "abc"]
+    previous = pl.DataFrame(rows, schema=forecasts.SCHEMA, orient="row")
+    partitions.write_monthly(previous, tmp_path / "fc", forecasts.KEYS)
+    first = datetime(2026, 10, 8, tzinfo=UTC)
+    single = [
+        (first + timedelta(hours=6 * r), eu.id, s, lead,
+         first + timedelta(hours=6 * r + lead), 12.0, 0.0, 3.0, None)
+        for r in range(4 * 8)
+        for lead in range(1, 121)
+        for s in "abc"
+    ]  # fmt: skip
+    table = pl.DataFrame(single, schema=runs.SCHEMA, orient="row")
+    partitions.write_monthly(table, tmp_path / "runs", runs.KEYS, "run")
+    logged = []
+    daily.run(None, pl.DataFrame({"id": list("abc")}), [eu], day, tmp_path, logged.append)
+    scores = pl.read_parquet(tmp_path / "scores" / "2026-10.parquet")
+    by_source = scores.group_by("source").agg(
+        pl.col("date").min().alias("from"), pl.col("date").max().alias("to")
+    )
+    assert sorted(by_source.rows()) == [
+        ("previous_runs", date(2026, 10, 3), date(2026, 10, 4)),
+        ("single_runs", day - timedelta(days=2), day),  # observations of the last 3 days
+    ]
+    fresh_rows = scores.filter(pl.col("source") == "single_runs", pl.col("model") == eu.id)
+    assert set(fresh_rows["lead_day"]) == {1, 2, 3, 4}
+    # 12 °C forecast against 10 °C observed
+    ranked = fresh_rows.filter(pl.col("variable") == "temperature_2m")
+    assert (ranked["sum_err"] / ranked["n"]).to_list() == pytest.approx([2.0] * ranked.height)
+    assert any(
+        line.startswith("rebuilt D+N from the single runs for 3 stations") for line in logged
+    )
+    assert logged[-1].endswith(f"last scored day {day}")
 
 
 def test_day_ranges():
