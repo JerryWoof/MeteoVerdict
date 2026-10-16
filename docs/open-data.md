@@ -20,13 +20,24 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
 - `forecast.generated`, `forecast.hourly`: `time` (UTC, `2026-10-12T00:00Z`) and the
   combined hourly series `temperature_2m` (°C), `precipitation` (mm in the hour ending at
   the time), `wind_speed_10m` (m/s), `cloud_cover` (%) and `sunshine_duration` (s of
-  sunshine in the hour ending at the time; both plain means of the models, not
-  verified); 6 days; `null` where fewer than two models cover an hour.
+  sunshine in the hour ending at the time; both the mean of the models corrected
+  against ČHMÚ observations, the hourly sunshine scaled so that each UTC day adds up to
+  the corrected daily total: [methodology](methodology.md#sunshine-cloud-and-gusts));
+  6 days; `null` where fewer than two models cover an hour.
 - `forecast.parts`: per day and part of day in Prague time (`night`, `morning`,
   `afternoon`, `evening`, `day`): `tmin`, `tmax`, `precipitation`, `rain_probability`,
   `wind`, `cloud`, `sunshine` (hours), `symbol` (as on the forecast map;
   [data-sources.md](data-sources.md#outlook-mvd-outlook-roadmap-66)), and `sunrise`,
-  `sunset` (Prague time, `"07:21"`, at the okres point, the same on every row of a day).
+  `sunset` (Prague time, `"07:21"`, at the okres point, the same on every row of a day),
+  `heavy_rain_probability` (calibrated chance of at least 5 mm in the period) and
+  `heavy_rain` (true when it is high enough to warn); both `null` while there is no
+  rain calibration ([methodology.md](methodology.md#probability-of-precipitation-and-heavy-rain-meteoverdictrain_calibration)).
+  Frost, on the `night` and `day` rows of the date a night (18–06 UTC) ends and `null`
+  elsewhere or when not available: `night_min` (corrected night minimum at 2 m, °C),
+  `coldest_site` and `coldest_min` (the okres's most frost-prone ČHMÚ station and its
+  corrected minimum), `frost_probability` (0–1, minimum ≤ 0 °C), `frost` (air-frost
+  warning, `night_min` ≤ 1 °C), `ground_min` (estimated minimum 5 cm above the ground)
+  and `ground_frost` (`ground_min` ≤ 0 °C); [methodology.md](methodology.md#frost-night-minimum-frost-and-ground-frost).
 - `models.variables.<variable>` for `temperature_2m`, `wind_speed_10m`,
   `precipitation_daily` and `precipitation_24h`: `stations`, `borrowed`, `days`, and
   `lead_days."1"…"5"`: the models in rank order with `rank`, `mae`, `bias`, `rmse`,

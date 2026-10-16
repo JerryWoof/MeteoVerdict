@@ -6,7 +6,7 @@ import httpx
 import polars as pl
 import pytest
 
-from meteoverdict import combine, outlook
+from meteoverdict import combine, outlook, rain_calibration
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CODES = ["CZ0100", "CZ0201"]
@@ -363,3 +363,67 @@ def test_the_regression_weights_and_slot_corrections_are_used():
     for v in ("temperature_2m", "wind_speed_10m", "precipitation"):
         new, old = hourly.filter(praha)[v], full.filter(praha)[v]
         assert new.to_list() == pytest.approx(old.to_list(), nan_ok=True)
+
+
+def calibration(flag_at=0.01):
+    """A made-up calibration: wetter with more wet models, heavy rain flagged early."""
+    return rain_calibration.Calibration(
+        intercept=-3.0,
+        coefficients=[4.0] + [0.0] * (len(rain_calibration.FEATURES) - 1),
+        heavy_intercept=-6.0,
+        heavy_coefficients=[2.0] + [0.0] * (len(rain_calibration.HEAVY_FEATURES) - 1),
+        heavy_flag_at=flag_at,
+        weights={},
+        first=date(2026, 7, 1),
+        last=date(2026, 10, 11),
+        days=90,
+        cases=1000,
+    )
+
+
+@pytest.mark.parametrize(
+    ("share", "chance", "showers_at", "expected"),
+    [
+        (0.6, 0.45, 0.4, "rain"),  # rain by the raw share, whatever the calibrated chance
+        (0.4, 0.45, 0.4, "showers"),
+        (0.4, 0.35, 0.4, "cloudy"),  # 0.35 calibrated is not enough for showers
+        (0.4, 0.35, 0.3, "showers"),
+    ],
+)
+def test_symbols_with_a_calibrated_chance(share, chance, showers_at, expected):
+    assert outlook.symbol(90, 1.0, chance, 10, share, showers_at) == expected
+
+
+def test_calibrated_probability_and_heavy_rain(tmp_path):
+    points = combine.okres_points().filter(pl.col("code").is_in(CODES))
+    raw = outlook.probability(FC, WEIGHTS, NOW)
+    assert raw["heavy_rain"].null_count() == raw.height
+    chances = outlook.probability(FC, WEIGHTS, NOW, calibration(), points)
+    keys = ["okres", "day", "part"]
+    both = chances.join(raw.select(*keys, pl.col("rain_probability").alias("raw")), on=keys)
+    parts = both.filter(pl.col("part") != "day")
+    days = both.filter(pl.col("part") == "day")
+    assert parts["calibrated"].all() and not days["calibrated"].any()
+    assert (parts["model_share"] == parts["raw"]).all()
+    # no model weights: every model weighs 1, so wshare is the share
+    p = 1 / (1 + (3.0 - 4.0 * parts["model_share"]).exp())
+    expected = rain_calibration.BLEND * p + (1 - rain_calibration.BLEND) * parts["model_share"]
+    assert (parts["rain_probability"] - expected).abs().max() < 1e-9
+    # whole days keep the raw share; their heavy rain is the highest of their parts
+    assert (days["rain_probability"] == days["raw"]).all()
+    highest = parts.group_by("okres", "day").agg(pl.col("heavy_rain_probability").max())
+    joined = days.join(highest, on=["okres", "day"], suffix="_parts")
+    assert (joined["heavy_rain_probability"] == joined["heavy_rain_probability_parts"]).all()
+    assert parts["heavy_rain"].any()
+
+    hourly = outlook.combine_hourly(FC, WEIGHTS, NOW)
+    table = outlook.summarise(hourly, chances)
+    assert "model_share" not in table.columns
+    path = outlook.write(outlook.with_sun(table, points), points, tmp_path / "o.json", NOW)
+    doc = json.loads(path.read_text("utf-8"))
+    assert doc["columns"][-2:] == ["heavy_rain_probability", "heavy_rain"]
+    assert {r[-1] for r in doc["rows"]} <= {True, False}
+    # without a calibration the new fields are there, null
+    table = outlook.with_sun(outlook.summarise(hourly, raw), points)
+    doc = json.loads(outlook.write(table, points, tmp_path / "r.json", NOW).read_text("utf-8"))
+    assert {tuple(r[-2:]) for r in doc["rows"]} == {(None, None)}

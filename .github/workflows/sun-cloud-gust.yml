@@ -1,0 +1,39 @@
+name: Sunshine, cloud and gust corrections
+
+# Every night, after the ČHMÚ archive (01:41 UTC) and before the morning outlook (05:52):
+# refit the outlook's sunshine and cloud corrections on the last 60 days of its archived
+# plain model means (release outlook-archive) against ČHMÚ SSV and N, and the gust
+# correction on the single runs (runs-YYYY-MM) against Fmax (`mvd sun-cloud-gust`).
+# A variable with fewer than 21 days of pairs keeps its current (at first: bootstrap)
+# coefficients. Publishes sun-cloud-gust.json to the release data-latest, which the
+# outlook reads. No Open-Meteo calls.
+on:
+  schedule:
+    - cron: "5 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write # release asset
+
+concurrency:
+  group: outlook # the outlook writes the archive this job reads
+  cancel-in-progress: false
+
+jobs:
+  fit:
+    name: Refit the corrections
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+      - name: Install project
+        run: uv sync --frozen
+      - name: Fit
+        run: uv run --frozen mvd sun-cloud-gust --github-release --publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

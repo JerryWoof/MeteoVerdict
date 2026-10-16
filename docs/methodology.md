@@ -273,9 +273,69 @@ National Blend of Models, MeteoSwiss) and what still has to be tested:
 [forecast-research.md](forecast-research.md).
 
 The forecast map (`tv.html`) shows the same combination for every okres, made twice a
-day by `mvd outlook`: by part of day, with the probability of precipitation (the
-share of models forecasting at least 0.2 mm, each counting the same) and a symbol; cloud cover there is
-a plain mean of the models and not verified.
+day by `mvd outlook`: by part of day, with the probability of precipitation (calibrated,
+below) and a symbol; cloud cover and sunshine there are the mean of the models
+corrected against ČHMÚ observations ([below](#sunshine-cloud-and-gusts)).
+
+### Probability of precipitation and heavy rain (`meteoverdict.rain_calibration`)
+
+The raw probability, the share of models with at least 0.2 mm in a 6-hour part of
+day (each model counting the same), rates rain too likely at every level. Every night
+`mvd daily` refits a calibration on the verified 6-hour cases of the last 90 days and
+publishes it as `rain-calibration.json` (release `data-latest` and the site data); `mvd
+outlook` uses it for every part of day:
+
+- **Cases:** okres × part of day × lead day 1–5, from the stored D+N forecasts at the
+  stations (`fc/`) and the hourly station precipitation (`obs/`). A model's value is
+  the mean of its 6-hour totals at the okres's stations, the observation the mean of
+  the stations with all 6 hours. Only cases with at least 3 models.
+- **p_L2:** one pooled logistic regression (L2 penalty as scikit-learn's
+  `LogisticRegression(C=1)`, fitted by Newton steps in numpy) of "≥ 0.2 mm observed"
+  on: the Brier-weighted share of wet models (each model weighted by 1 / its Brier
+  score for rain or no rain at that lead day, normalised to a mean of 1 and shrunk
+  towards equal weights by days / (days + 30)); the share with ≥ 1 mm; √mean and √max
+  of the model totals; the share of wet values over all models in the okresy whose
+  forecast points are within 40 km (the okres included, about 4.5 okresy) and √ of
+  the mean over the models of each one's largest total there; indicators for part of
+  day and lead day. Not per lead day: separate fits were worse.
+- **Published:** `rain_probability = 0.5 · p_L2 + 0.5 · share`. The fitted part alone
+  follows the training period's climate and was pulled too dry when the test period
+  turned wetter; the half with the raw share hedges against that.
+- **Symbols:** `rain` (sleet, snow) unchanged, by the raw share ≥ 50 % and ≥ 0.3 mm;
+  `showers` at a calibrated probability ≥ 40 % (30 % on the raw share before).
+- **Heavy rain:** an extended logistic regression (Wilks 2009: thresholds 0.2, 1 and
+  5 mm stacked with √threshold as a predictor, plus the share of models with ≥ 5 mm
+  and √ of their 90th percentile) gives `heavy_rain_probability`, P(≥ 5 mm in the
+  part of day); `heavy_rain` flags it at the probability with the best ETS on the
+  training cases (0.2–0.3 so far). For a whole day: the highest of its parts.
+- **Fallbacks:** fewer than 30 days of cases, a calibration older than 14 days, or a
+  case with fewer than 3 models: the raw share and the old showers rule, and the
+  heavy-rain fields are null. Whole days keep the raw share. A model without a Brier
+  score yet weighs 1.
+
+**Out of sample** (forecasts of 10 Aug – 30 Sep 2026, 11 models, 77 okresy; test
+13–30 Sep, refitted on 13, 19 and 25 Sep on the days up to 5 days before; 95 %
+intervals from a bootstrap over days):
+
+| Okres level, 26,334 test cases | Raw share (before) | Calibrated blend |
+|---|---|---|
+| Brier score, P(≥ 0.2 mm) | 0.0763 | **0.0683** (10.5 % lower [0.8, 21.0]) |
+| Brier skill vs. test climatology | 0.458 | 0.515 |
+| Mean probability (observed frequency 0.170) | 0.214 | 0.178 |
+| Brier score by lead day D+1 … D+5 | | 12, 14, 6.5, 6, 14 % lower |
+| ETS, any precipitation symbol (rain or showers) | 0.431 (bias 1.62) | **0.504** (bias 1.17), +0.075 [+0.036, +0.119] |
+| P(≥ 5 mm): ROC area (raw share of models ≥ 5 mm) | 0.772 | 0.952 (Brier +1 % [−8, +7]) |
+| Heavy-rain flag, ETS (frequency bias) | "any model ≥ 5 mm": 0.208 (2.14) | 0.190 (1.08) |
+
+The same holds with single-point model values (as the outlook asks Open-Meteo for one
+point per okres; −10.1 %) and with the okres forecast points rather than station
+centroids for the 40 km neighbourhood (−10.4 %). Weighting cases by age (half-life
+14 days) did not help, so all days of the window count the same. The heavy-rain flag
+ranks events far better than the raw share but its Brier score is no better; it fires
+about as often as heavy rain falls, while "any model ≥ 5 mm" fires twice as often for
+a slightly higher ETS. Risks: only August–September data so far (winter rain and snow
+will change the coefficients; the nightly refit follows with a 90-day lag), and the
+showers threshold of 0.40 was the best of 0.30/0.35/0.40 on the same test period.
 
 ### Does it beat the best single model? (roadmap 6.4)
 
@@ -333,6 +393,162 @@ weights themselves had at most 37 days of scores behind them. The test is repeat
 every day as history grows. Not yet done: training windows of 30 and 45 days and a
 decaying average (roadmap 6.4); with under 45 days of history they would be almost
 the same as 90 days.
+
+### Frost: night minimum, frost and ground frost
+
+The models' night minima are too warm (by 1.4–2.3 °C at the stations in September
+2026, most on clear, calm nights), so they almost never forecast frost (POD ≈ 0, see
+the event skill above). The forecast map's data (`outlook.json`, `mvd outlook`) therefore
+carries a separately corrected **night minimum** for the night 18–06 UTC, on the
+`night` and `day` rows of the date the night ends (`meteoverdict.frost`):
+
+1. **Per model and lead day:** `fmin − b[model, lead]`, the model's mean error of the
+   night minimum over the last 60 nights at all stations (D+N forecasts `fc-YYYY-MM`
+   against ČHMÚ's `TMInoc`, the 2 m minimum 18–06 UTC), then the plain mean of the
+   models (leads beyond D+3 use the D+3 bias).
+2. **Per station:** `− b_station`, the station's mean error left after 1., over the same
+   nights, shrunk by `n / (n + 10)` and applied in full (half strength was clearly
+   worse). Station biases are stable (correlation 0.93 between two halves of the
+   season) and differ more within an okres (0.95 °C) than between okresy (0.59 °C).
+   A split by forecast wind (< 2 m/s or not) did not help in our validation and is off.
+3. **Clear, calm nights:** `− (1.33 − 1.12 · cloud − 0.36 · min(wind, 5))` with the
+   night means of the models' own cloud fraction (not the corrected cover of the map) and wind (m/s): about
+   −1.0 °C for a clear, calm night, +1.4 °C for an overcast, windy one. These are the
+   values of the research sample (Open-Meteo Previous Runs, 16 stations, 1–13 April and
+   1–14 October 2026; bootstrap 95 % ranges 1.02–1.68, −1.98…−0.45, −0.53…−0.18);
+   `frost.json` records where they come from. The outlook archives its models' nights
+   at the okres points (`outlook-nights-YYYY-MM.parquet` in `data-YYYY-MM`, no extra
+   calls); once 30 nights of the last 45 days have observations, `mvd frost-fit` refits
+   the three numbers there on what is left after 1. and 2.
+
+The **okres minimum** (`night_min`) applies 1., the mean station bias of the okres and
+3. at the okres point. The **coldest site** (`coldest_site`, `coldest_min`) is the
+okres's station with the lowest corrected minimum: its own bias, the forecast moved from
+the point's to the station's elevation by 0.65 °C/100 m (as Open-Meteo corrects for
+elevation). From the okres minimum: `frost_probability` = Φ(−min / σ) with σ the error
+left in training (1.4–1.6 °C), `frost` (air-frost warning) when the minimum is ≤ 1 °C
+(the best CSI in every test; ≤ 0 °C catches too few, ≤ 2 °C has a FAR of 0.5–0.7), and
+`ground_min`, the 5 cm minimum, = minimum − 5.0 + 1.5 · cloud + 0.35 · wind
+(`ground_frost` when ≤ 0 °C; ČHMÚ's `TPM` is on average 2.9 °C below `TMInoc`, 4.1 °C
+on clear calm nights, 0.5 °C overcast and windy). `mvd frost-fit` runs in the daily
+workflow and writes `frost.json` to `data-latest`; without it the fields stay empty.
+
+**Validation** (with `meteoverdict.frost`; event = observed minimum ≤ 0 °C; POD / FAR
+/ CSI; MAE in °C). D+N forecasts of 11 models at 238 stations, D+1–D+3:
+
+| Test | Forecast | MAE | bias | warn ≤ 0 °C | warn ≤ 1 °C |
+|---|---|---|---|---|---|
+| Train 1–20 Sep, test 21 Sep–4 Oct (9,966 station-nights × lead, 81 frost) | mean of the models | 2.42 | +1.76 | 0.00 / – / 0.00 | 0.00 / 1.00 / 0.00 |
+| | + per model (1.) | 2.03 | +0.26 | 0.00 / 1.00 / 0.00 | 0.00 / 1.00 / 0.00 |
+| | + per station (2.) | **1.68** | +0.26 | 0.05 / 0.33 / 0.05 | 0.17 / 0.50 / 0.15 |
+| | + per station, split by wind | 1.72 | +0.28 | 0.05 / 0.43 / 0.05 | 0.16 / 0.63 / 0.13 |
+| Single runs for the night 13→14 Oct (192, 10 frost), trained 1 Sep–4 Oct | mean of the models | 1.46 | +0.72 | 0.00 / 1.00 / 0.00 | 0.10 / 0.86 / 0.06 |
+| | + per model | 1.57 | −0.79 | 0.20 / 0.82 / 0.11 | 0.40 / 0.75 / 0.18 |
+| | + per station | **1.19** | −0.63 | 0.30 / 0.57 / 0.21 | 0.80 / 0.53 / 0.42 |
+
+With cloud (the research sample, 16 stations, ECMWF IFS, ICON-EU, ICON-D2, ALADIN 1 km,
+D+1–D+2). The default clear-calm numbers were fitted on April and October together, so
+the "refit on train" rows are the honest out-of-sample ones:
+
+| Test | per model | + station | + station + clear-calm (default) | + station + clear-calm (refit on train) |
+|---|---|---|---|---|
+| Train Apr → test Oct (448, 20 frost): MAE; ≤ 1 °C | 1.33; 0.45 / 0.40 / 0.35 | 1.28; 0.30 / 0.50 / 0.23 | 1.18; 0.65 / 0.43 / 0.43 | 1.28; 0.75 / 0.50 / 0.43 |
+| Train Oct → test Apr (352, 145 frost) | 1.50; 0.83 / 0.25 / 0.65 | 1.46; 0.85 / 0.24 / 0.67 | 1.24; 0.90 / 0.24 / 0.70 | 1.26; 0.88 / 0.25 / 0.68 |
+| Train Apr + 1–11 Oct → test 12–14 Oct (96, 20 frost) | 1.43; 0.60 / 0.40 / 0.43 | 1.39; 0.60 / 0.40 / 0.43 | 1.24; 0.80 / 0.45 / 0.48 | 1.23; 0.85 / 0.47 / 0.49 |
+
+Ground frost (5 cm ≤ 0 °C) from the corrected minimum: CSI 0.66 Apr → Oct (POD 0.80,
+FAR 0.20; a fixed −3.4 °C offset 0.55), 0.88 Oct → Apr (0.85), 0.77 on 12–14 Oct (0.79).
+Frost probability, Brier score against climatology: 0.007 vs 0.008 (September test),
+0.026 vs 0.043 (Apr → Oct), 0.093 vs 0.242 (Oct → Apr).
+
+Limits: one autumn and 13 April nights; few frost nights in the tests (POD and FAR
+are uncertain by about ±0.15–0.2); the corrections are learnt at the stations and
+applied at the okres point (model biases there may differ); seasons differ (April-trained
+corrections ran 0.5–0.85 °C too cold on the October frost nights), hence the rolling
+windows. A dew-point floor did not help (observed minima fell below the forecast
+18 UTC dew point on 53 % of nights), and Open-Meteo's archived runs have no
+`soil_temperature_0cm`.
+
+## Sunshine, cloud and gusts
+
+The forecast map shows sunshine and cloud prominently (also on the TRMNL e-ink
+display). The plain mean of the models was checked against ČHMÚ in a research sample:
+the previous day's run (Open-Meteo Previous Runs API) of 10 models at 10 stations that
+measure sunshine, cloud and gusts (Prostějov, Pardubice, Brno-Tuřany, Mošnov,
+Praha-Ruzyně, Temelín, Karlovy Vary, Polom and the summits Milešovka and Lysá hora),
+15 August – 14 October 2026, 610 station-days. Observations: daily sunshine `SSV`
+(h) and maximum gust `Fmax` (m/s), hourly cloud cover `N` (octas × 12.5 %; 8 and 9,
+sky obscured, count as 100 %). Every model over-forecasts sunshine (+2.0 to +3.9 h a
+day; mean +2.8 h, worst on dull days: +4.0 h when under 2 h were measured), although
+cloud cover is only about 4 % too low: Open-Meteo derives sunshine from direct
+radiation above 120 W/m², which the models overdo. Gusts are too weak, mostly on the
+summits (Milešovka −6.1, Lysá hora −3.2 m/s).
+
+`meteoverdict.sun_cloud_gust` corrects the outlook's plain means:
+
+- **Sunshine**, per okres and UTC day: `L` the astronomical day length at the okres
+  point, `rel` the mean sunshine as a share of it, `c` the mean cloud cover 06–16 UTC
+  (0–1); `sunshine = clip((a + b·rel + d·(1 − c))·L, 0, L)`. In shares of the day, not
+  hours: an additive correction (about −3.7 h) would go negative in December. The
+  hourly values are then scaled proportionally to add up to the corrected day (no hour
+  above 3,600 s; an hour without sunshine stays without), so hours, parts of day,
+  days and the open-data files agree.
+- **Cloud cover**, every hour: `clip(a + b·mean, 0, 100)` (fitted on 06–16 UTC). The
+  correction narrows the spread (about `18 + 0.76·mean`), so with the old symbol
+  thresholds (25 / 70 %) "clear" would drop from 18 % to 6 % of days against 12 %
+  observed. The symbols now use **30 / 65 %** on the corrected cover, which matches
+  the observed shares and scores better (below).
+- **Gusts**, daily maximum: `a + b·mean` plus the mean remaining error of the okres's
+  representative station: the single-runs station of the okres if at most 750 m high,
+  so summits (Milešovka, Lysá hora) never set an okres's correction. Neither the
+  outlook nor the API shows gusts, and adding them to the outlook request would cost
+  a fifth more Open-Meteo calls (~170–290 a day) with the free budget nearly used, so
+  the gust correction is fitted and published in the coefficients but not yet
+  applied. It is not applied to the farmers' event skill either: that verifies each
+  model as published, and a correction fitted on the same observations would blur
+  it.
+
+**Fitting.** Least squares on the pairs of the last 60 days, refitted every night
+(`mvd sun-cloud-gust`, workflow `sun-cloud-gust.yml`, no Open-Meteo calls): the
+outlook archives the plain means it fetches anyway (release `outlook-archive`) and
+they are paired, by lead day 1–5, with the nearest station at most 750 m high that
+measures sunshine (within 40 km of the okres point) or cloud (within 60 km); gusts
+from the 00 UTC single runs (each model's largest hourly gust of the UTC day, then the
+mean) at the okres's representative station against `Fmax`. A variable is refitted
+once it has 21 days of pairs (lead days with 21 days of their own get their own
+coefficients); until then it keeps the **bootstrap** coefficients fitted on the
+research sample (8 stations up to 750 m, all 61 days; `src/meteoverdict/data/
+sun-cloud-gust.json`, with its provenance). The outlook uses a different set of
+models from the research sample, which the refit absorbs. Rolling refits matter: the
+research expects the bias to grow in the winter inversion season (models dissolve
+low stratus too early), which an August–October sample cannot show.
+
+**Out of sample** (the research sample, reproduced with this module: each test day
+forecast with coefficients fitted on all earlier days, at least 21; 40 test days,
+5 September – 14 October; 95 % intervals from a 3-day block bootstrap over days):
+
+| Variable | Station-days (hours) | MAE plain mean | Bias | MAE corrected | Bias | ΔMAE [95 % CI] |
+|---|---:|---:|---:|---:|---:|---|
+| Sunshine, h/day (10 stations) | 400 | 2.78 | +2.68 | **1.58** | +0.07 | −1.20 [−1.86, −0.51] |
+| Sunshine, h/day (8 stations ≤ 750 m) | 320 | 2.80 | +2.72 | **1.50** | +0.08 | −1.30 [−1.97, −0.56] |
+| Sunshine via the hourly scaling (10 stations) | 400 | 2.78 | +2.68 | **1.58** | +0.07 | −1.20 [−1.81, −0.50] |
+| Daily max gust, m/s (10 stations) | 400 | 1.85 | −1.25 | **1.16** | −0.06 | −0.68 [−0.84, −0.50] |
+| Daily max gust, m/s (8 stations ≤ 750 m) | 320 | 1.20 | −0.47 | **1.00** | +0.01 | −0.21 [−0.31, −0.10] |
+| Cloud, %, hourly 06–16 UTC | (4,399) | 14.47 | −4.71 | **13.42** | −0.73 | −1.05 [−1.59, −0.46] |
+| Cloud, %, daytime mean | 400 | 10.45 | −4.71 | **8.86** | −0.73 | −1.59 [−2.25, −0.88] |
+
+Gust events (10 stations): ≥ 15 m/s caught 25 % → 75 % of 48 events, false alarms
+20 % → 18 %, CSI 0.24 → 0.64; ≥ 20 m/s 0 → 8 of 9 (nearly all on the summits). Symbols
+from the daytime mean cloud (observed: 12 % clear, 43 % partly, 45 % cloudy): plain
+mean with 25/70 % 18/42/40 %, hit rate 0.78, Heidke skill 0.65; corrected with 25/70 %
+6/53/41 %, 0.80, 0.65; corrected with **30/65 %** 12/42/47 %, 0.81, **0.69** (hourly:
+Heidke 0.51 → 0.54). The thresholds were picked on this sample, so the gain is
+somewhat optimistic; the frequencies are the reason for them.
+
+What did not help in the research: the median instead of the mean, weighting models
+by past error (≤ 0.1), the best single model or top three for cloud (worse), stacking,
+a 30-day instead of an expanding window, a plain ratio for sunshine (not
+significant).
 
 ## Limitations
 
