@@ -7,6 +7,7 @@ import {
   biasByElevation, blendTestLines, blendTestRows, blendTestVariable, blendVerdict, blendVerdicts, fmt, singleModelVerdicts,
   okresVerdictCounts, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
   leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, unpublishedHours,
+  RANK_BY, STATION_SETS, hasValues, sortByEts,
 } from "./compare.js";
 import { records } from "./data.js";
 
@@ -297,4 +298,40 @@ test("blend test chart lines and okres counts", () => {
   assert.equal(lines.filter((r) => r.series === "best_hindsight").length, 1); // null left out
   assert.deepEqual(okresVerdictCounts(BLEND_TEST, "temperature_2m", 1), { better: 1, same: 0, worse: 1 });
   assert.deepEqual(okresVerdictCounts(null, "temperature_2m", 1), { better: 0, same: 0, worse: 0 });
+});
+
+const RAIN = records({
+  columns: ["region", "lead_day", "model", "mae", "rank", "ets_0p1", "ets_1", "pod_1", "far_1", "ets_10", "mae_bc", "short_record"],
+  rows: [
+    ["cz", 1, "smooth", 1.0, 1, 0.3, 0.20, 0.9, 0.5, 0.05, null, false],
+    ["cz", 1, "sharp", 1.2, 2, 0.4, 0.35, 0.7, 0.3, 0.12, null, false],
+    ["cz", 1, "none", 1.1, 3, null, null, null, null, null, null, false],
+    ["cz", 1, "blend", 0.9, null, 0.3, 0.30, 0.8, 0.4, 0.01, null, false],
+    ["cz", 1, "new", 0.8, null, 0.5, 0.50, 0.9, 0.1, 0.20, null, true],
+    ["main", 1, "smooth", 0.9, 1, null, null, null, null, null, 0.7, false],
+  ],
+});
+
+test("the new event scores and the bias-corrected MAE reach the table", () => {
+  const table = rankingTable(RAIN, 1);
+  const smooth = table.find((r) => r.model === "smooth");
+  assert.equal(smooth.ets1, 0.2);
+  assert.equal(smooth.pod1, 0.9);
+  assert.equal(smooth.ets10, 0.05);
+  assert.equal(smooth.maeBc, null);
+  assert.equal(hasValues(table, "ets1"), true);
+  assert.equal(hasValues(table, "maeBc"), false);
+  // the station kinds are regions of the network level
+  assert.equal(rankingTable(RAIN, 1, "main")[0].maeBc, 0.7);
+  assert.deepEqual(STATION_SETS, ["all", "main", "other"]);
+  assert.deepEqual(RANK_BY, ["mae", "ets1", "ets10"]);
+});
+
+test("sorting by ETS: higher first, numbered; no score, the mean and short records last", () => {
+  const sorted = sortByEts(rankingTable(RAIN, 1), "ets1");
+  assert.deepEqual(sorted.map((r) => r.model), ["sharp", "smooth", "none", "blend", "new"]);
+  assert.deepEqual(sorted.map((r) => r.etsRank), [1, 2, null, null, null]);
+  // the MAE ranking keeps its own order and ranks
+  assert.deepEqual(sorted.map((r) => r.rank), [2, 1, 3, null, null]);
+  assert.deepEqual(sortByEts(rankingTable(RAIN, 1), "ets10").slice(0, 2).map((r) => r.model), ["sharp", "smooth"]);
 });

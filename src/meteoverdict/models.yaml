@@ -33,6 +33,9 @@
 # New models go at the end: the web pages colour models in this order.
 
 models:
+  # "1 km" is ČHMÚ's post-processing grid (Popis_obsahu.xlsx: "post-processingová oblast
+  # CZ1K"): the output of the same 2.3 km ALADIN/ALARO run as the next model, on a finer
+  # grid, so the two are near-duplicates (docs/data-sources.md#aladin-archive)
   - id: chmi_aladin_cz_1km
     name: ČHMÚ ALADIN CZ 1 km
     provider: ČHMÚ

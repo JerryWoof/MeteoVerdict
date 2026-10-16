@@ -73,7 +73,21 @@
         </div>
         <h3 id="ranking-title" data-i18n="compare.ranking">Ranking</h3>
         <p class="note" data-i18n="compare.rankingNote"></p>
+        <div class="ranking-options">
+          <div id="stations-block" class="blend-test-switch" hidden>
+            <span id="stations-label" data-i18n="compare.stations">Stations</span>
+            <div class="segmented" id="stations" role="group" aria-labelledby="stations-label"></div>
+          </div>
+          <p class="note" id="stations-note" hidden></p>
+          <div id="rank-by-block" class="blend-test-switch" hidden>
+            <span id="rank-by-label" data-i18n="compare.rankBy">Sort by</span>
+            <div class="segmented" id="rank-by" role="group" aria-labelledby="rank-by-label"></div>
+          </div>
+          <p class="note" id="rank-by-note" hidden></p>
+        </div>
         <div class="scroll"><table id="ranking"></table></div>
+        <p class="note" id="bc-note" hidden></p>
+        <p class="note" id="aladin-note" hidden></p>
         <h3 data-i18n="compare.intervals">How sure is the ranking?</h3>
         <p class="note" data-i18n="compare.intervalsNote"></p>
         <div id="intervals"></div>

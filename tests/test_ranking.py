@@ -168,3 +168,19 @@ def test_a_model_with_a_short_record_is_not_ranked_and_does_not_cut_the_others()
     table = cz(ranking.rank(pl.concat([rows, new]), STATIONS, resamples=100))
     assert table.select("model", "rank").rows() == [("a", 1), ("b", 2)]
     assert table.filter(pl.col("model") == "a")["clear_winner"].item()
+
+
+def test_main_and_other_stations_are_ranked_separately():
+    # model a is better at the main WMO station, b at the other two
+    main = "0-20000-0-11520"
+    stations = pl.concat([STATIONS, STATIONS.head(1).with_columns(id=pl.lit(main))])
+    days = 20
+    table = pl.concat(
+        [
+            scores({"a": [1.0] * days, "b": [2.0] * days}, stations=(main,)),
+            scores({"a": [2.0] * days, "b": [1.0] * days}, stations=("s1", "s2")),
+        ]
+    )
+    ranks = ranking.rank(table, stations, windows=("all",), resamples=200)
+    network = ranks.filter(pl.col("level") == "network", pl.col("rank") == 1)
+    assert dict(network.select("region", "model").rows()) == {"main": "a", "other": "b"}
