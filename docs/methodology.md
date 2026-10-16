@@ -397,7 +397,7 @@ outlook` uses it for every part of day:
   and √ of their 90th percentile) gives `heavy_rain_probability`, P(≥ 5 mm in the
   part of day); `heavy_rain` flags it at the probability with the best ETS on the
   training cases (0.2–0.3 so far). For a whole day: the highest of its parts.
-- **Fallbacks:** fewer than 30 days of cases, a calibration older than 14 days, or a
+- **Fallbacks:** fewer than 30 days of cases, a calibration older than 35 days (forecasts lag ~20 days in normal operation), or a
   case with fewer than 3 models: the raw share and the old showers rule, and the
   heavy-rain fields are null. Whole days keep the raw share. A model without a Brier
   score yet weighs 1.
@@ -514,7 +514,9 @@ The **okres minimum** (`night_min`) applies 1., the mean station bias of the okr
 3. at the okres point. The **coldest site** (`coldest_site`, `coldest_min`) is the
 okres's station with the lowest corrected minimum: its own bias, the forecast moved from
 the point's to the station's elevation by 0.65 °C/100 m (as Open-Meteo corrects for
-elevation). From the okres minimum: `frost_probability` = Φ(−min / σ) with σ the error
+elevation). Stations more than 300 m above the okres point (summits such as Milešovka)
+are left out of both: they are cold by height and say nothing about frost in the fields.
+From the okres minimum: `frost_probability` = Φ(−min / σ) with σ the error
 left in training (1.4–1.6 °C), `frost` (air-frost warning) when the minimum is ≤ 1 °C
 (the best CSI in every test; ≤ 0 °C catches too few, ≤ 2 °C has a FAR of 0.5–0.7), and
 `ground_min`, the 5 cm minimum, = minimum − 5.0 + 1.5 · cloud + 0.35 · wind

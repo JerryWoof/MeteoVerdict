@@ -83,6 +83,9 @@ AIR_FROST_AT = 1.0
 GROUND_FROST_AT = 0.0
 #: °C per metre, Open-Meteo's elevation correction (standard atmosphere)
 LAPSE = 0.0065
+#: stations more than this many metres above the okres point are left out of the okres
+#: correction and the coldest site
+MAX_SITE_ABOVE_POINT = 300.0
 
 #: the new optional fields of outlook.json on the "night" and "day" rows of the date the
 #: night ends
@@ -448,6 +451,11 @@ def okres_nights(nights: pl.DataFrame, cal: Calibration) -> pl.DataFrame:
     calm = pl.col("wind") < CALM_WIND
     sites = (
         okres.join(cal.stations.drop("nights"), on="okres", how="inner")
+        # summits (Milešovka above Litoměřice) are cold by height and warm in
+        # inversions: they say nothing about frost in the okres's fields
+        .filter(
+            (pl.col("elevation_right") - pl.col("elevation")).fill_null(0.0) <= MAX_SITE_ABOVE_POINT
+        )
         .with_columns(_station_bias(cal, calm).alias("_bias"))
         .with_columns(
             (

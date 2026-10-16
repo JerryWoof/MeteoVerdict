@@ -64,8 +64,9 @@ HEAVY_MM = 5.0
 #: training: the last WINDOW_DAYS days with verified cases, at least MIN_DAYS of them
 WINDOW_DAYS = 90
 MIN_DAYS = 30
-#: a calibration older than this (its last training day) is not used
-MAX_AGE_DAYS = 14
+#: a calibration older than this (its last training day) is not used; forecasts arrive
+#: in 14-day backfill windows and runs start hours late, so ~20 days is the normal lag
+MAX_AGE_DAYS = 35
 #: the model weights move from equal to 1/Brier as days / (days + SHRINK_DAYS)
 SHRINK_DAYS = 30
 #: a model's Brier score at a lead day needs at least this many cases

@@ -377,3 +377,29 @@ def test_frost_fit_command_on_local_files(tmp_path):
     assert bias == {"a": pytest.approx(2.0), "b": pytest.approx(1.0)}
     assert cal.stations["name"].to_list() == ["One"]
     assert cal.clear_calm["intercept"] == frost.CLEAR_CALM["intercept"]
+
+
+def test_a_summit_is_neither_the_coldest_site_nor_in_the_okres_correction():
+    # Milešovka-like: 500 m above the okres point, cold by height and strongly biased
+    stations = pl.DataFrame(
+        {
+            "station_id": ["low", "top"],
+            "name": ["Valley", "Summit"],
+            "okres": ["CZ0201", "CZ0201"],
+            "elevation": [330.0, 930.0],
+            "bias": [1.0, -3.0],
+            "bias_calm": [1.0, -3.0],
+            "bias_windy": [1.0, -3.0],
+            "nights": [30, 30],
+        }
+    )
+    nights = frost.point_nights(FC, PAYLOAD, CODES, NOW)
+    out = frost.okres_nights(nights, calibration(stations))
+    row = out.filter(pl.col("okres") == "CZ0201", pl.col("night") == date(2026, 10, 13)).row(
+        0, named=True
+    )
+    one = nights.filter(pl.col("okres") == "CZ0201", pl.col("night") == date(2026, 10, 13))
+    term = 1.33 - 1.12 * one["cloud"].mean() - 0.36 * min(one["wind"].mean(), 5)
+    assert row["coldest_site"] == "Valley"
+    # only the valley's bias (+1) corrects the okres
+    assert row["night_min"] == pytest.approx((one["fmin"] - 1.0).mean() - 1.0 - term)
