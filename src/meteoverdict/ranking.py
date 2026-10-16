@@ -1,7 +1,9 @@
 """Rank models with bootstrap confidence intervals (roadmap 2.5).
 
 For every level, region, window, variable and lead day (on the same fair station-days
-and okres pools as ``meteoverdict.aggregate``), models are ranked by MAE. To tell real
+and okres pools as ``meteoverdict.aggregate``), models are ranked by MAE. Only the
+models with scores on at least ``aggregate.MIN_COVERAGE`` of the window's scored days
+are ranked (``aggregate.covered_only``); a newly added model joins once it has them. To tell real
 differences from luck we resample **whole days** with replacement (all stations and
 models of a day stay together, because forecast errors on one day are correlated across
 stations) and recompute every model's MAE. A model is ``tied_with_best`` when the 95 %
@@ -99,6 +101,7 @@ def rank(
     for window in windows:
         _, days = aggregate.window_days(window, as_of, first_day)
         in_window = scores.filter(days).join(info, on="station_id", how="inner")
+        in_window = aggregate.covered_only(in_window)
         for level in aggregate.LEVELS:
             regions = aggregate.with_regions(in_window, level, distance)
             daily = (
