@@ -746,8 +746,15 @@ def blend_test_cmd(
         if releases:
             months = partitions.months(first, last + timedelta(days=1))
             store.download(releases, data_dir, months, typer.echo, kinds=("obs", "gauges", "fc"))
+            # the single runs the latest days' D+N are rebuilt from, as in `mvd daily`
+            oldest = last - timedelta(days=fresh.DAYS + catalogue.MAX_LEAD_DAY + 1)
+            runs.RunsSync(releases, data_dir, typer.echo).pull(partitions.months(oldest, last))
         obs = observations.scan(data_dir, first, last + timedelta(days=1))
         fc = partitions.scan_months(data_dir / "fc", first, last + timedelta(days=1))
+        # the fresh days were scored on D+N rebuilt from the single runs: the
+        # combination needs the same forecasts (none without data/runs)
+        enabled = [m for m in catalogue.load_models() if m.enabled]
+        fc, _ = daily_mod.add_fresh(data_dir, enabled, last, obs, fc, typer.echo)
         if obs is None or fc is None:
             typer.echo("mvd blend-test: no observations or forecasts for the test period", err=True)
             raise typer.Exit(code=1)
