@@ -280,7 +280,8 @@ plus the next day, for the last day's precipitation) and writes
 `data/scores/YYYY-MM.parquet`: one row per `date`, `station_id`, `model`, `lead_day`
 and `variable` with `period_h` and the additive sums (`n`, `sum_err`, `sum_abs_err`,
 `sum_sq_err`; for `precipitation_daily` and `precipitation_24h` also `a_*`, `b_*`,
-`c_*`, `d_*` for 0.1, 5 and 20 mm; for `temperature_max` for 30 °C).
+`c_*`, `d_*` for 0.1, 1, 5, 10 and 20 mm, 1 and 10 since October 2026, null in rows
+written before; for `temperature_max` for 30 °C).
 
 | `variable` | `period_h` | Day of a pair |
 |---|---|---|
@@ -291,6 +292,7 @@ and `variable` with `period_h` and the additive sums (`n`, `sum_err`, `sum_abs_e
 | `precipitation_24h` | 24 | the day ČHMÚ's climatological day starts (06:00 to 06:00 UTC) |
 | `temperature_max` | 24 | the UTC day (highest of the 24 hourly values, 00:00 … 23:00) |
 | `temperature_2m_00utc`, `_06utc`, `_12utc`, `_18utc` | 0 | UTC date of that hour |
+| `wind_speed_10m_00utc` … `_18utc` (since October 2026) | 0 | UTC date of that hour; not aggregated on their own |
 
 Hourly precipitation MAEs of different periods are not comparable, so models are
 ranked on `precipitation_daily` and `precipitation_24h`.
@@ -318,7 +320,12 @@ included, has native output at these hours, so all can be compared by time of da
 06 UTC (07:00 CET, 08:00 CEST) is around the end of the night, when valley inversions
 are strongest; 12 UTC is early afternoon. These variables are aggregated (MAE, bias,
 RMSE per region, window and season) but not ranked with the bootstrap, which keeps
-the daily run short; they add about 40 % to the score rows.
+the daily run short; they add about 40 % to the score rows. Since October 2026 the wind
+is scored at each synoptic hour too (`wind_speed_10m_00utc` …), only so that each
+pair's error is known for the bias-corrected MAE (`aggregate.bias_corrected`,
+[methodology](methodology.md#bias-corrected-mae)); these rows are not aggregated or
+published on their own and add about 30 % to a month's score file (September 2026:
+35 MB → 47 MB).
 
 **Same hours for every model.** The ranked `temperature_2m` and `wind_speed_10m`
 use only 00, 06, 12 and 18 UTC, where every model (also AIFS, IFS 0.25° and the blend,
@@ -343,7 +350,8 @@ published: on 2026-10-12 the latest complete checked month was September 2026 (s
 ## Aggregates (`mvd aggregate`)
 
 `mvd aggregate` sums the daily scores per **level** (`station`, `okres`, `kraj`,
-`elevation` class, `cz`) and **window** ending at the last scored day (`90d`, `season`
+`elevation` class, `network`: `main` WMO stations and `other` stations, `cz`) and
+**window** ending at the last scored day (`90d`, `season`
 = meteorological season so far, `all`), then derives the metrics. The **seasonal
 windows** `djf`, `mam`, `jja` and `son` (roadmap 5.1) take every day of that season
 in the whole history, e.g. all summers, so models can be compared by season (their
@@ -396,6 +404,15 @@ in the whole history, e.g. all summers, so models can be compared by season (the
   listed separately; for the 06–06 precipitation (gauges), six models whose gauge
   history so far starts on 7 September (38 of 52 days, 72–74 %) are also listed
   separately until the gauge backfill reaches further back.
+- **Added in October 2026** (older files lack them; readers must not require them):
+  the level `network` (regions `main`, the main WMO stations, WIGOS `0-20000-0-…`, and
+  `other`; about 180 kB per window), the columns `pod_1`, `far_1`, `ets_1`, `pod_10`,
+  `far_10`, `ets_10` for precipitation (not in the station-level files, to keep them
+  small; `aggregates.parquet` has them), and `mae_bc` for temperature and wind (the MAE
+  once the model's own bias at the station and hour, from the 30 days before the
+  forecast, is removed; every level but `station`;
+  [methodology](methodology.md#bias-corrected-mae)). `meta.json` describes them under
+  `networks` and `bias_corrected`.
 - For the web map also `site/data/stations.json` (position, okres, kraj) and
   `site/data/series/<station>.json`: each model's daily MAE at that station over the
   last 90 days, for the ranked variables at D+1 and D+2 (about 65 kB per station, so
@@ -807,6 +824,20 @@ What we verified in the files (run 2026-10-11 00 UTC):
 |---|---|---|
 | `CZ_1km` (`chmi_aladin_cz_1km`) | regular lat/lon, 501 × 290, 0.014° × 0.009°, lat 48.5–51.098, lon 12.0–18.995 | 0–72 h hourly |
 | `Lambert_2.3km` (`chmi_aladin_central_europe_2km`) | Lambert conformal, 1053 × 837 | 0–72 h hourly |
+
+**"ALADIN CZ 1 km" is not a 1 km model run.** ČHMÚ's own description of the files
+(`Popis_obsahu.xlsx`, checked 2026-10-16) calls the `CZ1K` sheet "Výstupy modelu ALADIN:
+post-processingová oblast CZ1K, pravidelný rastr v zeměpisných souřadnicích app 1km"
+(a post-processing area on a regular ~1 km lat/lon grid), and the `Lambert` sheet "vnitřní
+výpočetní oblast, modelový grid v rozlišení 2.3 km" (the model's own computational grid).
+The operational model is ALADIN in its ALARO configuration at 2.3 km (Mašek 2023,
+https://doi.org/10.59984/978-80-7653-063-8.06); a real ~1 km configuration is a plan of
+ČHMÚ's new supercomputer project. So Open-Meteo's `chmi_aladin_cz_1km` and
+`chmi_aladin_central_europe_2km` are the **same model run** on two grids, and they score
+almost alike: on the same runs and stations they differ by about 0.13 °C and 0.15 m/s on
+average and 97 % of their daily precipitation values are identical (review of
+2026-10-16). In the ranking they are near-duplicates (and both count in the mean of all
+models).
 
 - `CLSTEMPERATURE`: 2 m temperature, K, instantaneous.
 - `CLSWIND_SPEED`: 10 m wind speed, m/s, instantaneous.

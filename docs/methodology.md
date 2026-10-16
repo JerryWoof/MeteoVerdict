@@ -28,7 +28,8 @@ closest to what ČHMÚ measured?
 - From the **Open-Meteo Previous Runs API** (CC BY 4.0): for each model the value it
   predicted for a given hour 1, 2, … 5 days earlier (`_previous_dayN`, "D+N").
 - 19 models, every one Open-Meteo has for all of Czechia with an archive: ČHMÚ ALADIN
-  (1 km and 2.3 km), DWD ICON-D2, ICON-EU and ICON global, ECMWF IFS HRES, IFS 0.25° and
+  (1 km and 2.3 km: one 2.3 km run, also post-processed onto a 1 km grid, so the two
+  are near-duplicates, see [data-sources](data-sources.md#aladin-archive)), DWD ICON-D2, ICON-EU and ICON global, ECMWF IFS HRES, IFS 0.25° and
   AIFS, NOAA GFS and AIGFS, UK Met Office global, Météo-France ARPEGE Europe and World,
   GeoSphere Austria AROME, KNMI and DMI HARMONIE-AROME, ECCC GEM Global, JMA GSM and CMA
   GRAPES (the last eight added in October 2026). Each is used for the lead days its
@@ -197,9 +198,12 @@ are not independent.
 
 - **MAE** (mean absolute error) ranks the models. **Bias** (forecast minus observed)
   and **RMSE** are reported too.
-- Precipitation and heat events (at least 0.1, 5 and 20 mm a day; at least 30 °C) get
-  the **probability of detection**, the **false alarm ratio** and the **equitable
-  threat score**.
+- Precipitation and heat events (at least 0.1, 1, 5, 10 and 20 mm a day; at least
+  30 °C) get the **probability of detection**, the **false alarm ratio** and the
+  **equitable threat score** (1 and 10 mm since October 2026; score rows written before
+  lack them and are left out of their sums until they are re-scored, which the daily
+  run does for its last 100 days).
+- **Bias-corrected MAE** (temperature and wind, `mae_bc`), see below.
 - Scores are kept as daily sums per station and model, so any region and period is
   summed first and the metric computed once.
 
@@ -245,6 +249,60 @@ are not independent.
   days. The
   web pages show every window's real dates and number of days, and mark windows that
   are still the same as the 90-day one.
+
+## Station kinds
+
+Most wind stations (about 170 of 210) are automatic **climate stations**, often more
+sheltered than an open 10 m mast; the about 40 **main (synoptic) stations** with a WMO
+number are open sites. All models over-forecast wind at the climate stations, the ones
+that keep more wind near the ground (ALADIN, AROME) most, so the station mix decides
+part of the wind ranking. The level `network` aggregates and ranks every variable
+separately for `main` (WIGOS id `0-20000-0-<WMO>`) and `other` (all other stations),
+Czechia only, with the same fair station-days and day bootstrap as the other levels; the
+comparison page offers "Stations: all / main (WMO) only / other (climate)" for the
+ranking table and the two charts below it. (`mvd station-check` compares these subsets in
+more detail, [station-check.md](station-check.md).)
+
+90 days to 15 October 2026, D+1 wind (MAE, m/s): at the main stations ICON-D2 1.20,
+AROME 1.21, ALADIN Central Europe 1.23 (tied with the best) and CZ 1.24 (ALADIN's bias
+there is 0.00, ICON-D2's −0.65); at the other stations ALADIN is 7th and
+9th (1.44, bias +1.18) behind ICON-EU 0.99 and ICON-D2 1.01. At D+2 the two ALADINs are
+first and second at the main stations (1.26, 1.27; ICON-D2 does not reach D+2).
+
+## Bias-corrected MAE
+
+A model that is always 1 m/s too windy at a station is easy to fix, and our combined
+forecast fixes it (its regression removes each model's bias per okres and hour). So the
+ranking table shows next to the raw MAE the **MAE once each model's usual bias is
+removed** (`mae_bc`), for temperature and wind:
+
+- For every pair (station, synoptic hour 00/06/12/18 UTC, day d, model, lead day N) the
+  bias is the model's mean error at that station and hour over the **30 days ending on
+  d − N − 1**: the last day whose observations were all known when the D+N forecast for
+  d was made (Open-Meteo's D+1 comes from a run of day d − 1). It is never estimated on
+  the day it corrects, so this is out of sample, as our forecast would have been.
+- At least 10 such days are needed; a station-hour-day counts only where **every**
+  compared model of the region has a bias, so all models are compared on the same pairs.
+  These are fewer than the raw MAE's (the first weeks of the history have no bias yet),
+  so compare `mae_bc` between models, not exactly with `mae`.
+- It comes from the per-hour score rows (`temperature_2m_HHutc`, and since October 2026
+  `wind_speed_10m_HHutc`, which are not published on their own); all levels except the
+  single stations (file size). It is shown, not ranked.
+
+90 days to 15 October 2026, D+1, Czechia: wind ICON-EU 0.78, ICON-D2 0.79, the mean of
+all models 0.76, ALADIN CZ 0.90 and CE 0.91 (raw 1.40); so about two thirds of ALADIN's
+gap to ICON-D2 (0.35 m/s raw) is its bias, and 0.11 m/s remains. Temperature: AROME 1.09,
+ICON-D2 1.11, ALADIN 1.15 (raw 1.32, 1.26, 1.34).
+
+## Precipitation: MAE favours smooth models
+
+Daily precipitation MAE rewards a model that spreads a little rain everywhere (a coarse
+or smooth model is never far off) over one that puts a shower in the right valley but
+slightly displaced (the "double penalty"). So for precipitation the ranking table can
+also be **sorted by ETS at ≥ 1 mm and ≥ 10 mm a day**, with POD and FAR at the threshold
+sorted by. That order is a plain sort without bootstrap intervals; days with ≥ 10 mm are
+few, so those scores are noisy. In autumn 2026 ALADIN is no better by ETS at 1 mm (D+1:
+0.52 against ICON-EU 0.59) and mid-pack at 10 mm.
 
 ## Ranking and uncertainty
 
