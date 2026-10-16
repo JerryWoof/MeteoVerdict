@@ -26,7 +26,9 @@ test("an okres file: forecast by hour and part of day, licence and attribution",
   assert.deepEqual(DOC.forecast.hourly.temperature_2m, HOURLY_DOC.okresy.CZ0201.temperature_2m);
   const parts = DOC.forecast.parts;
   assert.equal(parts.length, 6 * 5);
-  assert.deepEqual(Object.keys(parts[0]), ["day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol", "sunrise", "sunset"]);
+  assert.deepEqual(Object.keys(parts[0]), ["day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol", "sunrise", "sunset", "heavy_rain_probability", "heavy_rain"]);
+  // the saved outlook predates them: null, not missing
+  assert.equal(parts[0].heavy_rain, null);
 });
 
 test("model ranking per variable and lead day, with the weights of our forecast", () => {

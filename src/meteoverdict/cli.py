@@ -30,6 +30,7 @@ from meteoverdict import (
     partitions,
     quality,
     radar,
+    rain_calibration,
     ranking,
     regions,
     runs,
@@ -1012,12 +1013,19 @@ def outlook_cmd(
     out: Annotated[
         Path, typer.Option(help="The JSON file to write; outlook-hourly.json goes beside it.")
     ] = Path("site/data/outlook.json"),
+    calibration_path: Annotated[
+        Path,
+        typer.Option(
+            "--rain-calibration",
+            help="rain-calibration.json from `mvd daily` (missing or too old: the raw share).",
+        ),
+    ] = Path("site/data") / rain_calibration.FILE,
     github_release: Annotated[
         bool,
         typer.Option(
             "--github-release",
-            help="Take aggregates.parquet from and put outlook.json and "
-            "outlook-hourly.json into the release data-latest (GITHUB_TOKEN, "
+            help="Take aggregates.parquet (and rain-calibration.json) from and put "
+            "outlook.json and outlook-hourly.json into the release data-latest (GITHUB_TOKEN, "
             "GITHUB_REPOSITORY).",
         ),
     ] = False,
@@ -1032,6 +1040,8 @@ def outlook_cmd(
         releases = _release_store(client) if github_release else None
         if releases:
             releases.download(store.LATEST_TAG, "aggregates.parquet", aggregates_path)
+            if rain_calibration.FILE in releases.names(store.LATEST_TAG):
+                releases.download(store.LATEST_TAG, rain_calibration.FILE, calibration_path)
         if not aggregates_path.exists():
             raise typer.BadParameter(f"{aggregates_path} not found; run `mvd aggregate`")
         weights = combine.weights(pl.read_parquet(aggregates_path))
@@ -1039,8 +1049,11 @@ def outlook_cmd(
             typer.echo("mvd outlook: no okres weights yet", err=True)
             raise typer.Exit(code=1)
         points = combine.okres_points()
+        calibration = rain_calibration.load(calibration_path, log=typer.echo)
         try:
-            table, hourly = outlook.outlook(client, weights, points, sleep=time.sleep)
+            table, hourly = outlook.outlook(
+                client, weights, points, sleep=time.sleep, calibration=calibration
+            )
         finally:  # also when it fails: the calls count against the daily budget
             typer.echo(meter.line())
             _job_summary(f"## Outlook\n\n- {meter.line()}\n")
@@ -1412,10 +1425,48 @@ def daily(
         return
     aggregates_table = _publish_aggregates(files, table, data_dir, out, None, resamples)
     _write_badge(aggregates_table, out)
+    calibration = _refit_rain_calibration(table, data_dir, target, out)
     if github_release:
         with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
-            store.publish_latest(_release_store(client), data_dir, out)
+            releases = _release_store(client)
+            store.publish_latest(releases, data_dir, out)
+            if calibration:
+                releases.put(store.LATEST_TAG, calibration.name, calibration)
         typer.echo(f"published aggregates and site data to the release {store.LATEST_TAG}")
+
+
+def _refit_rain_calibration(
+    station_table: pl.DataFrame, data_dir: Path, day: date, out: Path
+) -> Path | None:
+    """Refit the calibrated rain probability of the outlook on the verified 6-hour cases
+    of the last ``rain_calibration.WINDOW_DAYS`` days (``out/rain-calibration.json``).
+    Not fatal: on failure the outlook keeps the last published calibration until it is
+    ``rain_calibration.MAX_AGE_DAYS`` old, then the raw share of models."""
+    first = day - timedelta(days=rain_calibration.WINDOW_DAYS - 1)
+    obs = observations.scan(data_dir, first, day + timedelta(days=1))
+    fc = partitions.scan_months(data_dir / "fc", first, day + timedelta(days=1))
+    if obs is None or fc is None:
+        typer.echo("rain calibration: no forecasts or observations")
+        return None
+    try:
+        calibration = rain_calibration.refit(
+            fc, obs, station_table, combine.okres_points(), day, generated=datetime.now(UTC)
+        )
+    except Exception as exc:  # the daily scores matter more than this refit
+        typer.echo(f"rain calibration failed: {type(exc).__name__}: {exc}", err=True)
+        return None
+    if calibration is None:
+        typer.echo(f"rain calibration: fewer than {rain_calibration.MIN_DAYS} days of cases")
+        return None
+    path = rain_calibration.write(calibration, out / rain_calibration.FILE)
+    info = calibration.info
+    typer.echo(
+        f"rain calibration: {calibration.days} days, {calibration.cases} cases "
+        f"{calibration.first}..{calibration.last}; Brier in sample {info.get('brier')} "
+        f"(raw share {info.get('brier_share')}), heavy rain flag at "
+        f"{calibration.heavy_flag_at} → {path}"
+    )
+    return path
 
 
 @app.command()
