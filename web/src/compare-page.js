@@ -340,8 +340,8 @@ function verdictText(v, unit, long = false, model = null) {
 }
 
 /**
- * A table of verdicts: a row per variable and a column per lead day, or on a phone
- * (where five lead-day columns do not fit) a row per lead day and a column per variable.
+ * A table of verdicts for the section's chosen variable (the switch above it): a column
+ * per lead day, or on a phone (where five lead-day columns do not fit) a row per lead day.
  */
 function verdictTable(id, verdicts, leads, unit, modelName, against) {
   const variables = BLEND_TEST_VARIABLES.filter((variable) => verdicts.some((v) => v.variable === variable));
@@ -362,10 +362,10 @@ function verdictTable(id, verdicts, leads, unit, modelName, against) {
   };
   const head = document.createElement("tr");
   let body;
+  const shown = variables.includes(blendView.variable) ? [blendView.variable] : variables;
   if (window.matchMedia("(max-width: 700px)").matches) {
-    // phones: only the section's chosen variable, a row per lead day (two columns always fit)
+    // phones: a row per lead day (two columns always fit)
     head.append(cell("th", t("control.lead")), cell("th", t("blendTest.verdict")));
-    const shown = variables.includes(blendView.variable) ? [blendView.variable] : variables;
     body = shown.flatMap((variable) => {
       const group = document.createElement("tr");
       group.className = "group";
@@ -380,7 +380,7 @@ function verdictTable(id, verdicts, leads, unit, modelName, against) {
     });
   } else {
     head.append(cell("th", t("blendTest.variable")), ...leads.map((d) => cell("th", `D+${d}`)));
-    body = variables.map((variable) => {
+    body = shown.map((variable) => {
       const tr = document.createElement("tr");
       tr.append(cell("th", t(`variable.${variable}`)), ...leads.map((lead) => verdictCell(variable, lead)));
       return tr;
@@ -474,7 +474,7 @@ async function renderBlendTest(names) {
       : null,
     leads.length > 1 ? t("blendTest.scopeLeads", { first: leads[0], last: leads.at(-1) }) : null,
   ].filter(Boolean).join(" · ");
-  // the section's own variable (switch above the tables): the phone tables, okres counts, chart, per-model table
+  // the section's own variable (switch above everything in it): tables, okres counts, chart, per-model table
   renderBlendSwitch(verdicts, () => renderBlendTest(names));
   // headline: one model for the whole of Czechia (files before it: the okres table only)
   const czVerdicts = blendVerdicts(czRows, "cz");
