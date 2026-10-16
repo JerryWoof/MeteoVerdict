@@ -15,12 +15,13 @@ name: Single runs
 # and 300,000 a month, shared by all workflows; docs/data-sources.md#open-meteo-budget).
 # Priorities: (1) outlook (outlook.yml, <= 2 x 800), (2) the newest runs: 850 at 04:20,
 # 10:20, 16:20 and 22:20 = 3,400 a day, (3) the D+N backfill's current windows,
-# (4a) this history, (4b) the D+N backfill's older windows. (3)-(4b) share 4,500 a day:
-# the backfill (02:41) spends it first on its current windows; 10:20 takes the part
-# 0-2,500 and 13:20 the part 2,500-4,500 of what it left (`--shared-calls`,
+# (3b) its priority windows back to 2025-10-01 at these ~100 stations, (4a) this
+# history, (4b) the D+N backfill's older windows. (3)-(4b) share 4,500 a day:
+# the backfill (02:41) spends it first on its current and priority windows; 10:20 takes
+# the part 0-2,500 and 13:20 the part 2,500-4,500 of what it left (`--shared-calls`,
 # `--shared-from/--shared-to`, read from its state in the release data-state):
-#   - a current backfill window pending, or one due tomorrow: nothing (also keeps this
-#     history and the backfill's next big day 24 hours apart);
+#   - a current or priority backfill window pending, or a current one due tomorrow:
+#     nothing (also keeps this history and the backfill's next big day 24 hours apart);
 #   - the backfill called Open-Meteo today: 4,500 minus what it used;
 #   - otherwise all 4,500; nothing when the state cannot be read.
 # The backfill takes its older windows only once this history is complete, then with the
@@ -66,6 +67,7 @@ env:
   SHARED_CALLS: "4500" # MAX_CALLS of backfill.yml
   MODE: ${{ inputs.mode || 'all' }}
   BACKFILL_FROM: "2024-01-01" # the --from of backfill.yml
+  BACKFILL_PRIORITY_FROM: "2025-10-01" # the --priority-from of backfill.yml
 
 jobs:
   runs:
@@ -93,6 +95,7 @@ jobs:
           to="${INPUT_SHARED_TO:-$to}"
           uv run --frozen mvd fetch-runs --github-release --mode "$MODE" \
             --max-calls "$calls" --shared-calls "$SHARED_CALLS" \
-            --shared-from "$from" --shared-to "$to" --backfill-from "$BACKFILL_FROM"
+            --shared-from "$from" --shared-to "$to" --backfill-from "$BACKFILL_FROM" \
+            --backfill-priority-from "$BACKFILL_PRIORITY_FROM"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -10,7 +10,9 @@ name: Daily
 # against the best single model (blend-test.json) and the night-minimum corrections
 # for the outlook's frost fields (frost.json), each allowed to fail without failing
 # the run.
-# No Open-Meteo calls: forecasts come from the backfill and single-runs workflows.
+# No Open-Meteo calls: forecasts come from the backfill and single-runs workflows (the
+# days the backfill's 14-day windows have not reached are scored from D+N rebuilt from
+# the single runs, read from the releases runs-YYYY-MM; docs/data-sources.md).
 on:
   schedule:
     - cron: "17 5 * * *"
