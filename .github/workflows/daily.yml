@@ -9,7 +9,9 @@ name: Daily
 # rain from the same single runs) and the out-of-sample test of our combined forecast
 # against the best single model (blend-test.json), each allowed to fail without
 # failing the run.
-# No Open-Meteo calls: forecasts come from the backfill and single-runs workflows.
+# No Open-Meteo calls: forecasts come from the backfill and single-runs workflows (the
+# days the backfill's 14-day windows have not reached are scored from D+N rebuilt from
+# the single runs, read from the releases runs-YYYY-MM; docs/data-sources.md).
 on:
   schedule:
     - cron: "17 5 * * *"
