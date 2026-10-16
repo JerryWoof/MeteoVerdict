@@ -288,3 +288,165 @@ def test_json_leaves_out_empty_columns_and_native_precipitation(tmp_path):
     assert not any(p.name == "precipitation.json" for p in written)
     doc = json.loads((tmp_path / "all" / "cz" / "temperature_2m.json").read_text())
     assert "pod_5" not in doc["columns"] and "mae" in doc["columns"]
+
+
+# --- stations by kind (network level) ---------------------------------------------------
+MAIN = "0-20000-0-11518"  # a main WMO station
+NETWORK_STATIONS = pl.concat(
+    [
+        STATIONS,
+        STATIONS.head(1).with_columns(id=pl.lit(MAIN), name=pl.lit("Main")),
+    ]
+)
+
+
+def test_main_stations_are_compared_on_their_own():
+    rows = [(DAY, s, m, 1, e) for s in ("s1", "s2") for m, e in (("a", 2.0), ("b", 1.0))]
+    rows += [(DAY, MAIN, "a", 1, 0.5), (DAY, MAIN, "b", 1, 1.5)]
+    table = agg.aggregate(score_rows(rows), NETWORK_STATIONS, windows=("all",))
+    network = table.filter(pl.col("level") == "network")
+    columns = ("region", "model", "stations", "mae")
+    got = {(r, m): (n, mae) for r, m, n, mae in network.select(columns).rows()}
+    assert got == {
+        ("main", "a"): (1, 0.5),
+        ("main", "b"): (1, 1.5),
+        ("other", "a"): (2, 2.0),
+        ("other", "b"): (2, 1.0),
+    }
+    kinds = pl.DataFrame({"id": [MAIN, "0-203-0-11518", "s1"]}).select(
+        agg.network_class(pl.col("id"))
+    )
+    assert kinds.to_series().to_list() == ["main", "other", "other"]
+
+
+# --- bias-corrected MAE -----------------------------------------------------------------
+def slot_rows(rows, variable="wind_speed_10m"):
+    """rows: (date, station, model, lead_day, hour, error): one pair per row."""
+    return pl.DataFrame(
+        [
+            {
+                "date": d,
+                "station_id": s,
+                "model": m,
+                "lead_day": lead,
+                "variable": f"{variable}_{h:02d}utc",
+                "period_h": 0,
+                "n": 1,
+                "sum_err": e,
+                "sum_abs_err": abs(e),
+                "sum_sq_err": e * e,
+            }
+            for d, s, m, lead, h, e in rows
+        ]
+    )
+
+
+def test_the_bias_comes_only_from_days_known_before_the_forecast():
+    days = [DAY - timedelta(days=k) for k in range(40)]
+    # a constant +2 bias, and a wild error on the last day that must not leak into it
+    rows = [(d, "s1", "a", 1, 0, 2.0) for d in days[1:]] + [(DAY, "s1", "a", 1, 0, 10.0)]
+    out = agg.bias_corrected(slot_rows(rows))
+    last = out.filter(pl.col("date") == DAY).row(0, named=True)
+    assert last["bias"] == pytest.approx(2.0)
+    assert last["abs_err_bc"] == pytest.approx(8.0)
+    # D+1 on DAY - 1 may use days up to DAY - 3 only: training ends on d - N - 1
+    yesterday = out.filter(pl.col("date") == DAY - timedelta(days=1)).row(0, named=True)
+    assert yesterday["bias"] == pytest.approx(2.0)
+    # the first days have too few training days
+    first = out.filter(pl.col("date") <= days[-1] + timedelta(days=agg.BIAS_MIN_DAYS))
+    assert first["bias"].is_null().all()
+
+
+def test_the_training_window_is_the_last_days_before_the_forecast():
+    days = [DAY - timedelta(days=k) for k in range(60)]
+    # error 5 long ago, 1 in the last 30 days before the D+2 forecast for DAY was made
+    rows = [
+        (d, "s1", "a", 2, 12, 1.0 if (DAY - d).days <= 2 + agg.BIAS_TRAINING_DAYS else 5.0)
+        for d in days
+    ]
+    out = agg.bias_corrected(slot_rows(rows))
+    last = out.filter(pl.col("date") == DAY).row(0, named=True)
+    # days DAY-32 … DAY-3: 30 days, all with error 1
+    assert last["bias"] == pytest.approx(1.0)
+
+
+def test_bias_corrected_mae_next_to_the_raw_one():
+    days = [DAY - timedelta(days=k) for k in range(30)]
+    slots = []
+    daily = []
+    for d in days:
+        for s in ("s1", "s2", "s3"):
+            # a: always 3 too strong (MAE 3, nothing left once the bias is removed);
+            # b: ±1 on alternate days, no bias (MAE 1, stays 1)
+            e_b = 1.0 if d.toordinal() % 2 else -1.0
+            for model, e in (("a", 3.0), ("b", e_b)):
+                slots += [(d, s, model, 1, h, e) for h in (0, 6, 12, 18)]
+                daily.append(
+                    {
+                        "date": d, "station_id": s, "model": model, "lead_day": 1,
+                        "variable": "wind_speed_10m", "period_h": 0, "n": 4,
+                        "sum_err": 4 * e, "sum_abs_err": 4 * abs(e), "sum_sq_err": 4 * e * e,
+                    }
+                )  # fmt: skip
+    scores = pl.concat([pl.DataFrame(daily), slot_rows(slots)], how="diagonal_relaxed")
+    table = agg.aggregate(scores, STATIONS, windows=("all",))
+    cz = table.filter(pl.col("level") == "cz", pl.col("variable") == "wind_speed_10m")
+    got = {m: (mae, bc) for m, mae, bc in cz.select("model", "mae", "mae_bc").rows()}
+    assert got["a"] == (pytest.approx(3.0), pytest.approx(0.0))
+    # b: the bias of a training window is about 0 (± 1 / days), so its MAE stays about 1
+    assert got["b"] == (pytest.approx(1.0), pytest.approx(1.0, abs=0.05))
+    # the per-hour wind rows are not aggregated on their own; no correction per station
+    assert not table["variable"].str.starts_with("wind_speed_10m_").any()
+    station = table.filter(pl.col("level") == "station", pl.col("variable") == "wind_speed_10m")
+    assert station["mae_bc"].is_null().all()
+
+
+def test_bias_corrected_pairs_are_the_same_for_every_model():
+    days = [DAY - timedelta(days=k) for k in range(30)]
+    slots = [(d, "s1", "a", 1, 0, 1.0) for d in days]
+    # model b's per-hour rows start later: a is corrected only on b's days too
+    slots += [(d, "s1", "b", 1, 0, 2.0) for d in days[:15]]
+    daily = [
+        {
+            "date": d, "station_id": "s1", "model": m, "lead_day": 1, "variable": "temperature_2m",
+            "period_h": 0, "n": 1, "sum_err": 1.0, "sum_abs_err": 1.0, "sum_sq_err": 1.0,
+        }
+        for d in days for m in ("a", "b")
+    ]  # fmt: skip
+    scores = pl.concat(
+        [pl.DataFrame(daily), slot_rows(slots, "temperature_2m")], how="diagonal_relaxed"
+    )
+    table = agg.aggregate(scores, STATIONS, windows=("all",))
+    cz = table.filter(pl.col("level") == "cz", pl.col("variable") == "temperature_2m")
+    n_bc = dict(cz.select("model", "n_bc").rows())
+    # b has 10 training days (its days up to d - 2) from its 12th day on: 4 of its 15
+    # days, and a is corrected on those same 4 only
+    assert n_bc["a"] == n_bc["b"] == 15 - agg.BIAS_MIN_DAYS - 1
+
+
+def test_event_skill_at_the_new_thresholds_is_published(tmp_path):
+    rows = []
+    for d in [DAY - timedelta(days=k) for k in range(4)]:
+        for s in ("s1", "s2", "s3"):
+            for m, hit in (("a", True), ("b", False)):
+                rows.append(
+                    {
+                        "date": d, "station_id": s, "model": m, "lead_day": 1,
+                        "variable": "precipitation_daily", "period_h": 24, "n": 1,
+                        "sum_err": 0.0, "sum_abs_err": 1.0, "sum_sq_err": 1.0,
+                        # observed ≥ 1 mm on the first two days; a forecasts it, b never
+                        "a_1": int(hit and d >= DAY - timedelta(days=1)),
+                        "b_1": 0,
+                        "c_1": int(not hit and d >= DAY - timedelta(days=1)),
+                        "d_1": int(d < DAY - timedelta(days=1)),
+                    }
+                )  # fmt: skip
+    table = agg.aggregate(pl.DataFrame(rows), STATIONS, windows=("all",))
+    cz = table.filter(pl.col("level") == "cz")
+    assert dict(cz.select("model", "ets_1").rows()) == {"a": 1.0, "b": 0.0}
+    agg.write_json(table, tmp_path, {})
+    doc = json.loads((tmp_path / "all" / "cz" / "precipitation_daily.json").read_text())
+    assert {"ets_1", "pod_1", "far_1"} <= set(doc["columns"])
+    assert "ets_10" not in doc["columns"]  # no counts at 10 mm in these rows
+    station = json.loads((tmp_path / "all" / "station" / "precipitation_daily.json").read_text())
+    assert "ets_1" not in station["columns"] and "mae" in station["columns"]  # file size

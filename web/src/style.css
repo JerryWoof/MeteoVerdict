@@ -1637,6 +1637,13 @@ body.radar #show-box {
   margin: 0.6rem 0 0.2rem;
   font-size: 0.85rem;
 }
+/* the switches above the ranking table (stations, sort): hidden ones take no space */
+.ranking-options [hidden] {
+  display: none;
+}
+.ranking-options .note {
+  margin-top: 0.2rem;
+}
 .blend-test-table tr.group th {
   background: #f4f1ea;
   font-weight: 600;

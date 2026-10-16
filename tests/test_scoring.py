@@ -132,10 +132,31 @@ def test_temperature_at_synoptic_hours_is_scored_for_six_hourly_models_too():
     )
     synoptic = table.filter(pl.col("variable").str.ends_with("utc")).sort("variable")
     assert synoptic["variable"].to_list() == [
-        f"temperature_2m_{h}utc" for h in ("00", "06", "12", "18")
+        f"{v}_{h}utc"
+        for v in ("temperature_2m", "wind_speed_10m")
+        for h in ("00", "06", "12", "18")
     ]
-    assert synoptic["n"].to_list() == [1] * 4
-    assert synoptic["sum_err"].to_list() == pytest.approx([2.0] * 4)  # 12 °C vs 10 °C
+    assert synoptic["n"].to_list() == [1] * 8
+    # 12 °C vs 10 °C, 3 m/s vs 2 m/s
+    assert synoptic["sum_err"].to_list() == pytest.approx([2.0] * 4 + [1.0] * 4)
+    assert scoring.slot_variable("wind_speed_10m", 6) == "wind_speed_10m_06utc"
+
+
+def test_new_precipitation_thresholds_are_counted():
+    times = hours(49)
+    table = scoring.daily_scores(
+        observations(times, rain=lambda t: 0.5),
+        forecasts(times, rain=0.0),
+        MODELS,
+        date(2026, 9, 1),
+        date(2026, 9, 1),
+        with_blend=False,
+    )
+    daily = table.filter(pl.col("variable") == "precipitation_daily").row(0, named=True)
+    # 12 mm observed, 0 forecast: missed at 1 and 10 mm, nothing at 20 mm
+    assert [daily[c] for c in metrics.counts_columns(1.0)] == [0, 0, 1, 0]
+    assert [daily[c] for c in metrics.counts_columns(10.0)] == [0, 0, 1, 0]
+    assert [daily[c] for c in metrics.counts_columns(20.0)] == [0, 0, 0, 1]
 
 
 def test_ranked_temperature_and_wind_use_the_same_hours_for_every_model():
