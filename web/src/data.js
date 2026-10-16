@@ -45,7 +45,7 @@ export function bestByRegion(rows, leadDay) {
     } else if (r.tied_with_best && r.rank != null) {
       entry.tied.push(r.model);
     }
-    if (r.rank == null && r.model !== "blend" && r.mae != null) {
+    if (r.rank == null && r.model !== "blend" && r.mae != null && !r.short_record) {
       const low = unranked.get(r.region);
       if (!low || r.mae < low.mae) unranked.set(r.region, { model: r.model, mae: r.mae });
     }
