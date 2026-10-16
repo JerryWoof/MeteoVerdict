@@ -18,6 +18,9 @@ sunshine are the plain mean of the models corrected against ČHMÚ observations
 (``meteoverdict.sun_cloud_gust``: sunshine as a share of the day length, refitted
 nightly; the hourly sunshine is scaled to the corrected day). Every day also gets
 its sunrise and sunset at the okres point (``meteoverdict.sun``, computed, no request).
+Wind gusts (``gust``, the largest per part of day, corrected, and ``gust_warning``) come
+from the newest stored single run at the okres's lowland stations
+(``meteoverdict.gusts``, no request); null beyond the run and without one.
 
 Cost: 77 locations x 5 variables x models / 10 weighted calls a run, and only the
 models with weights are asked: 11 models about 420, 19 models about 730. A request
@@ -28,6 +31,7 @@ than 12 models the okresy are split into equal parts, a minute apart.
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -36,8 +40,9 @@ from zoneinfo import ZoneInfo
 import httpx
 import polars as pl
 
-from meteoverdict import frost, rain_calibration, sun_cloud_gust
-from meteoverdict.combine import BLEND_COLUMNS, combine_values, okres_points
+from meteoverdict import frost, gusts, rain_calibration, sun_cloud_gust
+from meteoverdict import runs as runs_mod
+from meteoverdict.combine import BLEND_COLUMNS, combine_values, okres_points, point_elevations
 from meteoverdict.forecasts import _reason, call_weight
 from meteoverdict.sun import sun_times
 
@@ -469,6 +474,10 @@ COLUMNS = (
     "heavy_rain_probability",
     "heavy_rain",
 )
+#: after the frost fields: the corrected largest gust of the period (m/s, from the
+#: single runs, ``meteoverdict.gusts``) and whether it reaches ``gusts.WARNING_AT``;
+#: null beyond the newest run's end and without a run
+GUST_COLUMNS = ("gust", "gust_warning")
 
 
 def with_sun(table: pl.DataFrame, points: pl.DataFrame) -> pl.DataFrame:
@@ -497,7 +506,11 @@ def with_sun(table: pl.DataFrame, points: pl.DataFrame) -> pl.DataFrame:
 def write(table: pl.DataFrame, points: pl.DataFrame, path: Path, generated: datetime) -> Path:
     """``outlook.json``: ``{"generated", "time_zone", "parts", "days", "okresy",
     "columns", "rows"}``, numbers rounded to one decimal (probability to two)."""
-    columns = [*COLUMNS, *(c for c in frost.OUTLOOK_COLUMNS if c in table.columns)]
+    columns = [
+        *COLUMNS,
+        *(c for c in frost.OUTLOOK_COLUMNS if c in table.columns),
+        *GUST_COLUMNS,
+    ]
     rounded = (
         table.select(
             pl.col("okres"),
@@ -514,6 +527,14 @@ def write(table: pl.DataFrame, points: pl.DataFrame, path: Path, generated: date
                 for c, t in (("heavy_rain_probability", pl.Float64), ("heavy_rain", pl.Boolean))
             ],
             *_frost_columns(table),
+            (pl.col("gust") if "gust" in table.columns else pl.lit(None, pl.Float64))
+            .round(1)
+            .alias("gust"),
+            (
+                pl.col("gust_warning")
+                if "gust_warning" in table.columns
+                else pl.lit(None, pl.Boolean)
+            ).alias("gust_warning"),
         )
         .with_columns(pl.col("heavy_rain_probability").round(2))
         .select(columns)
@@ -586,6 +607,7 @@ def outlook(
     corrections: dict | None = None,
     frost_calibration: frost.Calibration | None = None,
     nights: list[pl.DataFrame] | None = None,
+    single_runs: pl.LazyFrame | pl.DataFrame | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Fetch, combine and summarise for all ``points`` (code, name, lat, lon) that have
     weights: the parts-of-day table and the combined hourly series (with the plain
@@ -593,7 +615,8 @@ def outlook(
     with a rain ``calibration``, calibrated probabilities of precipitation;
     ``corrections``: the coefficients of ``sun_cloud_gust`` (default: the bootstrap).
     The frost fields (``meteoverdict.frost``) come from ``frost_calibration``; the
-    models' nights at the okres points are appended to ``nights`` for the archive."""
+    models' nights at the okres points are appended to ``nights`` for the archive. The
+    gusts come from the newest of ``single_runs`` (``runs``; none: null)."""
     now = now or datetime.now(UTC)
     points = points.filter(pl.col("code").is_in(weights["region"].unique().to_list()))
     models = sorted(weights["model"].unique().to_list())
@@ -608,4 +631,23 @@ def outlook(
     if nights is not None:
         nights.append(night_rows)
     table = frost.add_to_outlook(table, night_rows, frost_calibration)
+    table = add_gusts(table, single_runs, points, corrections or sun_cloud_gust.load(), now)
     return with_sun(table, points), hourly
+
+
+def add_gusts(
+    table: pl.DataFrame,
+    single_runs: pl.LazyFrame | pl.DataFrame | None,
+    points: pl.DataFrame,
+    corrections: dict,
+    now: datetime,
+) -> pl.DataFrame:
+    """Add ``GUST_COLUMNS`` to every row the newest single run covers (null elsewhere;
+    everywhere when the runs cannot be read: the gusts must not fail the outlook)."""
+    mapping = gusts.okres_stations(runs_mod.load_stations(), points, point_elevations())
+    try:
+        values = gusts.okres_gusts(single_runs, mapping, corrections, now)
+    except (pl.exceptions.PolarsError, OSError, KeyError, ValueError) as exc:
+        print(f"outlook: no gusts, the single runs could not be read: {exc}", file=sys.stderr)
+        values = gusts.okres_gusts(None, mapping, corrections, now)
+    return table.join(values, on=["okres", "day", "part"], how="left", maintain_order="left")

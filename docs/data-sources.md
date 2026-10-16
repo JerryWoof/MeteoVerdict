@@ -523,6 +523,19 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
   cloud, lead, point elevation) in `outlook-nights-YYYY-MM.parquet` of `data-YYYY-MM`
   for refitting the clear-calm term, from the same answer (no extra calls).
   [methodology.md](methodology.md#frost-night-minimum-frost-and-ground-frost).
+- **Gusts** (`gust`, `gust_warning`, after the frost fields): no Open-Meteo calls. The
+  outlook downloads the month file(s) of the single runs (release `runs-YYYY-MM`, a
+  few MB to ~50 MB at a month's end) and takes the newest run with gusts of at least
+  3 models, at most 36 h old (runs are fetched once 10 h old, so it is usually 10–16 h
+  old). Per lowland run station of the okres (≤ 750 m and ≤ 300 m above the okres
+  point; an okres without one takes the nearest such station within 30 km): each
+  model's largest hourly gust in the part of day, mean over the models (a model must
+  reach the part's end; at least 3 models; the part wholly after the run's start),
+  corrected with `gust_part` of `sun-cloud-gust.json`, then the mean over the okres's
+  stations; a whole day takes the largest of its four parts. `gust_warning` when
+  `gust` ≥ 13.5 m/s. `null` beyond the run (about 5 days, the last part cut) and
+  when no run is available (`meteoverdict.gusts`,
+  [methodology.md](methodology.md#gusts-in-the-outlook)).
 - **Output:** `site/data/outlook.json` `{"generated", "time_zone", "parts", "days",
   "okresy": [{code, name, lat, lon}], "columns", "rows"}` (about 110 kB);
   `.github/workflows/outlook.yml` runs it at 05:52 and 17:52 UTC and uploads it to the

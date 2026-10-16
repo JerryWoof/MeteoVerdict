@@ -24,6 +24,9 @@ const PART_FIELDS = [
   // frost (on the night and day rows of the date a night ends; null elsewhere and in
   // older outlook files): corrected night minimum, coldest site, probability, warnings
   "night_min", "coldest_site", "coldest_min", "frost_probability", "frost", "ground_min", "ground_frost",
+  // gusts (from the newest single run, corrected; null beyond its end and in older
+  // outlook files): the strongest gust of the period in m/s and the strong-gust warning
+  "gust", "gust_warning",
 ];
 
 const round = (v, digits) => (v == null ? null : Number(v.toFixed(digits)));

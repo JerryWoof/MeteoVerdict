@@ -591,13 +591,13 @@ summits (Milešovka −6.1, Lysá hora −3.2 m/s).
   the observed shares and scores better (below).
 - **Gusts**, daily maximum: `a + b·mean` plus the mean remaining error of the okres's
   representative station: the single-runs station of the okres if at most 750 m high,
-  so summits (Milešovka, Lysá hora) never set an okres's correction. Neither the
-  outlook nor the API shows gusts, and adding them to the outlook request would cost
-  a fifth more Open-Meteo calls (~170–290 a day) with the free budget nearly used, so
-  the gust correction is fitted and published in the coefficients but not yet
-  applied. It is not applied to the farmers' event skill either: that verifies each
-  model as published, and a correction fitted on the same observations would blur
-  it.
+  so summits (Milešovka, Lysá hora) never set an okres's correction. Fitted and
+  published, but the outlook uses the part-of-day fit below (`gust_part`): applied to
+  the largest gust of a part of day, the daily coefficients make it worse. Neither is
+  applied to the farmers' event skill: that verifies each model as published, and a
+  correction fitted on the same observations would blur it.
+- **Gusts per part of day** (`gust_part`, the outlook's `gust`): the same form fitted on
+  the largest gust of each part of day; see [Gusts in the outlook](#gusts-in-the-outlook).
 
 **Fitting.** Least squares on the pairs of the last 60 days, refitted every night
 (`mvd sun-cloud-gust`, workflow `sun-cloud-gust.yml`, no Open-Meteo calls): the
@@ -640,6 +640,65 @@ What did not help in the research: the median instead of the mean, weighting mod
 by past error (≤ 0.1), the best single model or top three for cloud (worse), stacking,
 a 30-day instead of an expanding window, a plain ratio for sunshine (not
 significant).
+
+### Gusts in the outlook
+
+The outlook's request has no gusts (adding them would cost a fifth more Open-Meteo
+calls), but the single runs (`mvd fetch-runs`) already hold every model's hourly gusts
+(maximum of the preceding hour) at the ~100 run stations, four runs a day. So the
+outlook (`meteoverdict.gusts`, no Open-Meteo calls) takes the newest stored run
+(fetched once 10 h old, so 10–16 h old; at most 36 h) and, per lowland run station of
+the okres (≤ 750 m and at most 300 m above the okres point, as for frost; 76 of 77
+okresy have one, Jablonec nad Nisou takes the nearest within 30 km), each model's
+largest gust in the part of day (Prague time; an hourly gust belongs to the part of the
+hour it ends), the mean over the models (at least 3, each reaching the part's end, the
+part wholly after the run's start), corrected by `gust = a + b·mean + station term`,
+then the mean over the okres's stations. A whole day is the largest of its four parts.
+Beyond the run's end (5 days) or without a run: `null`.
+
+**Which correction.** Checked out of sample on the research sample (above: previous
+day's run of 10 models, D+1, the 8 stations up to 750 m), against the largest ČHMÚ
+10-minute `Fmax` of each part (at least 30 of 36 values); each test day forecast with
+coefficients fitted on the days up to two days before (at least 21), 39 test days
+6 September – 14 October 2026, 1,248 station-parts; 95 % interval of the change from a
+bootstrap over days:
+
+| Forecast of the part's largest gust | MAE, m/s | Bias |
+|---|---:|---:|
+| Plain mean of the models | 1.05 | −0.17 |
+| Daily-maximum coefficients (`gust`) | 1.15 | +0.50 |
+| **Part-of-day fit (`gust_part`)** | **0.99** | +0.03 |
+
+The part-of-day fit beats the plain mean by 0.06 m/s [0.02, 0.10], mostly in the
+afternoon (1.19 → 0.99; night, morning and evening about equal). The daily
+coefficients are 0.11 m/s worse [0.04, 0.17]: a part's largest gust is weaker than the
+day's, so their intercept over-forecasts every part but the windiest. The bootstrap of
+`gust_part` (`src/meteoverdict/data/sun-cloud-gust.json`) is fitted on all 61 days
+(`a = 0.62`, `b = 0.93`).
+
+**Warning.** Of the 15 parts with an observed gust of at least 15 m/s, a forecast of
+at least 15 m/s caught 1 (plain mean: 1 hit, 1 false alarm; corrected: 1 hit, none),
+since a mean over models smooths the peaks. `gust_warning` therefore uses a lower
+threshold, **13.5 m/s** on the corrected gust: the best ETS among 12–15 m/s in steps of
+0.5 (POD 0.47, FAR 0.50, CSI 0.32, ETS 0.31, frequency bias 0.93). The plain mean
+reaches the same CSI at 14 m/s, so the correction improves the size of the gusts, not
+the warnings; with 15 events this is a small sample.
+
+**On the single runs themselves** the check is still thin: `runs-2026-10` has gusts
+only since the runs of 2026-10-15 (earlier runs were fetched without them), so no
+training days exist yet. On 15 October (calm, no gust of 10 m/s), runs of 00, 06 and
+12 UTC, 81 lowland stations, coefficients from the research sample: the plain mean
+had MAE 0.79 / 0.74 / 0.64 m/s (bias +0.38 / +0.25 / +0.21) and the corrected one
+0.96 / 0.88 / 0.81 (bias +0.75 / +0.62 / +0.65) — on a calm day the intercept
+over-forecasts. One day says little, so the correction is guarded: the nightly
+`mvd sun-cloud-gust` refits `gust_part` on the single runs (all four runs a day, lead
+days by the hours from the run's start to the part's end) against the hourly ČHMÚ
+gusts at the same stations (`obs`, the largest of six `Fmax`; at least 5 hours of the
+part) once there are 21 days, and stores in `check` the plain and corrected MAE on the
+last 10 days, fitted on the days before (from 31 days, about mid-November 2026).
+`apply` is false when the correction does not beat the plain mean there, and the
+outlook then shows the plain mean. It starts switched off (`apply: false` in the bootstrap), so
+the outlook shows the plain mean until that check on the runs turns it on.
 
 ## Limitations
 
