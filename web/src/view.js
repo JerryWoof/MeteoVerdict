@@ -73,6 +73,22 @@ export function windowSpan(key, windows) {
   return days ? { from, to, days } : null;
 }
 
+/**
+ * Windows worth offering: those with at least one scored day in meta.json (all of them
+ * before meta.json exists, so the select is never empty).
+ */
+export function availableWindows(windows) {
+  if (!windows) return [...WINDOWS];
+  const listed = WINDOWS.filter((key) => windowSpan(key, windows));
+  return listed.length ? listed : [DEFAULT_VIEW.window];
+}
+
+/** The window to show: the asked-for one if it has data, else the default, else the first with data. */
+export function pickWindow(current, available) {
+  if (available.includes(current)) return current;
+  return available.includes(DEFAULT_VIEW.window) ? DEFAULT_VIEW.window : available[0];
+}
+
 /** True if the window covers exactly the days of the 90-day window (short history). */
 export function sameAs90d(key, windows) {
   if (key === "90d") return false;
