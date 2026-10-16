@@ -364,3 +364,111 @@ export function singleModelVerdicts(doc, variable) {
     return la - lb || ma - mb || a.model.localeCompare(b.model);
   });
 }
+
+// --- ranking by lead band, run by run (leads-bands-<window>[-kraj].json, `mvd leads`) --
+// Every lead hour of the 00/06/12/18 UTC runs against the observation at its valid
+// time, pooled over a band of hours (H+1–6 … H+49–72). Czechia, the station kinds
+// (main WMO / other) and kraje; okresy have too few of the ~100 run stations.
+
+export const LEAD_BANDS = ["h1-6", "h7-12", "h13-24", "h25-48", "h49-72"];
+export const LEAD_DAYS = [1, 2, 3, 4, 5];
+/** Windows of the band ranking (the D+N windows also have seasons). */
+export const BAND_WINDOWS = ["90d", "all"];
+/** Variables of the band ranking, in the order of the variable select. */
+export const BAND_VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitation", "wind_gusts_10m"];
+/** Fair sets: models with hourly output at every lead hour, or every model at H+6, H+12, … */
+export const BAND_SETS = ["hourly", "6h"];
+/** How the band ranking of precipitation can be sorted (ETS at 0.1 and 1 mm in the hour). */
+export const BAND_RANK_BY = ["mae", "ets", "ets1"];
+
+export const isBand = (lead) => LEAD_BANDS.includes(lead);
+
+/** "h13-24" → the band, "1"…"5" → the lead day, anything else → null. */
+export function parseLead(text) {
+  if (LEAD_BANDS.includes(text)) return text;
+  const day = Number.parseInt(text, 10);
+  return String(day) === String(text) && LEAD_DAYS.includes(day) ? day : null;
+}
+
+/** "H+13–24" for a band, "D+2" for a lead day. */
+export function leadLabel(lead) {
+  if (!isBand(lead)) return `D+${lead}`;
+  const [first, last] = lead.slice(1).split("-");
+  return `H+${first}–${last}`;
+}
+
+/** The band variable for a page variable (any temperature → temperature_2m, …). */
+export function bandVariable(variable) {
+  if (BAND_VARIABLES.includes(variable)) return variable;
+  if (variable.startsWith("temperature")) return "temperature_2m";
+  if (variable.startsWith("wind")) return "wind_speed_10m";
+  return "precipitation";
+}
+
+/** The D+N variable for a page variable: itself when offered, else the closest one. */
+export function dayVariable(variable, available) {
+  if (available.includes(variable)) return variable;
+  const closest = variable.startsWith("precipitation")
+    ? "precipitation_daily"
+    : variable.startsWith("wind") ? "wind_speed_10m" : "temperature_2m";
+  return available.includes(closest) ? closest : available[0];
+}
+
+/** The kraj of a region code (an okres CZ0642 → CZ064; Czechia and kraje unchanged). */
+export const krajOf = (region) => (levelOf(region) === "okres" ? region.slice(0, 5) : region);
+
+/**
+ * Rows of a band file as score records like the D+N files (so the ranking table, the
+ * summary, the interval chart and the map read them alike): `lead_day` is the band.
+ */
+export function bandRecords(doc) {
+  if (!doc?.rows) return [];
+  const names = doc.regions ?? {};
+  return doc.rows.map((row) => {
+    const r = Object.fromEntries(doc.columns.map((c, i) => [c, row[i]]));
+    return {
+      level: r.level, region: r.region, region_name: names[r.region] ?? r.region, lead_day: r.band,
+      set: r.set, variable: r.variable, model: r.model, rank: r.rank, mae: r.mae, bias: r.bias,
+      rmse: r.rmse, mae_bc: r.mae_bc, ets_0p1: r.ets_0p1, ets_1: r.ets_1, pod_1: r.pod_1, far_1: r.far_1,
+      diff_ci_low: r.diff_low, diff_ci_high: r.diff_high, tied_with_best: r.tied, clear_winner: r.clear,
+      stations: r.stations, days: r.days, runs: r.runs, n: r.n, enough_stations: true,
+    };
+  });
+}
+
+/** The fair sets a variable has (temperature and wind: both; precipitation, gusts: hourly). */
+export function bandSets(rows, variable) {
+  return BAND_SETS.filter((set) => rows.some((r) => r.variable === variable && r.set === set));
+}
+
+/** The bands with rows. */
+export function bandsIn(rows) {
+  return LEAD_BANDS.filter((band) => rows.some((r) => r.lead_day === band));
+}
+
+/**
+ * What a band result rests on: runs, stations and days (the same for every model of a
+ * fair set) and whether it is preliminary (fewer than `preliminaryDays` days).
+ */
+export function bandBasis(rows, band, region, preliminaryDays = 30) {
+  const row = rows.find((r) => r.lead_day === band && r.region === region && r.rank === 1);
+  if (!row) return null;
+  return { runs: row.runs, stations: row.stations, days: row.days, preliminary: row.days < preliminaryDays };
+}
+
+/** MAE of every model by band in a region, for the chart: [{model, lead_day (1…5), band, mae}]. */
+export function maeByBand(rows, region = "cz") {
+  return rows
+    .filter((r) => r.region === region && r.mae != null && isBand(r.lead_day))
+    .map((r) => ({ model: r.model, lead_day: LEAD_BANDS.indexOf(r.lead_day) + 1, band: r.lead_day, mae: r.mae }))
+    .sort((a, b) => a.model.localeCompare(b.model) || a.lead_day - b.lead_day);
+}
+
+/**
+ * The lead the page opens at when the link names none: the band the data suggests
+ * (`default_band`, written by `mvd leads` once its 90-day ranking rests on at least 60
+ * days), else D+1.
+ */
+export function defaultLead(doc) {
+  return isBand(doc?.default_band) ? doc.default_band : 1;
+}
