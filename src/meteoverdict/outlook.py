@@ -650,4 +650,19 @@ def add_gusts(
     except (pl.exceptions.PolarsError, OSError, KeyError, ValueError) as exc:
         print(f"outlook: no gusts, the single runs could not be read: {exc}", file=sys.stderr)
         values = gusts.okres_gusts(None, mapping, corrections, now)
-    return table.join(values, on=["okres", "day", "part"], how="left", maintain_order="left")
+    joined = table.join(values, on=["okres", "day", "part"], how="left", maintain_order="left")
+    if "wind" not in joined.columns:
+        return joined
+    # the gusts come from the okres's stations, the wind from its point: a gust below
+    # the mean wind would read as nonsense, so it is at least the wind
+    return joined.with_columns(
+        pl.when(pl.col("gust").is_not_null() & pl.col("wind").is_not_null())
+        .then(pl.max_horizontal("gust", "wind"))
+        .otherwise(pl.col("gust"))
+        .alias("gust")
+    ).with_columns(
+        pl.when(pl.col("gust").is_not_null())
+        .then(pl.col("gust") >= gusts.WARNING_AT)
+        .otherwise(pl.col("gust_warning"))
+        .alias("gust_warning")
+    )

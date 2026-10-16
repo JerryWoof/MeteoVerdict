@@ -223,3 +223,29 @@ def test_unreadable_runs_leave_the_outlook_gusts_empty(tmp_path):
     points = pl.DataFrame({"code": ["CZ0100"], "lat": [50.07], "lon": [14.47]})
     out = outlook.add_gusts(table, pl.scan_parquet(bad), points, PLAIN, NOW)
     assert out["gust"].to_list() == [None] and out["gust_warning"].to_list() == [None]
+
+
+def test_a_gust_is_never_below_the_wind(monkeypatch):
+    table = pl.DataFrame(
+        {
+            "okres": ["CZ0100", "CZ0100"],
+            "day": [date(2026, 10, 17)] * 2,
+            "part": ["night", "morning"],
+            "wind": [2.2, 14.0],
+        }
+    )
+    values = pl.DataFrame(
+        {
+            "okres": ["CZ0100", "CZ0100"],
+            "day": [date(2026, 10, 17)] * 2,
+            "part": ["night", "morning"],
+            "gust": [1.9, 12.0],
+            "gust_warning": [False, False],
+        }
+    )
+    monkeypatch.setattr(gusts, "okres_gusts", lambda *args: values)
+    points = pl.DataFrame({"code": ["CZ0100"], "lat": [50.07], "lon": [14.47]})
+    out = outlook.add_gusts(table, None, points, PLAIN, NOW)
+    assert out["gust"].to_list() == [2.2, 14.0]
+    # the raised gust reaches the warning
+    assert out["gust_warning"].to_list() == [False, True]
