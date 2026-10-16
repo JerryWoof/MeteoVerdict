@@ -1586,6 +1586,87 @@ body.radar #show-box {
   }
 }
 
+/* compare.html: each part says what it covers; the ranking's controls sit right above
+   the parts they drive (sticky within that part on wide screens) */
+.content .section-title {
+  font-size: 1.25rem;
+  margin: 1.6rem 0 0.3rem;
+}
+.scope {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4b5863;
+}
+.ranking-section h3 {
+  font-size: 1.05rem;
+  margin: 1.2rem 0 0.3rem;
+}
+.ranking-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.2rem;
+  padding: 0.5rem 0.8rem;
+  background: #ffffff;
+  border: 1px solid #ddd8cc;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(29, 35, 41, 0.12);
+  font-size: 0.85rem;
+}
+.ranking-controls label {
+  min-width: 0;
+  max-width: 100%;
+}
+.ranking-controls select {
+  margin-left: 0.3rem;
+}
+.farm-section {
+  margin-top: 1.6rem;
+  padding-top: 0.2rem;
+  border-top: 2px solid #ddd8cc;
+}
+.blend-test-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+  margin: 0.6rem 0 0.2rem;
+  font-size: 0.85rem;
+}
+.blend-test-table tr.group th {
+  background: #f4f1ea;
+  font-weight: 600;
+}
+@media (min-width: 701px) {
+  .ranking-controls {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+  }
+}
+@media (max-width: 700px) {
+  .ranking-controls {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.5rem 0.6rem;
+  }
+  /* phones: one control per row, the selects lined up after their labels */
+  .ranking-controls label {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .ranking-controls select {
+    margin-left: 0;
+    width: 100%;
+  }
+  .blend-test-table th:first-child {
+    width: 3.2rem;
+  }
+}
+
 /* the score map's okres panel: links to the pages of its stations, under the name */
 .station-pages {
   margin: 0.1rem 0 0.4rem;

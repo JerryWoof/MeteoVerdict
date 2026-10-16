@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { translator } from "./i18n.js";
 import {
-  DEFAULT_VIEW, availableLeadDays, availableVariables, dayCount, formatRange, parseHash, sameAs90d,
+  DEFAULT_VIEW, availableLeadDays, availableWindows, pickWindow, availableVariables, dayCount, formatRange, parseHash, sameAs90d,
   toHash, windowLabel, windowSpan,
 } from "./view.js";
 
@@ -93,4 +93,14 @@ test("window labels show the range, the days and duplicates of the 90-day window
   assert.equal(windowLabel("season", SHORT, cs, "cs"), "Tato sezóna: 1. 9. – 30. 9. 2026 (30 dní)");
   assert.equal(windowLabel("mam", SHORT, en, "en"), "All springs: no data yet");
   assert.equal(windowLabel("all", LONG, en, "en"), "All time: 1 Jan 2024 – 30 Sep 2026 (1004 days)");
+});
+
+test("only windows with scored days are offered, never an empty default", () => {
+  assert.deepEqual(availableWindows(SHORT), ["90d", "season", "all", "jja", "son"]);
+  assert.deepEqual(availableWindows(LONG), ["90d", "all", "djf"]);
+  assert.deepEqual(availableWindows({ "90d": { from: "2026-08-23", to: "2026-09-30" }, djf: { from: "2026-08-23", to: "2026-09-30" } }), ["90d"]);
+  assert.equal(availableWindows(null).length, 7);
+  assert.equal(pickWindow("mam", availableWindows(SHORT)), "90d");
+  assert.equal(pickWindow("jja", availableWindows(SHORT)), "jja");
+  assert.equal(pickWindow("mam", ["all", "son"]), "all");
 });
