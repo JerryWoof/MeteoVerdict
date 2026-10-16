@@ -29,7 +29,7 @@ data comes from recorded fixtures in `tests/fixtures/`. Dates are `YYYY-MM-DD` i
 | Scores | `mvd score` | `data/scores/YYYY-MM.parquet` |
 | Rankings | `mvd aggregate` | `data/aggregates.parquet`, `site/data/**/*.json` |
 | Single runs (all models) | `mvd fetch-runs` | `data/runs/YYYY-MM.parquet`, `data/runs-state.json` |
-| Error by lead hour | `mvd leads` | `site/data/leads.json`, `leads-aladin.json`, `leads-aladin-kraj.json` |
+| Error by lead hour | `mvd leads` | `site/data/leads.json`, `leads-aladin.json`, `leads-aladin-kraj.json`, `leads-bands-{90d,all}[-kraj].json` |
 | Event skill for farmers | `mvd farm` | `site/data/farm.json` |
 | Combined forecast | `mvd outlook` | `site/data/outlook.json`, `outlook-hourly.json` |
 | Everything daily | `mvd daily` | all of the above from the stored data |
@@ -161,7 +161,11 @@ uv run mvd fetch-runs --run 2026-07-15T00            # one given run (330 calls)
 `--runs-days` (90) days hour by hour (H+1 … H+120) on the fair set and writes
 `site/data/leads.json` for the comparison page; it also verifies every archived ALADIN
 run of the last `--days` (30) days (H+1 … H+72) into `leads-aladin.json` and
-`leads-aladin-kraj.json`. `--github-release` downloads the single runs, the archived
+`leads-aladin-kraj.json`. With `--bands` (default) it also ranks the models by lead
+band (H+1–6 … H+49–72) over the last 90 days and every single run since `--bands-since`
+(default: all) into `leads-bands-90d.json`, `leads-bands-all.json` and their `-kraj`
+files ([method](methodology.md#ranking-by-lead-band-hours-ahead)); about a minute and
+under 5 GB of memory for four months of runs. `--github-release` downloads the single runs, the archived
 runs and the observation months first (read only), `--publish` also puts the JSON into
 `data-latest` ([details](data-sources.md#error-by-lead-hour-mvd-leads)).
 

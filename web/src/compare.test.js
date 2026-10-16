@@ -335,3 +335,59 @@ test("sorting by ETS: higher first, numbered; no score, the mean and short recor
   assert.deepEqual(sorted.map((r) => r.rank), [2, 1, 3, null, null]);
   assert.deepEqual(sortByEts(rankingTable(RAIN, 1), "ets10").slice(0, 2).map((r) => r.model), ["sharp", "smooth"]);
 });
+
+test("lead bands and lead days: parsing, labels, variables", async () => {
+  const { bandVariable, dayVariable, defaultLead, isBand, krajOf, leadLabel, parseLead } = await import("./compare.js");
+  assert.equal(parseLead("h13-24"), "h13-24");
+  assert.equal(parseLead("2"), 2);
+  assert.equal(parseLead("h1-5"), null);
+  assert.equal(parseLead("7"), null);
+  assert.equal(parseLead(undefined), null);
+  assert.equal(leadLabel("h49-72"), "H+49–72");
+  assert.equal(leadLabel(3), "D+3");
+  assert.ok(isBand("h1-6") && !isBand(1));
+  assert.equal(bandVariable("temperature_2m_06utc"), "temperature_2m");
+  assert.equal(bandVariable("wind_speed_10m_hourly"), "wind_speed_10m");
+  assert.equal(bandVariable("precipitation_24h"), "precipitation");
+  assert.equal(bandVariable("wind_gusts_10m"), "wind_gusts_10m");
+  const days = ["temperature_2m", "wind_speed_10m", "precipitation_daily"];
+  assert.equal(dayVariable("precipitation", days), "precipitation_daily");
+  assert.equal(dayVariable("wind_gusts_10m", days), "wind_speed_10m");
+  assert.equal(dayVariable("wind_speed_10m", days), "wind_speed_10m");
+  assert.equal(krajOf("CZ0642"), "CZ064");
+  assert.equal(krajOf("CZ020A"), "CZ020");
+  assert.equal(krajOf("CZ064"), "CZ064");
+  assert.equal(defaultLead({ default_band: "h13-24" }), "h13-24");
+  assert.equal(defaultLead({ default_band: null }), 1);
+  assert.equal(defaultLead(null), 1);
+});
+
+test("band files read like D+N score records", async () => {
+  const { bandBasis, bandRecords, bandSets, bandsIn, maeByBand } = await import("./compare.js");
+  const columns = [
+    "level", "region", "band", "set", "variable", "model", "rank", "tied", "clear", "mae", "bias", "rmse", "mae_bc",
+    "ets_0p1", "ets_1", "pod_1", "far_1", "diff", "diff_low", "diff_high", "n", "n_bc", "runs", "stations", "days",
+  ];
+  const doc = {
+    columns,
+    regions: { cz: "Česko" },
+    rows: [
+      ["cz", "cz", "h13-24", "hourly", "temperature_2m", "a", 1, false, false, 1.2, 0.3, 1.6, 1.1, null, null, null, null, 0, 0, 0, 100, 90, 340, 98, 20],
+      ["cz", "cz", "h13-24", "hourly", "temperature_2m", "b", 2, true, false, 1.25, 0.1, 1.7, 1.0, null, null, null, null, 0.05, -0.01, 0.1, 100, 90, 340, 98, 20],
+      ["cz", "cz", "h1-6", "6h", "temperature_2m", "a", 1, false, true, 1.0, 0.3, 1.6, 1.1, null, null, null, null, 0, 0, 0, 100, 90, 340, 98, 20],
+    ],
+  };
+  const rows = bandRecords(doc);
+  assert.equal(rows[0].lead_day, "h13-24");
+  assert.equal(rows[0].region_name, "Česko");
+  assert.equal(rows[1].tied_with_best, true);
+  assert.equal(rows[1].diff_ci_high, 0.1);
+  const table = rankingTable(rows.filter((r) => r.set === "hourly"), "h13-24");
+  assert.deepEqual(table.map((r) => [r.model, r.tied]), [["a", false], ["b", true]]);
+  assert.equal(table[0].maeBc, 1.1);
+  assert.deepEqual(bandSets(rows, "temperature_2m"), ["hourly", "6h"]);
+  assert.deepEqual(bandsIn(rows), ["h1-6", "h13-24"]);
+  assert.deepEqual(bandBasis(rows, "h13-24", "cz"), { runs: 340, stations: 98, days: 20, preliminary: true });
+  assert.equal(bandBasis(rows, "h13-24", "CZ010"), null);
+  assert.deepEqual(maeByBand(rows.filter((r) => r.set === "hourly")).map((r) => [r.model, r.lead_day]), [["a", 3], ["b", 3]]);
+});

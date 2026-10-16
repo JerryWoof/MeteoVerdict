@@ -375,3 +375,175 @@ def test_run_coverage_counts_only_the_run_hours_a_model_has():
     )
     cover = {m: (n, of, ok) for m, n, of, _, ok in runs_mod.coverage(rows).rows()}
     assert cover == {"all": (8, 8, True), "new": (1, 2, False), "twice": (4, 4, True)}
+
+
+# --- ranking by lead band ----------------------------------------------------------------
+
+MAIN, OTHER = "0-20000-0-11520", "0-203-0-11201020001"
+DAY0 = datetime(2026, 8, 1, tzinfo=UTC)
+
+
+def band_rows(model_id, run, station, temp, last=72, gust=5.0, rain=None, step=1):
+    """Single-run rows with all four band variables, leads step…last."""
+    hours = [h for h in range(step, last + 1, step)]
+    n = len(hours)
+    rain = rain or {}
+    return pl.DataFrame(
+        {
+            "run": [run] * n,
+            "model": [model_id] * n,
+            "station_id": [station] * n,
+            "lead_h": pl.Series(hours, dtype=pl.Int16),
+            "valid_time": [run + timedelta(hours=h) for h in hours],
+            "temperature_2m": pl.Series([temp] * n, dtype=pl.Float32),
+            "precipitation": pl.Series([rain.get(h, 0.0) for h in hours], dtype=pl.Float32),
+            "wind_speed_10m": pl.Series([2.0] * n, dtype=pl.Float32),
+            "wind_gusts_10m": pl.Series([gust] * n, dtype=pl.Float32),
+        }
+    )
+
+
+def band_obs(station, days):
+    hours = 24 * (days + 4)
+    frames = [obs(station, DAY0, [10.0] * hours)]
+    frames.append(obs(station, DAY0, [2.0] * hours, "wind_speed_10m"))
+    frames.append(obs(station, DAY0, [5.0] * hours, "wind_gusts_10m"))
+    # 1 mm in the hour ending at 03 UTC every day
+    frames.append(
+        obs(station, DAY0, [1.0 if i % 24 == 3 else 0.0 for i in range(hours)], "precipitation")
+    )
+    return pl.concat(frames)
+
+
+def test_band_required_reach_and_sets():
+    table = pl.DataFrame(
+        {
+            "model": ["hourly", "hourly", "six", "six", "short", "short", "coarse"],
+            "run_hour": ["00", "06", "00", "06", "00", "06", "00"],
+            "horizon_h": [72, 72, 72, 72, 48, 30, 72],
+        },
+        schema_overrides={"horizon_h": pl.Int16},
+    )
+    models = [
+        model("hourly"), model("six", step=6), model("short"),
+        model("coarse", coarser_after=48, coarser_step=3),
+    ]  # fmt: skip
+    req = leads.band_required(table, models, gusts={"hourly", "short", "coarse"})
+
+    def members(set_, band, variable="temperature_2m"):
+        found = req.filter(
+            pl.col("set") == set_, pl.col("band") == band, pl.col("variable") == variable
+        )
+        return sorted(set(found["model"]))
+
+    # short reaches 30 h at 06 UTC: not in H+25-48 although its 00 UTC runs reach 48 h
+    assert members("hourly", "h13-24") == ["coarse", "hourly", "short"]
+    assert members("hourly", "h25-48") == ["coarse", "hourly"]
+    # coarse is 3-hourly after H+48: not in the hourly set there, in the 6h set
+    assert members("hourly", "h49-72") == ["hourly"]
+    assert members("6h", "h49-72") == ["coarse", "hourly", "six"]
+    assert members("hourly", "h49-72", "wind_gusts_10m") == ["hourly"]
+    assert members("6h", "h1-6", "precipitation") == []
+    six = req.filter(pl.col("set") == "6h", pl.col("band") == "h25-48")
+    assert sorted(set(six["lead_h"])) == [30, 36, 42, 48]
+    hourly = req.filter(pl.col("set") == "hourly", pl.col("band") == "h7-12")
+    assert sorted(set(hourly["lead_h"])) == list(range(7, 13))
+
+
+def test_band_scores_fair_sets_intervals_and_bias():
+    days = 15
+    runs = [DAY0 + timedelta(days=k) for k in range(days)]
+    rows = []
+    for run in runs:
+        for station in (MAIN, OTHER):
+            rows.append(band_rows("good", run, station, 10.5, rain={3: 1.0, 27: 1.0}))
+            rows.append(band_rows("bad", run, station, 12.0))
+            rows.append(band_rows("six", run, station, 11.0, step=6))
+    rows = pl.concat(rows).with_columns(
+        # bad has no gusts
+        pl.when(pl.col("model") == "bad")
+        .then(None)
+        .otherwise("wind_gusts_10m")
+        .alias("wind_gusts_10m")
+    )
+    observed = pl.concat([band_obs(MAIN, days), band_obs(OTHER, days)])
+    stations = pl.DataFrame({"id": [MAIN, OTHER], "kraj_code": ["CZ010", "CZ010"]})
+    models = [model("good"), model("bad"), model("six", step=6)]
+    sums, info = leads.band_sums(rows, observed, models, chunk_runs=4)
+    assert info["reach"] == {"bad": 72, "good": 72, "six": 72}
+    table = leads.band_scores(sums, stations, resamples=50)
+
+    def get(model_id, band="h1-6", set_="hourly", variable="temperature_2m", region="cz"):
+        found = table.filter(
+            pl.col("region") == region, pl.col("band") == band, pl.col("set") == set_,
+            pl.col("variable") == variable, pl.col("model") == model_id,
+        )  # fmt: skip
+        return found.row(0, named=True) if found.height else None
+
+    good, bad = get("good"), get("bad")
+    assert (good["rank"], good["mae"], good["bias"]) == (1, pytest.approx(0.5), pytest.approx(0.5))
+    assert (bad["rank"], bad["mae"]) == (2, pytest.approx(2.0))
+    assert bad["diff"] == pytest.approx(1.5) and not bad["tied"]
+    assert bad["diff_low"] == pytest.approx(1.5) and good["clear"]
+    assert get("six") is None  # 6-hourly: not in the hourly set
+    assert (good["runs"], good["stations"], good["days"]) == (days, 2, days)
+    assert good["n"] == days * 2 * 6
+    # 6h set: lead 6 only in H+1-6, every model
+    assert get("six", set_="6h")["mae"] == pytest.approx(1.0)
+    assert get("good", set_="6h")["n"] == days * 2
+    # bias from the 30 valid dates before the run's day, at least 10: the last 5 runs
+    assert good["n_bc"] == 5 * 2 * 6 and good["mae_bc"] == pytest.approx(0.0, abs=1e-6)
+    # gusts: only the models with gusts
+    assert get("bad", variable="wind_gusts_10m") is None
+    assert get("good", variable="wind_gusts_10m")["mae"] == pytest.approx(0.0)
+    # rain >= 1 mm in the hour: good catches every event, bad none
+    rain = get("good", variable="precipitation")
+    assert rain["ets_1"] == pytest.approx(1.0) and rain["pod_1"] == pytest.approx(1.0)
+    assert get("bad", variable="precipitation")["ets_1"] == pytest.approx(0.0)
+    assert get("good")["ets_1"] is None
+    # station kinds; the kraj has two stations only: no kraj rows
+    assert get("good", region="main")["stations"] == 1
+    assert get("good", region="other")["n"] == days * 6
+    assert set(table["level"]) == {"cz", "network"}
+    assert list(table.columns) == leads.BAND_COLUMNS
+
+
+def test_band_rankings_windows_documents_and_default():
+    days = 12
+    runs = [DAY0 + timedelta(hours=6 * k) for k in range(4 * days)]
+    rows = pl.concat(
+        [band_rows(m, run, MAIN, t) for run in runs for m, t in (("a", 10.5), ("b", 11.0))]
+    )
+    stations = pl.DataFrame({"id": [MAIN], "kraj_code": ["CZ010"]})
+    out = leads.band_rankings(
+        rows, band_obs(MAIN, days + 1), [model("a"), model("b")], stations, resamples=20
+    )
+    assert set(out) == {"90d", "all"}
+    table, facts = out["all"]
+    first = table.filter(
+        pl.col("level") == "cz", pl.col("band") == "h13-24", pl.col("set") == "hourly",
+        pl.col("variable") == "temperature_2m", pl.col("rank") == 1,
+    )  # fmt: skip
+    assert first.select("model", "runs", "days").row(0) == ("a", 4 * days, days)
+    assert facts["first_day"] == DAY0.date()
+    # fewer than 60 days: the page keeps D+1
+    assert leads.band_default(table) is None
+    assert leads.band_default(table.with_columns(pl.lit(60, pl.UInt32).alias("days"))) == "h13-24"
+    docs = leads.band_documents(
+        table, facts, "all", datetime(2026, 10, 17, tzinfo=UTC), {"cz": "Česko"}, {"a": "A"}
+    )
+    assert set(docs) == {"leads-bands-all.json", "leads-bands-all-kraj.json"}
+    doc = docs["leads-bands-all.json"]
+    assert doc["columns"] == leads.BAND_COLUMNS
+    assert doc["models"] == {"a": "A", "b": "b"}
+    assert doc["members"]["h1-6"]["hourly"]["temperature_2m"] == ["a", "b"]
+    assert doc["preliminary_days"] == leads.PRELIMINARY_DAYS
+    assert doc["first_run"] == "2026-08-01T00:00Z"
+    assert docs["leads-bands-all-kraj.json"]["rows"] == []
+    assert len(doc["rows"]) == table.height
+
+
+def test_window_sums_keeps_the_last_days():
+    sums = pl.DataFrame({"day": [DAY0.date() + timedelta(days=k) for k in range(100)]})
+    assert leads.window_sums(sums, 90).height == 90
+    assert leads.window_sums(sums, None).height == 100
