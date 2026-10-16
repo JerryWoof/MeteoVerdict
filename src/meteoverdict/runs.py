@@ -26,8 +26,9 @@ then "history" newest first back to ``HISTORY_FROM`` (not to the archive start
 ``models.RUNS_FROM``; see ``HISTORY_FROM``).
 
 The call budget of a scheduled run can grow by what the D+N backfill leaves of the
-daily shared budget (``shared_budget``, ``backfill.share_left``); the backfill in turn
-fetches its older windows only once this history is complete (``history_pending``).
+daily shared budget (``shared_budget``, ``backfill.share_left``) once its current and
+priority windows are done; the backfill in turn fetches its older windows only once this
+history is complete (``history_pending``).
 
 See docs/data-sources.md#single-runs-mvd-fetch-runs.
 """
@@ -653,17 +654,22 @@ def shared_budget(
     models: list[Model],
     backfill_from: date,
     today: date,
+    priority_from: date | None = None,
 ) -> tuple[float, str]:
     """``(calls, why)``: ``base`` plus this run's ``part`` (from, to) of what the D+N
     backfill leaves today of the daily shared budget ``share`` (``backfill.share_left``):
     ``max(0, min(left, to) - from)``. Two runs with parts (0, a) and (a, share) never
     take more than ``left`` together. Only ``base`` when the backfill's state cannot be
-    read. ``read_state`` gives the backfill's state (from the release ``data-state``)."""
+    read. ``read_state`` gives the backfill's state (from the release ``data-state``);
+    ``priority_from`` is the backfill's ``--priority-from`` (its priority windows come
+    before this history too)."""
     if share <= 0 or part[1] <= part[0]:
         return base, f"{base:g} calls (normal)"
     normal = f"{base:g} calls (normal; no shared calls"
     try:
-        left, why = backfill.share_left(models, backfill_from, today, read_state(), share)
+        left, why = backfill.share_left(
+            models, backfill_from, today, read_state(), share, priority_from
+        )
     except Exception as exc:  # anything: the normal budget is always safe
         return base, f"{normal}: backfill state not readable: {exc})"
     extra = max(0.0, min(left, part[1]) - part[0])

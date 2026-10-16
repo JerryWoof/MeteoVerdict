@@ -8,12 +8,15 @@ name: Backfill
 # Priorities (docs/data-sources.md#open-meteo-budget): (1) the outlook and (2) the newest
 # single runs have budgets of their own; MAX_CALLS is the daily SHARED budget for
 # (3) the current windows (the last 90 days: the 90-day ranking and the combination
-# weights; also every newly added model there), then (4a) the single-runs history back to
-# 2026-06-23 (runs.yml takes what this run leaves today) and only then (4b) the older
-# windows back to 2024-01-01 (`--older-windows after-runs-history`: only once the
-# single-runs history is complete, read from the release runs-state; held back if that
-# cannot be read). The job summary says which windows were allowed and why, and the
-# calls used today (`calls_used` in the state, which runs.yml reads).
+# weights; also every newly added model there), then (3b) the priority windows back to
+# 2025-10-01 (one full year, every season; `--priority-from`) at the ~100 stations of the
+# single runs only (~2,000 calls a window, ~41,000 for all 21), then (4a) the single-runs
+# history back to 2026-06-23 (runs.yml takes what this run leaves today) and only then
+# (4b) the older windows back to 2024-01-01 and the other stations of the priority
+# windows (`--older-windows after-runs-history`: only once the single-runs history is
+# complete, read from the release runs-state; held back if that cannot be read). The job
+# summary says which windows were allowed and why, and the calls used today
+# (`calls_used` in the state, which runs.yml reads).
 on:
   schedule:
     - cron: "41 2 * * *"
@@ -33,11 +36,13 @@ concurrency:
 env:
   # Daily budget, 19 models: outlook <= 1,600 (2 x ~732) + newest single runs 3,400
   # (4 x 850) + this shared 4,500 = <= 9,500 a day, <= 294,500 in 31 days (free tier:
-  # 10,000 and 300,000). A new 14-day window costs ~12,000 (+ ~5,400 for the rain gauges'
-  # 28-day window with every other one): about three days of the share, then the rest goes
-  # to the single-runs history. Open-Meteo counts per IP, and runners share IPs, so a run
+  # 10,000 and 300,000). A new 14-day window costs ~10,100 (+ ~3,900 for the rain gauges'
+  # 28-day window with every other one; models with the same lead days share requests):
+  # two to three days of the share, then the rest goes to the priority windows and then
+  # the single-runs history. Open-Meteo counts per IP, and runners share IPs, so a run
   # may still meet the daily limit: it then stops cleanly and the next run continues.
   MAX_CALLS: ${{ inputs.max_calls || '4500' }}
+  PRIORITY_FROM: "2025-10-01" # also in runs.yml (BACKFILL_PRIORITY_FROM)
 
 jobs:
   backfill:
@@ -58,6 +63,7 @@ jobs:
       - name: Backfill
         run: |
           uv run --frozen mvd backfill --from 2024-01-01 --github-release \
-            --max-calls "$MAX_CALLS" --older-windows after-runs-history
+            --max-calls "$MAX_CALLS" --older-windows after-runs-history \
+            --priority-from "$PRIORITY_FROM"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
