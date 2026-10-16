@@ -9,20 +9,27 @@ export function levelOf(region) {
   return region.length === 5 ? "kraj" : "okres";
 }
 
+/** A model the window leaves out of the comparison for too short a record (scores on
+ * too few of its days, e.g. added recently): its own days only, not ranked. Score
+ * files from before the rule have no `short_record`. */
+export const isShort = (r) => Boolean(r.short_record);
+
 /**
  * Rows of the ranking table for a region at one lead day: ranked models first (by
- * rank), the mean of all models after them, each with its MAE difference to the best,
- * the interval of that difference and its skill against the mean of all models
- * (1 − MAE / MAE of the mean: positive = better than the mean).
+ * rank), the mean of all models after them, then the models with too short a record
+ * (`short`), each with its MAE difference to the best, the interval of that difference
+ * and its skill against the mean of all models (1 − MAE / MAE of the mean: positive =
+ * better than the mean).
  */
 export function rankingTable(rows, leadDay, region = "cz") {
   const here = rows.filter((r) => r.lead_day === leadDay && r.region === region);
   const best = here.find((r) => r.rank === 1);
   const blend = here.find((r) => r.model === "blend");
-  const order = (r) => (r.rank == null ? Number.POSITIVE_INFINITY : r.rank);
+  const order = (r) => (isShort(r) ? 2 : r.rank == null ? 1 : 0);
+  const rank = (r) => (r.rank == null ? Number.POSITIVE_INFINITY : r.rank);
   return here
     .slice()
-    .sort((a, b) => order(a) - order(b) || a.mae - b.mae)
+    .sort((a, b) => order(a) - order(b) || rank(a) - rank(b) || a.mae - b.mae)
     .map((r) => ({
       model: r.model,
       rank: r.rank,
@@ -32,6 +39,8 @@ export function rankingTable(rows, leadDay, region = "cz") {
       diff: best ? r.mae - best.mae : null,
       ci: r.diff_ci_low == null ? null : [r.diff_ci_low, r.diff_ci_high],
       tied: Boolean(r.tied_with_best),
+      short: isShort(r),
+      coverage: r.coverage ?? null,
       skill: blend && r.model !== "blend" && blend.mae > 0 ? 1 - r.mae / blend.mae : null,
       stations: r.stations,
       borrowed: r.borrowed ?? 0,
@@ -62,7 +71,7 @@ export function intervalRows(table) {
 /** MAE of every model (and the mean of all) by lead day in a region: [{model, lead_day, mae}]. */
 export function maeByLead(rows, region = "cz") {
   return rows
-    .filter((r) => r.region === region && r.mae != null)
+    .filter((r) => r.region === region && r.mae != null && !isShort(r))
     .map((r) => ({ model: r.model, lead_day: r.lead_day, mae: r.mae }))
     .sort((a, b) => a.model.localeCompare(b.model) || a.lead_day - b.lead_day);
 }
@@ -97,7 +106,7 @@ export function regionList(rows) {
 /** [{elevation, model, bias}] at one lead day, in elevation order, without the blend. */
 export function biasByElevation(rows, leadDay) {
   return rows
-    .filter((r) => r.lead_day === leadDay && r.model !== "blend" && r.bias != null)
+    .filter((r) => r.lead_day === leadDay && r.model !== "blend" && r.bias != null && !isShort(r))
     .filter((r) => ELEVATION_ORDER.includes(r.region))
     .sort((a, b) => ELEVATION_ORDER.indexOf(a.region) - ELEVATION_ORDER.indexOf(b.region))
     .map((r) => ({ elevation: r.region, model: r.model, bias: r.bias }));

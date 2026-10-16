@@ -76,9 +76,10 @@ MIN_TRAINING_DAYS = 14
 #: results of an okres are published with at least this many test days
 MIN_OKRES_DAYS = 10
 #: a model is trained on only when it has scores on this share of the window's scored
-#: days (as ``mos.MIN_COVERAGE``): a model the backfill has delivered only a few days of
-#: would otherwise shrink the fair station-days of every model to those few days
-MIN_MODEL_COVERAGE = mos.MIN_COVERAGE
+#: days (``aggregate.MIN_COVERAGE``, as the live ranking): a model the backfill has
+#: delivered only a few days of would otherwise shrink the fair station-days of every
+#: model to those few days
+MIN_MODEL_COVERAGE = aggregate.MIN_COVERAGE
 COMBINED = "combined"
 BEST_OOS = "best_oos"
 BEST_CZ_OOS = "best_cz_oos"
@@ -125,6 +126,7 @@ def best_models(
             pl.col("model") != blend.ID,
             pl.col("enough_stations"),
             pl.col("mae").is_not_null(),
+            ~pl.col("short_record").fill_null(False),
         )
         .sort("region", "variable", "lead_day", "mae", "model")
         .group_by("region", "variable", "lead_day", maintain_order=True)
@@ -215,22 +217,15 @@ def _score_training(
 
 def covered_models(scores: pl.LazyFrame | pl.DataFrame) -> pl.DataFrame:
     """``variable``, ``lead_day`` and ``model`` of the models with scores on at least
-    ``MIN_MODEL_COVERAGE`` of the days that variable and lead day has scores on.
+    ``MIN_MODEL_COVERAGE`` of the days that variable and lead day has scores on
+    (``aggregate.coverage``, the rule of the live ranking and weights).
 
     The fair comparison (``aggregate.common_days``) keeps only the station-days every
     model of the period has; a model the backfill has delivered for its newest window
     only (it fetches newest first, so a newly added model starts with a 14-day block)
     would cut every model's training down to that block, and with it the warm-up."""
-    group = ["variable", "lead_day"]
-    return (
-        scores.lazy()
-        .group_by(*group, "model")
-        .agg(pl.col("date").n_unique().alias("_days"))
-        .join(scores.lazy().group_by(group).agg(pl.col("date").n_unique().alias("_all")), on=group)
-        .filter(pl.col("_days") >= MIN_MODEL_COVERAGE * pl.col("_all"))
-        .select(*group, "model")
-        .collect()
-    )
+    cover = aggregate.coverage(scores)
+    return cover.filter("covered").select(aggregate.COVERAGE_KEYS)
 
 
 def pools(scores: pl.LazyFrame | pl.DataFrame, stations: pl.DataFrame) -> pl.DataFrame:

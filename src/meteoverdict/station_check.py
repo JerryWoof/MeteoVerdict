@@ -111,7 +111,8 @@ def compare_subsets(
     """MAE ranking of the models per subset (None: all stations), level, region,
     variable and lead day, over all days of ``scores``.
 
-    As in ``ranking.rank``: only station-days every model of the region has, whole days
+    As in ``ranking.rank``: only the models with ``aggregate.MIN_COVERAGE`` of the days,
+    only station-days every one of them has in the region, whole days
     resampled, a model ``tied_with_best`` when the 95 % interval of its MAE minus the
     best's includes 0; the mean of all models (``blend``) is not ranked. Regions with
     fewer than ``aggregate.MIN_STATIONS`` stations are left out.
@@ -123,7 +124,7 @@ def compare_subsets(
     rows = []
     for name, ids in subsets.items():
         part = scores if ids is None else scores.filter(pl.col("station_id").is_in(ids))
-        part = part.join(info, on="station_id", how="inner")
+        part = aggregate.covered_only(part.join(info, on="station_id", how="inner"))
         for level in levels:
             fair = aggregate.common_days(
                 part.with_columns(*aggregate.region_columns(level)), by="region"

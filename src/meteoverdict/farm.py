@@ -37,7 +37,10 @@ hour, the narrowest over the run hours) spans the whole bin and, for the blocks,
 output step in the bin is at most 3 hours. Only units (run, station, night or block)
 that every one of them has, and that have the observation, are counted; so within a
 bin every model is scored on the same events. Models without a variable at all (AIFS
-has no gusts) are left out of that event.
+has no gusts) are left out of that event, and models with fewer than
+``runs.MIN_COVERAGE`` of the period's runs (``runs.coverage``: added recently, their
+single runs fetched only since) are left out altogether until they have them, so that
+they do not cut every model's runs to their few days.
 
 Counts per event, threshold, bin and model: hits, misses, false alarms and correct
 negatives; POD, FAR, CSI, ETS and frequency bias from them. Fewer than
@@ -501,11 +504,16 @@ def farm_scores(
 ) -> tuple[pl.DataFrame, dict]:
     """Event scores per event, threshold, bin and model on the fair set (``COLUMNS``),
     and facts about the sample (``models``, ``first_run``, ``last_run``, ``stations``,
-    ``runs``, ``required``)."""
+    ``runs``, ``required``, ``short_record``: the models left out for too few runs,
+    ``runs.coverage``)."""
     forecasts = forecasts.lazy()
     names = forecasts.collect_schema().names()
     if "wind_gusts_10m" not in names:  # month files from before the gusts
         forecasts = forecasts.with_columns(pl.lit(None, pl.Float32).alias("wind_gusts_10m"))
+    run_cover = runs_mod.coverage(forecasts)
+    forecasts = forecasts.join(
+        run_cover.filter("covered").select("model").lazy(), on="model", how="semi"
+    )
     cover = coverage(forecasts)
     required_ = required(cover, models)
     stations = forecasts.select("station_id").unique().collect()["station_id"].to_list()
@@ -530,6 +538,7 @@ def farm_scores(
         "runs": 0,
         "required": required_,
         "coverage": cover,
+        "short_record": runs_mod.short_records(run_cover),
     }
     if not sums:
         return pl.DataFrame(schema={c: pl.Null for c in COLUMNS}).clear(), info
@@ -600,8 +609,11 @@ def document(
         "fair_set": (
             "Per event and lead bin only the models whose runs cover the whole bin (and, for "
             "the 3-hour blocks, have at most 3-hourly output there) are compared, on the "
-            "runs, stations and nights or blocks that every one of them has."
+            "runs, stations and nights or blocks that every one of them has. Models with "
+            f"fewer than {runs_mod.MIN_COVERAGE:.0%} of the period's runs (short_record, "
+            "e.g. newly added) are left out until they have them."
         ),
+        "short_record": info.get("short_record", {}),
         "first_run": info["first_run"].strftime(stamp) if info["first_run"] else None,
         "last_run": info["last_run"].strftime(stamp) if info["last_run"] else None,
         "runs": info["runs"],
