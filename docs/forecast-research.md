@@ -84,7 +84,7 @@ last 3 hours (applied in the forecast page and the TV forecast).
 | Correlated model families | Document; revisit with a year of data |
 | Rain | Show probability of precipitation, symbols only above a threshold |
 | Short-range models ending | Taper over the last 3 hours (done) |
-| Cloud cover (for TV symbols) | Plain mean of the models: **not verified** against observations, say so |
+| Cloud cover (for TV symbols) | Plain mean of the models, corrected against ČHMÚ cloud cover (`a + b·mean`); sunshine corrected as a share of the day length; refitted nightly (methodology.md#sunshine-cloud-and-gusts) |
 
 ## Sources
 

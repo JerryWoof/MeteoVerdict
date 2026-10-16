@@ -20,8 +20,10 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
 - `forecast.generated`, `forecast.hourly`: `time` (UTC, `2026-10-12T00:00Z`) and the
   combined hourly series `temperature_2m` (°C), `precipitation` (mm in the hour ending at
   the time), `wind_speed_10m` (m/s), `cloud_cover` (%) and `sunshine_duration` (s of
-  sunshine in the hour ending at the time; both plain means of the models, not
-  verified); 6 days; `null` where fewer than two models cover an hour.
+  sunshine in the hour ending at the time; both the mean of the models corrected
+  against ČHMÚ observations, the hourly sunshine scaled so that each UTC day adds up to
+  the corrected daily total: [methodology](methodology.md#sunshine-cloud-and-gusts));
+  6 days; `null` where fewer than two models cover an hour.
 - `forecast.parts`: per day and part of day in Prague time (`night`, `morning`,
   `afternoon`, `evening`, `day`): `tmin`, `tmax`, `precipitation`, `rain_probability`,
   `wind`, `cloud`, `sunshine` (hours), `symbol` (as on the forecast map;

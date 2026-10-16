@@ -453,8 +453,18 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
   somewhere. The forecast page (`forecast.js`, `weightedModels`) does the same.
 - **Combination:** as on the forecast page (bias correction, weights of the hour's lead
   day, models fading out over their last 3 hours, at least 2 models). Cloud cover and
-  sunshine are the plain mean of the models (not verified; all 13 models report
-  sunshine, checked 2026-10-12).
+  sunshine are the plain mean of the models (all 13 models report sunshine, checked
+  2026-10-12), then corrected against ČHMÚ observations (`meteoverdict.sun_cloud_gust`,
+  [methodology](methodology.md#sunshine-cloud-and-gusts)): sunshine per UTC day as a
+  share of the day length, the hours scaled to the corrected day; cloud
+  `clip(a + b·mean, 0, 100)`. The coefficients come from `sun-cloud-gust.json` in the
+  release `data-latest` (refitted nightly by `mvd sun-cloud-gust`, workflow
+  `sun-cloud-gust.yml`), or the bootstrap in the package.
+- **Archive (training data, no extra calls):** every run appends the plain model means
+  of cloud cover and sunshine of all okresy and hours (`okres`, `issued`, `time`,
+  `cloud_cover`, `sunshine_duration`) to `outlook-archive-YYYY-MM.parquet` in the
+  release `outlook-archive` (about 11,000 rows a run); a failure there does not fail
+  the outlook.
 - **Periods** in Prague time: night 0–6, morning 6–12, afternoon 12–18, evening 18–24,
   and the whole day; a part needs at least 4 hours and a day 18 (the answer starts at
   00 UTC, 02:00 in Prague in summer time).
@@ -468,7 +478,8 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
   m/s), `cloud` (%), `sunshine` (hours, sum of the hourly mean), `symbol`: `rain` / `sleet` / `snow` (≤ 2 / ≤ 0.5 °C mean temperature) when the
   share of models is ≥ 50 % and the total ≥ 0.3 mm, `showers` at a calibrated
   probability ≥ 40 % (≥ 30 % of the models without a calibration), otherwise `clear`
-  (< 25 % cloud), `partly` (< 70 %) or `cloudy`. The whole day's symbol uses the cloud
+  (< 30 % corrected cloud), `partly` (< 65 %) or `cloudy` (thresholds chosen so the
+  shares match the observed < 25 / 25–70 / ≥ 70 %: the correction narrows the spread). The whole day's symbol uses the cloud
   of 6–18. With a calibration also `heavy_rain_probability` (P(≥ 5 mm)) and
   `heavy_rain` (true/false), null without; a whole day takes the highest of its parts.
 - **Sunrise and sunset** (`sunrise`, `sunset`, Prague time "HH:MM") at the okres point,

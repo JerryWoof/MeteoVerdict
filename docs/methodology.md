@@ -222,7 +222,8 @@ National Blend of Models, MeteoSwiss) and what still has to be tested:
 
 The forecast map (`tv.html`) shows the same combination for every okres, made twice a
 day by `mvd outlook`: by part of day, with the probability of precipitation (calibrated,
-below) and a symbol; cloud cover there is a plain mean of the models and not verified.
+below) and a symbol; cloud cover and sunshine there are the mean of the models
+corrected against ČHMÚ observations ([below](#sunshine-cloud-and-gusts)).
 
 ### Probability of precipitation and heavy rain (`meteoverdict.rain_calibration`)
 
@@ -328,6 +329,87 @@ weights themselves had at most 37 days of scores behind them. The test is repeat
 every day as history grows. Not yet done: training windows of 30 and 45 days and a
 decaying average (roadmap 6.4); with under 45 days of history they would be almost
 the same as 90 days.
+
+## Sunshine, cloud and gusts
+
+The forecast map shows sunshine and cloud prominently (also on the TRMNL e-ink
+display). The plain mean of the models was checked against ČHMÚ in a research sample:
+the previous day's run (Open-Meteo Previous Runs API) of 10 models at 10 stations that
+measure sunshine, cloud and gusts (Prostějov, Pardubice, Brno-Tuřany, Mošnov,
+Praha-Ruzyně, Temelín, Karlovy Vary, Polom and the summits Milešovka and Lysá hora),
+15 August – 14 October 2026, 610 station-days. Observations: daily sunshine `SSV`
+(h) and maximum gust `Fmax` (m/s), hourly cloud cover `N` (octas × 12.5 %; 8 and 9,
+sky obscured, count as 100 %). Every model over-forecasts sunshine (+2.0 to +3.9 h a
+day; mean +2.8 h, worst on dull days: +4.0 h when under 2 h were measured), although
+cloud cover is only about 4 % too low: Open-Meteo derives sunshine from direct
+radiation above 120 W/m², which the models overdo. Gusts are too weak, mostly on the
+summits (Milešovka −6.1, Lysá hora −3.2 m/s).
+
+`meteoverdict.sun_cloud_gust` corrects the outlook's plain means:
+
+- **Sunshine**, per okres and UTC day: `L` the astronomical day length at the okres
+  point, `rel` the mean sunshine as a share of it, `c` the mean cloud cover 06–16 UTC
+  (0–1); `sunshine = clip((a + b·rel + d·(1 − c))·L, 0, L)`. In shares of the day, not
+  hours: an additive correction (about −3.7 h) would go negative in December. The
+  hourly values are then scaled proportionally to add up to the corrected day (no hour
+  above 3,600 s; an hour without sunshine stays without), so hours, parts of day,
+  days and the open-data files agree.
+- **Cloud cover**, every hour: `clip(a + b·mean, 0, 100)` (fitted on 06–16 UTC). The
+  correction narrows the spread (about `18 + 0.76·mean`), so with the old symbol
+  thresholds (25 / 70 %) "clear" would drop from 18 % to 6 % of days against 12 %
+  observed. The symbols now use **30 / 65 %** on the corrected cover, which matches
+  the observed shares and scores better (below).
+- **Gusts**, daily maximum: `a + b·mean` plus the mean remaining error of the okres's
+  representative station: the single-runs station of the okres if at most 750 m high,
+  so summits (Milešovka, Lysá hora) never set an okres's correction. Neither the
+  outlook nor the API shows gusts, and adding them to the outlook request would cost
+  a fifth more Open-Meteo calls (~170–290 a day) with the free budget nearly used, so
+  the gust correction is fitted and published in the coefficients but not yet
+  applied. It is not applied to the farmers' event skill either: that verifies each
+  model as published, and a correction fitted on the same observations would blur
+  it.
+
+**Fitting.** Least squares on the pairs of the last 60 days, refitted every night
+(`mvd sun-cloud-gust`, workflow `sun-cloud-gust.yml`, no Open-Meteo calls): the
+outlook archives the plain means it fetches anyway (release `outlook-archive`) and
+they are paired, by lead day 1–5, with the nearest station at most 750 m high that
+measures sunshine (within 40 km of the okres point) or cloud (within 60 km); gusts
+from the 00 UTC single runs (each model's largest hourly gust of the UTC day, then the
+mean) at the okres's representative station against `Fmax`. A variable is refitted
+once it has 21 days of pairs (lead days with 21 days of their own get their own
+coefficients); until then it keeps the **bootstrap** coefficients fitted on the
+research sample (8 stations up to 750 m, all 61 days; `src/meteoverdict/data/
+sun-cloud-gust.json`, with its provenance). The outlook uses a different set of
+models from the research sample, which the refit absorbs. Rolling refits matter: the
+research expects the bias to grow in the winter inversion season (models dissolve
+low stratus too early), which an August–October sample cannot show.
+
+**Out of sample** (the research sample, reproduced with this module: each test day
+forecast with coefficients fitted on all earlier days, at least 21; 40 test days,
+5 September – 14 October; 95 % intervals from a 3-day block bootstrap over days):
+
+| Variable | Station-days (hours) | MAE plain mean | Bias | MAE corrected | Bias | ΔMAE [95 % CI] |
+|---|---:|---:|---:|---:|---:|---|
+| Sunshine, h/day (10 stations) | 400 | 2.78 | +2.68 | **1.58** | +0.07 | −1.20 [−1.86, −0.51] |
+| Sunshine, h/day (8 stations ≤ 750 m) | 320 | 2.80 | +2.72 | **1.50** | +0.08 | −1.30 [−1.97, −0.56] |
+| Sunshine via the hourly scaling (10 stations) | 400 | 2.78 | +2.68 | **1.58** | +0.07 | −1.20 [−1.81, −0.50] |
+| Daily max gust, m/s (10 stations) | 400 | 1.85 | −1.25 | **1.16** | −0.06 | −0.68 [−0.84, −0.50] |
+| Daily max gust, m/s (8 stations ≤ 750 m) | 320 | 1.20 | −0.47 | **1.00** | +0.01 | −0.21 [−0.31, −0.10] |
+| Cloud, %, hourly 06–16 UTC | (4,399) | 14.47 | −4.71 | **13.42** | −0.73 | −1.05 [−1.59, −0.46] |
+| Cloud, %, daytime mean | 400 | 10.45 | −4.71 | **8.86** | −0.73 | −1.59 [−2.25, −0.88] |
+
+Gust events (10 stations): ≥ 15 m/s caught 25 % → 75 % of 48 events, false alarms
+20 % → 18 %, CSI 0.24 → 0.64; ≥ 20 m/s 0 → 8 of 9 (nearly all on the summits). Symbols
+from the daytime mean cloud (observed: 12 % clear, 43 % partly, 45 % cloudy): plain
+mean with 25/70 % 18/42/40 %, hit rate 0.78, Heidke skill 0.65; corrected with 25/70 %
+6/53/41 %, 0.80, 0.65; corrected with **30/65 %** 12/42/47 %, 0.81, **0.69** (hourly:
+Heidke 0.51 → 0.54). The thresholds were picked on this sample, so the gain is
+somewhat optimistic; the frequencies are the reason for them.
+
+What did not help in the research: the median instead of the mean, weighting models
+by past error (≤ 0.1), the best single model or top three for cloud (worse), stacking,
+a 30-day instead of an expanding window, a plain ratio for sunshine (not
+significant).
 
 ## Limitations
 

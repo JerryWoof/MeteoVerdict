@@ -1,0 +1,61 @@
+{
+ "version": 1,
+ "fitted": "2026-10-16T00:00+00:00",
+ "provenance": "Bootstrap, fitted 2026-10-16 on the research sample: Open-Meteo Previous Runs API (the previous day's run, D+1) of 10 models (ALADIN CZ, ICON-D2, ICON-EU, IFS, IFS 0.25, AROME Austria, HARMONIE, ARPEGE Europe, GFS, UKMO 10 km; plain mean of those with the variable) at 8 lowland ČHMÚ stations (Prostějov, Pardubice, Brno-Tuřany, Mošnov, Praha-Ruzyně, Temelín, Karlovy Vary, Polom; the summits Milešovka and Lysá hora left out), 2026-08-15 to 2026-10-14, against ČHMÚ daily SSV and Fmax and hourly N. Out of sample (expanding window, >= 21 days, 40 test days, all 10 stations): sunshine MAE 2.78 -> 1.58 h, gust MAE 1.85 -> 1.16 m/s, hourly daytime cloud MAE 14.5 -> 13.4 %. Used until the nightly fit (`mvd sun-cloud-gust`) has 21 days of the outlook's own forecasts paired with observations; the outlook's set of models differs from this sample.",
+ "sunshine": {
+  "source": "bootstrap",
+  "pairs": 488,
+  "days": 61,
+  "stations": 8,
+  "from": "2026-08-15",
+  "to": "2026-10-14",
+  "default": {
+   "a": -0.1899,
+   "b": 0.6955,
+   "d": 0.4465
+  },
+  "by_lead": {}
+ },
+ "cloud": {
+  "source": "bootstrap",
+  "pairs": 5367,
+  "days": 61,
+  "stations": 8,
+  "from": "2026-08-15",
+  "to": "2026-10-14",
+  "default": {
+   "a": 18.0224,
+   "b": 0.7585
+  },
+  "by_lead": {}
+ },
+ "gust": {
+  "source": "bootstrap",
+  "pairs": 488,
+  "days": 61,
+  "stations": 8,
+  "from": "2026-08-15",
+  "to": "2026-10-14",
+  "default": {
+   "a": 1.1571,
+   "b": 0.9172,
+   "stations": {
+    "0-20000-0-11414": -0.494,
+    "0-20000-0-11518": 0.23,
+    "0-20000-0-11538": -0.107,
+    "0-20000-0-11652": -0.006,
+    "0-20000-0-11669": -1.554,
+    "0-20000-0-11723": 0.777,
+    "0-20000-0-11747": 0.653,
+    "0-20000-0-11782": 0.5
+   }
+  },
+  "by_lead": {},
+  "okres_stations": {
+   "CZ0412": "0-20000-0-11414",
+   "CZ0532": "0-20000-0-11652",
+   "CZ0713": "0-20000-0-11747",
+   "CZ0804": "0-20000-0-11782"
+  }
+ }
+}
