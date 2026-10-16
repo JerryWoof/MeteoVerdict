@@ -49,7 +49,40 @@ export function rankingTable(rows, leadDay, region = "cz") {
       pod: r.pod_0p1 ?? null,
       far: r.far_0p1 ?? null,
       ets5: r.ets_5 ?? null,
+      // added in October 2026 (older files: null): event skill at 1 and 10 mm a day, and
+      // the MAE once the model's usual bias at the station and hour is removed
+      ets1: r.ets_1 ?? null,
+      pod1: r.pod_1 ?? null,
+      far1: r.far_1 ?? null,
+      ets10: r.ets_10 ?? null,
+      pod10: r.pod_10 ?? null,
+      far10: r.far_10 ?? null,
+      maeBc: r.mae_bc ?? null,
     }));
+}
+
+/** Station sets of the ranking for Czechia: all, or one kind (the `network` level). */
+export const STATION_SETS = ["all", "main", "other"];
+
+/** How the precipitation ranking table is sorted: by MAE (the ranking) or by ETS. */
+export const RANK_BY = ["mae", "ets1", "ets10"];
+
+/** True when some row of the ranking table has a value in `key` (e.g. older files lack it). */
+export const hasValues = (table, key) => table.some((r) => r[key] != null);
+
+/**
+ * The ranking table sorted by event skill (`key`: "ets1" or "ets10"; higher is better):
+ * the models with a value first, numbered by it (`etsRank`, no intervals), then the
+ * ones without, then the mean of all models and the models with too short a record,
+ * as in the MAE ranking.
+ */
+export function sortByEts(table, key) {
+  const group = (r) => (r.short ? 3 : r.model === "blend" ? 2 : r[key] == null ? 1 : 0);
+  const sorted = table
+    .slice()
+    .sort((a, b) => group(a) - group(b) || (b[key] ?? 0) - (a[key] ?? 0) || (a.mae ?? 0) - (b.mae ?? 0));
+  let position = 0;
+  return sorted.map((r) => ({ ...r, etsRank: group(r) === 0 ? ++position : null }));
 }
 
 /**

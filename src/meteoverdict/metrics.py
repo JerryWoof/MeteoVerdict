@@ -19,9 +19,12 @@ from __future__ import annotations
 
 import polars as pl
 
-#: Daily precipitation event thresholds in mm: 0.1 and 5 (ROADMAP "Scope v1") and 20 for
-#: heavy precipitation (the ETCCDI climate index R20mm, roadmap 5.2).
-PRECIPITATION_THRESHOLDS = (0.1, 5.0, 20.0)
+#: Daily precipitation event thresholds in mm: 0.1 and 5 (ROADMAP "Scope v1"), 20 for
+#: heavy precipitation (the ETCCDI climate index R20mm, roadmap 5.2), and 1 and 10 (the
+#: ETCCDI wet day and R10mm), added in October 2026 to rank precipitation by event skill
+#: (ETS) as well as by MAE, which favours smooth models (docs/methodology.md). Score
+#: files written before lack the counts of 1 and 10 mm (null, left out of the sums).
+PRECIPITATION_THRESHOLDS = (0.1, 1.0, 5.0, 10.0, 20.0)
 #: Daily maximum temperature event thresholds in °C: a "tropický den" (tropical day,
 #: ČHMÚ's term for a day reaching 30 °C), roadmap 5.2b.
 HEAT_THRESHOLDS = (30.0,)

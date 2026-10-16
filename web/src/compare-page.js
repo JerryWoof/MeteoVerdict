@@ -9,6 +9,7 @@ import {
   BLEND_TEST_SERIES, BLEND_TEST_VARIABLES, HOME_MODEL, biasByElevation, blendTestLines, blendTestRows, blendTestVariable,
   blendVerdict, blendVerdicts, fmt, okresVerdictCounts, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
   leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, singleModelVerdicts, unpublishedHours,
+  RANK_BY, STATION_SETS, hasValues, sortByEts,
 } from "./compare.js";
 import { binLabel, count, etsColor, etsTextColor, farmChoices, farmGrid, plain, score } from "./farm.js";
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
@@ -68,21 +69,38 @@ const pct = (v) => (v == null ? "–" : `${v > 0 ? "+" : ""}${Math.round(v * 100
 const width = () => Math.min(900, document.querySelector(".content").clientWidth);
 const PRECIPITATION = new Set(["precipitation_24h", "precipitation_daily"]);
 
-// --- view, kept in the URL: #variable/lead/window/region/blend-test variable ---------
-// The first four drive the model ranking; the fifth only the blend-test section. Links
-// from before the fifth existed open the blend test at the ranking's variable, as then.
+// --- view, kept in the URL: #variable/lead/window/region/blend-test variable/stations/sort
+// The first four drive the model ranking; the fifth only the blend-test section; the
+// last two only the ranking table (and, for the stations, the charts below it). Links
+// from before the fifth existed open the blend test at the ranking's variable, as then;
+// links without the last two show all stations sorted by MAE.
 function readView() {
   const view = parseHash(window.location.hash);
   const parts = window.location.hash.replace(/^#/, "").split("/");
   view.region = parts[3] || "cz";
   view.blendVariable = BLEND_TEST_VARIABLES.includes(parts[4]) ? parts[4] : blendTestVariable(view.variable);
+  view.stations = STATION_SETS.includes(parts[5]) ? parts[5] : "all";
+  view.rankBy = RANK_BY.includes(parts[6]) ? parts[6] : "mae";
   return view;
 }
 
 function writeView(view) {
-  window.history.replaceState(
-    null, "", `#${view.variable}/${view.leadDay}/${view.window}/${view.region}/${view.blendVariable}`,
-  );
+  const base = `#${view.variable}/${view.leadDay}/${view.window}/${view.region}/${view.blendVariable}`;
+  const extra = view.stations !== "all" || view.rankBy !== "mae" ? `/${view.stations}/${view.rankBy}` : "";
+  window.history.replaceState(null, "", base + extra);
+}
+
+/** A segmented switch: `options` [[value, label]]; `onPick(value)` when another is chosen. */
+function fillSegmented(id, options, current, onPick) {
+  document.getElementById(id).replaceChildren(...options.map(([value, label]) => {
+    const button = cell("button", label);
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(value === current));
+    button.addEventListener("click", () => {
+      if (value !== current) onPick(value);
+    });
+    return button;
+  }));
 }
 
 // --- region picker: Czechia, kraje, okresy -----------------------------------------
@@ -202,30 +220,97 @@ function renderSummary(rows, view, names, colors) {
   box.replaceChildren(...children);
 }
 
-function renderTable(rows, view, names) {
+/** The station sets offered for the ranking table (all, main, other) and the one shown. */
+function stationChoice(view, networkRows) {
+  const sets = STATION_SETS.filter((set) => set === "all" || networkRows.some((r) => r.region === set));
+  const shown = view.region === "cz" && sets.includes(view.stations) ? view.stations : "all";
+  return { sets, shown };
+}
+
+/** The station switch above the ranking table: Czechia only, when the scores have it. */
+function renderStations(view, choice, rows, onChange) {
+  const block = document.getElementById("stations-block");
+  block.hidden = view.region !== "cz" || choice.sets.length < 2;
+  const note = document.getElementById("stations-note");
+  note.hidden = block.hidden || choice.shown === "all";
+  if (block.hidden) return;
+  fillSegmented("stations", choice.sets.map((set) => [set, t(`compare.stations.${set}`)]), choice.shown, (set) => {
+    view.stations = set;
+    onChange();
+  });
+  if (!note.hidden) {
+    const best = rankingTable(rows, view.leadDay, choice.shown).find((r) => r.stations != null);
+    note.textContent = t(`compare.stationsNote.${choice.shown}`, { n: best?.stations ?? "–" });
+  }
+}
+
+/** The sort switch above the table (precipitation with event scores only): MAE or ETS. */
+function rankByChoice(view, data) {
+  if (!PRECIPITATION.has(view.variable)) return { options: [], shown: "mae" };
+  const options = RANK_BY.filter((key) => key === "mae" || hasValues(data, key));
+  return { options, shown: options.includes(view.rankBy) ? view.rankBy : "mae" };
+}
+
+function renderTable(rows, view, names, region, onChange) {
   const table = document.getElementById("ranking");
   const rain = PRECIPITATION.has(view.variable);
-  const keys = ["rank", "model", "mae", "diff", "skill", "bias", "rmse", ...(rain ? ["ets", "pod", "far"] : []), "stations", "days"];
+  const data = rankingTable(rows, view.leadDay, region);
+  const choice = rankByChoice(view, data);
+  const block = document.getElementById("rank-by-block");
+  block.hidden = choice.options.length < 2;
+  document.getElementById("rank-by-note").hidden = !rain;
+  document.getElementById("rank-by-note").textContent = rain ? t("compare.rankByNote") : "";
+  if (!block.hidden) {
+    fillSegmented("rank-by", choice.options.map((key) => [key, t(`compare.rankBy.${key}`)]), choice.shown, (key) => {
+      view.rankBy = key;
+      onChange();
+    });
+  }
+  const byEts = choice.shown !== "mae";
+  const shown = byEts ? sortByEts(data, choice.shown) : data;
+  // POD and FAR at the threshold sorted by, else at 1 mm (0.1 mm in older files)
+  const at = choice.shown === "ets10" ? "10" : hasValues(data, "ets1") ? "1" : "0p1";
+  const pod = { 10: "pod10", 1: "pod1", "0p1": "pod" }[at];
+  const far = { 10: "far10", 1: "far1", "0p1": "far" }[at];
+  const mm = { 10: "10", 1: "1", "0p1": fmtMm(0.1) }[at];
+  const events = [
+    "ets", ...(hasValues(data, "ets1") ? ["ets1"] : []), ...(hasValues(data, "ets10") ? ["ets10"] : []), pod, far,
+  ];
+  const bc = hasValues(data, "maeBc") ? ["maeBc"] : [];
+  const keys = byEts
+    ? ["rank", "model", choice.shown, ...events.filter((k) => k !== choice.shown), "mae", "bias", "stations", "days"]
+    : ["rank", "model", "mae", ...bc, "diff", "skill", "bias", "rmse", ...(rain ? events : []), "stations", "days"];
+  const label = (key) => {
+    if (key === pod || key === far) return t(`table.${key.slice(0, 3)}At`, { mm });
+    return t(`table.${key}`);
+  };
   const head = document.createElement("tr");
-  for (const key of keys) head.append(cell("th", t(`table.${key}`), ["rank", "model"].includes(key) ? "" : "num"));
-  const data = rankingTable(rows, view.leadDay, view.region);
-  const body = data.map((r) => {
+  for (const key of keys) head.append(cell("th", label(key), ["rank", "model"].includes(key) ? "" : "num"));
+  const body = shown.map((r) => {
     const tr = document.createElement("tr");
+    const position = byEts ? r.etsRank : r.rank;
     if (r.short) tr.className = "short";
-    else if (r.rank == null) tr.className = "baseline";
-    else if (r.rank === 1) tr.className = "winner";
+    else if (position == null) tr.className = "baseline";
+    else if (position === 1) tr.className = "winner";
     const ci = r.ci && r.rank !== 1 ? ` ${t("compare.interval", { low: fmt(r.ci[0], true), high: fmt(r.ci[1], true) })}` : "";
     const values = {
-      rank: r.rank == null ? "–" : `${r.tied ? "≈" : ""}${r.rank}`,
+      rank: byEts ? (r.etsRank ?? "–") : r.rank == null ? "–" : `${r.tied ? "≈" : ""}${r.rank}`,
       model: r.model === "blend" ? t("model.blend") : (names[r.model] ?? r.model) + (r.short ? ` (${t("compare.shortRecord")})` : ""),
       mae: fmt(r.mae),
       diff: r.rank === 1 ? t("compare.best") : r.diff == null || r.short ? "–" : `${fmt(r.diff, true)}${ci}`,
       skill: r.short ? "–" : pct(r.skill),
       bias: fmt(r.bias, true),
       rmse: fmt(r.rmse),
+      maeBc: fmt(r.maeBc),
       ets: fmt(r.ets),
+      ets1: fmt(r.ets1),
+      ets10: fmt(r.ets10),
       pod: fmt(r.pod),
       far: fmt(r.far),
+      pod1: fmt(r.pod1),
+      far1: fmt(r.far1),
+      pod10: fmt(r.pod10),
+      far10: fmt(r.far10),
       stations: r.borrowed ? `${r.stations} (${r.borrowed})` : (r.stations ?? "–"),
       days: r.days ?? "–",
     };
@@ -238,11 +323,22 @@ function renderTable(rows, view, names) {
     body.push(tr);
   }
   table.replaceChildren(head, ...body);
+  const bcNote = document.getElementById("bc-note");
+  bcNote.hidden = bc.length === 0 || byEts;
+  bcNote.textContent = bcNote.hidden ? "" : t("compare.bcNote");
+  const aladinNote = document.getElementById("aladin-note");
+  aladinNote.hidden = !data.some((r) => isAladin(r.model));
+  aladinNote.textContent = aladinNote.hidden ? "" : t("compare.aladinNote");
 }
 
-function renderIntervals(rows, view, names, colors) {
+/** "0,1" or "0.1" in the page's language. */
+function fmtMm(value) {
+  return value.toLocaleString(document.documentElement.lang === "cs" ? "cs-CZ" : "en-US");
+}
+
+function renderIntervals(rows, view, names, colors, region = view.region) {
   const target = document.getElementById("intervals");
-  const data = intervalRows(rankingTable(rows, view.leadDay, view.region));
+  const data = intervalRows(rankingTable(rows, view.leadDay, region));
   if (data.length < 2) {
     target.replaceChildren(cell("p", t("compare.empty")));
     return;
@@ -264,9 +360,9 @@ function renderIntervals(rows, view, names, colors) {
   );
 }
 
-function renderByLead(rows, view, names, colors) {
+function renderByLead(rows, view, names, colors, region = view.region) {
   const target = document.getElementById("by-lead");
-  const data = maeByLead(rows, view.region);
+  const data = maeByLead(rows, region);
   if (data.length === 0) {
     target.replaceChildren(cell("p", t("compare.empty")));
     return;
@@ -741,7 +837,9 @@ async function main() {
 
   async function render() {
     const level = levelOf(view.region);
-    const [rows, okresRows] = await Promise.all([load(view, level), load(view, "okres")]);
+    const [rows, okresRows, networkRows] = await Promise.all([
+      load(view, level), load(view, "okres"), view.region === "cz" ? load(view, "network") : [],
+    ]);
     const leadDays = availableLeadDays(rows);
     if (!leadDays.includes(view.leadDay)) view.leadDay = leadDays[0];
     fillSelect("lead", leadDays.map((d) => [d, `D+${d}`]), view.leadDay);
@@ -750,9 +848,13 @@ async function main() {
       region: view.region === "cz" ? t("region.cz") : displayName(regionList(rows).find((r) => r.code === view.region)?.name ?? view.region),
     });
     renderSummary(rows, view, names, colors);
-    renderTable(rows, view, names);
-    renderIntervals(rows, view, names, colors);
-    renderByLead(rows, view, names, colors);
+    // the station switch (Czechia): the table and the two charts below it
+    const stations = stationChoice(view, networkRows);
+    const [rankRows, rankRegion] = stations.shown === "all" ? [rows, view.region] : [networkRows, stations.shown];
+    renderStations(view, stations, networkRows, render);
+    renderTable(rankRows, view, names, rankRegion, render);
+    renderIntervals(rankRows, view, names, colors, rankRegion);
+    renderByLead(rankRows, view, names, colors, rankRegion);
     renderLeadHours(view, names, colors);
     renderBias(view.region === "cz" ? await load(view, "elevation") : [], view, names, colors);
     if (map.getLayer("fill")) paintMap(okresRows, view, colors, names);
