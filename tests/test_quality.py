@@ -159,3 +159,26 @@ def test_implausible_observations_are_dropped(variable, value, kept):
         rows = [("s", t, variable, value, 0, "now")]
     ten_minute = pl.DataFrame(rows, schema=observations.SCHEMA, orient="row")
     assert (observations.to_hourly(ten_minute).height == 1) == kept
+
+
+def test_models_left_out_for_too_short_a_record_are_reported():
+    every = ["precipitation_24h", "temperature_2m"]
+    meta = {
+        "min_coverage": 0.8,
+        "variables": [*every, "precipitation"],
+        "short_record": {
+            "90d": {
+                "jma_gsm": {"coverage": 0.25, "days": 10, "variables": every},
+                "ecmwf_ifs025": {"coverage": 0.74, "days": 38, "variables": every[:1]},
+            },
+            "all": {"jma_gsm": {"coverage": 0.2, "days": 10, "variables": every}},
+        },
+    }
+    found = quality.short_records(meta)
+    assert found.level == "warning"
+    assert found.message.startswith("2 models left out of the 90d comparison")
+    assert "need 80% of the days" in found.message
+    assert "jma_gsm (10 days, 25%)" in found.message
+    assert "ecmwf_ifs025 (precipitation_24h: 38 days, 74%)" in found.message
+    assert quality.short_records({"short_record": {}}) is None
+    assert quality.short_records({}) is None  # meta.json from before the rule

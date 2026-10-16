@@ -189,7 +189,7 @@ function closeButton(onClose) {
 function intervalChart(facts) {
   const best = facts.table.find((r) => r.rank === 1);
   const data = facts.table
-    .filter((r) => r.mae != null)
+    .filter((r) => r.mae != null && !r.short)
     .map((r) => ({
       label: r.model === "blend" ? t("model.blend") : nameOf(r.model),
       model: r.model,
