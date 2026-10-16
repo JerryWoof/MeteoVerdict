@@ -15,7 +15,9 @@ import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./d
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
-import { WINDOWS, availableLeadDays, availableVariables, parseHash, windowLabel } from "./view.js";
+import {
+  availableLeadDays, availableVariables, availableWindows, dayCount, formatRange, parseHash, pickWindow, windowLabel,
+} from "./view.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -66,15 +68,21 @@ const pct = (v) => (v == null ? "–" : `${v > 0 ? "+" : ""}${Math.round(v * 100
 const width = () => Math.min(900, document.querySelector(".content").clientWidth);
 const PRECIPITATION = new Set(["precipitation_24h", "precipitation_daily"]);
 
-// --- view, kept in the URL: #variable/lead/window/region ---------------------------
+// --- view, kept in the URL: #variable/lead/window/region/blend-test variable ---------
+// The first four drive the model ranking; the fifth only the blend-test section. Links
+// from before the fifth existed open the blend test at the ranking's variable, as then.
 function readView() {
   const view = parseHash(window.location.hash);
-  view.region = window.location.hash.replace(/^#/, "").split("/")[3] || "cz";
+  const parts = window.location.hash.replace(/^#/, "").split("/");
+  view.region = parts[3] || "cz";
+  view.blendVariable = BLEND_TEST_VARIABLES.includes(parts[4]) ? parts[4] : blendTestVariable(view.variable);
   return view;
 }
 
 function writeView(view) {
-  window.history.replaceState(null, "", `#${view.variable}/${view.leadDay}/${view.window}/${view.region}`);
+  window.history.replaceState(
+    null, "", `#${view.variable}/${view.leadDay}/${view.window}/${view.region}/${view.blendVariable}`,
+  );
 }
 
 // --- region picker: Czechia, kraje, okresy -----------------------------------------
@@ -183,6 +191,9 @@ function renderSummary(rows, view, names, colors) {
   ];
   const children = [heading, cell("p", lines[0], "note"), best, cell("p", lines[1]), cell("p", lines[2], "note")];
   if (levelOf(view.region) === "okres") {
+    const blend = cell("p", null, "note");
+    children.push(blend);
+    summaryBlend(blend, view);
     const link = document.createElement("a");
     link.href = `forecast.html#${view.region}`;
     link.textContent = t("forecast.link");
@@ -289,6 +300,20 @@ function renderByLead(rows, view, names, colors) {
   );
 }
 
+/** The chosen okres in the blend test, at the ranking's variable and lead day (its own dates). */
+async function summaryBlend(target, view) {
+  const doc = await blendTestDoc;
+  const variable = blendTestVariable(view.variable);
+  const row = blendTestRows(doc, view.region).find((r) => r.variable === variable && r.lead_day === view.leadDay);
+  const verdict = row && blendVerdict(row);
+  if (!verdict) return target.remove();
+  target.textContent = t("compare.blendHere", {
+    range: formatRange(doc.from, doc.to, document.documentElement.lang),
+    variable: t(`variable.${variable}`).toLowerCase(), lead: view.leadDay,
+    verdict: verdictText(verdict, doc.units?.[variable] ?? "", true),
+  });
+}
+
 // --- does our forecast beat one model? (blend-test.json; hidden until it exists) -----
 const blendTestDoc = getJson("data/scores/blend-test.json");
 const SERIES_COLORS = {
@@ -300,6 +325,8 @@ const SERIES_STYLE = [
   ["combined", 3, null],
 ];
 const MARK = { better: "✓", same: "≈", worse: "✗" };
+/** The blend test's variable (from the URL); `onChange` keeps the URL in step. */
+const blendView = { variable: "temperature_2m", onChange: null };
 
 /** Long or short words for a verdict; `model`: against that model used everywhere. */
 function verdictText(v, unit, long = false, model = null) {
@@ -336,11 +363,20 @@ function verdictTable(id, verdicts, leads, unit, modelName, against) {
   const head = document.createElement("tr");
   let body;
   if (window.matchMedia("(max-width: 700px)").matches) {
-    head.append(cell("th", ""), ...variables.map((variable) => cell("th", t(`variable.${variable}`))));
-    body = leads.map((lead) => {
-      const tr = document.createElement("tr");
-      tr.append(cell("th", `D+${lead}`), ...variables.map((variable) => verdictCell(variable, lead)));
-      return tr;
+    // phones: only the section's chosen variable, a row per lead day (two columns always fit)
+    head.append(cell("th", t("control.lead")), cell("th", t("blendTest.verdict")));
+    const shown = variables.includes(blendView.variable) ? [blendView.variable] : variables;
+    body = shown.flatMap((variable) => {
+      const group = document.createElement("tr");
+      group.className = "group";
+      const name = cell("th", t(`variable.${variable}`));
+      name.colSpan = 2;
+      group.append(name);
+      return [group, ...leads.map((lead) => {
+        const tr = document.createElement("tr");
+        tr.append(cell("th", `D+${lead}`), verdictCell(variable, lead));
+        return tr;
+      })];
     });
   } else {
     head.append(cell("th", t("blendTest.variable")), ...leads.map((d) => cell("th", `D+${d}`)));
@@ -401,7 +437,26 @@ function renderSingleModels(doc, variable, leads, unit, modelName) {
   document.getElementById("blend-test-models-note").textContent = few ? t("blendTest.fewDays") : "";
 }
 
-async function renderBlendTest(view, names) {
+/** The blend test's own variable switch (temperature, wind, precipitation): never the ranking's. */
+function renderBlendSwitch(verdicts, onChange) {
+  const present = BLEND_TEST_VARIABLES.filter((variable) => verdicts.some((v) => v.variable === variable));
+  if (!present.includes(blendView.variable)) blendView.variable = present[0];
+  const group = document.getElementById("blend-test-variable");
+  group.replaceChildren(...present.map((variable) => {
+    const button = cell("button", t(`blendTest.short.${variable}`));
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(variable === blendView.variable));
+    button.addEventListener("click", () => {
+      if (variable === blendView.variable) return;
+      blendView.variable = variable;
+      blendView.onChange?.();
+      onChange();
+    });
+    return button;
+  }));
+}
+
+async function renderBlendTest(names) {
   const section = document.getElementById("blend-test-section");
   const doc = await blendTestDoc;
   const czRows = blendTestRows(doc, "cz");
@@ -411,6 +466,16 @@ async function renderBlendTest(view, names) {
   const unit = (variable) => doc.units?.[variable] ?? "";
   const modelName = (m) => (m == null ? "–" : (names[m] ?? doc.models?.[m] ?? m));
   const leads = [...new Set(verdicts.map((v) => v.lead_day))].sort((a, b) => a - b);
+  const language = document.documentElement.lang;
+  document.getElementById("blend-test-scope").textContent = [
+    t("blendTest.scopeCz"),
+    doc.test_days && doc.from && doc.to
+      ? t("blendTest.scopeDays", { days: dayCount(doc.test_days, t), range: formatRange(doc.from, doc.to, language) })
+      : null,
+    leads.length > 1 ? t("blendTest.scopeLeads", { first: leads[0], last: leads.at(-1) }) : null,
+  ].filter(Boolean).join(" · ");
+  // the section's own variable (switch above the tables): the phone tables, okres counts, chart, per-model table
+  renderBlendSwitch(verdicts, () => renderBlendTest(names));
   // headline: one model for the whole of Czechia (files before it: the okres table only)
   const czVerdicts = blendVerdicts(czRows, "cz");
   document.getElementById("blend-test-cz").hidden = czVerdicts.length === 0;
@@ -423,22 +488,17 @@ async function renderBlendTest(view, names) {
     });
   }
   verdictTable("blend-test-okres-table", verdicts, leads, unit, modelName, "okres");
-  // the chosen okres (or how the okresy came out) at the page's variable and lead day
-  const variable = blendTestVariable(view.variable);
-  const okresRow = levelOf(view.region) !== "okres" ? null : blendTestRows(doc, view.region).find((r) => r.variable === variable && r.lead_day === view.leadDay);
-  const line = document.getElementById("blend-test-okres");
-  if (okresRow && blendVerdict(okresRow)) {
-    line.textContent = t("blendTest.okres", {
-      region: displayName(okresRow.region_name), variable: t(`variable.${variable}`).toLowerCase(), lead: view.leadDay,
-      verdict: verdictText(blendVerdict(okresRow), unit(variable), true),
-    });
-  } else {
-    const counts = okresVerdictCounts(doc, variable, view.leadDay);
-    line.textContent = counts.better + counts.same + counts.worse
-      ? t("blendTest.okresy", { variable: t(`variable.${variable}`).toLowerCase(), lead: view.leadDay, ...counts })
-      : "";
-  }
-  // MAE by lead day of the page's variable: ours, one model, the best per okres, ...
+  const variable = blendView.variable;
+  const counts = leads
+    .map((lead) => ({ lead, ...okresVerdictCounts(doc, variable, lead) }))
+    .filter((c) => c.better + c.same + c.worse);
+  document.getElementById("blend-test-okres").textContent = counts.length
+    ? t("blendTest.okresyAll", {
+      variable: t(`variable.${variable}`),
+      list: counts.map((c) => t("blendTest.okresyLead", c)).join("; "),
+    })
+    : "";
+  // MAE by lead day of the section's variable: ours, one model, the best per okres, ...
   const lines = blendTestLines(czRows, variable);
   const present = BLEND_TEST_SERIES.filter((s) => lines.some((r) => r.series === s));
   const label = (s) => t(`blendTest.series.${s}`);
@@ -669,6 +729,15 @@ async function main() {
   const names = { ...meta?.models, blend: t("model.blend") };
   const colors = modelColors(names);
   const view = readView();
+  // only periods with scored days: an empty one is never offered nor kept from a link
+  const windows = availableWindows(meta?.windows);
+  view.window = pickWindow(view.window, windows);
+  blendView.variable = view.blendVariable;
+  blendView.onChange = () => {
+    view.blendVariable = blendView.variable;
+    writeView(view);
+  };
+  renderBlendTest(names).then(() => (view.blendVariable = blendView.variable));
 
   async function render() {
     const level = levelOf(view.region);
@@ -680,7 +749,6 @@ async function main() {
     document.getElementById("ranking-title").textContent = t("compare.rankingIn", {
       region: view.region === "cz" ? t("region.cz") : displayName(regionList(rows).find((r) => r.code === view.region)?.name ?? view.region),
     });
-    renderBlendTest(view, names);
     renderSummary(rows, view, names, colors);
     renderTable(rows, view, names);
     renderIntervals(rows, view, names, colors);
@@ -698,7 +766,7 @@ async function main() {
   fillSelect("variable", availableVariables(meta).map((v) => [v, t(`variable.${v}`)]), view.variable);
   // each period with its real dates and days, so a short history explains itself
   const language = document.documentElement.lang;
-  fillSelect("window", WINDOWS.map((w) => [w, windowLabel(w, meta?.windows, t, language)]), view.window);
+  fillSelect("window", windows.map((w) => [w, windowLabel(w, meta?.windows, t, language)]), view.window);
   for (const [id, key, parse] of [
     ["region", "region", String],
     ["variable", "variable", String],
