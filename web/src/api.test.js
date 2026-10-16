@@ -28,10 +28,11 @@ test("an okres file: forecast by hour and part of day, licence and attribution",
   assert.equal(parts.length, 6 * 5);
   assert.deepEqual(Object.keys(parts[0]), [
     "day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol",
-    "sunrise", "sunset",
+    "sunrise", "sunset", "heavy_rain_probability", "heavy_rain",
     "night_min", "coldest_site", "coldest_min", "frost_probability", "frost", "ground_min", "ground_frost",
   ]);
-  // an outlook file from before the frost fields: they are there, null
+  // the saved outlook predates them: null, not missing
+  assert.equal(parts[0].heavy_rain, null);
   assert.equal(parts[0].night_min, null);
 });
 
