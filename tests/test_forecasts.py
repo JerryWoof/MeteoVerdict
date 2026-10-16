@@ -1,5 +1,6 @@
+import dataclasses
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -295,3 +296,138 @@ def test_persistent_failures_stop_like_the_daily_limit_with_partial_results():
         )
     assert isinstance(info.value, fc.QuotaError)
     assert len(seen) == 5 and info.value.partial.height == 2 * 2 * 24
+
+
+# --- several models per request (roadmap: cheaper requests) ---------------------------
+
+ENABLED = [m for m in load_models() if m.enabled]
+
+
+def test_only_models_below_the_minimum_weight_share_a_request():
+    shared = [[m.id for m in g] for g in fc.groups(ENABLED) if len(g) > 1]
+    assert shared == [
+        ["chmi_aladin_cz_1km", "chmi_aladin_central_europe_2km"],  # D+1-2: 0.6 each
+        ["dwd_icon_d2", "geosphere_arome_austria", "knmi_harmonie_arome_europe",
+         "dmi_harmonie_arome_europe"],  # D+1: 0.3 each
+        ["meteofrance_arpege_europe", "meteofrance_arpege_world"],  # D+1-3: 0.9 each
+    ]  # fmt: skip
+    # models of 1.0 or more alone (nothing to save), in the catalogue's order
+    alone = [g[0].id for g in fc.groups(ENABLED) if len(g) == 1]
+    assert alone[:2] == ["dwd_icon_eu", "ecmwf_ifs"]
+    assert sorted(m.id for g in fc.groups(ENABLED) for m in g) == sorted(m.id for m in ENABLED)
+
+
+def test_shared_requests_cost_less_measured_with_the_weight_function():
+    # Open-Meteo: max(1, variables x models / 10 x max(1, days / 14)) per location
+    first, last = date(2026, 10, 5), date(2026, 10, 18)  # one 14-day window
+    before = fc.estimate_calls(1, ENABLED, first, last, grouped=False)
+    after = fc.estimate_calls(1, ENABLED, first, last)
+    assert (before, after) == pytest.approx((23.9, 20.1))  # per station, all 19 models
+    assert fc.estimate_calls(501, ENABLED, first, last) == pytest.approx(10_070.1)  # was 11,974
+    # rain gauges, precipitation only, 28 days: 19 -> 13.8 per gauge
+    gauge = {"variables": ("precipitation",), "max_days": fc.GAUGE_DAYS}
+    first = date(2026, 9, 21)
+    assert fc.estimate_calls(1, ENABLED, first, last, grouped=False, **gauge) == pytest.approx(19)
+    assert fc.estimate_calls(1, ENABLED, first, last, **gauge) == pytest.approx(13.8)
+    # a group never weighs more than the models alone, and stays below the minute's pace
+    for g in fc.groups(ENABLED):
+        alone = sum(fc.call_weight(1, len(fc.hourly_names(m)), 14) for m in g)
+        assert fc.group_weight(1, g, VARIABLES, 14) <= alone
+        assert fc.group_weight(fc.BATCH, g, VARIABLES, 14) <= 500
+
+
+VARIABLES = ("temperature_2m", "precipitation", "wind_speed_10m")
+D1 = [MODELS[i] for i in ("dwd_icon_d2", "geosphere_arome_austria")]
+
+
+def fake_open_meteo(params):
+    """Answers like the Previous Runs API (checked live 2026-10-16): several models give
+    ``<name>_<model>`` columns; ICON-D2 has no data east of 18.6° E, so it is left out of
+    those locations' answers (with one model left the suffix goes), and a request for it
+    alone fails there. Values encode model, station position, lead day and hour."""
+    models = params["models"].split(",")
+    lons = [float(x) for x in params["longitude"].split(",")]
+    names = params["hourly"].split(",")
+    start = datetime.fromisoformat(params["start_date"])
+    days = (datetime.fromisoformat(params["end_date"]) - start).days + 1
+    times = [f"{start + timedelta(hours=h):%Y-%m-%dT%H:%M}" for h in range(24 * days)]
+    results = []
+    for i, lon in enumerate(lons):
+        here = [m for m in models if not (m == "dwd_icon_d2" and lon > 18.6)]
+        if not here:
+            return 400, NO_DATA
+        hourly = {"time": times}
+        for m in here:
+            for name in names:
+                value = [round(lon + len(m) / 100 + int(name[-1]) / 10 + h / 1000, 3)
+                         for h in range(len(times))]  # fmt: skip
+                hourly[name if len(here) == 1 else f"{name}_{m}"] = value
+        results.append({"hourly": hourly, **({"location_id": i} if i else {})})
+    return 200, json.dumps(results if len(results) > 1 else results[0])
+
+
+def test_a_shared_request_gives_the_same_rows_as_one_model_requests():
+    stations = five_stations()
+    first = last = date(2026, 10, 9)
+    uncovered_a: dict[str, set[str]] = {}
+    client, seen = open_meteo(fake_open_meteo)
+    shared = fc.fetch_forecasts(
+        client, stations, D1, first, last, no_wait_budget(), uncovered=uncovered_a
+    )
+    uncovered_b: dict[str, set[str]] = {}
+    alone = []
+    for m in D1:
+        client_b, _ = open_meteo(fake_open_meteo)
+        alone.append(
+            fc.fetch_forecasts(
+                client_b, stations, [m], first, last, no_wait_budget(), uncovered=uncovered_b
+            )
+        )
+    alone = pl.concat(alone)
+    assert shared.schema == alone.schema == pl.Schema(fc.SCHEMA)
+    assert shared.sort(fc.KEYS).equals(alone.sort(fc.KEYS))
+    assert uncovered_a == uncovered_b == {"dwd_icon_d2": {"s3", "s4"}, D1[1].id: set()}
+    # one shared request, then each model alone at the two stations whose answer lacked
+    # ICON-D2 (refused for it: one request for both, then one each to find them)
+    assert seen[0]["models"] == "dwd_icon_d2,geosphere_arome_austria"
+    assert sorted(p["models"] for p in seen[1:]) == ["dwd_icon_d2"] * 3 + [D1[1].id]
+    # the next time, those stations are left out of the shared request and go to
+    # GeoSphere alone: no searching, nothing asked twice
+    client, seen = open_meteo(fake_open_meteo)
+    again = fc.fetch_forecasts(
+        client, stations, D1, first, last, no_wait_budget(), uncovered=uncovered_a
+    )
+    assert again.sort(fc.KEYS).equals(alone.sort(fc.KEYS))
+    assert [(p["models"], p["longitude"].count(",") + 1) for p in seen] == [
+        ("dwd_icon_d2,geosphere_arome_austria", 3),
+        ("geosphere_arome_austria", 2),
+    ]
+
+
+def test_a_shared_request_keeps_each_models_own_first_day():
+    late = dataclasses.replace(D1[1], archive_from=date(2026, 10, 9))
+    client, seen = open_meteo(fake_open_meteo)
+    budget = no_wait_budget()
+    rows = fc.fetch_forecasts(
+        client, five_stations()[:2], [D1[0], late], date(2026, 10, 8), date(2026, 10, 9), budget
+    )
+    assert seen[0]["start_date"] == "2026-10-08" and seen[0]["models"].count(",") == 1
+    first = rows.group_by("model").agg(pl.col("time").min()).sort("model").rows()
+    assert [t.date() for _, t in first] == [date(2026, 10, 8), date(2026, 10, 9)]
+    assert budget.used == 2 * 1.0  # 2 stations x max(1, 3 x 2 / 10)
+    assert fc.estimate_calls(2, [D1[0], late], date(2026, 10, 8), date(2026, 10, 9)) == 2
+
+
+def test_parse_group_reports_models_missing_at_a_location():
+    _, text = fake_open_meteo(
+        {
+            "models": "dwd_icon_d2,geosphere_arome_austria",
+            "longitude": "14.0,18.7",
+            "hourly": ",".join(fc.hourly_names(D1[0])),
+            "start_date": "2026-10-09",
+            "end_date": "2026-10-09",
+        }
+    )
+    rows, missing = fc.parse_group(json.loads(text), ["a", "b"], D1)
+    assert missing == {"dwd_icon_d2": ["b"], "geosphere_arome_austria": ["b"]}
+    assert rows.height == 2 * 24 and set(rows["station_id"]) == {"a"}

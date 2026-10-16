@@ -23,6 +23,7 @@ from meteoverdict import (
     combine,
     farm,
     forecasts,
+    fresh,
     frost,
     gauges,
     leads,
@@ -833,6 +834,14 @@ def fetch_runs(
         datetime,
         typer.Option(formats=["%Y-%m-%d"], help="The backfill's --from (for the shared budget)."),
     ] = datetime(2024, 1, 1),
+    backfill_priority_from: Annotated[
+        datetime | None,
+        typer.Option(
+            formats=["%Y-%m-%d"],
+            help="The backfill's --priority-from: its priority windows come before the "
+            "history too (for the shared budget).",
+        ),
+    ] = None,
 ) -> None:
     """Fetch single model runs (H+1 … H+120) at the station subset from Open-Meteo's
     Single Runs API, resumable within a call budget."""
@@ -863,6 +872,7 @@ def fetch_runs(
             models,
             backfill_from.date(),
             now.date(),
+            backfill_priority_from.date() if backfill_priority_from else None,
         )
         typer.echo(f"budget: {budget_note}")
         if dry_run:
@@ -1544,6 +1554,7 @@ def _publish_aggregates(
     forecast = _forecast_weights(table, scores, station_table, data_dir)
     names = _model_names()
     meta = aggregate.metadata(table, names, datetime.now(UTC))
+    meta["sources"] = fresh.sources(scores)
     written = [
         *aggregate.write_json(table, out, meta),
         aggregate.write_stations(station_table, out),
@@ -1615,7 +1626,8 @@ def station_check_cmd(
     with _chmi_client() as client:
         meta2 = _meta2_tables(client)
     kinds = station_check.networks(table, meta2)
-    scores = pl.scan_parquet(files)
+    # files written before a column was added lack it (see partitions.scan_months)
+    scores = pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
     subsets = {"all": None, **station_check.subsets_by_network(kinds)}
     ranks = station_check.compare_subsets(scores, table, subsets, resamples=resamples)
     summary = station_check.summarize(ranks)
@@ -1679,6 +1691,9 @@ def daily(
         if github_release:
             sync = store.ReleaseSync(_release_store(client), data_dir, log=typer.echo)
             sync.pull(window)
+            # the single runs the recent days' D+N are rebuilt from (read only)
+            oldest = target - timedelta(days=fresh.DAYS + catalogue.MAX_LEAD_DAY + 1)
+            runs.RunsSync(sync.store, data_dir, typer.echo).pull(partitions.months(oldest, target))
         meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
         points = observations.verification_stations(table, meta2)
         months = daily_mod.run(
@@ -1804,9 +1819,25 @@ def backfill(
             help="Windows older than the current ones (last 90 days): always, never, or "
             "after-runs-history (only once the single-runs history is complete: its state "
             "in the release runs-state with --github-release, else runs-state.json in "
-            "--data-dir; never if it cannot be read).",
+            "--data-dir; never if it cannot be read). Priority windows are always allowed.",
         ),
     ] = "always",
+    priority_from: Annotated[
+        datetime | None,
+        typer.Option(
+            formats=["%Y-%m-%d"],
+            help="Priority windows: those ending on or after this day come right after the "
+            "current ones (before the single-runs history and older windows), at the "
+            "station subset of the single runs only (--priority-stations).",
+        ),
+    ] = None,
+    priority_stations: Annotated[
+        Path | None,
+        typer.Option(
+            help="Station subset CSV (column id) for the priority windows. Default: the "
+            "committed subset of the single runs (run-stations.csv).",
+        ),
+    ] = None,
 ) -> None:
     """Backfill history newest first, in 14-day windows, resumable (state in the data dir)."""
     if older_windows not in ("always", "never", "after-runs-history"):
@@ -1819,6 +1850,8 @@ def backfill(
         raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
     table = pl.read_parquet(stations_path)
     models = [m for m in catalogue.load_models() if m.enabled]
+    priority = priority_from.date() if priority_from else None
+    subset = set(runs.load_stations(priority_stations)["id"]) if priority else None
     transport = httpx.HTTPTransport(retries=3)
     with httpx.Client(timeout=300, transport=transport, follow_redirects=True) as client:
         sync = None
@@ -1827,6 +1860,9 @@ def backfill(
             sync.pull_state()
         meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
         points = observations.verification_stations(table, meta2)
+        if priority:
+            n = len(subset & set(points["id"]))
+            typer.echo(f"priority windows: ending since {priority}, at {n} stations")
         older, why = older_windows == "always", "--older-windows never"
         if older_windows == "after-runs-history":
             older, why = runs.history_done(
@@ -1849,6 +1885,8 @@ def backfill(
             gauge_points=_gauge_points(table, meta2, points),
             older=older,
             held_back="" if older else why,
+            priority_from=priority,
+            subset=subset,
         )
     typer.echo(
         f"{result.windows_done} windows done, {budget.used:g} calls used"
@@ -1856,7 +1894,7 @@ def backfill(
     )
     job_summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if job_summary:  # shown on the workflow run page
-        text = backfill_mod.summary(result, budget.used, data_dir, first, last)
+        text = backfill_mod.summary(result, budget.used, data_dir, first, last, priority)
         with open(job_summary, "a", encoding="utf-8") as f:
             f.write(text)
 
