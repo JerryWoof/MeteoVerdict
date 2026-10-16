@@ -10,6 +10,10 @@ then notifies the owner) and stops the daily commit. Warnings are reported only.
   combination weights miss the latest days (in October 2026 ``as_of`` stayed at 30 Sep
   while the daily run "re-scored" up to 14 Oct, as no October day had both forecasts
   and observations yet: normal for up to ~20 days, as forecasts come in 14-day windows);
+* models left out for too short a record: the models the published 90-day comparison
+  leaves out because they have scores on fewer than ``aggregate.MIN_COVERAGE`` of its
+  days (``meta.json`` ``short_record``; a warning: normal for a few weeks after a model is
+  added, as the backfill reaches back);
 * missing stations: under ``MIN_REPORTING`` of the verified stations reported in the
   last ``RECENT_DAYS`` days (the stations missing are listed as a warning);
 * suspicious stations: temperature MAE over the last 90 days (all models) above
@@ -41,6 +45,8 @@ MIN_REPORTING = 0.8
 SUSPICIOUS_FACTOR = 3.0
 SUSPICIOUS_MIN_MAE = 3.0
 LIST_AT_MOST = 15
+#: a model left out for more variables than this is reported with their number only
+LIST_VARIABLES = 3
 
 
 @dataclass(frozen=True)
@@ -77,6 +83,32 @@ def as_of_lag(meta: dict) -> Finding | None:
     )
 
 
+def short_records(meta: dict, window: str = "90d") -> Finding | None:
+    """A warning listing the models ``meta["short_record"]`` says the ``window``
+    comparison leaves out (no ranking, no combination weight) for too short a record."""
+    left_out = (meta.get("short_record") or {}).get(window) or {}
+    if not left_out:
+        return None
+    every = set(meta.get("variables") or []) - {"precipitation"}
+    listed = []
+    for model, facts in sorted(left_out.items()):
+        variables = facts.get("variables") or []
+        if not variables or set(variables) >= every:
+            where = ""
+        elif len(variables) > LIST_VARIABLES:
+            where = f"{len(variables)} variables: "
+        else:
+            where = f"{', '.join(variables)}: "
+        listed.append(f"{model} ({where}{facts['days']} days, {facts['coverage']:.0%})")
+    need = meta.get("min_coverage")
+    share = f"{need:.0%} of the days" if isinstance(need, int | float) else "enough days"
+    return Finding(
+        "warning",
+        f"{len(listed)} models left out of the {window} comparison and weights for too "
+        f"short a record (need {share}): {_listing(listed)}",
+    )
+
+
 def check(
     data_dir: Path,
     station_ids: list[str] | None = None,
@@ -93,6 +125,8 @@ def check(
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
             if (late := as_of_lag(meta)) is not None:
                 findings.append(late)
+            if (short := short_records(meta)) is not None:
+                findings.append(short)
         else:
             findings.append(Finding("warning", f"{meta_path} not found; as_of not checked"))
     first = today - timedelta(days=100)

@@ -228,6 +228,44 @@ def load_stations(path: Path | None = None) -> pl.DataFrame:
 # --- which runs ----------------------------------------------------------------------
 
 
+#: a model is verified run by run (``leads``, ``farm``) when it has at least this share
+#: of the runs in the period (as ``aggregate.MIN_COVERAGE`` for the D+N scores)
+MIN_COVERAGE = 0.8
+
+
+def coverage(forecasts: pl.LazyFrame | pl.DataFrame) -> pl.DataFrame:
+    """``model``, ``runs`` (its runs with a value), ``of`` (runs of any model at the run
+    hours this model has: GEM Global has no 06 and 18 UTC runs), ``coverage`` and
+    ``covered`` (at least ``MIN_COVERAGE``, or no model reaches it).
+
+    The run-by-run fair sets keep only the runs every model compared has; a model added
+    recently (its single runs fetched only since) would otherwise cut them to its days."""
+    frame = forecasts.lazy().select("model", "run").unique()
+    hour = pl.col("run").dt.hour().alias("run_hour")
+    per_hour = frame.group_by(hour).agg(pl.col("run").n_unique().alias("of"))
+    return (
+        frame.with_columns(hour)
+        .group_by("model", "run_hour")
+        .agg(pl.col("run").n_unique().alias("runs"))
+        .join(per_hour, on="run_hour")
+        .group_by("model")
+        .agg(pl.col("runs").sum(), pl.col("of").sum())
+        .with_columns((pl.col("runs") / pl.col("of")).alias("coverage"))
+        .with_columns((pl.col("coverage") >= MIN_COVERAGE).alias("covered"))
+        .with_columns(pl.col("covered") | ~pl.col("covered").any())
+        .sort("model")
+        .collect()
+    )
+
+
+def short_records(cover: pl.DataFrame) -> dict[str, dict]:
+    """``{model: {"runs", "of", "coverage"}}`` of the models left out (``coverage``)."""
+    return {
+        r["model"]: {"runs": r["runs"], "of": r["of"], "coverage": round(r["coverage"], 3)}
+        for r in cover.filter(~pl.col("covered")).iter_rows(named=True)
+    }
+
+
 def key(run: datetime) -> str:
     return f"{run:%Y%m%d%H}"
 

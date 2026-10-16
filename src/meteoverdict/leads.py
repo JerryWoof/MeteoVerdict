@@ -450,9 +450,13 @@ def run_lead_scores(
 ) -> tuple[pl.DataFrame, dict]:
     """Scores of every model by lead hour on the fair set (``COLUMNS``, region "cz"),
     and facts about the sample: ``models`` (runs, pairs, horizon per run hour),
-    ``first_run``, ``last_run``, ``stations``. Runs are processed ``chunk_runs`` at a
+    ``first_run``, ``last_run``, ``stations``, ``short_record`` (the models left out for
+    too few runs, ``runs.short_records``). Runs are processed ``chunk_runs`` at a
     time (the sums are additive), so months of runs fit in memory."""
     forecasts = forecasts.lazy()
+    cover = runs_mod.coverage(forecasts)
+    compared = cover.filter("covered").select("model")
+    forecasts = forecasts.join(compared.lazy(), on="model", how="semi")
     horizon_table = horizons(forecasts)
     required_ = required(horizon_table, models)
     run_list = sorted(forecasts.select("run").unique().collect()["run"].to_list())
@@ -483,7 +487,13 @@ def run_lead_scores(
                 pl.col("run").max().alias("last"),
             )
         )
-    info = {"models": {}, "first_run": None, "last_run": None, "stations": 0}
+    info = {
+        "models": {},
+        "first_run": None,
+        "last_run": None,
+        "stations": 0,
+        "short_record": runs_mod.short_records(cover),
+    }
     if not sums:
         return pl.DataFrame(schema={c: pl.Null for c in COLUMNS}).clear(), info
     totals = pl.concat(sums).group_by(RUN_KEYS).agg(pl.all().sum())
@@ -562,8 +572,11 @@ def runs_document(
             "For each lead hour, variable and run hour only the models that reach that "
             "lead with their own output are compared, on the runs and stations that every "
             "one of them has; the set of models shrinks as short models end. "
-            "run_hour 'all': a model must reach the lead in every run hour."
+            "run_hour 'all': a model must reach the lead in every run hour. Models with "
+            f"fewer than {runs_mod.MIN_COVERAGE:.0%} of the period's runs (short_record, "
+            "e.g. newly added) are left out until they have them."
         ),
+        "short_record": info.get("short_record", {}),
         "first_run": info["first_run"].strftime(stamp) if info["first_run"] else None,
         "last_run": info["last_run"].strftime(stamp) if info["last_run"] else None,
         "stations": info["stations"],

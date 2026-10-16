@@ -258,3 +258,18 @@ def test_the_hourly_correction_is_interpolated_between_the_slots():
         pl.lit(None, pl.Float64).alias(c) for c in combine.SLOT_CORRECTIONS
     )
     assert plain.select(combine.hourly_correction()).to_series().to_list() == [9.0] * 4
+
+
+def test_a_model_with_a_short_record_gets_no_weight():
+    frame = table(
+        [
+            ("temperature_2m", "a", 40, 1.0, 0.0),
+            ("temperature_2m", "b", 40, 2.0, 0.0),
+            ("temperature_2m", "new", 10, 0.5, 0.0),
+        ]
+    ).with_columns((pl.col("model") == "new").alias("short_record"))
+    got = weights_of(combine.weights(frame))
+    assert set(got) == {"a", "b"}
+    assert sum(w for w, _ in got.values()) == pytest.approx(1.0)
+    # tables from before the coverage rule have no short_record column
+    assert set(weights_of(combine.weights(frame.drop("short_record")))) == {"a", "b", "new"}

@@ -2,7 +2,10 @@
 
 For every okres, variable and lead day, each model gets a weight from how well it did
 there over the last 90 days (the okres scores of ``mvd aggregate``, on the same fair
-station-days for all models, with borrowed stations where an okres has few):
+station-days for all models, with borrowed stations where an okres has few). Only the
+models compared there get a weight: a model with scores on fewer than
+``aggregate.MIN_COVERAGE`` of the window's days (``short_record``, e.g. one added
+recently) gets none until it has them, and does not shorten the others' training:
 
 - **temperature and wind**: the forecast is first corrected by the model's mean error
   (bias) there, so the weight is the inverse of the error variance left after that
@@ -100,6 +103,8 @@ def weights(table: pl.DataFrame, window: str = WINDOW) -> pl.DataFrame:
     """
     if "rank" not in table.columns:
         table = table.with_columns(pl.lit(None, pl.Int16).alias("rank"))
+    if "short_record" not in table.columns:  # tables from before the coverage rule
+        table = table.with_columns(pl.lit(False).alias("short_record"))
     by_score = {score: (name, corrected) for name, (score, corrected) in VARIABLES.items()}
     rows = table.filter(
         pl.col("level") == "okres",
@@ -107,6 +112,7 @@ def weights(table: pl.DataFrame, window: str = WINDOW) -> pl.DataFrame:
         pl.col("variable").is_in(list(by_score)),
         pl.col("model") != blend.ID,
         pl.col("enough_stations"),
+        ~pl.col("short_record").fill_null(False),
         pl.col("n") > 0,
         pl.col("rmse").is_not_null(),
     )

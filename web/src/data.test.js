@@ -48,6 +48,14 @@ test("best model per region at one lead day, with ties but without the blend", (
   assert.equal(bestByRegion(records(DOC), 2).get("CZ020").model, "ifs");
 });
 
+test("an unranked variable's best is never a model with too short a record", () => {
+  const rows = [
+    { region: "cz", region_name: "Česko", lead_day: 1, model: "icon", mae: 1.2, rank: null, enough_stations: true },
+    { region: "cz", region_name: "Česko", lead_day: 1, model: "new", mae: 0.9, rank: null, enough_stations: true, short_record: true },
+  ];
+  assert.equal(bestByRegion(rows, 1).get("cz").model, "icon");
+});
+
 test("region colours: best model, too few stations, no data", () => {
   const colors = modelColors(MODELS);
   const best = bestByRegion(records(DOC), 1);

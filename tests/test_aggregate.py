@@ -66,17 +66,74 @@ def test_windows():
 
 
 def test_only_days_every_covering_model_has_are_compared():
-    yesterday = DAY - timedelta(days=1)
+    days = [DAY - timedelta(days=i) for i in range(5)]
     scores = score_rows(
-        [
-            (yesterday, "s1", "a", 1, 1.0),
-            (yesterday, "s1", "b", 1, 2.0),
-            (DAY, "s1", "a", 1, 9.0),  # model b covers s1 but lacks this day: dropped for a too
-        ]
+        [(d, "s1", "a", 1, 1.0) for d in days[1:]]
+        + [(d, "s1", "b", 1, 2.0) for d in days[1:]]
+        # model b covers s1 on 4 of 5 days (80 %), so it is compared, and the day it
+        # lacks is dropped for a too
+        + [(DAY, "s1", "a", 1, 9.0)]
     )
     table = agg.aggregate(scores, STATIONS, windows=("all",))
     cz = table.filter(pl.col("level") == "cz").select("model", "n", "mae", "days").rows()
-    assert cz == [("a", 24, 1.0, 1), ("b", 24, 2.0, 1)]
+    assert cz == [("a", 96, 1.0, 4), ("b", 96, 2.0, 4)]
+    assert not table["short_record"].any()
+
+
+def _with_new_model(old_days: int = 40, new_days: int = 10) -> pl.DataFrame:
+    """Models a and b on ``old_days`` days, model c (added recently) on the last
+    ``new_days`` of them, at all three stations."""
+    days = [DAY - timedelta(days=i) for i in range(old_days)]
+    rows = [
+        (d, s, m, 1, e)
+        for d in days
+        for s in ("s1", "s2", "s3")
+        for m, e in (("a", 1.0), ("b", 2.0))
+    ]
+    rows += [(d, s, "c", 1, 0.5) for d in days[:new_days] for s in ("s1", "s2", "s3")]
+    return score_rows(rows)
+
+
+def test_a_model_with_a_short_record_does_not_cut_the_others_days():
+    # October 2026: eight models added with 10 days cut the 90-day window to 10 days
+    table = agg.aggregate(_with_new_model(), STATIONS, windows=("90d",))
+    cz = table.filter(pl.col("level") == "cz")
+    got = {
+        m: (d, s, round(c, 2))
+        for m, d, s, c in cz.select("model", "days", "short_record", "coverage").rows()
+    }
+    assert got == {"a": (40, False, 1.0), "b": (40, False, 1.0), "c": (10, True, 0.25)}
+    # its own rows: its own station-days, so its MAE is still its own
+    assert cz.filter(pl.col("model") == "c")["mae"].item() == 0.5
+    # every level and region compares a and b on all their days
+    compared = table.filter(~pl.col("short_record"))
+    assert set(compared["days"]) == {40}
+    assert set(compared["model"]) == {"a", "b"}
+
+
+def test_a_new_model_is_compared_once_it_has_enough_days():
+    table = agg.aggregate(_with_new_model(40, 32), STATIONS, windows=("90d",))
+    cz = table.filter(pl.col("level") == "cz")
+    assert not cz["short_record"].any()
+    assert set(cz["days"]) == {32}  # compared on the days all three have
+
+
+def test_coverage_falls_back_to_all_models_when_none_has_enough():
+    days = [DAY - timedelta(days=i) for i in range(4)]
+    scores = score_rows(
+        [(d, "s1", "a", 1, 1.0) for d in days[:2]] + [(d, "s1", "b", 1, 1.0) for d in days[2:]]
+    )
+    cover = agg.coverage(scores)
+    assert cover["covered"].to_list() == [True, True]
+
+
+def test_metadata_lists_the_models_left_out():
+    table = agg.aggregate(_with_new_model(), STATIONS, windows=("90d",))
+    meta = agg.metadata(table, {}, datetime(2026, 10, 16, tzinfo=UTC))
+    assert meta["short_record"] == {
+        "90d": {"c": {"coverage": 0.25, "days": 10, "variables": ["temperature_2m"]}}
+    }
+    assert meta["min_coverage"] == agg.MIN_COVERAGE
 
 
 def test_regions_compare_all_their_models_on_the_same_stations():
