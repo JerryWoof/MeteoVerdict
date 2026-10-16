@@ -211,15 +211,16 @@ function renderTable(rows, view, names) {
   const data = rankingTable(rows, view.leadDay, view.region);
   const body = data.map((r) => {
     const tr = document.createElement("tr");
-    if (r.rank == null) tr.className = "baseline";
+    if (r.short) tr.className = "short";
+    else if (r.rank == null) tr.className = "baseline";
     else if (r.rank === 1) tr.className = "winner";
     const ci = r.ci && r.rank !== 1 ? ` ${t("compare.interval", { low: fmt(r.ci[0], true), high: fmt(r.ci[1], true) })}` : "";
     const values = {
       rank: r.rank == null ? "–" : `${r.tied ? "≈" : ""}${r.rank}`,
-      model: r.model === "blend" ? t("model.blend") : (names[r.model] ?? r.model),
+      model: r.model === "blend" ? t("model.blend") : (names[r.model] ?? r.model) + (r.short ? ` (${t("compare.shortRecord")})` : ""),
       mae: fmt(r.mae),
-      diff: r.rank === 1 ? t("compare.best") : r.diff == null ? "–" : `${fmt(r.diff, true)}${ci}`,
-      skill: pct(r.skill),
+      diff: r.rank === 1 ? t("compare.best") : r.diff == null || r.short ? "–" : `${fmt(r.diff, true)}${ci}`,
+      skill: r.short ? "–" : pct(r.skill),
       bias: fmt(r.bias, true),
       rmse: fmt(r.rmse),
       ets: fmt(r.ets),

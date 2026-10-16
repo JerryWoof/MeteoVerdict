@@ -157,3 +157,14 @@ def test_a_region_ranks_its_models_on_the_same_stations():
     got = cz(ranking.rank(data, STATIONS, resamples=100))
     # without s3 for both, a stays ahead; counting s3 for a alone would put b first
     assert got.select("model", "rank").rows() == [("a", 1), ("b", 2)]
+
+
+def test_a_model_with_a_short_record_is_not_ranked_and_does_not_cut_the_others():
+    # a and b on 20 days, c (added recently) on the last 4: a and b are ranked on all
+    # 20 days and c is not ranked at all
+    errors = {"a": [1.0] * 20, "b": [2.0] * 20}
+    rows = scores(errors, stations=("s1", "s2", "s3"))
+    new = scores({"c": [0.1] * 4}, stations=("s1", "s2", "s3"))
+    table = cz(ranking.rank(pl.concat([rows, new]), STATIONS, resamples=100))
+    assert table.select("model", "rank").rows() == [("a", 1), ("b", 2)]
+    assert table.filter(pl.col("model") == "a")["clear_winner"].item()
