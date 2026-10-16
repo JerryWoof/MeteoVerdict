@@ -10,7 +10,7 @@ import {
 import { setUpLanguage } from "./i18n.js";
 import { glyph } from "./icons.js";
 import { statusText } from "./status.js";
-import { dayLabel, parseOutlook, sunFor, today } from "./tv.js";
+import { dayLabel, parseOutlook, rowFor, sunFor, today } from "./tv.js";
 
 const t = setUpLanguage();
 const TIME_ZONE = "Europe/Prague";
@@ -62,12 +62,13 @@ function sunCell(sun) {
   return td;
 }
 
-function renderDays(days, sunOf) {
+function renderDays(days, sunOf, gustOf) {
   const table = document.getElementById("days");
   const head = document.createElement("tr");
-  // older outlook files have no sun times: then no column at all
+  // older outlook files have no sun times or gusts: then no column at all
   const withSun = days.some((d) => sunOf(d.day));
-  const columns = ["day", "tmin", "tmax", "precipitation", "wind", ...(withSun ? ["sun"] : [])];
+  const withGust = days.some((d) => gustOf(d.day)?.gust != null);
+  const columns = ["day", "tmin", "tmax", "precipitation", "wind", ...(withGust ? ["gust"] : []), ...(withSun ? ["sun"] : [])];
   for (const key of columns) {
     head.append(cell("th", t(`forecast.col.${key}`), key === "day" || key === "sun" ? "" : "num"));
   }
@@ -86,6 +87,13 @@ function renderDays(days, sunOf) {
       cell("td", fmt(d.precipitation), "num"),
       cell("td", fmt(d.wind), "num"),
     );
+    if (withGust) {
+      // from outlook.json (the single runs, corrected): null beyond the newest run
+      const gust = gustOf(d.day);
+      const td = cell("td", fmt(gust?.gust), gust?.gust_warning ? "num gust-warning" : "num");
+      if (gust?.gust_warning) td.title = t("tv.gustWarning");
+      tr.append(td);
+    }
     if (withSun) tr.append(sunCell(sunOf(d.day)));
     return tr;
   });
@@ -213,7 +221,8 @@ async function show(point, names, colors, outlook) {
   const now = Date.now();
   const combined = Object.fromEntries(VARIABLES.map((v) => [v, combine(forecast, table, v, now)]));
   const sunOf = (day) => sunFor(outlook, point.code, day);
-  renderDays(dailySummary(forecast.times, combined, TIME_ZONE), sunOf);
+  const gustOf = (day) => rowFor(outlook, point.code, day, "day");
+  renderDays(dailySummary(forecast.times, combined, TIME_ZONE), sunOf, gustOf);
   const nights = nightBands(sunOf, forecast.times[0], forecast.times.at(-1), TIME_ZONE);
   document.getElementById("charts").replaceChildren(
     ...VARIABLES.map((v) => chart(forecast, combined[v], table, v, colors, names, nights)),
@@ -226,7 +235,8 @@ async function main() {
   const [meta, index, outlookDoc] = await Promise.all([
     getJson("data/scores/meta.json"),
     getJson("data/scores/forecast/okresy.json"),
-    // only for sunrise and sunset; without it (or in older files) the page shows neither
+    // only for sunrise and sunset and the gusts; without it (or in older files) the page
+    // shows none of them
     getJson("data/scores/outlook.json"),
   ]);
   const outlook = parseOutlook(outlookDoc);
