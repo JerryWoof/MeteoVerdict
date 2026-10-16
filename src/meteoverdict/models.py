@@ -45,6 +45,8 @@ _OPTIONAL = {
     "coarser_step_h",
     "runs_from",
     "run_hours",
+    "previous_runs_step_h",
+    "previous_runs_max_lead_h",
 }
 
 
@@ -71,6 +73,13 @@ class Model:
     runs_from: date | None = None
     #: UTC hours of its runs in the Single Runs API (GEM Global: 00 and 12 only)
     run_hours: tuple[int, ...] = RUN_HOURS
+    #: hours between the runs in Open-Meteo's Previous Runs archive when below 6
+    #: (ICON-D2, GeoSphere and DMI 3, KNMI 1): the runs in between are not in the Single
+    #: Runs data, so D+N rebuilt from it (``fresh``) is exact only at some hours
+    previous_runs_step_h: int = 6
+    #: run hour (UTC) -> last lead hour of those runs in the Previous Runs archive, where
+    #: it is shorter than in the Single Runs API (UKMO: the 06 and 18 UTC runs make no D+2)
+    previous_runs_max_lead_h: dict[int, int] = field(default_factory=dict)
 
     def available_from(self, variable: str) -> date:
         """First day with D+1 forecasts of ``variable`` in the Previous Runs archive."""
@@ -143,8 +152,24 @@ def _parse(entry: Any, index: int) -> Model:
         raise ModelCatalogError(
             f"models[{index}]: variable_from must map {VARIABLES} to dates after archive_from"
         )
+    step = entry.get("previous_runs_step_h", 6)
+    if isinstance(step, bool) or step not in (1, 2, 3, 6):
+        raise ModelCatalogError(f"models[{index}]: previous_runs_step_h must be 1, 2, 3 or 6")
+    max_lead = entry.get("previous_runs_max_lead_h") or {}
+    if not isinstance(max_lead, dict) or not all(
+        h in RUN_HOURS and isinstance(n, int) and not isinstance(n, bool) and n > 0
+        for h, n in max_lead.items()
+    ):
+        raise ModelCatalogError(
+            f"models[{index}]: previous_runs_max_lead_h must map run hours {RUN_HOURS} to hours"
+        )
     model = Model(
-        **{**entry, "variable_from": variable_from, "run_hours": tuple(sorted(set(run_hours)))}
+        **{
+            **entry,
+            "variable_from": variable_from,
+            "run_hours": tuple(sorted(set(run_hours))),
+            "previous_runs_max_lead_h": dict(max_lead),
+        }
     )
     if model.step_hours not in (1, 3, 6) or model.forecast_days < 1:
         raise ModelCatalogError(f"{model.id}: implausible step_hours or forecast_days")

@@ -611,6 +611,17 @@ def test_shared_budget_ignores_older_windows_but_not_new_models(tmp_path):
     done.fc_done -= {backfill.fc_key(m, *oldest) for m in MODELS}
     assert backfill.pending_windows(MODELS, first, today, done) == [oldest]
     assert backfill.share_left(MODELS, first, today, done, 4500)[0] == 4500
+    # ... unless it is a priority window (one year back): those come before this history
+    calls, why = runs.shared_budget(
+        850, 4500, (0, 2500), lambda: done, MODELS, first, today, priority_from=first
+    )
+    assert calls == 850 and "1 priority backfill window pending" in why
+    # fetched at the station subset is enough
+    done.fc_done |= {backfill.subset_key(m, *oldest) for m in MODELS}
+    calls, why = runs.shared_budget(
+        850, 4500, (0, 2500), lambda: done, MODELS, first, today, priority_from=first
+    )
+    assert calls == 3350 and "its priority windows (since 2026-05-01) are done" in why
     # a model added later is pending in every current window: nothing until fetched
     calls, why = shared(backfill_state(tmp_path, today, MODELS[:-1]), today)
     assert calls == 850 and "5 current backfill windows pending" in why

@@ -28,6 +28,10 @@ One row per day, station, model, lead day and variable with the additive sums of
   models by time of day (night inversions at 06 UTC, afternoon at 12 UTC).
 
 The mean of all models (``meteoverdict.blend``) is scored as one more model, ``blend``.
+
+``source`` says where the forecasts came from: ``previous_runs`` here; ``fresh.mark``
+sets ``single_runs`` for the recent days rebuilt from the single runs (score files
+written before 2026-10-16 lack the column: Previous Runs).
 """
 
 from __future__ import annotations
@@ -40,6 +44,10 @@ from meteoverdict import align, blend, metrics
 from meteoverdict.models import Model
 
 KEYS = ["date", "station_id", "model", "lead_day", "variable"]
+#: ``source`` of a score row: D+N forecasts of the Previous Runs API (the backfill), or
+#: rebuilt from the single runs for the days the backfill has not reached (``fresh``)
+PREVIOUS_RUNS = "previous_runs"
+SINGLE_RUNS = "single_runs"
 #: Hours (UTC) at which every model, also the 6-hourly ones, has native output; the
 #: temperature at each is scored separately (roadmap 5.1b), e.g. 06 UTC for inversions.
 SYNOPTIC_HOURS = (0, 6, 12, 18)
@@ -124,6 +132,7 @@ def daily_scores(
     table = (
         pl.concat([hourly, fair, synoptic, daily, climatological, maximum], how="diagonal_relaxed")
         .filter(pl.col("date").is_between(start, end))
+        .with_columns(pl.lit(PREVIOUS_RUNS).alias("source"))
         .sort(KEYS)
         .collect()
     )
