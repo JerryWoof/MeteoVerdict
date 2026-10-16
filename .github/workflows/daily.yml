@@ -6,9 +6,10 @@ name: Daily
 # full data to the release data-latest. Last, the error by lead hour of every model
 # (leads.json, from the single runs of runs.yml) and of ALADIN from our own archive
 # (leads-aladin.json), the farmers' event skill (farm.json: frost, gusts, 3-hour
-# rain from the same single runs) and the out-of-sample test of our combined forecast
-# against the best single model (blend-test.json), each allowed to fail without
-# failing the run.
+# rain from the same single runs), the out-of-sample test of our combined forecast
+# against the best single model (blend-test.json) and the night-minimum corrections
+# for the outlook's frost fields (frost.json), each allowed to fail without failing
+# the run.
 # No Open-Meteo calls: forecasts come from the backfill and single-runs workflows (the
 # days the backfill's 14-day windows have not reached are scored from D+N rebuilt from
 # the single runs, read from the releases runs-YYYY-MM; docs/data-sources.md).
@@ -81,5 +82,13 @@ jobs:
         continue-on-error: true
         timeout-minutes: 30
         run: uv run --frozen mvd blend-test --github-release --publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Frost calibration for the outlook (night minimum, frost, ground frost)
+        # optional, like the lead hours; the outlook keeps the last frost.json. D+N
+        # forecasts vs ČHMÚ TMInoc of the last 60 nights, no Open-Meteo calls
+        continue-on-error: true
+        timeout-minutes: 20
+        run: uv run --frozen mvd frost-fit --github-release --publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
