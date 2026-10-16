@@ -30,10 +30,12 @@ test("an okres file: forecast by hour and part of day, licence and attribution",
     "day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol",
     "sunrise", "sunset", "heavy_rain_probability", "heavy_rain",
     "night_min", "coldest_site", "coldest_min", "frost_probability", "frost", "ground_min", "ground_frost",
+    "gust", "gust_warning",
   ]);
   // the saved outlook predates them: null, not missing
   assert.equal(parts[0].heavy_rain, null);
   assert.equal(parts[0].night_min, null);
+  assert.equal(parts[0].gust, null);
 });
 
 test("the frost fields of an outlook row are passed through", () => {
@@ -45,6 +47,14 @@ test("the frost fields of an outlook row are passed through", () => {
   assert.equal(night.coldest_site, "Valley");
   assert.equal(night.frost, true);
   assert.equal(night.ground_frost, true);
+});
+
+test("the gust fields of an outlook row are passed through", () => {
+  const columns = [...OUTLOOK.columns, "gust", "gust_warning"];
+  const rows = OUTLOOK.rows.map((r) => [...r, 14.2, true]);
+  const doc = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, weightsDoc: WEIGHTS, scores: SCORES, meta: META });
+  assert.equal(doc.forecast.parts[0].gust, 14.2);
+  assert.equal(doc.forecast.parts[0].gust_warning, true);
 });
 
 test("model ranking per variable and lead day, with the weights of our forecast", () => {
