@@ -10,7 +10,9 @@ night 0-6, morning 6-12, afternoon 12-18, evening 18-24.
 Per part of day and per whole day: minimum and maximum of the combined temperature,
 combined precipitation total, **probability of precipitation** (the share of models
 whose own total for that period is at least ``WET_MM``, every model counting the same;
-averaging rain smooths it, see docs/forecast-research.md), the highest combined hourly
+averaging rain smooths it, see docs/forecast-research.md; for parts of day blended 50/50
+with a calibrated probability when ``rain-calibration.json`` is there, see
+``meteoverdict.rain_calibration``; with it also a heavy-rain flag), the highest combined hourly
 wind, mean cloud cover, hours of sunshine and a weather symbol. Cloud cover and
 sunshine are the plain mean of the models corrected against ČHMÚ observations
 (``meteoverdict.sun_cloud_gust``: sunshine as a share of the day length, refitted
@@ -34,8 +36,8 @@ from zoneinfo import ZoneInfo
 import httpx
 import polars as pl
 
-from meteoverdict import sun_cloud_gust
-from meteoverdict.combine import combine_values
+from meteoverdict import rain_calibration, sun_cloud_gust
+from meteoverdict.combine import combine_values, okres_points
 from meteoverdict.forecasts import _reason, call_weight
 from meteoverdict.sun import sun_times
 
@@ -291,13 +293,27 @@ def _local(frame: pl.DataFrame, hour_ending: bool = False) -> pl.DataFrame:
     return frame.with_columns(local.dt.date().alias("day"), part.alias("part"))
 
 
-def probability(fc: pl.DataFrame, weights: pl.DataFrame, now: datetime) -> pl.DataFrame:
+def probability(
+    fc: pl.DataFrame,
+    weights: pl.DataFrame,
+    now: datetime,
+    calibration: rain_calibration.Calibration | None = None,
+    points: pl.DataFrame | None = None,
+) -> pl.DataFrame:
     """Per okres, day and part (and ``part`` = "day" for whole days): the share of
     models whose own precipitation total is at least ``WET_MM``. Only models with
     precipitation weights for the okres that cover as many hours of the period as the
     longest one count, each the same: the weights come from the error of the amounts and
     favour a model (AIFS) that is the worst at rain or no rain (September 2026: Brier
-    score 0.071 weighted against 0.070 with equal weights)."""
+    score 0.071 weighted against 0.070 with equal weights).
+
+    With a ``calibration`` (``meteoverdict.rain_calibration``; neighbours from
+    ``points``) the parts of day get the blended calibrated probability, the raw share
+    kept as ``model_share``, and ``heavy_rain_probability`` and ``heavy_rain`` (a day:
+    the highest of its parts, and whether any part is flagged)."""
+    nbrs = None
+    if calibration is not None:
+        nbrs = rain_calibration.neighbours(points if points is not None else okres_points())
     lead = _lead_weights(weights).filter(pl.col("variable") == "precipitation")
     rows = _local(with_lead_and_fade(fc, now).drop_nulls("precipitation"), hour_ending=True)
     frames = []
@@ -313,13 +329,31 @@ def probability(fc: pl.DataFrame, weights: pl.DataFrame, now: datetime) -> pl.Da
             # a model ending inside the period would undercount its rain
             .filter(pl.col("hours") == pl.col("hours").max().over(keys))
             .join(lead, on=["okres", "lead_day", "model"])
-            .group_by(keys)
-            .agg((pl.col("precipitation") >= WET_MM).mean().alias("rain_probability"))
+            .select(
+                *keys,
+                pl.col("lead_day").alias("lead"),
+                "model",
+                pl.col("precipitation").alias("fc"),
+            )
         )
         if period == "day":
-            totals = totals.with_columns(pl.lit("day").alias("part"))
-        frames.append(totals.select("okres", "day", "part", "rain_probability"))
-    return pl.concat(frames)
+            totals = rain_calibration.apply(totals, None, None).with_columns(
+                pl.lit("day").alias("part")
+            )
+        else:
+            totals = rain_calibration.apply(totals, calibration, nbrs)
+        frames.append(totals)
+    parts, days = frames
+    heavy = parts.group_by("okres", "day").agg(
+        pl.col("heavy_rain_probability").max(),
+        pl.when(pl.col("heavy_rain").is_not_null().any()).then(pl.col("heavy_rain").any()),
+    )
+    days = days.drop("heavy_rain_probability", "heavy_rain").join(
+        heavy, on=["okres", "day"], how="left"
+    )
+    columns = ["okres", "day", "part", "rain_probability", "model_share", "calibrated"]
+    columns += ["heavy_rain_probability", "heavy_rain"]
+    return pl.concat([parts.select(columns), days.select(columns)])
 
 
 def symbol(
@@ -327,18 +361,23 @@ def symbol(
     precipitation: float | None,
     chance: float | None,
     temperature: float | None,
+    share: float | None = None,
+    showers_at: float = SHOWER_PROBABILITY,
 ) -> str | None:
-    """Weather symbol: precipitation when likely, else sky by cloud cover."""
+    """Weather symbol: precipitation when likely, else sky by cloud cover. Rain (sleet,
+    snow) by ``share``, the raw share of wet models, when given (else ``chance``);
+    showers when ``chance`` is at least ``showers_at``."""
     if cloud is None and chance is None:
         return None
-    wet = (chance or 0) >= RAIN_PROBABILITY and (precipitation or 0) >= RAIN_MM
+    wet_share = chance if share is None else share
+    wet = (wet_share or 0) >= RAIN_PROBABILITY and (precipitation or 0) >= RAIN_MM
     if wet:
         if temperature is not None and temperature <= SNOW_AT_OR_BELOW:
             return "snow"
         if temperature is not None and temperature <= SLEET_AT_OR_BELOW:
             return "sleet"
         return "rain"
-    if (chance or 0) >= SHOWER_PROBABILITY:
+    if (chance or 0) >= showers_at:
         return "showers"
     if cloud is None:
         return None
@@ -390,16 +429,20 @@ def summarise(hourly: pl.DataFrame, chances: pl.DataFrame) -> pl.DataFrame:
     )
     table = pl.concat([parts, days], how="diagonal_relaxed")
     table = table.join(chances, on=["okres", "day", "part"], how="left")
+    for name, dtype in (("model_share", pl.Float64), ("calibrated", pl.Boolean)):
+        if name not in table.columns:
+            table = table.with_columns(pl.lit(None, dtype).alias(name))
+    showers = rain_calibration.SHOWER_PROBABILITY
     symbols = [
-        symbol(c, p, r, t)
-        for c, p, r, t in table.select(
-            "cloud", "precipitation", "rain_probability", "tmean"
+        symbol(c, p, r, t, s, showers if k else SHOWER_PROBABILITY)
+        for c, p, r, t, s, k in table.select(
+            "cloud", "precipitation", "rain_probability", "tmean", "model_share", "calibrated"
         ).iter_rows()
     ]
     order = {name: i for i, name in enumerate([*PARTS, "day"])}
     return (
         table.with_columns(pl.Series("symbol", symbols, pl.String))
-        .drop("hours", "tmean")
+        .drop("hours", "tmean", "model_share", "calibrated")
         .with_columns(pl.col("part").replace_strict(order, return_dtype=pl.Int8).alias("order"))
         .sort("okres", "day", "order")
         .drop("order")
@@ -420,6 +463,9 @@ COLUMNS = (
     "symbol",
     "sunrise",
     "sunset",
+    # optional, with a rain calibration only (null otherwise): P(>= 5 mm) and its flag
+    "heavy_rain_probability",
+    "heavy_rain",
 )
 
 
@@ -449,17 +495,25 @@ def with_sun(table: pl.DataFrame, points: pl.DataFrame) -> pl.DataFrame:
 def write(table: pl.DataFrame, points: pl.DataFrame, path: Path, generated: datetime) -> Path:
     """``outlook.json``: ``{"generated", "time_zone", "parts", "days", "okresy",
     "columns", "rows"}``, numbers rounded to one decimal (probability to two)."""
-    rounded = table.select(
-        pl.col("okres"),
-        pl.col("day").cast(pl.String),
-        pl.col("part"),
-        *[pl.col(c).round(1) for c in ("tmin", "tmax", "precipitation", "wind", "sunshine")],
-        pl.col("rain_probability").round(2),
-        pl.col("cloud").round(0).cast(pl.Int16, strict=False),
-        pl.col("symbol"),
-        pl.col("sunrise"),
-        pl.col("sunset"),
-    ).select(COLUMNS)
+    rounded = (
+        table.select(
+            pl.col("okres"),
+            pl.col("day").cast(pl.String),
+            pl.col("part"),
+            *[pl.col(c).round(1) for c in ("tmin", "tmax", "precipitation", "wind", "sunshine")],
+            pl.col("rain_probability").round(2),
+            pl.col("cloud").round(0).cast(pl.Int16, strict=False),
+            pl.col("symbol"),
+            pl.col("sunrise"),
+            pl.col("sunset"),
+            *[
+                (pl.col(c) if c in table.columns else pl.lit(None, t)).alias(c)
+                for c, t in (("heavy_rain_probability", pl.Float64), ("heavy_rain", pl.Boolean))
+            ],
+        )
+        .with_columns(pl.col("heavy_rain_probability").round(2))
+        .select(COLUMNS)
+    )
     doc = {
         "generated": generated.isoformat(timespec="minutes"),
         "time_zone": TIME_ZONE,
@@ -513,11 +567,13 @@ def outlook(
     points: pl.DataFrame,
     now: datetime | None = None,
     sleep: Callable[[float], None] = lambda _: None,
+    calibration: rain_calibration.Calibration | None = None,
     corrections: dict | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Fetch, combine and summarise for all ``points`` (code, name, lat, lon) that have
     weights: the parts-of-day table and the combined hourly series (with the plain
-    means of cloud and sunshine as ``cloud_cover_raw`` and ``sunshine_duration_raw``).
+    means of cloud and sunshine as ``cloud_cover_raw`` and ``sunshine_duration_raw``);
+    with a rain ``calibration``, calibrated probabilities of precipitation;
     ``corrections``: the coefficients of ``sun_cloud_gust`` (default: the bootstrap)."""
     now = now or datetime.now(UTC)
     points = points.filter(pl.col("code").is_in(weights["region"].unique().to_list()))
@@ -528,5 +584,5 @@ def outlook(
     hourly = sun_cloud_gust.correct_hourly(
         hourly, points, corrections or sun_cloud_gust.load(), now
     )
-    table = summarise(hourly, probability(fc, weights, now))
+    table = summarise(hourly, probability(fc, weights, now, calibration, points))
     return with_sun(table, points), hourly

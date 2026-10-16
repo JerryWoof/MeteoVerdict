@@ -19,6 +19,8 @@ export const HOURLY = ["temperature_2m", "precipitation", "wind_speed_10m", "clo
 const PART_FIELDS = [
   "day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol",
   "sunrise", "sunset",
+  // optional (null without the rain calibration): P(>= 5 mm) in the period and its flag
+  "heavy_rain_probability", "heavy_rain",
 ];
 
 const round = (v, digits) => (v == null ? null : Number(v.toFixed(digits)));
