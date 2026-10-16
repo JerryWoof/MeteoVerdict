@@ -40,6 +40,7 @@ from meteoverdict import (
     station_pages,
     stations,
     store,
+    sun_cloud_gust,
 )
 from meteoverdict import backfill as backfill_mod
 from meteoverdict import daily as daily_mod
@@ -1026,9 +1027,21 @@ def outlook_cmd(
             "--github-release",
             help="Take aggregates.parquet (and rain-calibration.json) from and put "
             "outlook.json and outlook-hourly.json into the release data-latest (GITHUB_TOKEN, "
-            "GITHUB_REPOSITORY).",
+            "GITHUB_REPOSITORY); take the sunshine/cloud coefficients from there and "
+            "archive the plain model means in the release outlook-archive.",
         ),
     ] = False,
+    corrections_path: Annotated[
+        Path,
+        typer.Option(
+            "--corrections",
+            help="Sunshine/cloud/gust coefficients from `mvd sun-cloud-gust` "
+            "(missing: the bootstrap in the package).",
+        ),
+    ] = Path("data/sun-cloud-gust.json"),
+    archive_dir: Annotated[
+        Path, typer.Option(help="Folder of the monthly archive of the plain model means.")
+    ] = Path("data/outlook-archive"),
 ) -> None:
     """TV-style forecast for every okres: today's models combined by their okres scores."""
     meter = _OpenMeteoMeter()
@@ -1042,6 +1055,9 @@ def outlook_cmd(
             releases.download(store.LATEST_TAG, "aggregates.parquet", aggregates_path)
             if rain_calibration.FILE in releases.names(store.LATEST_TAG):
                 releases.download(store.LATEST_TAG, rain_calibration.FILE, calibration_path)
+            if sun_cloud_gust.NAME in releases.names(store.LATEST_TAG):
+                releases.download(store.LATEST_TAG, sun_cloud_gust.NAME, corrections_path)
+        corrections = sun_cloud_gust.load(corrections_path)
         if not aggregates_path.exists():
             raise typer.BadParameter(f"{aggregates_path} not found; run `mvd aggregate`")
         weights = combine.weights(pl.read_parquet(aggregates_path))
@@ -1052,7 +1068,12 @@ def outlook_cmd(
         calibration = rain_calibration.load(calibration_path, log=typer.echo)
         try:
             table, hourly = outlook.outlook(
-                client, weights, points, sleep=time.sleep, calibration=calibration
+                client,
+                weights,
+                points,
+                sleep=time.sleep,
+                calibration=calibration,
+                corrections=corrections,
             )
         finally:  # also when it fails: the calls count against the daily budget
             typer.echo(meter.line())
@@ -1063,7 +1084,115 @@ def outlook_cmd(
         if releases:
             releases.put(store.LATEST_TAG, "outlook.json", path)
             releases.put(store.LATEST_TAG, "outlook-hourly.json", hourly_path)
+        try:  # training data for the corrections; must not fail the outlook
+            _archive_outlook(client, hourly, now, archive_dir, github_release)
+        except Exception as exc:
+            typer.echo(f"mvd outlook: archive not updated: {exc}", err=True)
     typer.echo(f"{table['okres'].n_unique()} okresy, {table.height} rows → {path}")
+
+
+def _archive_outlook(
+    client: httpx.Client, hourly: pl.DataFrame, now: datetime, folder: Path, github: bool
+) -> None:
+    """Add this run's plain model means of cloud and sunshine to the month file (and to
+    the release outlook-archive)."""
+    tag, name = sun_cloud_gust.archive_asset(f"{now:%Y-%m}")
+    path = folder / name
+    archive = None
+    if github:
+        archive = GitHubReleaseStore(
+            client, *_github_credentials(), notes=sun_cloud_gust.ARCHIVE_NOTES
+        )
+        if name in archive.assets(tag):
+            archive.download(tag, name, path)
+    sun_cloud_gust.append_archive(path, sun_cloud_gust.archive_rows(hourly, now))
+    if archive:
+        archive.put(tag, name, path, label=store.sha256(path))
+    typer.echo(f"archived the plain means → {path}")
+
+
+@app.command("sun-cloud-gust")
+def sun_cloud_gust_cmd(
+    archive_dir: Annotated[
+        Path, typer.Option(help="Folder of the outlook's monthly archive.")
+    ] = Path("data/outlook-archive"),
+    chmi_dir: Annotated[
+        Path, typer.Option(help="ČHMÚ archive folder (<tag>/<name>), as chmi-archive.")
+    ] = Path("data/chmi"),
+    data_dir: Annotated[Path, typer.Option(help="Folder with runs/ (single runs).")] = Path("data"),
+    out: Annotated[Path, typer.Option(help="The coefficients (JSON).")] = Path(
+        "data/sun-cloud-gust.json"
+    ),
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Download the archive, the ČHMÚ files, the single runs and the current "
+            "coefficients from GitHub Releases first (read only).",
+        ),
+    ] = False,
+    publish: Annotated[
+        bool, typer.Option("--publish", help="Put the JSON into the release data-latest.")
+    ] = False,
+) -> None:
+    """Refit the sunshine, cloud and gust corrections of the outlook on the last 60 days
+    of its archived forecasts and ČHMÚ observations (needs 21 days, else keeps the
+    current or bootstrap coefficients). No Open-Meteo calls."""
+    if publish and not github_release:
+        raise typer.BadParameter("--publish needs --github-release")
+    now = datetime.now(UTC)
+    today = now.date()
+    first = today - timedelta(days=sun_cloud_gust.WINDOW_DAYS + sun_cloud_gust.MAX_LEAD + 1)
+    months = partitions.months(first, today)
+    with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
+        releases = _release_store(client) if github_release else None
+        if releases:
+            if sun_cloud_gust.NAME in releases.names(store.LATEST_TAG):
+                releases.download(store.LATEST_TAG, sun_cloud_gust.NAME, out)
+            archive = GitHubReleaseStore(client, *_github_credentials())
+            names = archive.assets(sun_cloud_gust.ARCHIVE_TAG)
+            for month in months:
+                tag, name = sun_cloud_gust.archive_asset(month)
+                if name in names:
+                    archive.download(tag, name, archive_dir / name)
+            chmi_archive.sync(
+                _archive_releases(client), chmi_dir, sun_cloud_gust.wanted_chmi(today), typer.echo
+            )
+            runs.RunsSync(releases, data_dir, typer.echo).pull(months)
+    with _chmi_client() as client:
+        meta1 = fetch_current_meta(client, 1, today)
+    station_table = meta1.select(
+        pl.col("WSI").alias("id"),
+        pl.col("GEOGR2").cast(pl.Float64).alias("lat"),  # GEOGR1 is longitude
+        pl.col("GEOGR1").cast(pl.Float64).alias("lon"),
+        pl.col("ELEVATION").cast(pl.Float64).alias("elevation"),
+    ).unique("id")
+    chmi_daily, chmi_hourly = sun_cloud_gust.read_chmi(chmi_dir, today)
+    since = datetime.combine(first, datetime.min.time(), UTC)
+    doc, info = sun_cloud_gust.fit_from_files(
+        sun_cloud_gust.load(out),
+        today,
+        sun_cloud_gust.read_archive(archive_dir, today),
+        chmi_daily,
+        chmi_hourly,
+        station_table,
+        combine.okres_points(),
+        runs.load_stations(),
+        leads.scan_runs(data_dir / "runs", since, now),
+    )
+    sun_cloud_gust.write(doc, out)
+    lines = [
+        f"- {v}: {i['source']}, {i['days']} days, {i['pairs']} pairs, {i['okresy']} okresy "
+        "with a station"
+        for v, i in info.items()
+    ]
+    for line in lines:
+        typer.echo(line)
+    _job_summary("## Sunshine, cloud and gust corrections\n\n" + "\n".join(lines) + "\n")
+    if publish:
+        with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
+            _release_store(client).put(store.LATEST_TAG, sun_cloud_gust.NAME, out)
+    typer.echo(f"→ {out}")
 
 
 @app.command("models")
