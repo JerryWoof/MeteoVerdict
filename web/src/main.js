@@ -12,7 +12,7 @@ import { HOURS, explainRegion, reasons } from "./explain.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
-import { WINDOWS, availableLeadDays, availableVariables, parseHash, windowLabel } from "./view.js";
+import { availableLeadDays, availableVariables, availableWindows, parseHash, pickWindow, windowLabel } from "./view.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -435,6 +435,9 @@ map.on("load", async () => {
   current.stationTable = await getJson("data/scores/stations.json");
 
   const view = readView();
+  // only periods with scored days: an empty one is never offered nor kept from a link
+  const windows = availableWindows(meta?.windows);
+  view.window = pickWindow(view.window, windows);
   current.view = view;
   // okres choropleth where the okres level is published, kraj otherwise
   current.level = (await scores(view, "okres")).length ? "okres" : "kraj";
@@ -465,7 +468,7 @@ map.on("load", async () => {
   fillSelect("variable", availableVariables(meta).map((v) => [v, t(`variable.${v}`)]), view.variable);
   // each period with its real dates and days, so a short history explains itself
   const language = document.documentElement.lang;
-  fillSelect("window", WINDOWS.map((w) => [w, windowLabel(w, meta?.windows, t, language)]), view.window);
+  fillSelect("window", windows.map((w) => [w, windowLabel(w, meta?.windows, t, language)]), view.window);
   for (const [id, key, parse] of [
     ["variable", "variable", String],
     ["lead", "leadDay", Number],
