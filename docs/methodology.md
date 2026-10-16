@@ -697,7 +697,8 @@ gusts at the same stations (`obs`, the largest of six `Fmax`; at least 5 hours o
 part) once there are 21 days, and stores in `check` the plain and corrected MAE on the
 last 10 days, fitted on the days before (from 31 days, about mid-November 2026).
 `apply` is false when the correction does not beat the plain mean there, and the
-outlook then shows the plain mean.
+outlook then shows the plain mean. It starts switched off (`apply: false` in the bootstrap), so
+the outlook shows the plain mean until that check on the runs turns it on.
 
 ## Limitations
 

@@ -202,7 +202,7 @@ def test_the_part_fit_checks_itself_against_the_plain_mean():
     assert entry["apply"] is False
     # too few days for the check: the previous decision stays
     short = scg.fit(previous, date(2026, 10, 11), gust_part=gust_pairs(days=25))["gust_part"]
-    assert short["check"] is None and short["apply"] is True
+    assert short["check"] is None and short["apply"] is previous["gust_part"]["apply"]
 
 
 def test_older_coefficients_get_the_part_fit_from_the_bootstrap(tmp_path):
@@ -211,7 +211,8 @@ def test_older_coefficients_get_the_part_fit_from_the_bootstrap(tmp_path):
     path.write_text(json.dumps(old), "utf-8")
     doc = scg.load(path)
     assert doc["gust_part"]["source"] == "bootstrap"
-    assert doc["gust_part"]["apply"] is True
+    # off until the nightly check on the single runs shows it beats the plain mean
+    assert doc["gust_part"]["apply"] is False
     assert doc["gust_part"]["check"]["corrected_mae"] < doc["gust_part"]["check"]["raw_mae"]
 
 
