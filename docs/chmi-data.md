@@ -8,8 +8,11 @@ column, see below). Licence of all of it: CC BY 4.0, ČHMÚ
 [data-sources.md#chmi-archive](data-sources.md#chmi-archive).
 
 Top level of opendata.chmi.cz: `meteorology/`, `hydrology/` and `air_quality/`. Only
-`meteorology/` was inventoried. Radar is handled separately; ALADIN (`weather/nwp_aladin`)
-has been archived since June 2026 ([ALADIN archive](data-sources.md#aladin-archive)).
+`meteorology/` was inventoried. Radar is handled separately; ČHMÚ's ALADIN GRIB files
+(`weather/nwp_aladin`) have been archived by us since the 2026-10-09 runs (the server
+keeps only three days; [ALADIN archive](data-sources.md#aladin-archive)). The longer
+ALADIN history in our scores, from June 2026, comes from Open-Meteo, not from this
+archive.
 
 ## Climatological station data (`meteorology/climate/`)
 

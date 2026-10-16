@@ -62,7 +62,8 @@ jobs:
           else
             echo "no station pages yet; station.html says so"
           fi
-          for name in outlook.json outlook-hourly.json leads.json farm.json blend-test.json; do
+          for name in outlook.json outlook-hourly.json leads.json leads-aladin.json leads-aladin-kraj.json \
+            farm.json blend-test.json; do
             if gh release download data-latest --pattern "$name" --dir site/data --clobber 2>/dev/null; then
               echo "$name from data-latest"
             else
