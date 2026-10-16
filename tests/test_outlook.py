@@ -206,7 +206,7 @@ def test_parts_and_days_in_prague_time(tmp_path):
     doc = json.loads(path.read_text("utf-8"))
     assert doc["parts"] == ["night", "morning", "afternoon", "evening"]
     assert doc["days"][0] == "2026-10-12" and len(doc["days"]) == 6
-    assert doc["columns"] == list(outlook.COLUMNS)
+    assert doc["columns"] == [*outlook.COLUMNS, *outlook.GUST_COLUMNS]
     assert doc["okresy"][1]["name"] == "Benešov"
     assert {r[0] for r in doc["rows"]} == set(CODES)
     row = dict(zip(doc["columns"], doc["rows"][0], strict=True))
@@ -421,9 +421,10 @@ def test_calibrated_probability_and_heavy_rain(tmp_path):
     assert "model_share" not in table.columns
     path = outlook.write(outlook.with_sun(table, points), points, tmp_path / "o.json", NOW)
     doc = json.loads(path.read_text("utf-8"))
-    assert doc["columns"][-2:] == ["heavy_rain_probability", "heavy_rain"]
-    assert {r[-1] for r in doc["rows"]} <= {True, False}
+    at = doc["columns"].index("heavy_rain")
+    assert doc["columns"][at - 1 : at + 1] == ["heavy_rain_probability", "heavy_rain"]
+    assert {r[at] for r in doc["rows"]} <= {True, False}
     # without a calibration the new fields are there, null
     table = outlook.with_sun(outlook.summarise(hourly, raw), points)
     doc = json.loads(outlook.write(table, points, tmp_path / "r.json", NOW).read_text("utf-8"))
-    assert {tuple(r[-2:]) for r in doc["rows"]} == {(None, None)}
+    assert {tuple(r[at - 1 : at + 1]) for r in doc["rows"]} == {(None, None)}

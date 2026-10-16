@@ -57,5 +57,39 @@
    "CZ0713": "0-20000-0-11747",
    "CZ0804": "0-20000-0-11782"
   }
+ },
+ "gust_part": {
+  "source": "bootstrap",
+  "provenance": "Fitted 2026-10-16 on the research sample of the other variables (Open-Meteo Previous Runs API, previous day's run, plain mean of the 10 models with gusts) at the 8 lowland stations: largest gust per part of day (Prague time) against the largest ČHMÚ 10-minute Fmax of the part (at least 30 of 36 values), 2026-08-15 to 2026-10-14. check: expanding window (fitted on the days up to two days before each test day), 39 test days 2026-09-06 to 2026-10-14.",
+  "pairs": 1952,
+  "days": 61,
+  "stations": 8,
+  "from": "2026-08-15",
+  "to": "2026-10-14",
+  "default": {
+   "a": 0.62164,
+   "b": 0.92785,
+   "stations": {
+    "0-20000-0-11414": -0.238,
+    "0-20000-0-11518": 0.217,
+    "0-20000-0-11538": 0.046,
+    "0-20000-0-11652": -0.15,
+    "0-20000-0-11669": -1.077,
+    "0-20000-0-11723": 0.555,
+    "0-20000-0-11747": 0.204,
+    "0-20000-0-11782": 0.444
+   }
+  },
+  "by_lead": {},
+  "check": {
+   "from": "2026-09-06",
+   "to": "2026-10-14",
+   "pairs": 1248,
+   "raw_mae": 1.045,
+   "raw_bias": -0.173,
+   "corrected_mae": 0.989,
+   "corrected_bias": 0.027
+  },
+  "apply": true
  }
 }

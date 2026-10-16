@@ -38,6 +38,12 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
   corrected minimum), `frost_probability` (0–1, minimum ≤ 0 °C), `frost` (air-frost
   warning, `night_min` ≤ 1 °C), `ground_min` (estimated minimum 5 cm above the ground)
   and `ground_frost` (`ground_min` ≤ 0 °C); [methodology.md](methodology.md#frost-night-minimum-frost-and-ground-frost).
+  Gusts, on every row the newest single model run covers (about the next 4–5 days,
+  `null` beyond it and in files from before 2026-10-16): `gust` (the strongest gust of
+  the period, m/s: each model's largest hourly gust at the okres's lowland ČHMÚ
+  stations, mean over the models, corrected against ČHMÚ gust observations) and
+  `gust_warning` (true when `gust` ≥ 13.5 m/s, the level that best caught observed
+  gusts of 15 m/s and more); [methodology.md](methodology.md#gusts-in-the-outlook).
 - `models.variables.<variable>` for `temperature_2m`, `wind_speed_10m`,
   `precipitation_daily` and `precipitation_24h`: `stations`, `borrowed`, `days`, and
   `lead_days."1"…"5"`: the models in rank order with `rank`, `mae`, `bias`, `rmse`,

@@ -23,6 +23,15 @@ UTC.
 representative station (``okres_gust_stations``: a lowland or upland station, never a
 summit such as Milešovka or Lysá hora, where the models are 3-6 m/s too weak).
 
+**Gusts per part of day** (``gust_part``, the outlook's ``gust``, ``meteoverdict.gusts``):
+the same form fitted on the largest gust of each part of day (Prague time) at the
+lowland run stations, from all stored single runs against the hourly ČHMÚ gusts. The
+daily coefficients would add about 0.6 m/s too much to a part (out of sample, docs/
+methodology.md). ``check`` holds the plain mean's and the correction's mean absolute
+error on the last ``CHECK_DAYS`` days, fitted on the days before; ``apply`` is false when
+the correction does not beat the plain mean there (the outlook then shows the plain
+mean).
+
 Coefficients may differ by lead day (``by_lead``, where a lead day has ``MIN_DAYS`` days
 of pairs) and fall back to ``default`` (all lead days pooled). They live in
 ``sun-cloud-gust.json``: the bootstrap fitted on the research sample ships with the
@@ -63,7 +72,9 @@ ARCHIVE_NOTES = (
     "CC BY 4.0, from the weather services listed in docs/licensing.md. Published under "
     "CC BY-SA 4.0."
 )
-VARIABLES = ("sunshine", "cloud", "gust")
+VARIABLES = ("sunshine", "cloud", "gust", "gust_part")
+#: ``gust_part``: the out-of-sample check holds out this many most recent days
+CHECK_DAYS = 10
 #: days with pairs needed before a fit replaces the bootstrap (research: >= 21)
 MIN_DAYS = 21
 #: the fit uses the pairs of this many days before today (rolling: the biases change
@@ -88,9 +99,13 @@ MIN_GUST_VALUES = 8
 
 # --- coefficients --------------------------------------------------------------------
 def load(path: Path | None = None) -> dict:
-    """The coefficients at ``path``, or the bootstrap when it is missing."""
-    path = path if path is not None and path.exists() else BOOTSTRAP
-    return json.loads(path.read_text("utf-8"))
+    """The coefficients at ``path``, or the bootstrap when it is missing; a variable the
+    file lacks (written before it existed) comes from the bootstrap."""
+    bootstrap = json.loads(BOOTSTRAP.read_text("utf-8"))
+    if path is None or not path.exists() or path == BOOTSTRAP:
+        return bootstrap
+    doc = json.loads(path.read_text("utf-8"))
+    return {**doc, **{v: bootstrap[v] for v in VARIABLES if v not in doc and v in bootstrap}}
 
 
 def write(doc: dict, path: Path) -> Path:
@@ -500,6 +515,7 @@ def fit(
     cloud: pl.DataFrame | None = None,
     gust: pl.DataFrame | None = None,
     gust_okresy: pl.DataFrame | None = None,
+    gust_part: pl.DataFrame | None = None,
 ) -> dict:
     """New coefficients from the pairs of the last ``WINDOW_DAYS`` days before ``today``
     (``sunshine_pairs``, ``cloud_pairs``, gust pairs ``station``, ``day``,
@@ -555,7 +571,41 @@ def fit(
             **entry,
             "okres_stations": dict(sorted(okres_stations.items())),
         }
+    pairs = recent(gust_part)
+    if pairs is not None:
+        check = gust_check(pairs)
+        previous_apply = previous.get("gust_part", {}).get("apply", True)
+        doc["gust_part"] = {
+            "source": "observations",
+            **_summary(pairs),
+            **_fit_by_lead(pairs, lambda p: fit_gust(p["forecast"], p["observed"], p["station"])),
+            "check": check,
+            "apply": previous_apply if check is None else check["corrected_mae"] < check["raw_mae"],
+        }
     return doc
+
+
+def gust_check(pairs: pl.DataFrame) -> dict | None:
+    """The plain mean against the correction on the last ``CHECK_DAYS`` days of
+    ``pairs`` (``station``, ``day``, ``forecast``, ``observed``), fitted on the days
+    before; None with fewer than ``MIN_DAYS`` days before them."""
+    days = sorted(pairs["day"].unique().to_list())
+    if len(days) < MIN_DAYS + CHECK_DAYS:
+        return None
+    split = days[-CHECK_DAYS]
+    train, test = pairs.filter(pl.col("day") < split), pairs.filter(pl.col("day") >= split)
+    coef = fit_gust(train["forecast"], train["observed"], train["station"])
+    corrected = predict_gust(coef, test["forecast"], test["station"])
+    observed, raw = test["observed"].to_numpy(), test["forecast"].to_numpy()
+    return {
+        "from": str(split),
+        "to": str(days[-1]),
+        "pairs": test.height,
+        "raw_mae": round(float(np.abs(raw - observed).mean()), 3),
+        "raw_bias": round(float((raw - observed).mean()), 3),
+        "corrected_mae": round(float(np.abs(corrected - observed).mean()), 3),
+        "corrected_bias": round(float((corrected - observed).mean()), 3),
+    }
 
 
 # --- the nightly fit from local files ------------------------------------------------------
@@ -623,10 +673,12 @@ def fit_from_files(
     points: pl.DataFrame,
     run_stations: pl.DataFrame,
     runs: pl.LazyFrame | pl.DataFrame | None,
+    gust_part: pl.DataFrame | None = None,
 ) -> tuple[dict, dict]:
     """The new coefficients and what they were fitted on, per variable. ``stations``:
     ČHMÚ ``id``, ``lat``, ``lon``, ``elevation``; ``points``: the okres points
-    (``code``, ``lat``, ``lon``); ``run_stations``: ``runs.load_stations()``."""
+    (``code``, ``lat``, ``lon``); ``run_stations``: ``runs.load_stations()``;
+    ``gust_part``: the part-of-day gust pairs (``gusts.pairs``)."""
     sun_obs = observed_daily(chmi_daily, "SSV")
     gust_obs = observed_daily(chmi_daily, "Fmax")
     cloud_obs = observed_cloud(chmi_hourly)
@@ -636,14 +688,20 @@ def fit_from_files(
         "sunshine": sunshine_pairs(archive, sun_obs, sun_map, points),
         "cloud": cloud_pairs(archive, cloud_obs, cloud_map),
         "gust": None,
+        "gust_part": gust_part,
     }
     reps = okres_gust_stations(run_stations)
     if runs is not None:
         pairs["gust"] = gust_forecasts(runs, reps["station"].unique()).join(
             gust_obs, on=["station", "day"]
         )
-    doc = fit(previous, today, pairs["sunshine"], pairs["cloud"], pairs["gust"], reps)
-    okresy = {"sunshine": sun_map.height, "cloud": cloud_map.height, "gust": reps.height}
+    doc = fit(previous, today, pairs["sunshine"], pairs["cloud"], pairs["gust"], reps, gust_part)
+    okresy = {
+        "sunshine": sun_map.height,
+        "cloud": cloud_map.height,
+        "gust": reps.height,
+        "gust_part": 0 if gust_part is None else gust_part["station"].n_unique(),
+    }
     info = {
         v: {
             "okresy": okresy[v],

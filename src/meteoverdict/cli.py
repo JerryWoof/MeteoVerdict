@@ -26,6 +26,7 @@ from meteoverdict import (
     fresh,
     frost,
     gauges,
+    gusts,
     leads,
     mos,
     observations,
@@ -1099,6 +1100,7 @@ def outlook_cmd(
         if frost_calibration is None:
             typer.echo(f"mvd outlook: no {frost_path}, the frost fields stay empty", err=True)
         nights: list[pl.DataFrame] = []
+        single_runs = _outlook_runs(releases, data_dir)
         try:
             table, hourly = outlook.outlook(
                 client,
@@ -1109,6 +1111,7 @@ def outlook_cmd(
                 corrections=corrections,
                 frost_calibration=frost_calibration,
                 nights=nights,
+                single_runs=single_runs,
             )
         finally:  # also when it fails: the calls count against the daily budget
             typer.echo(meter.line())
@@ -1128,6 +1131,26 @@ def outlook_cmd(
         except (httpx.HTTPError, OSError) as exc:
             typer.echo(f"mvd outlook: archiving the nights failed: {exc}", err=True)
     typer.echo(f"{table['okres'].n_unique()} okresy, {table.height} rows → {path}")
+
+
+def _outlook_runs(releases: GitHubReleaseStore | None, data_dir: Path) -> pl.LazyFrame | None:
+    """The single runs of the last ``gusts.MAX_RUN_AGE_H`` hours for the outlook's gusts
+    (with ``releases`` first downloaded from runs-YYYY-MM; no Open-Meteo calls); None
+    when there are none or they cannot be had (the gusts then stay empty)."""
+    now = datetime.now(UTC)
+    since = now - timedelta(hours=gusts.MAX_RUN_AGE_H)
+    try:
+        if releases:
+            runs.RunsSync(releases, data_dir, typer.echo).pull(
+                partitions.months(since.date(), now.date())
+            )
+        found = leads.scan_runs(data_dir / "runs", since, now)
+    except (httpx.HTTPError, OSError, RuntimeError) as exc:
+        typer.echo(f"mvd outlook: no single runs, the gusts stay empty: {exc}", err=True)
+        return None
+    if found is None:
+        typer.echo("mvd outlook: no single runs, the gusts stay empty", err=True)
+    return found
 
 
 def _archive_outlook_nights(
@@ -1254,7 +1277,9 @@ def sun_cloud_gust_cmd(
     chmi_dir: Annotated[
         Path, typer.Option(help="ČHMÚ archive folder (<tag>/<name>), as chmi-archive.")
     ] = Path("data/chmi"),
-    data_dir: Annotated[Path, typer.Option(help="Folder with runs/ (single runs).")] = Path("data"),
+    data_dir: Annotated[
+        Path, typer.Option(help="Folder with runs/ (single runs) and obs/ (hourly gusts).")
+    ] = Path("data"),
     out: Annotated[Path, typer.Option(help="The coefficients (JSON).")] = Path(
         "data/sun-cloud-gust.json"
     ),
@@ -1262,8 +1287,9 @@ def sun_cloud_gust_cmd(
         bool,
         typer.Option(
             "--github-release",
-            help="Download the archive, the ČHMÚ files, the single runs and the current "
-            "coefficients from GitHub Releases first (read only).",
+            help="Download the archive, the ČHMÚ files, the single runs, the hourly "
+            "observations (data-YYYY-MM) and the current coefficients from GitHub "
+            "Releases first (read only).",
         ),
     ] = False,
     publish: Annotated[
@@ -1294,6 +1320,7 @@ def sun_cloud_gust_cmd(
                 _archive_releases(client), chmi_dir, sun_cloud_gust.wanted_chmi(today), typer.echo
             )
             runs.RunsSync(releases, data_dir, typer.echo).pull(months)
+            store.download(releases, data_dir, months, typer.echo, kinds=("obs",))
     with _chmi_client() as client:
         meta1 = fetch_current_meta(client, 1, today)
     station_table = meta1.select(
@@ -1304,6 +1331,7 @@ def sun_cloud_gust_cmd(
     ).unique("id")
     chmi_daily, chmi_hourly = sun_cloud_gust.read_chmi(chmi_dir, today)
     since = datetime.combine(first, datetime.min.time(), UTC)
+    single = leads.scan_runs(data_dir / "runs", since, now)
     doc, info = sun_cloud_gust.fit_from_files(
         sun_cloud_gust.load(out),
         today,
@@ -1313,14 +1341,28 @@ def sun_cloud_gust_cmd(
         station_table,
         combine.okres_points(),
         runs.load_stations(),
-        leads.scan_runs(data_dir / "runs", since, now),
+        single,
+        gusts.pairs(
+            single,
+            partitions.scan_months(data_dir / "obs", first, today),
+            gusts.okres_stations(
+                runs.load_stations(), combine.okres_points(), combine.point_elevations()
+            )["station"].unique(),
+        ),
     )
     sun_cloud_gust.write(doc, out)
     lines = [
-        f"- {v}: {i['source']}, {i['days']} days, {i['pairs']} pairs, {i['okresy']} okresy "
-        "with a station"
+        f"- {v}: {i['source']}, {i['days']} days, {i['pairs']} pairs, {i['okresy']} "
+        + ("stations" if v == "gust_part" else "okresy with a station")
         for v, i in info.items()
     ]
+    check = doc.get("gust_part", {}).get("check")
+    if check:
+        lines.append(
+            f"- gust_part check {check['from']}…{check['to']}: MAE plain {check['raw_mae']} → "
+            f"corrected {check['corrected_mae']} m/s ({check['pairs']} pairs); applied: "
+            f"{doc['gust_part'].get('apply', True)}"
+        )
     for line in lines:
         typer.echo(line)
     _job_summary("## Sunshine, cloud and gust corrections\n\n" + "\n".join(lines) + "\n")

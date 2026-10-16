@@ -266,7 +266,7 @@ def test_outlook_gets_the_frost_fields_on_night_and_day_rows(tmp_path):
     assert (pairs["night_min"] == 1).all()
     path = outlook.write(table, points, tmp_path / "outlook.json", NOW)
     doc = json.loads(path.read_text("utf-8"))
-    assert doc["columns"] == [*outlook.COLUMNS, *frost.OUTLOOK_COLUMNS]
+    assert doc["columns"] == [*outlook.COLUMNS, *frost.OUTLOOK_COLUMNS, *outlook.GUST_COLUMNS]
     rows = [dict(zip(doc["columns"], r, strict=True)) for r in doc["rows"]]
     night = next(
         r
