@@ -6,10 +6,18 @@ latitude, longitude **and elevation** (Open-Meteo then corrects for elevation).
 
 The free API counts weighted calls (open-meteo.com/en/pricing): per location
 max(1, variables / 10 * max(1, days / 14)), and allows 600 a minute, 5,000 an hour,
-10,000 a day and 300,000 a month. So we ask one model at a time (its own lead days
-only), up to 14 days per request and up to ``BATCH`` stations per request, keep a
-running total, pace requests below the minute and hour limits, and stop before
-``max_calls``.
+10,000 a day and 300,000 a month. So we ask for each model's own lead days only, up
+to 14 days per request and up to ``BATCH`` stations per request, keep a running total,
+pace requests below the minute and hour limits, and stop before ``max_calls``.
+
+One model per request, except where that would pay Open-Meteo's minimum of one call
+per location for less: models with the same lead days whose request alone weighs less
+than 1 (ICON-D2, GeoSphere, KNMI and DMI at D+1; the two ALADINs at D+1-2; the two
+ARPEGEs at D+1-3) share a request (``groups``), which costs
+``variables x models / 10`` per location instead of 1 per model. The answer has the
+columns ``<variable>_previous_dayN_<model>`` with the same values as one-model requests
+(checked live 2026-10-16); a model without data at a location is left out of that
+location's answer, so such locations are asked again one model at a time.
 
 The rain gauges only need precipitation: at most 5 lead days are 5 variables, so a
 request of up to ``GAUGE_DAYS`` days still costs one call per location.
@@ -33,6 +41,9 @@ URL = "https://previous-runs-api.open-meteo.com/v1/forecast"
 MAX_DAYS = 14  # longer windows cost more, shorter ones the same
 GAUGE_DAYS = 28  # precipitation only (<= 5 variables): 28 days cost one call per location
 BATCH = 100  # stations per request
+#: Weighted calls per location of a shared request at most (``groups``): with
+#: ``BATCH`` stations a request stays at or below 500, under Open-Meteo's 600 a minute
+MAX_GROUP_WEIGHT = 5.0
 KEYS = ["station_id", "time", "model", "lead_day"]
 SCHEMA = {
     "station_id": pl.String,
@@ -164,6 +175,65 @@ def parse(
     return out.filter(~pl.all_horizontal(pl.col(v).is_null() for v in VARIABLES))
 
 
+def groups(
+    models: list[Model], variables: tuple[str, ...] = VARIABLES, days: int = MAX_DAYS
+) -> list[list[Model]]:
+    """Models asked for in one request, in the order of ``models``: models with the
+    same lead days that each weigh less than one call per location alone (Open-Meteo
+    bills at least 1) share a request, up to ``MAX_GROUP_WEIGHT`` per location; every
+    other model has a request of its own."""
+    found: list[list[Model]] = []
+    open_groups: dict[tuple[int, ...], list[Model]] = {}
+    for model in models:
+        alone = len(hourly_names(model, variables)) / 10 * max(1, days / MAX_DAYS)
+        if alone >= 1:
+            found.append([model])
+            continue
+        group = open_groups.get(model.lead_days)
+        if group is not None and (len(group) + 1) * alone <= MAX_GROUP_WEIGHT:
+            group.append(model)
+            continue
+        open_groups[model.lead_days] = [model]
+        found.append(open_groups[model.lead_days])
+    return found
+
+
+def group_weight(
+    locations: int, group: list[Model], variables: tuple[str, ...], days: int
+) -> float:
+    """Weighted calls of one request for ``group`` (models with the same lead days)."""
+    return call_weight(locations, len(hourly_names(group[0], variables)) * len(group), days)
+
+
+def parse_group(
+    payload: list | dict,
+    station_ids: list[str],
+    models: list[Model],
+    variables: tuple[str, ...] = VARIABLES,
+) -> tuple[pl.DataFrame, dict[str, list[str]]]:
+    """A several-model answer (columns ``<name>_<model>``) → ``(rows, missing)``.
+
+    ``missing`` maps a model id to the stations whose answer has no columns of it:
+    Open-Meteo leaves a model without data at a location out of that location's
+    answer (and with one model left drops the suffix), so these are asked one by one.
+    """
+    results = payload if isinstance(payload, list) else [payload]
+    if len(results) != len(station_ids):
+        raise ValueError(f"asked for {len(station_ids)} locations, got {len(results)}")
+    frames, missing = [pl.DataFrame(schema=SCHEMA)], {}
+    for position, result in enumerate(results):
+        station = station_ids[result.get("location_id", position)]
+        hourly = result["hourly"]
+        for model in models:
+            names = hourly_names(model, variables)
+            if not all(f"{name}_{model.id}" in hourly for name in names):
+                missing.setdefault(model.id, []).append(station)
+                continue
+            own = {"time": hourly["time"], **{n: hourly[f"{n}_{model.id}"] for n in names}}
+            frames.append(parse({"hourly": own}, [station], model, variables))
+    return pl.concat(frames), missing
+
+
 def request(
     client: httpx.Client, params: dict, sleep: Callable[[float], None], url: str = URL
 ) -> list | dict:
@@ -257,7 +327,11 @@ class Ask:
 
 
 def _fetch_into(frames, client, rows, models, start, end, budget, log, uncovered, ask) -> None:
-    for model in models:
+    for group in groups(models, ask.variables, ask.max_days):
+        if len(group) > 1:
+            _fetch_group(frames, client, rows, group, start, end, budget, log, uncovered, ask)
+            continue
+        (model,) = group
         skip = uncovered.setdefault(model.id, set())
         first = max(start, model.archive_from)
         for window_start, window_end in windows(first, end, ask.max_days):
@@ -272,15 +346,99 @@ def _fetch_into(frames, client, rows, models, start, end, budget, log, uncovered
                 log(f"{model.id}: no data for {len(skip)} stations: {', '.join(sorted(skip))}")
 
 
+def _fetch_group(frames, client, rows, group, start, end, budget, log, uncovered, ask) -> None:
+    """Several models with the same lead days, one request per window and batch.
+
+    Stations a model is known to have no data at, and stations whose answer lacks a
+    model, are asked one model at a time (``_fetch_batch``, which records stations
+    without data in ``uncovered``). Each model's rows start on its own first day, so
+    the result is the same as asking every model alone."""
+    skips = {m.id: uncovered.setdefault(m.id, set()) for m in group}
+    starts = {m.id: max(start, m.archive_from) for m in group}
+    for window_start, window_end in windows(min(starts.values()), end, ask.max_days):
+        members = [m for m in group if starts[m.id] <= window_end]
+        alone: dict[str, list] = {m.id: [] for m in members}
+        shared = []
+        for r in rows:
+            if not any(r[0] in skips[m.id] for m in members):
+                shared.append(r)
+                continue
+            for m in members:
+                if r[0] not in skips[m.id]:
+                    alone[m.id].append(r)
+        for i in range(0, len(shared) if len(members) > 1 else 0, BATCH):
+            batch = shared[i : i + BATCH]
+            got, missing = _fetch_group_batch(
+                client, batch, members, window_start, window_end, budget, ask
+            )
+            for m in members:
+                first_hour = datetime.combine(starts[m.id], datetime.min.time(), UTC)
+                frames.append(got.filter(pl.col("model") == m.id, pl.col("time") >= first_hour))
+            by_id = {r[0]: r for r in batch}
+            for model_id, stations in missing.items():
+                alone[model_id] += [by_id[s] for s in stations]
+        if len(members) == 1:
+            alone[members[0].id] += shared
+        for m in members:
+            todo = alone[m.id]
+            for i in range(0, len(todo), BATCH):
+                batch = todo[i : i + BATCH]
+                frames.extend(
+                    _fetch_batch(
+                        client,
+                        batch,
+                        m,
+                        max(window_start, starts[m.id]),
+                        window_end,
+                        budget,
+                        skips[m.id],
+                        ask,
+                    )
+                )
+        ids = ", ".join(m.id for m in members)
+        log(f"{ids} {window_start}..{window_end}: {budget.used:g} calls used")
+    for m in group:
+        if skips[m.id]:
+            log(
+                f"{m.id}: no data for {len(skips[m.id])} stations: {', '.join(sorted(skips[m.id]))}"
+            )
+
+
+def _fetch_group_batch(client, batch, members, window_start, window_end, budget, ask):
+    """One request for several models: ``(rows, missing)`` as from ``parse_group``. If
+    Open-Meteo refuses it for missing data, all stations go to one-model requests."""
+    days = (window_end - window_start).days + 1
+    budget.spend(group_weight(len(batch), members, ask.variables, days))
+    params = {
+        **_location_params(batch),
+        "hourly": ",".join(hourly_names(members[0], ask.variables)),
+        "models": ",".join(m.id for m in members),
+        "wind_speed_unit": "ms",
+        "start_date": window_start.isoformat(),
+        "end_date": window_end.isoformat(),
+    }
+    try:
+        payload = request(client, params, budget.sleep)
+    except NoDataError:
+        return pl.DataFrame(schema=SCHEMA), {m.id: [r[0] for r in batch] for m in members}
+    return parse_group(payload, [r[0] for r in batch], members, ask.variables)
+
+
+def _location_params(batch) -> dict[str, str]:
+    return {
+        "latitude": ",".join(f"{r[1]:.5f}" for r in batch),
+        "longitude": ",".join(f"{r[2]:.5f}" for r in batch),
+        # "nan" makes Open-Meteo use its own terrain height (checked live)
+        "elevation": ",".join("nan" if r[3] is None else f"{r[3]:.1f}" for r in batch),
+    }
+
+
 def _fetch_batch(client, batch, model, window_start, window_end, budget, skip, ask):
     days = (window_end - window_start).days + 1
     names = hourly_names(model, ask.variables)
     budget.spend(call_weight(len(batch), len(names), days))
     params = {
-        "latitude": ",".join(f"{r[1]:.5f}" for r in batch),
-        "longitude": ",".join(f"{r[2]:.5f}" for r in batch),
-        # "nan" makes Open-Meteo use its own terrain height (checked live)
-        "elevation": ",".join("nan" if r[3] is None else f"{r[3]:.1f}" for r in batch),
+        **_location_params(batch),
         "hourly": ",".join(names),
         "models": model.id,
         "wind_speed_unit": "ms",
@@ -308,14 +466,21 @@ def estimate_calls(
     end: date,
     variables: tuple[str, ...] = VARIABLES,
     max_days: int = MAX_DAYS,
+    grouped: bool = True,
 ) -> float:
-    """Weighted Open-Meteo calls ``fetch_forecasts`` will use."""
+    """Weighted Open-Meteo calls ``fetch_forecasts`` will use where every model has
+    data at every station (``grouped=False``: one model per request, as before
+    2026-10-16)."""
     total = 0.0
-    for model in models:
-        names = hourly_names(model, variables)
-        for window_start, window_end in windows(max(start, model.archive_from), end, max_days):
+    for group in groups(models, variables, max_days) if grouped else [[m] for m in models]:
+        starts = [max(start, m.archive_from) for m in group]
+        for window_start, window_end in windows(min(starts), end, max_days):
+            members = [m for m, s in zip(group, starts, strict=True) if s <= window_end]
             days = (window_end - window_start).days + 1
+            if len(members) == 1:  # asked from its own first day, as in _fetch_group
+                first = max(window_start, starts[group.index(members[0])])
+                days = (window_end - first).days + 1
             for i in range(0, n_stations, BATCH):
                 batch = min(BATCH, n_stations - i)
-                total += call_weight(batch, len(names), days)
+                total += group_weight(batch, members, variables, days)
     return total

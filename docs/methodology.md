@@ -35,6 +35,49 @@ closest to what ČHMÚ measured?
   archive fills, measured live (the high-resolution models only reach D+1 or D+2).
 - Requested at each station's coordinates **and elevation**: Open-Meteo picks the grid
   point and corrects temperature for the height difference.
+- The D+N archive is fetched in complete 14-day windows (the cost of a request does not
+  grow up to 14 days), so on its own it is 14-20 days behind. The **most recent days**
+  are scored from the same forecasts rebuilt from the single runs (below), at the ~100
+  stations of the run-by-run verification, until the backfill delivers their window.
+
+### Fresh scores from the single runs
+
+`_previous_dayN` at an hour is the value of the newest run that started at least 24·N
+hours before it. We store every 00, 06, 12 and 18 UTC run of every model at ~100
+stations anyway (for the lead-hour scores), so the daily run rebuilds D+1 … D+5 for
+the last 30 days from them (`meteoverdict.fresh`) and scores the days the backfill has
+not reached; the scores say which source they come from (`source`: `previous_runs` or
+`single_runs`). When the backfill window arrives, its forecasts (at all ~500 stations)
+replace the rebuilt ones. The ranking and the weights and bias corrections of our
+own forecast (90-day okres scores) thereby reach yesterday instead of two to three
+weeks ago, which matters most for the bias correction when the weather pattern
+changes; the scores of `meta.json` are dated accordingly.
+
+Checked on 2026-10-16 against the Previous Runs API (11 stations on 14-15 October for
+the 11 models then in the single runs at D+1 and D+2, with observations; 5 stations on
+16-18 October for all 19 models, D+1 to D+5 as far as the runs since 13 October
+reach): at every hour we score temperature and wind on (each model's native hours) the
+two sources are **identical**, and so were the D+1/D+2 temperature and wind scores
+(MAE difference 0.000 °C and m/s). Three details of Open-Meteo's archive had to be
+matched, all found in this comparison:
+
+- ICON-D2, GeoSphere AROME and DMI HARMONIE also have runs at 03, 09, 15 and 21 UTC in
+  the archive, and KNMI HARMONIE hourly runs, which the 6-hourly single runs lack: for
+  them only the hours where a 00/06/12/18 UTC run is the newest are rebuilt (all four
+  synoptic hours among them), so their daily precipitation and maximum on fresh days
+  come only with the backfill.
+- The archive takes UK Met Office D+2 from the 00 and 12 UTC runs only (the 06 and 18
+  UTC runs are not used beyond D+1 there).
+- Hours between a 3- or 6-hourly model's outputs are interpolated over the stitched
+  runs in the archive and within the run in the single runs; they differ (up to 3.3 °C),
+  but they are not scored. Daily precipitation of those models is summed from the
+  interpolated hours and can differ a little (AIFS: 0.09 mm in MAE over 11
+  station-days; IFS 0.25°: 0.02 mm; all others 0).
+
+A run we have not fetched (yet) leaves its hours out rather than falling back to an
+older run, and D+5 has only the synoptic hours (single runs end at 120 hours). The daily
+run logs how both sources agree wherever they overlap (the last days of every backfill
+window), so the check repeats itself.
 
 ## Pairing forecasts and observations
 
@@ -518,6 +561,13 @@ significant).
   N days older. A 24-hour total therefore mixes runs (the hours after midnight come
   from a run one day later), and the native output step is inferred from the lead time
   plus a 6-hour margin, not read from the run.
+- **Fresh days.** The days scored from the single runs (until the backfill reaches
+  them, usually the last two to three weeks) rest on the ~100 run stations instead of
+  ~500 (one per okres plus mountains), without the rain gauges, and without the daily
+  precipitation of ICON-D2, GeoSphere, KNMI and DMI (see above), so on those days the
+  fair comparison leaves D+1 daily precipitation out. D+4 and D+5 of the 8 models
+  added on 2026-10-15 could not be compared with the archive yet (their single runs
+  start then); the daily log shows the comparison once both exist.
 - **Interpolated hours.** Where a model is 3- or 6-hourly we score only native hours,
   but whether Open-Meteo's hourly precipitation adds up exactly to the model's own
   period totals is **unverified**.
