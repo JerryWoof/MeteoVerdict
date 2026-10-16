@@ -141,6 +141,53 @@ drawn: the all-model chart takes ALADIN from Open-Meteo, so all models are proce
 alike. The archive remains our check of Open-Meteo's ALADIN and records when ČHMÚ
 published each run.
 
+### Ranking by lead band (hours ahead)
+
+The comparison page can rank the models by **hours ahead** as well as by D+1 … D+5
+(the "Lead time" choice: *Hours ahead (from every run)* H+1–6, H+7–12, H+13–24,
+H+25–48, H+49–72, and *Days ahead* D+1 … D+5). `mvd leads` writes
+`leads-bands-<window>.json` (Czechia and the station kinds) and
+`leads-bands-<window>-kraj.json` (kraje) for the windows `90d` (the last 90 days of
+runs) and `all` (every run), from the same single runs and observations as `leads.json`
+(`leads.band_rankings`):
+
+- **Bands.** Every lead hour of the band, of every 00/06/12/18 UTC run, against the
+  observation at its valid time, pooled. A day of the ranking is the day the runs started.
+- **Who enters a band.** A model enters a band only if its runs reach the band's last
+  hour in every run hour it has (its usual run length, from the data): ICON-D2
+  (48 h) is in H+25–48 but not in H+49–72; UK Met Office (60 h at 06/18 UTC) neither.
+  Models with fewer than 80 % of the runs are left out (`short_record`), as everywhere.
+- **Two fair sets per band.** *Every hour* (`hourly`): the models with hourly output over
+  the whole band, every lead hour of it; temperature, wind, hourly precipitation and
+  gusts (the models that have gusts: not AIFS, AIGFS, JMA). *Every 6th hour, all models*
+  (`6h`): every model reaching the band, only at the lead hours that are multiples of 6
+  (where the 3- and 6-hourly models have their own output); temperature and wind. In
+  both, only the (run, station, lead hour, variable) that every model of the set has
+  are scored, so all models share the same pairs; the page has a switch between the two.
+- **Metrics.** MAE, bias, RMSE; bias-corrected MAE for temperature and wind (below);
+  for hourly precipitation POD, FAR and ETS at ≥ 0.1 and ≥ 1 mm in the hour (the page
+  can sort by either ETS); gusts by MAE (the gust at the valid time against the observed
+  hourly maximum gust).
+- **Bias-corrected MAE, leakage-free** (as for D+N, [below](#bias-corrected-mae)): each
+  model's mean error at the same station, band and valid hour of day over the 30 valid
+  dates before the run's day (every one observed before the run started; at least 10),
+  is subtracted; only where every model of the set has such a bias (`n_bc`).
+- **Intervals.** As for D+N ([ranking](#ranking-and-uncertainty)): whole days of runs
+  are resampled 1000 times; `tied` (the page's "≈") when the 95 % interval of a model's
+  MAE minus the best one's contains 0.
+- **Levels.** Czechia, the station kinds (main WMO stations, 23 of the ~100, vs the
+  other 77) and kraje with at least 3 of the ~100 stations (all but Praha, which has 1).
+  **No okres level:** with ~100 stations for 76 okresy most okresy have one station or
+  none. On the page the map then colours kraje, the okres choices are disabled and say
+  so, and a chosen okres becomes its kraj.
+- **What each result rests on** (runs, stations, days) is shown with it; under 30 days
+  it is marked *preliminary*.
+- **Default.** The page opens at D+1 unless the files say otherwise: `mvd leads` sets
+  `default_band` to H+13–24 once that band's 90-day ranking for Czechia rests on at least
+  60 days (decided from the data each time the files are written), and the page then
+  opens there (a link that names a lead keeps it). With the July–October 2026 history
+  of the single runs (~375 runs, from 15 July) this is the case.
+
 What it is not:
 
 - **H+1 is not what anyone gets.** ČHMÚ publishes an ALADIN run only about 3 to 4.5 hours
@@ -157,7 +204,8 @@ What it is not:
   weeks the numbers rest on few runs and few weather regimes; long leads rest on fewer
   runs than short ones (a run's H+120 is verified five days later), and pooled run
   hours mix the time of day into the lead hour (H+6 is 06, 12, 18 or 00 UTC).
-- **100 stations**, not all ~500: enough for Czechia as a whole, too few for kraje.
+- **100 stations**, not all ~500: enough for Czechia as a whole and, for the band
+  ranking, for kraje (4 to 13 stations each, Praha 1: left out); too few for okresy.
 - The newest days use ČHMÚ's unchecked `now/` observations, like the D+N scores.
 
 ## Event skill for farmers

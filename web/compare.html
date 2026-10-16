@@ -66,7 +66,8 @@
         <div class="overview">
           <div>
             <div id="mini-map" aria-label="Map: best model per okres"></div>
-            <p class="note" data-i18n="compare.mapNote"></p>
+            <p class="note" id="map-note" data-i18n="compare.mapNote"></p>
+            <p class="note" id="map-band-note" hidden></p>
             <div id="mini-legend" class="mini-legend"></div>
           </div>
           <div id="summary" aria-live="polite"></div>
@@ -74,6 +75,12 @@
         <h3 id="ranking-title" data-i18n="compare.ranking">Ranking</h3>
         <p class="note" data-i18n="compare.rankingNote"></p>
         <div class="ranking-options">
+          <p class="note band-basis" id="band-basis" hidden></p>
+          <div id="band-set-block" class="blend-test-switch" hidden>
+            <span id="band-set-label" data-i18n="compare.bandSet">Hours in the band</span>
+            <div class="segmented" id="band-set" role="group" aria-labelledby="band-set-label"></div>
+          </div>
+          <p class="note" id="band-set-note" hidden></p>
           <div id="stations-block" class="blend-test-switch" hidden>
             <span id="stations-label" data-i18n="compare.stations">Stations</span>
             <div class="segmented" id="stations" role="group" aria-labelledby="stations-label"></div>
@@ -92,7 +99,7 @@
         <p class="note" data-i18n="compare.intervalsNote"></p>
         <div id="intervals"></div>
         <h3 data-i18n="compare.byLead">Error by lead time</h3>
-        <p class="note" data-i18n="compare.byLeadNote"></p>
+        <p class="note" id="by-lead-note" data-i18n="compare.byLeadNote"></p>
         <div id="by-lead"></div>
         <div id="elevation-section">
           <h3 data-i18n="compare.bias">Bias by elevation</h3>
