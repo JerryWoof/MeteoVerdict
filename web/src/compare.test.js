@@ -29,6 +29,22 @@ test("ranked models first, the blend last, differences to the best", () => {
   assert.deepEqual(table[1].ci, [0.02, 0.15]);
 });
 
+test("a model with too short a record comes last, unranked and out of the charts", () => {
+  const withShort = [
+    ...CZ.map((r) => ({ ...r, short_record: false, coverage: 1 })),
+    { region: "cz", lead_day: 1, model: "new", stations: 450, days: 10, mae: 0.9, bias: 0, rmse: 1.1, rank: null, short_record: true, coverage: 0.25 },
+  ];
+  const table = rankingTable(withShort, 1);
+  assert.deepEqual(table.map((r) => r.model), ["icon", "ifs", "blend", "new"]);
+  assert.equal(table.at(-1).short, true);
+  assert.equal(table.at(-1).coverage, 0.25);
+  assert.equal(table[0].short, false);
+  assert.ok(!intervalRows(table).some((r) => r.model === "new"));
+  assert.ok(!maeByLead(withShort).some((r) => r.model === "new"));
+  // files from before the rule have no short_record: nothing changes
+  assert.deepEqual(rankingTable(CZ, 1).map((r) => r.short), [false, false, false]);
+});
+
 test("bias by elevation class, in order, without the blend", () => {
   const rows = records({
     columns: ["region", "lead_day", "model", "bias"],

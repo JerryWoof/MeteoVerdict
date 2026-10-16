@@ -286,3 +286,17 @@ def test_gusts_from_fewer_run_hours_than_temperature():
     cover = farm.coverage(pl.concat([forecasts([D2, ALADIN]), old]))
     req = farm.required(cover, models)
     assert sorted(req.filter(event="gust", bin="1-6")["model"].to_list()) == sorted([D2, ALADIN])
+
+
+def test_a_model_with_few_runs_does_not_cut_the_runs_of_the_others():
+    models = [MODELS[m] for m in (D2, ALADIN)]
+    runs = [RUN + timedelta(days=k) for k in range(5)]
+    # ALADIN (as if added recently) has only the last of five runs
+    fc = pl.concat([forecasts([D2], run=r) for r in runs] + [forecasts([ALADIN], run=runs[-1])])
+    obs = observations(utc(14, 13), utc(23, 0))
+    table, info = farm.farm_scores(fc, obs, models)
+    assert set(table["model"]) == {D2}
+    assert info["runs"] == 5
+    assert info["short_record"] == {ALADIN: {"runs": 1, "of": 5, "coverage": 0.2}}
+    doc = farm.document(table, info, datetime(2026, 10, 16, tzinfo=UTC))
+    assert doc["short_record"] == info["short_record"]
