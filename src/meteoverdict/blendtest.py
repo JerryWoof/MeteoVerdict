@@ -188,8 +188,9 @@ def _score_training(
         if part.select(pl.len()).collect().item() == 0:
             continue
         part = part.join(covered_models(part).lazy(), on=["variable", "lead_day", "model"])
+        # the weights and the best models need the MAE only, not the bias-corrected one
         table = aggregate.aggregate(
-            part, stations, as_of, windows=(window,), levels=("okres", "cz")
+            part, stations, as_of, windows=(window,), levels=("okres", "cz"), corrected=False
         )
         stamp = pl.lit(as_of).alias("as_of")
         weights.append(combine.weights(table, window).with_columns(stamp))

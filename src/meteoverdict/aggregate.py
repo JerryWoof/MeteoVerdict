@@ -1,7 +1,9 @@
 """Aggregate daily scores per region and time window (roadmap 2.4).
 
-Levels: ``station``, ``okres``, ``kraj``, ``elevation`` (lowland/upland/mountain) and
-``cz`` (all stations). Windows, all ending at ``as_of`` (the last scored day): ``90d``
+Levels: ``station``, ``okres``, ``kraj``, ``elevation`` (lowland/upland/mountain),
+``network`` (``main``: the main WMO stations, open sites with the wind sensor at 10 m;
+``other``: all other stations, mostly automatic climate stations, often more sheltered)
+and ``cz`` (all stations). Windows, all ending at ``as_of`` (the last scored day): ``90d``
 (the last 90 days), ``season`` (the meteorological season so far: DJF, MAM, JJA, SON)
 and ``all``; and per season over all years (roadmap 5.1): ``djf``, ``mam``, ``jja`` and
 ``son``, every day of that season up to ``as_of`` (their ``from``/``to``: the first and
@@ -27,6 +29,16 @@ A region needs at least ``MIN_STATIONS`` stations; otherwise ``enough_stations``
 false and it must not be ranked. An okres with too few stations of its own borrows the
 nearest ones of its neighbours (``meteoverdict.neighbours``, roadmap 6.1); ``borrowed``
 counts them.
+
+Bias-corrected MAE (``mae_bc``, temperature and wind, all levels but ``station``): how
+good a model is once its usual bias is removed, which is what our combined forecast
+does (``meteoverdict.mos``). For each pair (station, synoptic hour 00/06/12/18 UTC,
+day ``d``, model, lead day N) the bias is the model's mean error at that station and
+hour over the ``BIAS_TRAINING_DAYS`` days ending on ``d - N - 1``: only days whose
+observations were known when the D+N forecast for ``d`` was made, never ``d`` itself.
+Pairs with fewer than ``BIAS_MIN_DAYS`` such days get none, and a station-hour-day
+counts only where every compared model has one, so all models are again compared on
+the same pairs (from the per-hour score rows ``<variable>_HHutc``, ``scoring``).
 """
 
 from __future__ import annotations
@@ -37,9 +49,10 @@ from pathlib import Path
 
 import polars as pl
 
-from meteoverdict import metrics, neighbours
+from meteoverdict import metrics, neighbours, scoring
+from meteoverdict.stations import MAIN_PREFIX
 
-LEVELS = ("station", "okres", "kraj", "elevation", "cz")
+LEVELS = ("station", "okres", "kraj", "elevation", "network", "cz")
 #: meteorological seasons and their months
 SEASONS = {"djf": (12, 1, 2), "mam": (3, 4, 5), "jja": (6, 7, 8), "son": (9, 10, 11)}
 WINDOWS = ("90d", "season", "all", *SEASONS)
@@ -53,7 +66,18 @@ _REGION = {
     "okres": ("okres_code", "okres"),
     "kraj": ("kraj_code", "kraj"),
     "elevation": ("elevation_class", "elevation_class"),
+    "network": ("network", "network"),
 }
+#: Bias-corrected MAE (``bias_corrected``): of these score variables, from their per-hour
+#: rows; the bias of the ``BIAS_TRAINING_DAYS`` days before the forecast was made, with
+#: at least ``BIAS_MIN_DAYS`` of them; at every level but ``station`` (file size)
+CORRECTED_VARIABLES = scoring.SLOT_VARIABLES
+BIAS_TRAINING_DAYS = 30
+BIAS_MIN_DAYS = 10
+CORRECTED_LEVELS = ("okres", "kraj", "elevation", "network", "cz")
+#: per-hour score rows used only for the bias-corrected MAE, not aggregated on their own
+#: (the temperature ones are, as before they were used for it)
+SLOT_ONLY = tuple(scoring.slot_variable("wind_speed_10m", h) for h in scoring.SYNOPTIC_HOURS)
 
 
 def season_start(day: date) -> date:
@@ -145,6 +169,16 @@ def short_records(cover: pl.DataFrame) -> pl.DataFrame:
     return cover.filter(~pl.col("covered"))
 
 
+def network_class(station_id: pl.Expr) -> pl.Expr:
+    """``main`` for a main (synoptic) station with a WMO number (``stations.network``:
+    WIGOS ``0-20000-0-<WMO>``), ``other`` for every other station."""
+    return (
+        pl.when(station_id.str.starts_with(MAIN_PREFIX))
+        .then(pl.lit("main"))
+        .otherwise(pl.lit("other"))
+    )
+
+
 def station_info(stations: pl.DataFrame) -> pl.LazyFrame:
     return stations.select(
         pl.col("id").alias("station_id"),
@@ -154,6 +188,7 @@ def station_info(stations: pl.DataFrame) -> pl.LazyFrame:
         "kraj_code",
         "kraj",
         "elevation_class",
+        network_class(pl.col("id")).alias("network"),
     ).lazy()
 
 
@@ -248,6 +283,11 @@ def _sum_columns(columns: list[str]) -> list[pl.Expr]:
 def _metrics(frame: pl.LazyFrame) -> pl.LazyFrame:
     frame = metrics.continuous_scores(frame)
     columns = set(frame.collect_schema().names())
+    if {"n_bc", "sum_abs_err_bc"} <= columns:
+        n = pl.col("n_bc").cast(pl.Float64)
+        frame = frame.with_columns(
+            pl.when(n > 0).then(pl.col("sum_abs_err_bc") / n).alias("mae_bc")
+        )
     for threshold in metrics.THRESHOLDS:
         if set(metrics.counts_columns(threshold)) <= columns:  # no daily rows, no counts
             frame = metrics.categorical_scores(frame, threshold)
@@ -263,14 +303,116 @@ def _summary(frame: pl.LazyFrame, columns: list[str]) -> pl.LazyFrame:
     )
 
 
+def slot_errors(scores: pl.LazyFrame | pl.DataFrame) -> pl.LazyFrame:
+    """The error of every pair at a synoptic hour: ``station_id``, ``date``, ``model``,
+    ``lead_day``, ``variable`` (of ``CORRECTED_VARIABLES``), ``slot`` (UTC hour) and
+    ``error`` (forecast - observed), from the per-hour score rows (one pair each)."""
+    names = {
+        scoring.slot_variable(v, h): (v, h)
+        for v in CORRECTED_VARIABLES
+        for h in scoring.SYNOPTIC_HOURS
+    }
+    variable = pl.col("variable")
+    return (
+        scores.lazy()
+        .filter(variable.is_in(list(names)), pl.col("n") > 0)
+        .select(
+            "station_id",
+            "date",
+            "model",
+            "lead_day",
+            variable.replace_strict({k: v for k, (v, _) in names.items()}).alias("variable"),
+            variable.replace_strict(
+                {k: h for k, (_, h) in names.items()}, return_dtype=pl.Int8
+            ).alias("slot"),
+            (pl.col("sum_err").cast(pl.Float64) / pl.col("n").cast(pl.Float64)).alias("error"),
+        )
+    )
+
+
+def bias_corrected(
+    scores: pl.LazyFrame | pl.DataFrame,
+    training_days: int = BIAS_TRAINING_DAYS,
+    min_days: int = BIAS_MIN_DAYS,
+) -> pl.DataFrame:
+    """``slot_errors`` with ``bias`` and ``abs_err_bc`` = |error - bias|: the bias is the
+    mean error of the same station, hour, model and lead day N over the
+    ``training_days`` days ending on ``date - N - 1`` (the last day whose observations
+    were all known when the D+N forecast was made), null with fewer than ``min_days``.
+    """
+    group = ["station_id", "model", "lead_day", "variable", "slot"]
+    errors = slot_errors(scores).collect()
+    cumulative = (
+        errors.sort([*group, "date"])
+        .with_columns(
+            pl.col("error").cum_sum().over(group).alias("_sum"),
+            pl.int_range(1, pl.len() + 1, dtype=pl.Int64).over(group).alias("_count"),
+        )
+        .select(*group, "date", "_sum", "_count")
+        .sort("date")
+    )
+    lead = pl.duration(days=pl.col("lead_day").cast(pl.Int64) + 1)
+    frame = errors.with_columns((pl.col("date") - lead).cast(pl.Date).alias("_upper"))
+    frame = frame.with_columns((pl.col("_upper") - timedelta(days=training_days)).alias("_lower"))
+
+    def upto(frame: pl.DataFrame, on: str, suffix: str) -> pl.DataFrame:
+        right = cumulative.rename({"date": on, "_sum": f"_sum{suffix}", "_count": f"_n{suffix}"})
+        return frame.sort(on).join_asof(
+            right, on=on, by=group, strategy="backward", check_sortedness=False
+        )
+
+    frame = upto(upto(frame, "_upper", "_u"), "_lower", "_l")
+    days = pl.col("_n_u").fill_null(0) - pl.col("_n_l").fill_null(0)
+    total = pl.col("_sum_u").fill_null(0.0) - pl.col("_sum_l").fill_null(0.0)
+    bias = pl.when(days >= min_days).then(total / days)
+    return (
+        frame.with_columns(bias.alias("bias"))
+        .with_columns((pl.col("error") - pl.col("bias")).abs().alias("abs_err_bc"))
+        .select(*group, "date", "error", "bias", "abs_err_bc")
+        .sort([*group, "date"])
+    )
+
+
+def _corrected_sums(fair: pl.LazyFrame, corrected: pl.LazyFrame) -> pl.LazyFrame:
+    """``n_bc`` and ``sum_abs_err_bc`` per region, variable, lead day and model: the
+    bias-corrected errors of the fair station-days, at the hours every model of the
+    station-day has a bias for."""
+    keys = ["variable", "lead_day", "station_id", "date"]
+    group = ["region", *keys]
+    base = fair.filter(pl.col("variable").is_in(CORRECTED_VARIABLES)).select(*group, "model")
+    joined = base.join(
+        corrected.filter(pl.col("abs_err_bc").is_not_null()).select(
+            *keys, "model", "slot", "abs_err_bc"
+        ),
+        on=[*keys, "model"],
+        how="inner",
+    )
+    need = base.group_by(group).agg(pl.col("model").n_unique().alias("_models"))
+    full = (
+        joined.group_by([*group, "slot"])
+        .agg(pl.col("model").n_unique().alias("_have"))
+        .join(need, on=group)
+        .filter(pl.col("_have") == pl.col("_models"))
+        .select(*group, "slot")
+    )
+    return (
+        joined.join(full, on=[*group, "slot"], how="semi")
+        .group_by("region", "variable", "lead_day", "model")
+        .agg(pl.len().alias("n_bc"), pl.col("abs_err_bc").sum().alias("sum_abs_err_bc"))
+    )
+
+
 def aggregate(
     scores: pl.LazyFrame | pl.DataFrame,
     stations: pl.DataFrame,
     as_of: date | None = None,
     windows: tuple[str, ...] = WINDOWS,
     levels: tuple[str, ...] = LEVELS,
+    corrected: bool = True,
 ) -> pl.DataFrame:
     """One row per level, region, window, variable, lead day and model.
+
+    ``corrected``: also the bias-corrected MAE (``bias_corrected``, ``mae_bc``).
 
     ``coverage``: the model's share of the window's scored days; ``short_record``: below
     ``MIN_COVERAGE``, so not compared (its rows cover only its own station-days among the
@@ -281,6 +423,10 @@ def aggregate(
     info = station_info(stations)
     distance = okres_distances(stations)
     columns = scores.collect_schema().names()
+    corrected = bias_corrected(scores.filter(pl.col("date") <= as_of)).lazy() if corrected else None
+    if corrected is not None and not corrected.select(pl.len()).collect().item():
+        corrected = None
+    scores = scores.filter(~pl.col("variable").is_in(SLOT_ONLY))
     frames = []
     for window in windows:
         start, days = window_days(window, as_of, first_day)
@@ -302,7 +448,13 @@ def aggregate(
         for level in levels:
             regions = with_regions(in_window, level, distance)
             fair = common_days(covered_only(regions, cover), by="region")
-            parts = [_summary(fair, columns).with_columns(pl.lit(False).alias("short_record"))]
+            summary = _summary(fair, columns)
+            if corrected is not None and level in CORRECTED_LEVELS:
+                sums = _corrected_sums(fair, corrected)
+                summary = summary.join(
+                    sums, on=["region", "variable", "lead_day", "model"], how="left"
+                )
+            parts = [summary.with_columns(pl.lit(False).alias("short_record"))]
             if short.height:  # each on its own station-days among the fair ones
                 keys = ["variable", "lead_day", "region", "station_id", "date"]
                 own = regions.join(short.lazy(), on=COVERAGE_KEYS, how="semi").join(
@@ -361,7 +513,21 @@ JSON_COLUMNS = (
     # is below MIN_COVERAGE (not compared, not ranked: a newly added model)
     "coverage",
     "short_record",
+    # added in October 2026: event skill at 1 and 10 mm a day, and the MAE once each
+    # model's usual bias at the station and hour is removed (``bias_corrected``)
+    "pod_1",
+    "far_1",
+    "ets_1",
+    "pod_10",
+    "far_10",
+    "ets_10",
+    "mae_bc",
 )
+
+
+#: Left out of the station-level JSON (its largest files; ``aggregates.parquet`` keeps
+#: them): the event scores at 1 and 10 mm, which the pages show for regions only
+STATION_LEFT_OUT = ("pod_1", "far_1", "ets_1", "pod_10", "far_10", "ets_10")
 
 
 def write_json(table: pl.DataFrame, out_dir: Path, meta: dict) -> list[Path]:
@@ -370,7 +536,8 @@ def write_json(table: pl.DataFrame, out_dir: Path, meta: dict) -> list[Path]:
     Each data file is ``{"columns": [...], "rows": [[...], ...]}`` with floats rounded to
     3 decimals, small enough for a static web page. Columns that are empty in a file
     (e.g. event scores for temperature) are left out, and so is the native-period
-    precipitation, whose periods differ between models (``aggregates.parquet`` keeps it).
+    precipitation, whose periods differ between models (``aggregates.parquet`` keeps it),
+    and ``STATION_LEFT_OUT`` at the station level.
     """
     written = []
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -380,7 +547,9 @@ def write_json(table: pl.DataFrame, out_dir: Path, meta: dict) -> list[Path]:
         columns = [
             c
             for c in JSON_COLUMNS
-            if c in part.columns and (c == "region" or part[c].null_count() < part.height)
+            if c in part.columns
+            and (c == "region" or part[c].null_count() < part.height)
+            and not (level == "station" and c in STATION_LEFT_OUT)
         ]
         rows = part.select(
             pl.col(c).round(3) if part.schema[c].is_float() else pl.col(c) for c in columns
@@ -448,6 +617,15 @@ def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -
             "shown on their own station-days and not ranked"
         ),
         "min_coverage": MIN_COVERAGE,
+        "networks": {
+            "main": "main (synoptic) stations with a WMO number: open sites, wind at 10 m",
+            "other": "all other stations, mostly automatic climate stations",
+        },
+        "bias_corrected": (
+            "mae_bc: MAE after removing each model's own bias at the station and synoptic "
+            f"hour, estimated on the {BIAS_TRAINING_DAYS} days before the forecast was made "
+            f"(at least {BIAS_MIN_DAYS}); only pairs where every compared model has one"
+        ),
         "short_record": excluded(table),
         "ranking": (
             "by MAE; tied_with_best when the 95 % bootstrap interval (days resampled) of the "

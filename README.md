@@ -47,7 +47,8 @@ Everything runs on GitHub Actions: scores are updated every morning, the forecas
 IFS 0.25° and AIFS, NOAA GFS and AIGFS, UK Met Office global, Météo-France ARPEGE Europe
 and World, GeoSphere AROME Austria, KNMI and DMI HARMONIE-AROME, ECCC GEM Global, JMA GSM
 and CMA GRAPES (19 models), plus the mean of all models as a baseline every model has to
-beat. The list
+beat. ALADIN's "1 km" is ČHMÚ's 2.3 km run post-processed onto a 1 km grid, so the two
+ALADINs are near-duplicates. The list
 is in [`models.yaml`](src/meteoverdict/models.yaml); archive depth and lead days per
 model are in [data sources](docs/data-sources.md#models).
 

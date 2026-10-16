@@ -26,6 +26,10 @@ One row per day, station, model, lead day and variable with the additive sums of
 * ``temperature_2m_00utc``, ``_06utc``, ``_12utc``, ``_18utc``: the temperature at
   one synoptic hour (``period_h`` 0), where every model has native output, to compare
   models by time of day (night inversions at 06 UTC, afternoon at 12 UTC).
+* ``wind_speed_10m_00utc`` … ``_18utc``: the same for wind (since October 2026). Not
+  aggregated or published on their own (``aggregate.SLOT_ONLY``): with the temperature
+  ones they give each pair's error at a station and hour, from which
+  ``aggregate.bias_corrected`` removes the model's usual bias there.
 
 The mean of all models (``meteoverdict.blend``) is scored as one more model, ``blend``.
 
@@ -51,6 +55,13 @@ SINGLE_RUNS = "single_runs"
 #: Hours (UTC) at which every model, also the 6-hourly ones, has native output; the
 #: temperature at each is scored separately (roadmap 5.1b), e.g. 06 UTC for inversions.
 SYNOPTIC_HOURS = (0, 6, 12, 18)
+#: Variables also scored at each synoptic hour on its own (``<variable>_HHutc``)
+SLOT_VARIABLES = ("temperature_2m", "wind_speed_10m")
+
+
+def slot_variable(variable: str, hour: int) -> str:
+    """``temperature_2m``, 6 → ``temperature_2m_06utc``."""
+    return f"{variable}_{hour:02d}utc"
 
 
 def daily_scores(
@@ -93,11 +104,11 @@ def daily_scores(
         .agg(metrics.error_sums())
     )
     synoptic = (
-        pairs.filter(pl.col("variable") == "temperature_2m", hour.is_in(SYNOPTIC_HOURS))
+        pairs.filter(pl.col("variable").is_in(SLOT_VARIABLES), hour.is_in(SYNOPTIC_HOURS))
         .with_columns(
             pl.col("time").dt.date().alias("date"),
             pl.concat_str(
-                pl.lit("temperature_2m_"), pl.col("time").dt.strftime("%H"), pl.lit("utc")
+                pl.col("variable"), pl.lit("_"), pl.col("time").dt.strftime("%H"), pl.lit("utc")
             ).alias("variable"),
         )
         .group_by(*KEYS, "period_h")
