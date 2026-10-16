@@ -19,6 +19,8 @@ export const HOURLY = ["temperature_2m", "precipitation", "wind_speed_10m", "clo
 const PART_FIELDS = [
   "day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol",
   "sunrise", "sunset",
+  // optional (null without the rain calibration): P(>= 5 mm) in the period and its flag
+  "heavy_rain_probability", "heavy_rain",
   // frost (on the night and day rows of the date a night ends; null elsewhere and in
   // older outlook files): corrected night minimum, coldest site, probability, warnings
   "night_min", "coldest_site", "coldest_min", "frost_probability", "frost", "ground_min", "ground_frost",

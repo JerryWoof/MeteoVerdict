@@ -255,7 +255,7 @@ def test_outlook_gets_the_frost_fields_on_night_and_day_rows(tmp_path):
     nights: list[pl.DataFrame] = []
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         table, _ = outlook.outlook(
-            client, weights, points, now=NOW, calibration=calibration(), nights=nights
+            client, weights, points, now=NOW, frost_calibration=calibration(), nights=nights
         )
     assert nights and nights[0].height > 0
     filled = table.filter(pl.col("night_min").is_not_null())

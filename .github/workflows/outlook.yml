@@ -6,10 +6,12 @@ name: Outlook
 # workflow then rebuilds the map. Only models with weights are asked: ~420 weighted calls
 # for 11 models, ~732 for all 19 (refused above 800), in requests of at most 500 a minute
 # apart; <= 1,600 a day, priority (1) in the budget split of runs.yml
-# (docs/data-sources.md#open-meteo-budget). The frost fields use frost.json (daily.yml,
-# `mvd frost-fit`); the models' nights at the okres points go into
-# outlook-nights-YYYY-MM.parquet of data-YYYY-MM (no extra calls) to refit the
-# clear-calm term (docs/methodology.md#frost).
+# (docs/data-sources.md#open-meteo-budget). Each run also appends the plain model means of
+# cloud and sunshine to the release outlook-archive (no extra calls), the training data
+# of the nightly sun-cloud-gust.yml.
+# The frost fields use frost.json (daily.yml, `mvd frost-fit`); the models' nights at
+# the okres points go into outlook-nights-YYYY-MM.parquet of data-YYYY-MM (no extra
+# calls) to refit the clear-calm term (docs/methodology.md#frost).
 on:
   schedule:
     - cron: "52 5 * * *"

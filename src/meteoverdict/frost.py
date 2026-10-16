@@ -86,15 +86,16 @@ LAPSE = 0.0065
 
 #: the new optional fields of outlook.json on the "night" and "day" rows of the date the
 #: night ends
-OUTLOOK_COLUMNS = (
-    "night_min",
-    "coldest_site",
-    "coldest_min",
-    "frost_probability",
-    "frost",
-    "ground_min",
-    "ground_frost",
-)
+OUTLOOK_SCHEMA = {
+    "night_min": pl.Float64,
+    "coldest_site": pl.String,
+    "coldest_min": pl.Float64,
+    "frost_probability": pl.Float64,
+    "frost": pl.Boolean,
+    "ground_min": pl.Float64,
+    "ground_frost": pl.Boolean,
+}
+OUTLOOK_COLUMNS = tuple(OUTLOOK_SCHEMA)
 #: archived outlook nights (one row per run, okres, model and night)
 ARCHIVE_COLUMNS = (
     "run",
@@ -483,15 +484,7 @@ def add_to_outlook(
 ) -> pl.DataFrame:
     """Add ``OUTLOOK_COLUMNS`` to the "night" and "day" rows of the outlook table (by
     the date the night ends); null elsewhere and without a calibration."""
-    schema = {
-        "night_min": pl.Float64,
-        "coldest_site": pl.String,
-        "coldest_min": pl.Float64,
-        "frost_probability": pl.Float64,
-        "frost": pl.Boolean,
-        "ground_min": pl.Float64,
-        "ground_frost": pl.Boolean,
-    }
+    schema = OUTLOOK_SCHEMA
     if cal is None or nights.is_empty():
         values = pl.DataFrame(schema={"okres": pl.String, "day": pl.Date, **schema})
     else:
