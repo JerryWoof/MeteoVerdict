@@ -221,9 +221,68 @@ National Blend of Models, MeteoSwiss) and what still has to be tested:
 [forecast-research.md](forecast-research.md).
 
 The forecast map (`tv.html`) shows the same combination for every okres, made twice a
-day by `mvd outlook`: by part of day, with the probability of precipitation (the
-share of models forecasting at least 0.2 mm, each counting the same) and a symbol; cloud cover there is
-a plain mean of the models and not verified.
+day by `mvd outlook`: by part of day, with the probability of precipitation (calibrated,
+below) and a symbol; cloud cover there is a plain mean of the models and not verified.
+
+### Probability of precipitation and heavy rain (`meteoverdict.rain_calibration`)
+
+The raw probability, the share of models with at least 0.2 mm in a 6-hour part of
+day (each model counting the same), rates rain too likely at every level. Every night
+`mvd daily` refits a calibration on the verified 6-hour cases of the last 90 days and
+publishes it as `rain-calibration.json` (release `data-latest` and the site data); `mvd
+outlook` uses it for every part of day:
+
+- **Cases:** okres × part of day × lead day 1–5, from the stored D+N forecasts at the
+  stations (`fc/`) and the hourly station precipitation (`obs/`). A model's value is
+  the mean of its 6-hour totals at the okres's stations, the observation the mean of
+  the stations with all 6 hours. Only cases with at least 3 models.
+- **p_L2:** one pooled logistic regression (L2 penalty as scikit-learn's
+  `LogisticRegression(C=1)`, fitted by Newton steps in numpy) of "≥ 0.2 mm observed"
+  on: the Brier-weighted share of wet models (each model weighted by 1 / its Brier
+  score for rain or no rain at that lead day, normalised to a mean of 1 and shrunk
+  towards equal weights by days / (days + 30)); the share with ≥ 1 mm; √mean and √max
+  of the model totals; the share of wet values over all models in the okresy whose
+  forecast points are within 40 km (the okres included, about 4.5 okresy) and √ of
+  the mean over the models of each one's largest total there; indicators for part of
+  day and lead day. Not per lead day: separate fits were worse.
+- **Published:** `rain_probability = 0.5 · p_L2 + 0.5 · share`. The fitted part alone
+  follows the training period's climate and was pulled too dry when the test period
+  turned wetter; the half with the raw share hedges against that.
+- **Symbols:** `rain` (sleet, snow) unchanged, by the raw share ≥ 50 % and ≥ 0.3 mm;
+  `showers` at a calibrated probability ≥ 40 % (30 % on the raw share before).
+- **Heavy rain:** an extended logistic regression (Wilks 2009: thresholds 0.2, 1 and
+  5 mm stacked with √threshold as a predictor, plus the share of models with ≥ 5 mm
+  and √ of their 90th percentile) gives `heavy_rain_probability`, P(≥ 5 mm in the
+  part of day); `heavy_rain` flags it at the probability with the best ETS on the
+  training cases (0.2–0.3 so far). For a whole day: the highest of its parts.
+- **Fallbacks:** fewer than 30 days of cases, a calibration older than 14 days, or a
+  case with fewer than 3 models: the raw share and the old showers rule, and the
+  heavy-rain fields are null. Whole days keep the raw share. A model without a Brier
+  score yet weighs 1.
+
+**Out of sample** (forecasts of 10 Aug – 30 Sep 2026, 11 models, 77 okresy; test
+13–30 Sep, refitted on 13, 19 and 25 Sep on the days up to 5 days before; 95 %
+intervals from a bootstrap over days):
+
+| Okres level, 26,334 test cases | Raw share (before) | Calibrated blend |
+|---|---|---|
+| Brier score, P(≥ 0.2 mm) | 0.0763 | **0.0683** (10.5 % lower [0.8, 21.0]) |
+| Brier skill vs. test climatology | 0.458 | 0.515 |
+| Mean probability (observed frequency 0.170) | 0.214 | 0.178 |
+| Brier score by lead day D+1 … D+5 | | 12, 14, 6.5, 6, 14 % lower |
+| ETS, any precipitation symbol (rain or showers) | 0.431 (bias 1.62) | **0.504** (bias 1.17), +0.075 [+0.036, +0.119] |
+| P(≥ 5 mm): ROC area (raw share of models ≥ 5 mm) | 0.772 | 0.952 (Brier +1 % [−8, +7]) |
+| Heavy-rain flag, ETS (frequency bias) | "any model ≥ 5 mm": 0.208 (2.14) | 0.190 (1.08) |
+
+The same holds with single-point model values (as the outlook asks Open-Meteo for one
+point per okres; −10.1 %) and with the okres forecast points rather than station
+centroids for the 40 km neighbourhood (−10.4 %). Weighting cases by age (half-life
+14 days) did not help, so all days of the window count the same. The heavy-rain flag
+ranks events far better than the raw share but its Brier score is no better; it fires
+about as often as heavy rain falls, while "any model ≥ 5 mm" fires twice as often for
+a slightly higher ETS. Risks: only August–September data so far (winter rain and snow
+will change the coefficients; the nightly refit follows with a 90-day lag), and the
+showers threshold of 0.40 was the best of 0.30/0.35/0.40 on the same test period.
 
 ### Does it beat the best single model? (roadmap 6.4)
 

@@ -26,7 +26,10 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
   `afternoon`, `evening`, `day`): `tmin`, `tmax`, `precipitation`, `rain_probability`,
   `wind`, `cloud`, `sunshine` (hours), `symbol` (as on the forecast map;
   [data-sources.md](data-sources.md#outlook-mvd-outlook-roadmap-66)), and `sunrise`,
-  `sunset` (Prague time, `"07:21"`, at the okres point, the same on every row of a day).
+  `sunset` (Prague time, `"07:21"`, at the okres point, the same on every row of a day),
+  `heavy_rain_probability` (calibrated chance of at least 5 mm in the period) and
+  `heavy_rain` (true when it is high enough to warn); both `null` while there is no
+  rain calibration ([methodology.md](methodology.md#probability-of-precipitation-and-heavy-rain-meteoverdictrain_calibration)).
 - `models.variables.<variable>` for `temperature_2m`, `wind_speed_10m`,
   `precipitation_daily` and `precipitation_24h`: `stations`, `borrowed`, `days`, and
   `lead_days."1"…"5"`: the models in rank order with `rank`, `mae`, `bias`, `rmse`,

@@ -461,11 +461,16 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
 - **Per period:** `tmin`, `tmax`, `precipitation` (sum of the combined hourly values),
   `rain_probability` (share of the models whose own total is ≥ 0.2 mm, among those
   covering the whole period, every model counting the same: the amount weights favour
-  AIFS, the worst model at rain or no rain), `wind` (highest combined hourly mean,
+  AIFS, the worst model at rain or no rain; for parts of day blended 50/50 with a
+  calibrated probability from `rain-calibration.json`, refitted nightly by `mvd daily`,
+  see [methodology.md](methodology.md#probability-of-precipitation-and-heavy-rain-meteoverdictrain_calibration)),
+  `wind` (highest combined hourly mean,
   m/s), `cloud` (%), `sunshine` (hours, sum of the hourly mean), `symbol`: `rain` / `sleet` / `snow` (≤ 2 / ≤ 0.5 °C mean temperature) when the
-  probability is ≥ 50 % and the total ≥ 0.3 mm, `showers` at ≥ 30 %, otherwise `clear`
+  share of models is ≥ 50 % and the total ≥ 0.3 mm, `showers` at a calibrated
+  probability ≥ 40 % (≥ 30 % of the models without a calibration), otherwise `clear`
   (< 25 % cloud), `partly` (< 70 %) or `cloudy`. The whole day's symbol uses the cloud
-  of 6–18.
+  of 6–18. With a calibration also `heavy_rain_probability` (P(≥ 5 mm)) and
+  `heavy_rain` (true/false), null without; a whole day takes the highest of its parts.
 - **Sunrise and sunset** (`sunrise`, `sunset`, Prague time "HH:MM") at the okres point,
   computed with the NOAA solar equations (`meteoverdict.sun`, no request; within half a
   minute of almanacs), the same on every row of a day.
