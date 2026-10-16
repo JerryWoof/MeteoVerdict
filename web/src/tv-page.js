@@ -307,6 +307,15 @@ function partCell(row, part) {
   return cell;
 }
 
+// the day's strongest wind and, where the single runs reach, its strongest gust
+function windCell(row) {
+  if (!row) return element("td", "", "num");
+  if (row.gust == null) return element("td", `${fmt(row.wind)} m/s`, "num");
+  const td = element("td", `${fmt(row.wind)} / ${fmt(row.gust)} m/s`, row.gust_warning ? "num gust-warning" : "num");
+  td.title = t("tv.windGustCell");
+  return td;
+}
+
 function renderPanel(outlook) {
   const panel = document.getElementById("okres-panel");
   if (!state.okres) {
@@ -330,11 +339,13 @@ function renderPanel(outlook) {
       symbolText(now.symbol),
       t("tv.range", { low: fmt(now.tmin), high: fmt(now.tmax) }),
       t("tv.rain", { chance: percent(now.rain_probability), amount: fmt(now.precipitation, 1) }),
-      t("tv.wind", { value: fmt(now.wind) }),
+      // gusts from the single runs: null beyond the newest run and in older files
+      now.gust != null ? t("tv.windGust", { value: fmt(now.wind), gust: fmt(now.gust) }) : t("tv.wind", { value: fmt(now.wind) }),
       t("tv.cloud", { value: fmt(now.cloud) }),
     ]) {
       facts.append(element("li", text));
     }
+    if (now.gust_warning) facts.append(element("li", t("tv.gustWarning"), "gust-warning"));
   }
   const sun = sunFor(outlook, state.okres, state.day);
   if (sun) {
@@ -358,7 +369,7 @@ function renderPanel(outlook) {
       iconCell,
       element("td", row ? `${fmt(row.tmax)}° / ${fmt(row.tmin)}°` : "–", "num"),
       element("td", row ? percent(row.rain_probability) : "", "num rain"),
-      element("td", row ? `${fmt(row.wind)} m/s` : "", "num"),
+      windCell(row),
     );
     week.append(tr);
   }
