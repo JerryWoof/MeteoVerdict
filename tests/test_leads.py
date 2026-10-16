@@ -341,3 +341,37 @@ def test_run_scores_chunks_add_up():
 def test_run_scores_without_pairs():
     table, info = leads.run_lead_scores(single("m"), obs(B, RUN, [1.0]), [model("m")])
     assert table.height == 0 and info["models"] == {}
+
+
+def test_a_model_with_few_runs_does_not_cut_the_fair_set():
+    # "new" (added recently) has 1 of 5 runs: the fair set keeps all 5 runs of "old"
+    runs = [RUN + timedelta(days=k) for k in range(5)]
+    observed = pl.concat([obs(A, r, [10.0] * 4) for r in runs])
+    rows = pl.concat(
+        [single("old", run=r, last=3, temp=11.0) for r in runs]
+        + [single("new", run=runs[-1], last=3, temp=12.0)]
+    )
+    table, info = leads.run_lead_scores(rows, observed, [model("old"), model("new")])
+    assert set(table["model"]) == {"old"}
+    first = table.filter(
+        pl.col("run_hour") == "all", pl.col("lead_h") == 1, pl.col("variable") == "temperature_2m"
+    )
+    assert first["runs"].item() == 5
+    assert info["short_record"] == {"new": {"runs": 1, "of": 5, "coverage": 0.2}}
+    doc = leads.runs_document(table, info, datetime(2026, 10, 16, tzinfo=UTC))
+    assert doc["short_record"] == info["short_record"]
+    assert info["first_run"] == runs[0]
+
+
+def test_run_coverage_counts_only_the_run_hours_a_model_has():
+    from meteoverdict import runs as runs_mod
+
+    runs = [RUN + timedelta(hours=6 * k) for k in range(8)]  # 06, 12, 18, 00 twice
+    rows = pl.concat(
+        [single("all", run=r) for r in runs]
+        # like GEM Global: no 06 and 18 UTC runs, but every 00 and 12 UTC one
+        + [single("twice", run=r) for r in runs if r.hour in (0, 12)]
+        + [single("new", run=runs[-1])]
+    )
+    cover = {m: (n, of, ok) for m, n, of, _, ok in runs_mod.coverage(rows).rows()}
+    assert cover == {"all": (8, 8, True), "new": (1, 2, False), "twice": (4, 4, True)}

@@ -172,6 +172,9 @@ header h1 a {
   color: #5b6670;
   font-style: italic;
 }
+#ranking tr.short {
+  color: #5b6670;
+}
 #language {
   margin-left: auto;
   font: inherit;
