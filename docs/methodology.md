@@ -283,33 +283,79 @@ every model has natively), per variable and lead day:
    `f − C`, constrained to sum to 1: first for Czechia (towards equal weights,
    penalty 0.1 per row), then per okres towards the Czech weights (penalty 1 per row).
    Weights can be negative (a model that errs like a better one is subtracted).
-5. **Forecast**: `Σ w · (f − D/(D+5)·C)`, wind not below 0. At the okres's forecast
-   point `dz` is the point's elevation (Open-Meteo's, committed in
-   `okres-elevations.csv`) minus the station mean, limited to the range of the
-   okres's stations; between the four slots the correction is interpolated linearly.
+5. **Forecast**: `Σ w · (f − D/(D+5)·C)`, wind not below 0. Between the four slots
+   the correction is interpolated linearly. At the okres's forecast point `dz` is the
+   point's elevation (Open-Meteo's, committed in `okres-elevations.csv`) minus the
+   station mean, limited to the range of the okres's stations, and the elevation term
+   counts **half** (see below).
+6. **Guard (wind only)**: the regression is also fitted without the last 7 days of its
+   window and scored on them against the method before (inverse-error weights,
+   all-hours bias), per okres; an okres where it did worse keeps the method before.
 
 Fallbacks: an hour where one of the regression's models has no value (or fades out)
 uses the inverse-error weights with the corrections of steps 2–3, rescaled over the
-models present; with fewer than 14 days of pairs (or no pairs in an okres) everything
-is as before. The weights without a sum-to-one constraint did better for wind at
-stations (−13.8 % instead of −10.9 %) but pull the forecast towards 0 without an
-intercept, so they are not used.
+models present; with fewer than 14 days of pairs, no pairs in an okres, or a guarded
+okres (wind) everything is as before. The weights without a sum-to-one constraint did
+better for wind at stations (−13.8 % instead of −10.9 %) but pull the forecast towards
+0 without an intercept, so they are not used. The pairs include the recent days that
+`mvd daily` rebuilds from the single runs (`meteoverdict.fresh`), so the regression is
+as recent as the scores.
 
 Out of sample (rolling origin, training only on days up to *d − N*, 11–30 September
 2026, against the previous method on the same rows) this cut the MAE by 6.9 % for
-temperature (D+1 −13.5 % … D+5 −3.7 %) and 10.8 % for wind (−9 … −12 % at every lead
+temperature (D+1 −13.5 % … D+5 −3.7 %) and 10.9 % for wind (−9 … −12 % at every lead
 day), in line with the research run it was chosen from (−7.0 %, −10.9 %; 95 %
-block-bootstrap intervals −9.9…−3.3 and −11.9…−9.8; the last week, held out when
+block-bootstrap intervals −9.7…−3.3 and −12.0…−9.7; the last week, held out when
 choosing it, gained as much). The gains are largest where the old all-hours bias did
 worst: by night for wind, by day for temperature. Tried and not used: a bias per
 station (larger gains at stations, but the forecast is for one point per okres), the
 previous run as extra members, exponentially decaying training weights, a
 multiplicative wind correction, only the best 3 or 5 models, and an elevation slope
-per okres (it mostly learns the okres's few stations). Caveats: the data cover late
-summer and autumn only, so the slopes are refitted daily rather than fixed (the winter
-inversions will change them); where an okres's stations span very different heights
-(Chomutov with Klínovec, Trutnov with Sněžka) the linear elevation term is a rough
-guess for the lowland stations, and a few such okresy got worse in the test below.
+per okres (it mostly learns the okres's few stations). The data cover late summer and
+autumn only, so the slopes are refitted daily rather than fixed (the winter inversions
+will change them).
+
+**Stations at very different heights.** Where an okres's pool mixes lowland and
+mountain stations (Chomutov: Tušimice 322 m and the borrowed Klínovec 1236 m) the
+national linear elevation term over-corrects the lowland station, and wind in
+Chomutov, Liberec and Nový Jičín got 10–34 % worse at stations. Tested out of sample at
+the stations (11–30 Sep, the last week held out), against the method before:
+
+| Wind, change of MAE | all days | held out | okres × lead day groups > 5 % worse |
+|---|---|---|---|
+| regression as specified | −12.7 % | −14.0 % | 26 of 385 |
+| pools without stations > 400 m from the point's height | −6.6 % | −6.4 % | 7 |
+| … > 300 m / > 500 m / no mountain stations | −5.7 / −7.0 / −7.1 % | | 4 / 13 / 7 |
+| elevation slope fitted only on \|dz\| ≤ 3 | −12.4 % | −13.6 % | 20 |
+| **guard (7 days, worse at all → method before)** | **−13.0 %** | **−14.4 %** | **10** |
+| guard with 14 days / with a 3 % or 5 % margin | −12.9 / −13.1 / −13.1 % | | 22 / 12 / 14 |
+
+Dropping the distant stations loses half the national gain (the mountain stations
+gain most from the elevation term); the guard keeps it and removes most of the
+losses (Chomutov +32 % → +9 %, Liberec +13 % → +2 %, Nový Jičín +13 % → +3 %). For
+temperature the guard cost 0.8 points of the gain and only 4 groups were worse than
+5 % without it, so it is used for wind only.
+
+**The elevation term at the forecast point.** The test above scores each station with
+its own elevation; the published forecast has one point per okres, often well below
+the stations' mean (Trutnov −540 m, Zlín −640 m, both with mountain stations in the
+pool). Checked with the station nearest each point as the truth (its forecasts and
+observations, the okres's coefficients, 11–30 Sep, held out 24–30 Sep), MAE change
+against no elevation term at the point (dz = 0):
+
+| | full term, all / held out | half term, all / held out | okresy > 5 % worse (wind): full / half |
+|---|---|---|---|
+| Temperature | −0.6 % / **−1.5 %** [−2.2, −0.7] | −0.4 % / **−0.9 %** [−1.2, −0.5] | |
+| Wind | −4.6 % / **−4.4 %** [−5.4, −3.5] | −3.5 % / **−3.3 %** [−4.1, −2.7] | 15 / 4 (of 77) |
+
+(Only okresy whose nearest station is within 150 m of the point's height: wind −6.7 %
+full, −4.1 % half, held out.) Both are clearly better than no term, so the data support
+an elevation correction at the point, including Trutnov (nearest station: wind MAE
+1.20 m/s without, 0.73 full, 0.70 half). The full term is a little better on average
+but makes wind clearly worse in 15 okresy (Chomutov +13 %), the
+half term in 4; against the okres's mean over its stations, which a single number for
+the whole okres is also read as, no term is best (half +5.5 %, full +14.5 % for wind).
+Half strength is the compromise used.
 
 How this compares with operational practice (Bureau of Meteorology OCF, NOAA's
 National Blend of Models, MeteoSwiss) and what still has to be tested:
@@ -415,10 +461,10 @@ negative = our forecast has the smaller MAE; 95 % interval in brackets):
 
 MAE of the combination with the regression blend against the method before it (same
 test): temperature 1.221 → 1.066 °C at D+1 (−12.7 %), −8.5 %, −6.5 %, −4.4 % and
-−3.9 % at D+2…D+5; wind 0.949 → 0.822 m/s at D+1 (−13.4 %), −12.3 %, −12.5 %,
-−11.5 % and −13.0 %. Of the 385 okres × lead day groups 31 got worse for temperature
-(4 by more than 5 %) and 58 for wind (26 by more than 5 %, mostly Chomutov, Liberec
-and Nový Jičín, whose stations span very different heights; see above).
+−3.9 % at D+2…D+5; wind 0.949 → 0.818 m/s at D+1 (−13.8 %), −12.7 %, −12.7 %,
+−11.8 % and −13.1 %. Of the 385 okres × lead day groups 4 got more than 5 % worse for
+temperature and 9 for wind (Chomutov up to +12 %, Semily, Nový Jičín, Prostějov,
+Hodonín; 26, up to +34 %, without the wind guard).
 
 Our forecast is now clearly better than the model a user of the ranking would have
 picked for every variable and lead day (before the regression blend it was worse for

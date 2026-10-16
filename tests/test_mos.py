@@ -156,3 +156,35 @@ def test_pairs_are_at_the_synoptic_hours():
         ("temperature_2m", 0, "a", 10.0, 9.0),
         ("wind_speed_10m", 0, "a", 3.0, 2.5),
     ]
+
+
+def test_inverse_error_is_the_method_before():
+    x = np.array([[11.0, 10.0], [13.0, 12.5], [12.0, 9.0], [10.0, 11.0]])
+    y = np.array([10.0, 12.0, 10.0, 10.0])
+    w, c = mos.inverse_error(x, y, np.array([0, 0, 0, 0]), 1, days=30)
+    bias = (x - y[:, None]).mean(0)
+    assert c[0] == pytest.approx(30 / 35 * bias)
+    assert w.sum() == pytest.approx(1.0)
+    variance = ((x - y[:, None]) ** 2).mean(0) - bias**2
+    inv = 1 / variance
+    assert w[0] == pytest.approx(0.5 * inv / inv.sum() + 0.25)
+
+
+def test_the_wind_guard_falls_back_where_the_regression_did_worse():
+    pairs = synthetic_pairs().with_columns(pl.lit("wind_speed_10m").alias("variable"))
+    t = mos.tables(pairs, mos.own_okres(STATIONS), STATIONS)[("wind_speed_10m", 1)]
+    end = mos.day_number(FIRST + timedelta(days=39))
+    # a clean regression keeps every okres
+    assert mos.fit(t, end).fitted.all()
+    assert not mos.worse_than_before(t, end, ["a", "b", "c"], 90, 14).any()
+    # in Beroun, model a's error flips in the last week: the regression, which trusts
+    # a's correction, does worse there than the inverse-error weights
+    late = (t.day > end - mos.GUARD_DAYS) & (t.okres == t.okresy.index("CZ0202"))
+    a = t.models.index("a")
+    t.forecast[late, a] -= 2 * (t.forecast[late, a] - t.observed[late]) + 6
+    worse = mos.worse_than_before(t, end, ["a", "b", "c"], 90, 14)
+    assert worse.tolist() == [False, True]
+    assert mos.fit(t, end).fitted.tolist() == [True, False]
+    assert mos.fit(t, end, guard=False).fitted.all()
+    # temperature is not guarded
+    assert "temperature_2m" not in mos.GUARD_VARIABLES

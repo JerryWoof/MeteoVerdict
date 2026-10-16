@@ -419,7 +419,9 @@ in each okres (`meteoverdict.combine`), from the okres scores of the last 90 day
 - **Temperature and wind, regression blend** (`meteoverdict.mos`, written by
   `mvd daily`, which has the last 100 days of `obs/` and `fc/` at hand): `mos_weight`
   (sums to 1 over the `mos_models` models, may be negative) and the corrections at
-  00/06/12/18 UTC at the okres's point, interpolated linearly in UTC hour in between.
+  00/06/12/18 UTC at the okres's point (elevation term at half strength), interpolated
+  linearly in UTC hour in between; for wind an okres where the regression did worse
+  than the method before on the last 7 days of its window has none.
   An hour where all `mos_models` models have a value (none fading out) is
   `Σ mos_weight · (forecast − correction)`; otherwise the inverse-error `weight` with
   the same hourly corrections, rescaled over the models present. `correction` holds

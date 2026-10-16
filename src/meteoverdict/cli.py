@@ -1528,7 +1528,14 @@ def _forecast_weights(
         as_of = table.filter(pl.col("window") == combine.WINDOW)["to"].max()
         allowed = combine.weights(table).select("variable", "lead_day", "model").unique()
         if as_of is not None:
-            coefficients = mos.recent(data_dir, scores, station_table, as_of, allowed)
+            # the forecasts of fc/ plus the recent days rebuilt from the single runs, as
+            # scored by mvd daily (fresh), so the regression is as recent as the scores
+            first, last = mos.training_span(as_of)
+            fc = partitions.scan_months(data_dir / "fc", first, last)
+            obs = observations.scan(data_dir, first, last)
+            models = [m for m in catalogue.load_models() if m.enabled]
+            fc, _ = daily_mod.add_fresh(data_dir, models, as_of, obs, fc)
+            coefficients = mos.recent(data_dir, scores, station_table, as_of, allowed, fc)
     fitted = 0 if coefficients is None else coefficients["region"].n_unique()
     typer.echo(f"regression blend (temperature, wind): {fitted} okresy")
     forecast = combine.forecast_weights(table, coefficients)

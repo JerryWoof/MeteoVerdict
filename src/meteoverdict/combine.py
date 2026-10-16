@@ -77,6 +77,12 @@ SLOT_CORRECTIONS = tuple(f"correction_{s}" for s in mos.SLOT_NAMES)
 FORECAST_COLUMNS = (*WEIGHT_COLUMNS, "mos_weight", "mos_models", *SLOT_CORRECTIONS)
 #: elevation of the forecast point of every okres (scripts/build_okres_elevations.py)
 ELEVATIONS_FILE = "okres-elevations.csv"
+#: the elevation term at the okres's forecast point at half strength: checked against
+#: the station nearest each point (held out 24-30 Sep 2026) the full term beat none by
+#: 4.4 % wind / 1.5 % temperature MAE, half by 3.3 % / 0.9 %, but the full term made 15
+#: okresy more than 5 % worse for wind (half: 4); against the okres's station mean, none
+#: is best (docs/methodology.md)
+POINT_LAPSE_FACTOR = 0.5
 #: the weight table of the forecast (``forecast_weights``) for ``mvd outlook``, in the
 #: data folder and in the release data-latest
 FORECAST_WEIGHTS_FILE = "forecast-weights.parquet"
@@ -166,11 +172,12 @@ def with_mos(
     )
 
 
-def slot_corrections(elevation: pl.Expr) -> list[pl.Expr]:
+def slot_corrections(elevation: pl.Expr, lapse_factor: float = 1.0) -> list[pl.Expr]:
     """``correction_00`` … ``correction_18`` at a place of the okres at ``elevation``
     (m; null: the mean elevation of the okres's stations) from the coefficient columns
-    of ``with_mos``; ``correction`` where there are none (precipitation, no regression)."""
-    dz = (
+    of ``with_mos``; ``correction`` where there are none (precipitation, no regression).
+    ``lapse_factor`` scales the elevation term (``POINT_LAPSE_FACTOR`` at the point)."""
+    dz = lapse_factor * (
         ((elevation - pl.col("station_elevation")) / mos.ELEVATION_STEP_M)
         .fill_null(0.0)
         .clip(pl.col("dz_min"), pl.col("dz_max"))
@@ -323,7 +330,7 @@ def forecast_weights(table: pl.DataFrame, coefficients: pl.DataFrame | None = No
     corrected = pl.col("bias_00").is_not_null()
     return (
         w.join(points, on="region", how="left")
-        .with_columns(slot_corrections(pl.col("_point")))
+        .with_columns(slot_corrections(pl.col("_point"), POINT_LAPSE_FACTOR))
         .with_columns(
             pl.when(corrected)
             .then(pl.mean_horizontal(*SLOT_CORRECTIONS))

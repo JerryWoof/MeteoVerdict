@@ -200,13 +200,14 @@ def coefficient_rows(models, weights, bias, lapse=0.0, elevation=400.0):
 def test_forecast_weights_with_the_regression():
     rows = table([("temperature_2m", "a", 30, 1.0, 0.2), ("temperature_2m", "b", 30, 2.0, 0.0)])
     bias = {"a": [1.0, 2.0, 3.0, 4.0], "b": [0.0, 0.0, 0.0, 0.0]}
-    # Benešov's point is at 430 m: 30 m above its stations, lapse 1 per 100 m → +0.3
+    # Benešov's point is at 430 m: 30 m above its stations, lapse 1 per 100 m at half
+    # strength at the point (POINT_LAPSE_FACTOR) → +0.15
     coefficients = coefficient_rows(["a", "b"], [0.7, 0.3], bias, lapse=1.0, elevation=400.0)
     w = combine.forecast_weights(rows, coefficients)
     a = w.filter(pl.col("model") == "a").row(0, named=True)
     assert a["mos_weight"] == 0.7 and a["mos_models"] == 2
-    assert [a[c] for c in combine.SLOT_CORRECTIONS] == pytest.approx([1.3, 2.3, 3.3, 4.3])
-    assert a["correction"] == pytest.approx(2.8)  # the mean, for readers of the old columns
+    assert [a[c] for c in combine.SLOT_CORRECTIONS] == pytest.approx([1.15, 2.15, 3.15, 4.15])
+    assert a["correction"] == pytest.approx(2.65)  # the mean, for readers of the old columns
     assert set(w.columns) == {"region", "region_name", *combine.FORECAST_COLUMNS}
     # a regression model without an inverse-error weight there: no regression at all
     partial = coefficient_rows(["a", "c"], [0.5, 0.5], {**bias, "c": [0.0] * 4})

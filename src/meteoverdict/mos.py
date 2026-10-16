@@ -22,17 +22,22 @@ every model has natively), separately for every variable and lead day N:
    ridge ``NATIONAL_RIDGE * n``), then per okres on its rows with the national weights
    as the prior (ridge ``OKRES_RIDGE * n_g``). Weights may be negative.
 5. **Forecast**: ``sum_m w_gm (f_m - D / (D + 5) C_ghm)``, wind not below 0. Between
-   the four slots the correction is interpolated linearly in UTC hour.
+   the four slots the correction is interpolated linearly in UTC hour. At the okres's
+   forecast point the elevation term counts half (``combine.POINT_LAPSE_FACTOR``).
+6. **Guard (wind)**: an okres whose regression, fitted without the last
+   ``GUARD_DAYS`` days of the window, did worse on them than the method before keeps
+   the method before (``worse_than_before``): okresy whose stations span very
+   different heights (Chomutov with Klínovec) lost up to a third without it.
 
 Out of sample (rolling origin, 11-30 Sep 2026, research report in the PR) this cut the
 MAE of the okres combination by about 7 % for temperature and 11 % for wind against the
 inverse-error weights with an all-hours bias. The fit is a few small linear systems.
 
-When it cannot be used, ``combine`` falls back: with too few days (``MIN_DAYS``) or no
-rows in an okres to the inverse-error weights of the okres scores with an all-hours
-bias (the method before); at an hour where one of the regression's models has no value
-(or fades out) to those inverse-error weights with the slot and elevation corrections
-above (renormalised over the models present).
+When it cannot be used, ``combine`` falls back: with too few days (``MIN_DAYS``), no
+rows in an okres or a guarded okres to the inverse-error weights of the okres scores
+with an all-hours bias (the method before); at an hour where one of the regression's
+models has no value (or fades out) to those inverse-error weights with the slot and
+elevation corrections above (renormalised over the models present).
 """
 
 from __future__ import annotations
@@ -61,6 +66,12 @@ OKRES_RIDGE = 1.0
 MIN_COVERAGE = 0.8
 #: fewer training days: no regression, the inverse-error weights of the okres scores
 MIN_DAYS = 14
+#: per okres, the regression falls back to the method before it where it did worse on
+#: the last GUARD_DAYS days of its window (fitted without them); for wind, where a few
+#: okresy with stations at very different heights (Chomutov with Klínovec) lost
+GUARD_VARIABLES = ("wind_speed_10m",)
+GUARD_DAYS = 7
+NON_NEGATIVE = ("wind_speed_10m",)
 #: elevation differences are counted in steps of this many metres
 ELEVATION_STEP_M = 100.0
 #: columns of the coefficient table (``Fit.frame``), besides region/variable/lead_day/model
@@ -324,6 +335,7 @@ def fit(
     models: list[str] | None = None,
     allowed: set[str] | None = None,
     min_days: int = MIN_DAYS,
+    guard: bool = True,
 ) -> Fit | None:
     """The regression on the rows of the ``window`` days ending on day ``end`` (days
     since 1970-01-01). ``models``: use exactly these (else those with
@@ -384,7 +396,7 @@ def fit(
         weights[okres] = solve(corrected[at], y[at], national, OKRES_RIDGE * at.sum())
         fitted[okres] = True
         dz_range[okres] = dz[at].min(), dz[at].max()
-    return Fit(
+    result = Fit(
         variable=table.variable,
         lead_day=table.lead_day,
         models=[table.models[i] for i in cols],
@@ -398,6 +410,60 @@ def fit(
         elevation=table.elevation,
         dz_range=dz_range,
     )
+    if guard and table.variable in GUARD_VARIABLES:
+        result.fitted &= ~worse_than_before(table, end, result.models, window, min_days)
+    return result
+
+
+def inverse_error(
+    x: np.ndarray, y: np.ndarray, okres: np.ndarray, okresy: int, days: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """The method before the regression, from pairs: per okres inverse error-variance
+    weights shrunk towards equal with 30 days and the all-hours bias shrunk with 5 days
+    (as ``combine.weights`` from the okres scores). ``(weights, corrections)``, okresy x
+    models."""
+    error = x - y[:, None]
+    bias = np.nan_to_num(_group_mean(okres, okresy, error))
+    square = np.nan_to_num(_group_mean(okres, okresy, error**2))
+    inverse = 1 / np.maximum(square - bias**2, 0.01)
+    s = days / (days + 30)
+    weights = s * inverse / inverse.sum(1, keepdims=True) + (1 - s) / x.shape[1]
+    return weights, days / (days + BIAS_SHRINK_DAYS) * bias
+
+
+def worse_than_before(
+    table: Table, end: int, models: list[str], window: int, min_days: int
+) -> np.ndarray:
+    """Okresy (bool per ``table.okresy``) where the regression did worse than the method
+    before it on the last ``GUARD_DAYS`` days of the window, both fitted on the days
+    before them (out of sample). False everywhere when that inner fit is not possible."""
+    worse = np.zeros(len(table.okresy), bool)
+    inner_end = end - GUARD_DAYS
+    inner = fit(table, inner_end, window, models=models, min_days=min_days, guard=False)
+    if inner is None:
+        return worse
+    cols = [table.models.index(m) for m in models]
+
+    def complete(first: int, last: int) -> np.ndarray:
+        rows = np.where((table.day > first) & (table.day <= last))[0]
+        return rows[~np.isnan(table.forecast[np.ix_(rows, cols)]).any(1)]
+
+    train, check = complete(inner_end - window, inner_end), complete(inner_end, end)
+    if len(check) == 0:
+        return worse
+    n = len(table.okresy)
+    weights, corrections = inverse_error(
+        table.forecast[np.ix_(train, cols)], table.observed[train], table.okres[train], n,
+        len(np.unique(table.day[train])),
+    )  # fmt: skip
+    x, y, g = table.forecast[np.ix_(check, cols)], table.observed[check], table.okres[check]
+    before = (weights[g] * (x - corrections[g])).sum(1) / weights[g].sum(1)
+    now = inner.predict(x, g, table.slot[check], table.dz[check])
+    if table.variable in NON_NEGATIVE:
+        before = np.clip(before, 0, None)
+    error_now = np.bincount(g, weights=np.abs(now - y), minlength=n)
+    error_before = np.bincount(g, weights=np.abs(before - y), minlength=n)
+    return error_now > error_before
 
 
 def day_number(day: date) -> int:
@@ -445,13 +511,17 @@ def recent(
     stations: pl.DataFrame,
     as_of: date,
     allowed: pl.DataFrame | None = None,
+    fc: pl.LazyFrame | None = None,
 ) -> pl.DataFrame | None:
     """The coefficients of the live forecast: fitted on the ``WINDOW_DAYS`` days up to
     ``as_of`` from the observations and forecasts in ``data_dir`` (``obs/``, ``fc/``),
-    with the okres pools of the ``scores`` of those days. None without data."""
+    with the okres pools of the ``scores`` of those days. ``fc``: the forecasts to use
+    instead of ``fc/`` (e.g. with the days rebuilt from the single runs). None without
+    data."""
     first, last = training_span(as_of)
     obs = observations.scan(data_dir, first, last)
-    fc = partitions.scan_months(data_dir / "fc", first, last)
+    if fc is None:
+        fc = partitions.scan_months(data_dir / "fc", first, last)
     if obs is None or fc is None:
         return None
     rows = pairs(obs, fc, first, last)
