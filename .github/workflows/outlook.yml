@@ -9,6 +9,9 @@ name: Outlook
 # (docs/data-sources.md#open-meteo-budget). Each run also appends the plain model means of
 # cloud and sunshine to the release outlook-archive (no extra calls), the training data
 # of the nightly sun-cloud-gust.yml.
+# The frost fields use frost.json (daily.yml, `mvd frost-fit`); the models' nights at
+# the okres points go into outlook-nights-YYYY-MM.parquet of data-YYYY-MM (no extra
+# calls) to refit the clear-calm term (docs/methodology.md#frost).
 on:
   schedule:
     - cron: "52 5 * * *"

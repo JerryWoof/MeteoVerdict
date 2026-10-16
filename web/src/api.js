@@ -21,6 +21,9 @@ const PART_FIELDS = [
   "sunrise", "sunset",
   // optional (null without the rain calibration): P(>= 5 mm) in the period and its flag
   "heavy_rain_probability", "heavy_rain",
+  // frost (on the night and day rows of the date a night ends; null elsewhere and in
+  // older outlook files): corrected night minimum, coldest site, probability, warnings
+  "night_min", "coldest_site", "coldest_min", "frost_probability", "frost", "ground_min", "ground_frost",
 ];
 
 const round = (v, digits) => (v == null ? null : Number(v.toFixed(digits)));

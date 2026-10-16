@@ -330,6 +330,81 @@ every day as history grows. Not yet done: training windows of 30 and 45 days and
 decaying average (roadmap 6.4); with under 45 days of history they would be almost
 the same as 90 days.
 
+### Frost: night minimum, frost and ground frost
+
+The models' night minima are too warm (by 1.4–2.3 °C at the stations in September
+2026, most on clear, calm nights), so they almost never forecast frost (POD ≈ 0, see
+the event skill above). The forecast map's data (`outlook.json`, `mvd outlook`) therefore
+carries a separately corrected **night minimum** for the night 18–06 UTC, on the
+`night` and `day` rows of the date the night ends (`meteoverdict.frost`):
+
+1. **Per model and lead day:** `fmin − b[model, lead]`, the model's mean error of the
+   night minimum over the last 60 nights at all stations (D+N forecasts `fc-YYYY-MM`
+   against ČHMÚ's `TMInoc`, the 2 m minimum 18–06 UTC), then the plain mean of the
+   models (leads beyond D+3 use the D+3 bias).
+2. **Per station:** `− b_station`, the station's mean error left after 1., over the same
+   nights, shrunk by `n / (n + 10)` and applied in full (half strength was clearly
+   worse). Station biases are stable (correlation 0.93 between two halves of the
+   season) and differ more within an okres (0.95 °C) than between okresy (0.59 °C).
+   A split by forecast wind (< 2 m/s or not) did not help in our validation and is off.
+3. **Clear, calm nights:** `− (1.33 − 1.12 · cloud − 0.36 · min(wind, 5))` with the
+   night means of the models' own cloud fraction (not the corrected cover of the map) and wind (m/s): about
+   −1.0 °C for a clear, calm night, +1.4 °C for an overcast, windy one. These are the
+   values of the research sample (Open-Meteo Previous Runs, 16 stations, 1–13 April and
+   1–14 October 2026; bootstrap 95 % ranges 1.02–1.68, −1.98…−0.45, −0.53…−0.18);
+   `frost.json` records where they come from. The outlook archives its models' nights
+   at the okres points (`outlook-nights-YYYY-MM.parquet` in `data-YYYY-MM`, no extra
+   calls); once 30 nights of the last 45 days have observations, `mvd frost-fit` refits
+   the three numbers there on what is left after 1. and 2.
+
+The **okres minimum** (`night_min`) applies 1., the mean station bias of the okres and
+3. at the okres point. The **coldest site** (`coldest_site`, `coldest_min`) is the
+okres's station with the lowest corrected minimum: its own bias, the forecast moved from
+the point's to the station's elevation by 0.65 °C/100 m (as Open-Meteo corrects for
+elevation). From the okres minimum: `frost_probability` = Φ(−min / σ) with σ the error
+left in training (1.4–1.6 °C), `frost` (air-frost warning) when the minimum is ≤ 1 °C
+(the best CSI in every test; ≤ 0 °C catches too few, ≤ 2 °C has a FAR of 0.5–0.7), and
+`ground_min`, the 5 cm minimum, = minimum − 5.0 + 1.5 · cloud + 0.35 · wind
+(`ground_frost` when ≤ 0 °C; ČHMÚ's `TPM` is on average 2.9 °C below `TMInoc`, 4.1 °C
+on clear calm nights, 0.5 °C overcast and windy). `mvd frost-fit` runs in the daily
+workflow and writes `frost.json` to `data-latest`; without it the fields stay empty.
+
+**Validation** (with `meteoverdict.frost`; event = observed minimum ≤ 0 °C; POD / FAR
+/ CSI; MAE in °C). D+N forecasts of 11 models at 238 stations, D+1–D+3:
+
+| Test | Forecast | MAE | bias | warn ≤ 0 °C | warn ≤ 1 °C |
+|---|---|---|---|---|---|
+| Train 1–20 Sep, test 21 Sep–4 Oct (9,966 station-nights × lead, 81 frost) | mean of the models | 2.42 | +1.76 | 0.00 / – / 0.00 | 0.00 / 1.00 / 0.00 |
+| | + per model (1.) | 2.03 | +0.26 | 0.00 / 1.00 / 0.00 | 0.00 / 1.00 / 0.00 |
+| | + per station (2.) | **1.68** | +0.26 | 0.05 / 0.33 / 0.05 | 0.17 / 0.50 / 0.15 |
+| | + per station, split by wind | 1.72 | +0.28 | 0.05 / 0.43 / 0.05 | 0.16 / 0.63 / 0.13 |
+| Single runs for the night 13→14 Oct (192, 10 frost), trained 1 Sep–4 Oct | mean of the models | 1.46 | +0.72 | 0.00 / 1.00 / 0.00 | 0.10 / 0.86 / 0.06 |
+| | + per model | 1.57 | −0.79 | 0.20 / 0.82 / 0.11 | 0.40 / 0.75 / 0.18 |
+| | + per station | **1.19** | −0.63 | 0.30 / 0.57 / 0.21 | 0.80 / 0.53 / 0.42 |
+
+With cloud (the research sample, 16 stations, ECMWF IFS, ICON-EU, ICON-D2, ALADIN 1 km,
+D+1–D+2). The default clear-calm numbers were fitted on April and October together, so
+the "refit on train" rows are the honest out-of-sample ones:
+
+| Test | per model | + station | + station + clear-calm (default) | + station + clear-calm (refit on train) |
+|---|---|---|---|---|
+| Train Apr → test Oct (448, 20 frost): MAE; ≤ 1 °C | 1.33; 0.45 / 0.40 / 0.35 | 1.28; 0.30 / 0.50 / 0.23 | 1.18; 0.65 / 0.43 / 0.43 | 1.28; 0.75 / 0.50 / 0.43 |
+| Train Oct → test Apr (352, 145 frost) | 1.50; 0.83 / 0.25 / 0.65 | 1.46; 0.85 / 0.24 / 0.67 | 1.24; 0.90 / 0.24 / 0.70 | 1.26; 0.88 / 0.25 / 0.68 |
+| Train Apr + 1–11 Oct → test 12–14 Oct (96, 20 frost) | 1.43; 0.60 / 0.40 / 0.43 | 1.39; 0.60 / 0.40 / 0.43 | 1.24; 0.80 / 0.45 / 0.48 | 1.23; 0.85 / 0.47 / 0.49 |
+
+Ground frost (5 cm ≤ 0 °C) from the corrected minimum: CSI 0.66 Apr → Oct (POD 0.80,
+FAR 0.20; a fixed −3.4 °C offset 0.55), 0.88 Oct → Apr (0.85), 0.77 on 12–14 Oct (0.79).
+Frost probability, Brier score against climatology: 0.007 vs 0.008 (September test),
+0.026 vs 0.043 (Apr → Oct), 0.093 vs 0.242 (Oct → Apr).
+
+Limits: one autumn and 13 April nights; few frost nights in the tests (POD and FAR
+are uncertain by about ±0.15–0.2); the corrections are learnt at the stations and
+applied at the okres point (model biases there may differ); seasons differ (April-trained
+corrections ran 0.5–0.85 °C too cold on the October frost nights), hence the rolling
+windows. A dew-point floor did not help (observed minima fell below the forecast
+18 UTC dew point on 53 % of nights), and Open-Meteo's archived runs have no
+`soil_temperature_0cm`.
+
 ## Sunshine, cloud and gusts
 
 The forecast map shows sunshine and cloud prominently (also on the TRMNL e-ink

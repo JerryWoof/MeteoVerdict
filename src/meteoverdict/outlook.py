@@ -36,7 +36,7 @@ from zoneinfo import ZoneInfo
 import httpx
 import polars as pl
 
-from meteoverdict import rain_calibration, sun_cloud_gust
+from meteoverdict import frost, rain_calibration, sun_cloud_gust
 from meteoverdict.combine import combine_values, okres_points
 from meteoverdict.forecasts import _reason, call_weight
 from meteoverdict.sun import sun_times
@@ -495,6 +495,7 @@ def with_sun(table: pl.DataFrame, points: pl.DataFrame) -> pl.DataFrame:
 def write(table: pl.DataFrame, points: pl.DataFrame, path: Path, generated: datetime) -> Path:
     """``outlook.json``: ``{"generated", "time_zone", "parts", "days", "okresy",
     "columns", "rows"}``, numbers rounded to one decimal (probability to two)."""
+    columns = [*COLUMNS, *(c for c in frost.OUTLOOK_COLUMNS if c in table.columns)]
     rounded = (
         table.select(
             pl.col("okres"),
@@ -510,9 +511,10 @@ def write(table: pl.DataFrame, points: pl.DataFrame, path: Path, generated: date
                 (pl.col(c) if c in table.columns else pl.lit(None, t)).alias(c)
                 for c, t in (("heavy_rain_probability", pl.Float64), ("heavy_rain", pl.Boolean))
             ],
+            *_frost_columns(table),
         )
         .with_columns(pl.col("heavy_rain_probability").round(2))
-        .select(COLUMNS)
+        .select(columns)
     )
     doc = {
         "generated": generated.isoformat(timespec="minutes"),
@@ -520,12 +522,23 @@ def write(table: pl.DataFrame, points: pl.DataFrame, path: Path, generated: date
         "parts": list(PARTS),
         "days": sorted(rounded["day"].unique().to_list()),
         "okresy": points.select("code", "name", "lat", "lon").rows(named=True),
-        "columns": list(COLUMNS),
+        "columns": columns,
         "rows": rounded.rows(),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), "utf-8")
     return path
+
+
+def _frost_columns(table: pl.DataFrame) -> list[pl.Expr]:
+    """The frost fields (``meteoverdict.frost``; ``outlook`` always adds them, null without
+    a frost calibration) that the table has, rounded like the others."""
+    digits = {"night_min": 1, "coldest_min": 1, "ground_min": 1, "frost_probability": 2}
+    return [
+        pl.col(c).round(digits[c]) if c in digits else pl.col(c)
+        for c in frost.OUTLOOK_COLUMNS
+        if c in table.columns
+    ]
 
 
 HOURLY = ("temperature_2m", "precipitation", "wind_speed_10m", "cloud_cover", "sunshine_duration")
@@ -569,12 +582,16 @@ def outlook(
     sleep: Callable[[float], None] = lambda _: None,
     calibration: rain_calibration.Calibration | None = None,
     corrections: dict | None = None,
+    frost_calibration: frost.Calibration | None = None,
+    nights: list[pl.DataFrame] | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Fetch, combine and summarise for all ``points`` (code, name, lat, lon) that have
     weights: the parts-of-day table and the combined hourly series (with the plain
     means of cloud and sunshine as ``cloud_cover_raw`` and ``sunshine_duration_raw``);
     with a rain ``calibration``, calibrated probabilities of precipitation;
-    ``corrections``: the coefficients of ``sun_cloud_gust`` (default: the bootstrap)."""
+    ``corrections``: the coefficients of ``sun_cloud_gust`` (default: the bootstrap).
+    The frost fields (``meteoverdict.frost``) come from ``frost_calibration``; the
+    models' nights at the okres points are appended to ``nights`` for the archive."""
     now = now or datetime.now(UTC)
     points = points.filter(pl.col("code").is_in(weights["region"].unique().to_list()))
     models = sorted(weights["model"].unique().to_list())
@@ -585,4 +602,8 @@ def outlook(
         hourly, points, corrections or sun_cloud_gust.load(), now
     )
     table = summarise(hourly, probability(fc, weights, now, calibration, points))
+    night_rows = frost.point_nights(fc, payload, points["code"].to_list(), now)
+    if nights is not None:
+        nights.append(night_rows)
+    table = frost.add_to_outlook(table, night_rows, frost_calibration)
     return with_sun(table, points), hourly

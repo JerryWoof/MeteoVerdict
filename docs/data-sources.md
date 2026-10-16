@@ -485,6 +485,14 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
 - **Sunrise and sunset** (`sunrise`, `sunset`, Prague time "HH:MM") at the okres point,
   computed with the NOAA solar equations (`meteoverdict.sun`, no request; within half a
   minute of almanacs), the same on every row of a day.
+- **Frost** (`night_min`, `coldest_site`, `coldest_min`, `frost_probability`, `frost`,
+  `ground_min`, `ground_frost`) on the `night` and `day` rows of the date a night ends:
+  the models' night minima (18–06 UTC) corrected with `frost.json` (`mvd frost-fit`,
+  daily) and the night means of their cloud and wind; empty without `frost.json`.
+  Each run also stores the models' nights at the okres points (minimum, mean wind and
+  cloud, lead, point elevation) in `outlook-nights-YYYY-MM.parquet` of `data-YYYY-MM`
+  for refitting the clear-calm term, from the same answer (no extra calls).
+  [methodology.md](methodology.md#frost-night-minimum-frost-and-ground-frost).
 - **Output:** `site/data/outlook.json` `{"generated", "time_zone", "parts", "days",
   "okresy": [{code, name, lat, lon}], "columns", "rows"}` (about 110 kB);
   `.github/workflows/outlook.yml` runs it at 05:52 and 17:52 UTC and uploads it to the
