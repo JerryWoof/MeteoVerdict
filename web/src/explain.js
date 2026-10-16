@@ -8,7 +8,8 @@ export const HOURS = ["00", "06", "12", "18"];
 // fewer scored days than this: the ranking is preliminary
 export const FEW_DAYS = 30;
 
-const isModel = (r) => r.model !== "blend";
+// the mean of all models and the models with too short a record are not candidates
+const isModel = (r) => r.model !== "blend" && !r.short_record;
 
 /** The model with the smallest MAE among rows (ranked or not), or null. */
 function lowest(rows) {

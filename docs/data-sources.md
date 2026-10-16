@@ -382,6 +382,20 @@ in the whole history, e.g. all summers, so models can be compared by season (the
   the first and last day scored from each source, e.g.
   `{"previous_runs": {"from": "2026-07-08", "to": "2026-10-04"}, "single_runs":
   {"from": "2026-10-04", "to": "2026-10-15"}}`.
+- **Models with too short a record.** Per window, variable and lead day only the models
+  with scores on at least 80 % of the window's scored days are compared and ranked
+  (`aggregate.coverage`, `MIN_COVERAGE`); the fair station-days are those every one of
+  them has. The others (a model added recently, whose backfill has reached only its
+  newest weeks) get rows of their own with `short_record` true, over their own
+  station-days among the fair ones (smaller `days` and `n`), no rank and no weight.
+  Every row has `coverage` (the model's share of the window's scored days). `meta.json`
+  lists them per window (`short_record`: `{window: {model: {coverage, days,
+  variables}}}`, with `min_coverage`). Without the rule, on 16 October 2026 the eight models added on 15
+  October (scores from 21 September) cut the 90-day window of every model from 38–40
+  days (temperature, wind) and 37–52 (precipitation) to 9–10. With it, those eight are
+  listed separately; for the 06–06 precipitation (gauges), six models whose gauge
+  history so far starts on 7 September (38 of 52 days, 72–74 %) are also listed
+  separately until the gauge backfill reaches further back.
 - For the web map also `site/data/stations.json` (position, okres, kraj) and
   `site/data/series/<station>.json`: each model's daily MAE at that station over the
   last 90 days, for the ranked variables at D+1 and D+2 (about 65 kB per station, so
@@ -391,7 +405,14 @@ in the whole history, e.g. all summers, so models can be compared by season (the
 
 `mvd aggregate` also writes, for the web map's own forecast, how to combine the models
 in each okres (`meteoverdict.combine`), from the okres scores of the last 90 days
-(window `90d`, same fair station-days, borrowed stations included):
+(window `90d`, same fair station-days, borrowed stations included). Only the models
+compared there get a weight: those with scores on at least 80 % of the window's scored
+days (`aggregate.MIN_COVERAGE`). A model with a shorter record (`short_record`, e.g.
+added recently, its backfill so far only reaching its newest weeks) gets no weight and
+does not cut the others' training days; it is weighted from the day it has them.
+`mvd aggregate` prints the models left out, and `mvd check` warns about them. The
+temperature and wind regression (`mos`) uses the same models (and its own 80 % rule
+on the training rows).
 
 | Open-Meteo variable | Weights from | Bias correction |
 |---|---|---|
@@ -747,7 +768,7 @@ also appears on the run page (job summary).
 |---|---|---|
 | newest observation | older than 30 h | |
 | newest forecast, newest score | older than 21 days (complete backfill windows lag up to 15) | |
-| published scores (`site/data/meta.json`, `mvd check --meta`) | `as_of` more than 21 days before `generated` (forecasts come in 14-day windows, so up to ~20 is normal) | file missing |
+| published scores (`site/data/meta.json`, `mvd check --meta`) | `as_of` more than 21 days before `generated` (forecasts come in 14-day windows, so up to ~20 is normal) | file missing; models left out of the 90-day ranking and weights for too short a record (`short_record`, under 80 % of the days; normal for a few weeks after a model is added) |
 | stations reporting in the last 3 days, of those that reported in the last 30 | under 80 % | the stations missing |
 | temperature MAE per station over 90 days (all models) | | above 3 x the network median and above 3 °C: sensor or metadata problem |
 
@@ -1630,9 +1651,13 @@ for what it means). `meteoverdict.leads` has two parts.
    value (and the observation exists) are scored. For "all" run hours a model must reach
    the lead in every run hour (UK Met Office therefore ends at 60 h there, ARPEGE at
    102 h). So the set of models shrinks with the lead hour, and a model missing from a
-   run takes that run out of the comparison at the leads it would reach (like the D+N
-   rule: models whose archive starts later — ALADIN, 2026-06-23 — limit the common
-   sample).
+   run takes that run out of the comparison at the leads it would reach. Only models
+   with at least 80 % of the period's runs take part (`runs.coverage`, counted over
+   the run hours the model has, so GEM Global without 06 and 18 UTC runs counts fully):
+   a model whose single runs are fetched only since it was added would otherwise cut
+   every model's runs to its few days (on 16 October 2026 the eight models added on 15
+   October cut `leads.json` and `farm.json` to the four runs of that day, of twelve
+   since 13 October). They are listed under `short_record` until they have them.
 4. Sums errors per run hour stratum (`all`, `00`, `06`, `12`, `18`), model, variable
    and lead hour, 24 runs at a time (the sums are additive, so months of runs fit in
    memory), plus the 2×2 counts for ≥ 0.1 mm in the hour.
@@ -1646,6 +1671,7 @@ the Pages build takes it):
 | `source`, `about`, `fair_set` | where the data come from and the comparison rule |
 | `stations` | stations with at least one pair |
 | `models` | per model: `name`, `runs` and `pairs` used (run hour "all"), `horizon_h` per run hour, `publication_delay_h` (ALADIN only, from our archive; null for the others) |
+| `short_record` | models left out for fewer than 80 % of the period's runs: `{model: {runs, of, coverage}}` |
 | `variables`, `region`, `regions` | units; Czechia only (`cz`) |
 | `columns`, `rows` | one row per `run_hour`, `model`, `variable`, `lead_h`: `runs`, `stations`, `n`, `mae`, `bias`, `rmse` (3 decimals), `a_0p1`, `b_0p1`, `c_0p1`, `d_0p1` (precipitation only) |
 
@@ -1746,6 +1772,8 @@ a value per run hour (narrowest over the run hours in which any model has the va
 gusts exist only in runs fetched since 2026-10-15). Per event and bin the required
 models are those covering the whole bin (for blocks also with an output step of at most
 3 h throughout); only units that every required model has, with an observation, count.
+Models with fewer than 80 % of the period's runs (added recently) are left out until
+they have them (`short_record`, as in `leads.json`).
 Measured coverage of the gusts (run of 2026-10-13 00 UTC): ALADIN 1–72, ICON-D2 1–48,
 AROME 2–60, ICON-EU, IFS HRES, GFS, UKMO 1–120 (UKMO 60 from 06/18 UTC), ARPEGE 1–102,
 IFS 0.25° 3–92 (temperature to 120), AIFS none.
@@ -1759,6 +1787,7 @@ IFS 0.25° 3–92 (temperature to 120), AIFS none.
 | `bins`, `small_sample` | the lead bins; fewer observed events than this are flagged (20) |
 | `events` | per event: `variable`, `unit` (`night`, `3h`), `op` (`<=`, `>=`), `thresholds`, `definition` |
 | `models` | per model: `name`, `runs` scored, `leads` (coverage per variable, `[first, last]`) |
+| `short_record` | models left out for fewer than 80 % of the period's runs: `{model: {runs, of, coverage}}` |
 | `columns`, `rows` | one row per `event`, `threshold`, `bin`, `model`: `units` (nights or blocks, station × run; the same for every model of a bin), `runs`, `stations`, `events` (observed), `hits`, `misses`, `false_alarms`, `correct_negatives`, `pod`, `far`, `csi`, `ets`, `bias` (frequency bias; 3 decimals, null when the denominator is 0) |
 
 About 35 kB with 11 runs (all events, thresholds and bins); it grows with the bins and

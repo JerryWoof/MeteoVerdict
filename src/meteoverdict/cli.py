@@ -619,6 +619,7 @@ def leads_cmd(
         if single is not None and obs is not None:
             models = [m for m in catalogue.load_models() if m.enabled]
             table, info = leads.run_lead_scores(single, obs, models)
+            _echo_short_runs("mvd leads", info)
             if table.height:
                 doc = leads.runs_document(table, info, generated, delays, names)
                 written.append(leads.write(doc, out))
@@ -634,6 +635,14 @@ def leads_cmd(
     for line in lines:
         typer.echo(line)
     typer.echo(f"→ {', '.join(map(str, written))}")
+
+
+def _echo_short_runs(command: str, info: dict) -> None:
+    """Print the models a single-run comparison left out for too few runs."""
+    left_out = info.get("short_record") or {}
+    if left_out:
+        listed = ", ".join(f"{m} ({f['runs']} of {f['of']} runs)" for m, f in left_out.items())
+        typer.echo(f"{command}: left out for too short a record: {listed}")
 
 
 @app.command("farm")
@@ -674,6 +683,7 @@ def farm_cmd(
         if single is not None and obs is not None:
             models = [m for m in catalogue.load_models() if m.enabled]
             table, info = farm.farm_scores(single, obs, models)
+            _echo_short_runs("mvd farm", info)
         if table is None or table.height == 0:
             typer.echo(
                 f"mvd farm: no runs with observations since {since:%Y-%m-%d %H} UTC", err=True
@@ -1611,6 +1621,12 @@ def _publish_aggregates(
     names = _model_names()
     meta = aggregate.metadata(table, names, datetime.now(UTC))
     meta["sources"] = fresh.sources(scores)
+    for window, left_out in meta["short_record"].items():
+        listed = ", ".join(
+            f"{m} ({f['days']} days, {f['coverage']:.0%}: {', '.join(f['variables'])})"
+            for m, f in left_out.items()
+        )
+        typer.echo(f"{window}: left out for too short a record (not ranked, no weight): {listed}")
     written = [
         *aggregate.write_json(table, out, meta),
         aggregate.write_stations(station_table, out),

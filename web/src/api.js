@@ -50,6 +50,10 @@ export function okresModels(code, scores, weightsDoc, names) {
         bias: round(r.bias, 3),
         rmse: round(r.rmse, 3),
         tied_with_best: Boolean(r.tied_with_best),
+        // too short a record in the window (e.g. added recently): not ranked, no weight;
+        // its MAE is over its own `days` only
+        short_record: Boolean(r.short_record),
+        days: r.days ?? null,
         weight: w ? round(w.weight, 4) : null,
         correction: w ? round(w.correction, 4) : null,
         // temperature and wind: weight in the regression blend (null without one)
@@ -88,7 +92,7 @@ export function okresDoc({ okres, outlook, hourly, weightsDoc, scores, meta }) {
       window: "90d",
       from: window?.from ?? null,
       to: window?.to ?? null,
-      metrics: "MAE, bias (forecast minus observed) and RMSE at D+1…D+5; rank 1 = smallest MAE; tied_with_best: not significantly worse (95 % bootstrap interval over days); weight/correction: as used in our forecast (correction: mean over the day); mos_weight: weight in the temperature and wind regression blend, used when all its models have a value",
+      metrics: "MAE, bias (forecast minus observed) and RMSE at D+1…D+5; rank 1 = smallest MAE; tied_with_best: not significantly worse (95 % bootstrap interval over days); weight/correction: as used in our forecast (correction: mean over the day); mos_weight: weight in the temperature and wind regression blend, used when all its models have a value; short_record: scores on fewer than 80 % of the window's days (e.g. a newly added model), not ranked and no weight, its MAE is over its own days",
       variables: okresModels(okres.code, scores, weightsDoc, meta?.models ?? {}),
     },
   };

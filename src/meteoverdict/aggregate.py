@@ -8,12 +8,21 @@ and ``all``; and per season over all years (roadmap 5.1): ``djf``, ``mam``, ``jj
 last scored day inside the season's months).
 
 Fair comparison: for each window, variable, lead day and region, only the station-days
-that **every** model present in that region has scores for are used. So a model with a
-short archive (ALADIN) or gaps (UKMO) does not get easier or harder days than the
-others, and all models in a region are compared on the same stations: where a model
+that **every** compared model present in that region has scores for are used. So a
+model with gaps (UKMO) does not get easier or harder days than the others, and all
+models in a region are compared on the same stations: where a model
 cannot reach some stations (ICON-D2 at six stations in the far east), those stations
 are left out of that region's comparison for every model, and still compared among the
 other models at the station level.
+Compared are the models with scores on at least ``MIN_COVERAGE`` (80 %) of the days the
+window has scores for that variable and lead day (``coverage``). A model with a shorter
+record (one added recently, whose backfill has only reached its newest weeks) would
+otherwise cut every model's station-days down to its few days: in October 2026 eight
+added models with 10 days cut the 90-day comparison of the others from 40 days to 10.
+Such a model gets its own rows with ``short_record`` true, aggregated on its own
+station-days among the fair ones of the compared models (so its ``days`` and ``n`` are
+smaller); it is not ranked and gets no combination weight until it reaches the
+coverage. Where no model reaches it (all records equally patchy), all are compared.
 A region needs at least ``MIN_STATIONS`` stations; otherwise ``enough_stations`` is
 false and it must not be ranked. An okres with too few stations of its own borrows the
 nearest ones of its neighbours (``meteoverdict.neighbours``, roadmap 6.1); ``borrowed``
@@ -35,6 +44,10 @@ LEVELS = ("station", "okres", "kraj", "elevation", "cz")
 SEASONS = {"djf": (12, 1, 2), "mam": (3, 4, 5), "jja": (6, 7, 8), "son": (9, 10, 11)}
 WINDOWS = ("90d", "season", "all", *SEASONS)
 MIN_STATIONS = 3
+#: a model is compared in a window when it has scores on at least this share of the days
+#: the window has scores for (per variable and lead day)
+MIN_COVERAGE = 0.8
+COVERAGE_KEYS = ["variable", "lead_day", "model"]
 _REGION = {
     "station": ("station_id", "station_name"),
     "okres": ("okres_code", "okres"),
@@ -97,6 +110,41 @@ def common_days(scores: pl.LazyFrame, by: str = "station_id") -> pl.LazyFrame:
     return scores.join(present, on=keys, how="semi")
 
 
+def coverage(scores: pl.LazyFrame | pl.DataFrame) -> pl.DataFrame:
+    """``variable``, ``lead_day``, ``model``, ``model_days`` (days with a score of that
+    model), ``all_days`` (days with any score), ``coverage`` (their ratio) and
+    ``covered``: at least ``MIN_COVERAGE``, or no model of the variable and lead day
+    reaches it (then all are compared, as without the rule)."""
+    group = ["variable", "lead_day"]
+    frame = scores.lazy()
+    every = frame.group_by(group).agg(pl.col("date").n_unique().alias("all_days"))
+    return (
+        frame.group_by(COVERAGE_KEYS)
+        .agg(pl.col("date").n_unique().alias("model_days"))
+        .join(every, on=group)
+        .with_columns((pl.col("model_days") / pl.col("all_days")).alias("coverage"))
+        .with_columns((pl.col("coverage") >= MIN_COVERAGE).alias("covered"))
+        .with_columns(pl.col("covered") | ~pl.col("covered").any().over(group))
+        .sort(COVERAGE_KEYS)
+        .collect()
+    )
+
+
+def covered_only(
+    scores: pl.LazyFrame | pl.DataFrame, cover: pl.DataFrame | None = None
+) -> pl.LazyFrame:
+    """The rows of the models that are compared (``coverage``; computed from ``scores``
+    unless given)."""
+    cover = coverage(scores) if cover is None else cover
+    keep = cover.filter("covered").select(COVERAGE_KEYS)
+    return scores.lazy().join(keep.lazy(), on=COVERAGE_KEYS, how="semi")
+
+
+def short_records(cover: pl.DataFrame) -> pl.DataFrame:
+    """The models left out of the comparison (``coverage`` rows not ``covered``)."""
+    return cover.filter(~pl.col("covered"))
+
+
 def station_info(stations: pl.DataFrame) -> pl.LazyFrame:
     return stations.select(
         pl.col("id").alias("station_id"),
@@ -131,17 +179,20 @@ POOL_ROUNDS = 3
 def okres_pools(in_window: pl.LazyFrame, distance: pl.DataFrame) -> pl.DataFrame:
     """``neighbours.pools`` for the stations with scores in ``in_window``.
 
-    A station counts only if it survives the fair comparison (``common_days``) at the
-    first lead day, where all models are present: a station that some of the okres's
-    models never reach (fewer models fetched for a rain gauge, ICON-D2 in the far east)
-    would otherwise fill a place in the pool and then be dropped. Such stations are
-    excluded from that okres and replaced by the next nearest ones.
+    A station counts only if it survives the fair comparison (``common_days``) of the
+    compared models (``covered_only``) at the first lead day, where all are present: a
+    station that some of the okres's models never reach (fewer models fetched for a rain
+    gauge, ICON-D2 in the far east) would otherwise fill a place in the pool and then be
+    dropped. Such stations are excluded from that okres and replaced by the next nearest
+    ones.
     """
     available = in_window.select("variable", "station_id").unique().collect()
     keys = ["variable", "region", "station_id"]
     excluded = pl.DataFrame(schema={k: pl.String for k in keys})
     pool = neighbours.pools(distance, available, MIN_STATIONS)
-    first = in_window.filter(pl.col("lead_day") == pl.col("lead_day").min())
+    # the models compared (``covered_only``): a model with a short record must not drop
+    # the stations it lacks from every okres
+    first = covered_only(in_window.filter(pl.col("lead_day") == pl.col("lead_day").min()))
     for _ in range(POOL_ROUNDS):
         joined = first.drop("okres_code", "okres").join(
             pool.lazy(), on=["variable", "station_id"], how="inner"
@@ -203,6 +254,15 @@ def _metrics(frame: pl.LazyFrame) -> pl.LazyFrame:
     return frame
 
 
+def _summary(frame: pl.LazyFrame, columns: list[str]) -> pl.LazyFrame:
+    return frame.group_by("region", "region_name", "variable", "lead_day", "model").agg(
+        *_sum_columns(columns),
+        pl.col("station_id").n_unique().alias("stations"),
+        pl.col("station_id").filter("borrowed").n_unique().alias("borrowed"),
+        pl.col("date").n_unique().alias("days"),
+    )
+
+
 def aggregate(
     scores: pl.LazyFrame | pl.DataFrame,
     stations: pl.DataFrame,
@@ -210,7 +270,11 @@ def aggregate(
     windows: tuple[str, ...] = WINDOWS,
     levels: tuple[str, ...] = LEVELS,
 ) -> pl.DataFrame:
-    """One row per level, region, window, variable, lead day and model."""
+    """One row per level, region, window, variable, lead day and model.
+
+    ``coverage``: the model's share of the window's scored days; ``short_record``: below
+    ``MIN_COVERAGE``, so not compared (its rows cover only its own station-days among the
+    fair ones of the compared models)."""
     scores = scores.lazy()
     first_day, last_day = date_span(scores)
     as_of = as_of or last_day
@@ -221,29 +285,38 @@ def aggregate(
     for window in windows:
         start, days = window_days(window, as_of, first_day)
         in_window = scores.filter(days).join(info, on="station_id", how="inner")
+        cover = coverage(in_window)
+        short = short_records(cover).select(COVERAGE_KEYS)
         # the window may start before the first scored day
         span = (max(start, first_day), as_of)
         if window in SEASONS:  # e.g. jja in October: its last scored day is 31 Aug
             dates = pl.col("date")
             span = in_window.select(dates.min().alias("from"), dates.max().alias("to"))
             span = span.collect().row(0)
+        stamp = [
+            pl.lit(window).alias("window"),
+            pl.lit(span[0], pl.Date).alias("from"),
+            pl.lit(span[1], pl.Date).alias("to"),
+        ]
+        share = cover.lazy().select(*COVERAGE_KEYS, "coverage")
         for level in levels:
-            fair = common_days(with_regions(in_window, level, distance), by="region")
-            frames.append(
-                fair.group_by("region", "region_name", "variable", "lead_day", "model")
-                .agg(
-                    *_sum_columns(columns),
-                    pl.col("station_id").n_unique().alias("stations"),
-                    pl.col("station_id").filter("borrowed").n_unique().alias("borrowed"),
-                    pl.col("date").n_unique().alias("days"),
+            regions = with_regions(in_window, level, distance)
+            fair = common_days(covered_only(regions, cover), by="region")
+            parts = [_summary(fair, columns).with_columns(pl.lit(False).alias("short_record"))]
+            if short.height:  # each on its own station-days among the fair ones
+                keys = ["variable", "lead_day", "region", "station_id", "date"]
+                own = regions.join(short.lazy(), on=COVERAGE_KEYS, how="semi").join(
+                    fair.select(keys).unique(), on=keys, how="semi"
                 )
-                .with_columns(
-                    pl.lit(level).alias("level"),
-                    pl.lit(window).alias("window"),
-                    pl.lit(span[0], pl.Date).alias("from"),
-                    pl.lit(span[1], pl.Date).alias("to"),
+                parts.append(
+                    _summary(own, columns).with_columns(pl.lit(True).alias("short_record"))
                 )
-            )
+            frames += [
+                part.join(share, on=COVERAGE_KEYS, how="left").with_columns(
+                    pl.lit(level).alias("level"), *stamp
+                )
+                for part in parts
+            ]
     out = _metrics(pl.concat(frames, how="diagonal_relaxed")).with_columns(
         ((pl.col("level") == "station") | (pl.col("stations") >= MIN_STATIONS)).alias(
             "enough_stations"
@@ -284,6 +357,10 @@ JSON_COLUMNS = (
     "diff_ci_high",
     "tied_with_best",
     "clear_winner",
+    # added later: the share of the window's scored days a model has, and whether that
+    # is below MIN_COVERAGE (not compared, not ranked: a newly added model)
+    "coverage",
+    "short_record",
 )
 
 
@@ -322,6 +399,35 @@ def write_json(table: pl.DataFrame, out_dir: Path, meta: dict) -> list[Path]:
     return [meta_path, *written]
 
 
+def excluded(table: pl.DataFrame) -> dict[str, dict[str, dict]]:
+    """The models left out of each window's comparison for too short a record:
+    ``{window: {model: {"coverage": highest share of the scored days, "days": most days,
+    "variables": [score variables where it is left out at some lead day]}}}`` (Czechia
+    rows, without the native-period precipitation, which is not published)."""
+    if "short_record" not in table.columns:
+        return {}
+    rows = (
+        table.filter(
+            pl.col("short_record"), pl.col("level") == "cz", pl.col("variable") != "precipitation"
+        )
+        .group_by("window", "model")
+        .agg(
+            pl.col("coverage").max(),
+            pl.col("days").max(),
+            pl.col("variable").unique().sort().alias("variables"),
+        )
+        .sort("window", "model")
+    )
+    out: dict[str, dict[str, dict]] = {}
+    for r in rows.iter_rows(named=True):
+        out.setdefault(r["window"], {})[r["model"]] = {
+            "coverage": round(r["coverage"], 3),
+            "days": r["days"],
+            "variables": r["variables"],
+        }
+    return out
+
+
 def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -> dict:
     windows = table.select("window", "from", "to").unique().sort("window").rows(named=True)
     return {
@@ -335,7 +441,14 @@ def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -
         "borrow_max_km": neighbours.MAX_KM,
         "precipitation_thresholds_mm": list(metrics.PRECIPITATION_THRESHOLDS),
         "heat_thresholds_c": list(metrics.HEAT_THRESHOLDS),
-        "fair_comparison": "per window, variable and lead day only station-days all models cover",
+        "fair_comparison": (
+            "per window, variable and lead day only station-days all compared models cover; "
+            f"compared are the models with scores on at least {MIN_COVERAGE:.0%} of the "
+            "window's scored days, the others (short_record, e.g. newly added models) are "
+            "shown on their own station-days and not ranked"
+        ),
+        "min_coverage": MIN_COVERAGE,
+        "short_record": excluded(table),
         "ranking": (
             "by MAE; tied_with_best when the 95 % bootstrap interval (days resampled) of the "
             "MAE difference to the best model contains 0; clear_winner when nobody is tied; "

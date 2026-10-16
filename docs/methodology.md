@@ -124,8 +124,10 @@ morning. Meteorologists verify run by run instead, and so do we:
   **shrinks with the lead hour**: ICON-D2 ends at 48 h, AROME at 60 h, ALADIN at 72 h,
   ARPEGE at 102 h, UK Met Office's 06 and 18 UTC runs at 60 h. Pooled over the four run
   hours a model must reach the lead in each of them; per run hour (00 or 12 UTC) the
-  longer runs show. Models whose single-run archive starts later (ALADIN) or that miss a
-  run limit the common sample for everyone at the leads they reach.
+  longer runs show. Models that miss a run limit the common sample for everyone at the
+  leads they reach; a model with fewer than 80 % of the period's runs (single runs
+  fetched only since it was added) is left out until it has them (`short_record` in
+  `leads.json`), so that it does not cut everyone's runs to its few days.
 - MAE, bias and RMSE (and hits, misses and false alarms for ≥ 0.1 mm in an hour) by
   lead hour H+1 … H+120, for Czechia (all runs and each run hour). The page draws all
   models, the three best over the hours bold (by their mean rank among the models
@@ -204,19 +206,34 @@ are not independent.
 ## Fair comparison
 
 - Within each time window, variable, lead day and region, only the station-days that
-  **every model present in that region** has forecasts for are used, so all models of a
-  region are compared on the same stations and days. Models whose archive starts later
-  (ALADIN: June 2026) or has gaps get the same days as the rest. The price: the "all
-  time" window at D+1 and D+2 only starts when ALADIN's does.
+  **every compared model present in that region** has forecasts for are used, so all
+  compared models of a region are rated on the same stations and days. Gaps of one model
+  (UKMO, AIGFS before July 2026, CMA GRAPES in autumn 2025) drop those days for every
+  model of the region.
+- **Compared** are the models with scores on at least **80 % of the window's scored
+  days** (per variable and lead day). A model with a shorter record, typically one
+  **added later** whose backfill has so far reached only its newest weeks, would otherwise
+  cut every other model's days down to its few: on 15 October 2026 eight models were
+  added with scores from 21 September only, and the 90-day comparison of the others
+  (and with it the weights of our forecast) shrank from 40 days to 10. Such a model is
+  listed separately ("short record so far, not ranked", `short_record` and `coverage` in
+  the data files, `short_record` in `meta.json`), with its MAE over its own station-days
+  among the compared ones; it is not ranked and gets no weight in our forecast. It joins
+  as soon as it has 80 % of the window's days (about 3 weeks after it was added for
+  the 90-day window, if its history is not filled in earlier). Where no model reaches
+  80 %, all are compared as before. The same holds for every window: in the windows
+  that reach further back (all time, seasons over all years) a model whose archive
+  starts much later than the others' (ALADIN: June 2026, against January 2024 once the
+  backfill has filled in history) is listed separately there too, while the 90-day
+  window and the current season compare it with the rest.
 - Where a model never reaches some stations (ICON-D2 at six stations in the Beskydy),
-  those stations are left out of their regions' comparison for every model; on their own
-  they are still compared among the other models.
-- **Models added later** (eight in October 2026) are fetched for the newest days first.
-  Until their history is filled in, the windows that reach further back (all time,
-  seasons) are limited to the days they have, like ALADIN's late start, and gaps of
-  one model (AIGFS before July 2026, CMA GRAPES in autumn 2025, UKMO) drop those days
-  for every model of the region. The single-run comparison likewise uses only runs that
-  every model reaching a lead hour has.
+  those stations are left out of their regions' comparison for every compared model; on
+  their own they are still compared among the other models.
+- The single-run comparisons (by lead hour, farmers' events) likewise use only the runs
+  that every model compared there has, and compare only the models with at least 80 % of
+  the period's runs (counted over the run hours a model has: GEM Global has no 06 and
+  18 UTC runs); the others are listed under `short_record` in `leads.json` and
+  `farm.json` until they have them.
 - A region is ranked only with at least **3 stations**. An okres with fewer of its own
   borrows the nearest stations of its neighbours (at most 30 km beyond its border) up to
   3, and the map says how many. So every okres has a ranking, but for a third of them it
@@ -224,7 +241,8 @@ are not independent.
 - Windows: the last 90 days, the current season, all time, and each season over all
   years (all winters, springs, summers, autumns). "All time" starts with the oldest day
   scored so far and grows as the backfill fills in history back to January 2024 (ALADIN
-  only from June 2026); until then it can cover the same days as the last 90 days. The
+  only from June 2026, see above); until then it can cover the same days as the last 90
+  days. The
   web pages show every window's real dates and number of days, and mark windows that
   are still the same as the 90-day one.
 
@@ -236,6 +254,8 @@ are not independent.
   interval.
 - A model whose interval includes zero is **tied with the best** ("≈" on the comparison page);
   the best model is a **clear winner** only if nobody is tied.
+- Only the compared models (at least 80 % of the window's days, see above) are ranked;
+  a model with a shorter record is shown after the mean of all models without a rank.
 
 ## Baseline: the mean of all models
 
@@ -251,7 +271,11 @@ it did there over the last 90 days (inverse of its error variance), and temperat
 wind are corrected by its mean error there; precipitation is weighted but not
 corrected. The weights are shrunk towards a plain mean while there are few scored days
 (half-way after 30 days), the bias correction much less (half-way after 5 days: a
-model's mean error is stable, and leaving half of it in cost 7–10 % of wind MAE). Hours in the next 24 h use the D+1 weights, later hours those
+model's mean error is stable, and leaving half of it in cost 7–10 % of wind MAE). Only
+the models compared in the 90-day window get a weight: a model added recently gets
+none until it has scores on 80 % of the window's days, and it does not shorten the
+training of the others (on 16 October 2026 that kept 38–40 days of training instead of
+10). Hours in the next 24 h use the D+1 weights, later hours those
 of their lead day (up to D+5), and models that do not reach an hour are left out with
 the other weights rescaled; a model that ends early fades out over its last 3 hours, so
 the curve does not jump. The page draws, next to the combination, the model ranked
