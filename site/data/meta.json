@@ -1,26 +1,26 @@
 {
- "generated": "2026-10-15T10:06:16+00:00",
- "as_of": "2026-09-30",
+ "generated": "2026-10-16T00:48:51+00:00",
+ "as_of": "2026-10-15",
  "windows": {
   "90d": {
    "from": "2026-08-10",
-   "to": "2026-09-30"
+   "to": "2026-10-15"
   },
   "all": {
    "from": "2026-08-10",
-   "to": "2026-09-30"
+   "to": "2026-10-15"
   },
   "jja": {
    "from": "2026-08-10",
-   "to": "2026-09-30"
+   "to": "2026-08-31"
   },
   "season": {
    "from": "2026-09-01",
-   "to": "2026-09-30"
+   "to": "2026-10-15"
   },
   "son": {
-   "from": "2026-08-10",
-   "to": "2026-09-30"
+   "from": "2026-09-01",
+   "to": "2026-10-15"
   }
  },
  "levels": [
@@ -58,6 +58,13 @@
   "geosphere_arome_austria": "GeoSphere Austria AROME 2.5 km",
   "knmi_harmonie_arome_europe": "KNMI HARMONIE-AROME Europe",
   "dmi_harmonie_arome_europe": "DMI HARMONIE-AROME DINI",
+  "dwd_icon": "DWD ICON global",
+  "gem_global": "ECCC GEM Global 15 km",
+  "jma_gsm": "JMA GSM",
+  "cma_grapes_global": "CMA GRAPES Global",
+  "meteofrance_arpege_world": "Météo-France ARPEGE World",
+  "ncep_aigfs025": "NOAA AIGFS 0.25°",
+  "gem_regional": "ECCC GEM Regional (RDPS) 10 km",
   "blend": "Mean of all models"
  },
  "min_stations": 3,
@@ -73,5 +80,15 @@
  "fair_comparison": "per window, variable and lead day only station-days all models cover",
  "ranking": "by MAE; tied_with_best when the 95 % bootstrap interval (days resampled) of the MAE difference to the best model contains 0; clear_winner when nobody is tied; the blend (mean of all models) is not ranked, its difference and interval are relative to the best single model",
  "licence": "CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/",
- "attribution": "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com (CC BY 4.0) from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, KNMI, DMI, ČHMÚ and the UK Met Office (CC BY-SA 4.0). Boundaries: ČÚZK (CC BY 4.0)."
+ "attribution": "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com (CC BY 4.0) from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, KNMI, DMI, ČHMÚ, Environment and Climate Change Canada, the Japan Meteorological Agency, the China Meteorological Administration and the UK Met Office (CC BY-SA 4.0). Boundaries: ČÚZK (CC BY 4.0).",
+ "sources": {
+  "previous_runs": {
+   "from": "2026-08-10",
+   "to": "2026-09-30"
+  },
+  "single_runs": {
+   "from": "2026-10-13",
+   "to": "2026-10-15"
+  }
+ }
 }
