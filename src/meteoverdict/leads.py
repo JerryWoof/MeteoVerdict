@@ -31,6 +31,11 @@ Both domains are compared on the same sample there: only the run, station, lead 
 and variable that every model in the data has a pair for. The archive also records when
 ČHMÚ published each run (``publication_delays``), shown on the all-model chart.
 
+**Ranking by lead band** (``band_rankings``, ``leads-bands-<window>[-kraj].json``): the
+same single runs pooled over H+1-6, H+7-12, H+13-24, H+25-48 and H+49-72, on two fair
+sets per band (``band_required``), with bias-corrected MAE, hourly precipitation ETS,
+gusts and bootstrap intervals over days, for Czechia, the station kinds and kraje.
+
 Lead 0 (the analysis) is not scored. Sums are kept additive (``metrics``), so MAE, bias
 and RMSE come from the sums of each group.
 See docs/methodology.md#run-based-verification-by-lead-hour.
@@ -40,14 +45,17 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import UTC, datetime
+import zlib
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 
 from meteoverdict import metrics, partitions
 from meteoverdict import runs as runs_mod
 from meteoverdict.models import Model
+from meteoverdict.stations import MAIN_PREFIX
 
 VARIABLES = ("temperature_2m", "wind_speed_10m", "precipitation")
 MAX_LEAD_H = 72
@@ -427,10 +435,14 @@ def run_pairs(
     return pl.concat(found).collect()
 
 
-def _obs_values(observations: pl.LazyFrame | pl.DataFrame, stations: list[str]) -> pl.DataFrame:
+def _obs_values(
+    observations: pl.LazyFrame | pl.DataFrame,
+    stations: list[str],
+    variables: tuple[str, ...] | list[str] = VARIABLES,
+) -> pl.DataFrame:
     return (
         observations.lazy()
-        .filter(pl.col("variable").is_in(VARIABLES), pl.col("station_id").is_in(stations))
+        .filter(pl.col("variable").is_in(list(variables)), pl.col("station_id").is_in(stations))
         .select(
             "station_id",
             pl.col("time").alias("valid_time"),
@@ -599,3 +611,623 @@ def runs_document(
         "columns": RUN_COLUMNS,
         "rows": rounded.rows(),
     }
+
+
+# --- ranking by lead band (H+1-6 … H+49-72), from the single runs --------------------
+
+#: Lead bands (first and last lead hour, inclusive).
+BANDS = ((1, 6), (7, 12), (13, 24), (25, 48), (49, 72))
+BAND_VARIABLES = ("temperature_2m", "wind_speed_10m", "precipitation", "wind_gusts_10m")
+#: The "6h" set: every model at the lead hours that are multiples of 6 (instant values
+#: only: a 3- or 6-hourly model has no hourly precipitation sum).
+SIX_HOURLY_VARIABLES = ("temperature_2m", "wind_speed_10m")
+BAND_SETS = ("hourly", "6h")
+#: Bias-corrected MAE, as for the D+N scores (``aggregate.bias_corrected``).
+BAND_CORRECTED = ("temperature_2m", "wind_speed_10m")
+BIAS_TRAINING_DAYS = 30
+BIAS_MIN_DAYS = 10
+#: Hourly precipitation events (mm in the hour): POD/FAR/ETS.
+BAND_THRESHOLDS = (0.1, 1.0)
+#: Windows: the last 90 days of runs (up to the last run) and every run.
+BAND_WINDOWS = {"90d": 90, "all": None}
+#: Levels: Czechia, main WMO vs other stations, kraje. No okres level: ~100 stations for
+#: 76 okresy, most okresy have one station or none.
+BAND_LEVELS = ("cz", "network", "kraj")
+BAND_MIN_STATIONS = 3
+#: Results on fewer days of runs are marked preliminary on the page.
+PRELIMINARY_DAYS = 30
+#: The page opens at this band (instead of D+1) once its 90-day ranking for Czechia
+#: rests on at least ``DEFAULT_BAND_DAYS`` days (``band_default``).
+DEFAULT_BAND = "h13-24"
+DEFAULT_BAND_DAYS = 60
+#: Gust output: a model with gusts in fewer than this share of its rows has none.
+GUST_SHARE = 0.5
+
+#: ``run_bits``: one bit per run hour (00, 06, 12, 18 UTC), so runs add up over stations.
+RUN_BITS = {0: 1, 6: 2, 12: 4, 18: 8}
+BAND_KEYS = ["set", "band", "variable", "model"]
+BAND_SUMS = [
+    "n", "sum_err", "sum_abs_err", "sum_sq_err", "n_bc", "sum_abs_err_bc",
+    *(c for t in BAND_THRESHOLDS for c in metrics.counts_columns(t)),
+]  # fmt: skip
+BAND_COLUMNS = [
+    "level", "region", "band", "set", "variable", "model", "rank", "tied", "clear",
+    "mae", "bias", "rmse", "mae_bc", "ets_0p1", "ets_1", "pod_1", "far_1",
+    "diff", "diff_low", "diff_high", "n", "n_bc", "runs", "stations", "days",
+]  # fmt: skip
+
+
+def band_name(first: int, last: int) -> str:
+    """``h13-24`` for H+13 … H+24."""
+    return f"h{first}-{last}"
+
+
+BAND_NAMES = tuple(band_name(a, b) for a, b in BANDS)
+
+
+def band_of(lead_h: pl.Expr) -> pl.Expr:
+    """The band name of a lead hour (null outside the bands)."""
+    (a, b), *rest = BANDS
+    expr = pl.when(lead_h.is_between(a, b)).then(pl.lit(band_name(a, b)))
+    for a, b in rest:
+        expr = expr.when(lead_h.is_between(a, b)).then(pl.lit(band_name(a, b)))
+    return expr.otherwise(pl.lit(None, pl.String))
+
+
+def run_summary(forecasts: pl.LazyFrame | pl.DataFrame) -> pl.DataFrame:
+    """One row per model and run: ``lead_h`` (its last lead hour with temperature),
+    ``temperature_2m`` (1.0, so ``horizons`` reads it like the runs), ``gust_rows`` and
+    ``rows``. Small, so coverage and horizons need not hold every row in memory."""
+    frame = forecasts.lazy()
+    gusts = (
+        pl.col("wind_gusts_10m").is_not_null().sum()
+        if "wind_gusts_10m" in frame.collect_schema().names()
+        else pl.lit(0)
+    )
+    return (
+        frame.group_by("model", "run")
+        .agg(
+            pl.col("lead_h").filter(pl.col("temperature_2m").is_not_null()).max(),
+            gusts.cast(pl.Int64).alias("gust_rows"),
+            pl.len().cast(pl.Int64).alias("rows"),
+        )
+        .with_columns(pl.lit(1.0).alias("temperature_2m"))
+        .collect(engine="streaming")
+    )
+
+
+def gust_models(summary_: pl.DataFrame) -> set[str]:
+    """Models with gusts in their runs (AIFS, AIGFS and JMA have none), from
+    ``run_summary``."""
+    share = summary_.group_by("model").agg(
+        (pl.col("gust_rows").sum() / pl.col("rows").sum()).alias("share")
+    )
+    return set(share.filter(pl.col("share") >= GUST_SHARE)["model"])
+
+
+def band_reach(horizon_table: pl.DataFrame) -> dict[str, int]:
+    """The last lead hour each model reaches in every run hour it has (``horizons``)."""
+    reach: dict[str, int] = {}
+    for model, _, last in horizon_table.select("model", "run_hour", "horizon_h").rows():
+        reach[model] = min(int(last), reach.get(model, int(last)))
+    return reach
+
+
+def band_required(
+    horizon_table: pl.DataFrame, models: list[Model], gusts: set[str] | None = None
+) -> pl.DataFrame:
+    """The fair sets of the lead bands: ``set``, ``band``, ``lead_h``, ``variable``,
+    ``model`` and ``n_required`` (models in that set at that lead and variable).
+
+    A model enters a band only if it reaches the band's last hour in every run hour
+    (``band_reach``). Set "hourly": the models with hourly output over the whole band,
+    every lead hour of the band, all ``BAND_VARIABLES`` (gusts: the models that have
+    them). Set "6h": every model reaching the band, at its lead hours that are multiples
+    of 6 (where 3- and 6-hourly models have their own output), temperature and wind.
+    """
+    catalogue = {m.id: m for m in models}
+    reach = band_reach(horizon_table)
+    gusts = set(reach) if gusts is None else gusts
+    rows = []
+    for a, b in BANDS:
+        band = band_name(a, b)
+        entered = sorted(m for m, last in reach.items() if last >= b)
+        hourly = [
+            m
+            for m in entered
+            if m not in catalogue or all(catalogue[m].step_at(h) == 1 for h in range(a, b + 1))
+        ]
+        for variable in BAND_VARIABLES:
+            for model in hourly:
+                if variable == "wind_gusts_10m" and model not in gusts:
+                    continue
+                rows += [("hourly", band, h, variable, model) for h in range(a, b + 1)]
+        six = [h for h in range(a, b + 1) if h % 6 == 0]
+        for variable in SIX_HOURLY_VARIABLES:
+            for model in entered:
+                rows += [
+                    ("6h", band, h, variable, model)
+                    for h in six
+                    if model not in catalogue or catalogue[model].native_hour(h)
+                ]
+    schema = {
+        "set": pl.String, "band": pl.String, "lead_h": pl.Int16, "variable": pl.String,
+        "model": pl.String,
+    }  # fmt: skip
+    table = pl.DataFrame(rows, schema=schema, orient="row")
+    return table.with_columns(
+        pl.len().over("set", "lead_h", "variable").cast(pl.UInt32).alias("n_required")
+    )
+
+
+def _bias_table(training: pl.DataFrame, days: list) -> pl.DataFrame:
+    """Leakage-free bias for the runs of ``days``: per station, model, variable, band and
+    valid hour of day, the mean error over the valid dates ``day - 30 … day - 1`` (all
+    observed before any run of ``day`` started); null with fewer than
+    ``BIAS_MIN_DAYS`` such dates."""
+    keys = ["station_id", "model", "variable", "band", "hod"]
+    found = []
+    for day in days:
+        lower = day - timedelta(days=BIAS_TRAINING_DAYS)
+        part = (
+            training.filter(pl.col("vdate") >= lower, pl.col("vdate") < day)
+            .group_by(keys)
+            .agg(
+                pl.col("sum_e").sum(),
+                pl.col("count").sum(),
+                pl.col("vdate").n_unique().alias("dates"),
+            )
+            .filter(pl.col("dates") >= BIAS_MIN_DAYS)
+            .select(*keys, pl.lit(day).alias("day"), (pl.col("sum_e") / pl.col("count")).alias("b"))
+        )
+        found.append(part)
+    return pl.concat(found)
+
+
+def band_sums(
+    forecasts: pl.LazyFrame | pl.DataFrame,
+    observations: pl.LazyFrame | pl.DataFrame,
+    models: list[Model],
+    chunk_runs: int = 8,
+    log=None,
+) -> tuple[pl.DataFrame, dict]:
+    """Station-day sums of the band fair sets: one row per ``BAND_KEYS``, ``station_id``
+    and ``day`` (the runs' start date) with ``BAND_SUMS`` and ``run_bits`` (bit k set
+    when the run at 6·k UTC was scored there). Facts: ``required``, ``reach``,
+    ``short_record``, ``first_run``, ``last_run``.
+
+    Runs are read ``chunk_runs`` at a time in time order; the bias of each pair comes
+    from the errors of earlier valid dates only (``_bias_table``), kept for the last
+    ``BIAS_TRAINING_DAYS`` + 3 days."""
+    forecasts = forecasts.lazy().filter(pl.col("lead_h").is_between(1, MAX_LEAD_H))
+    names = forecasts.collect_schema().names()
+    variables = [v for v in BAND_VARIABLES if v in names]
+    summary_ = run_summary(forecasts)
+    cover = runs_mod.coverage(summary_)
+    covered = cover.filter("covered").select("model")
+    forecasts = forecasts.join(covered.lazy(), on="model", how="semi")
+    summary_ = summary_.join(covered, on="model", how="semi")
+    horizon_table = horizons(summary_)
+    required_ = band_required(horizon_table, models, gust_models(summary_))
+    info = {
+        "required": required_,
+        "reach": band_reach(horizon_table),
+        "short_record": runs_mod.short_records(cover),
+        "first_run": None,
+        "last_run": None,
+    }
+    run_list = sorted(forecasts.select("run").unique().collect()["run"].to_list())
+    if not run_list or required_.height == 0:
+        return pl.DataFrame(), info
+    info["first_run"], info["last_run"] = run_list[0], run_list[-1]
+    stations = forecasts.select("station_id").unique().collect()["station_id"].to_list()
+    observed = _obs_values(observations, stations, variables)
+    group = ["set", "band", "variable", "model", "station_id", "day"]
+    train_keys = ["station_id", "model", "variable", "band", "hod", "vdate"]
+    # categories instead of strings: the training errors of ~33 days stay small
+    enums = {
+        "station_id": pl.Enum(sorted(stations)),
+        "model": pl.Enum(sorted(covered["model"])),
+        "variable": pl.Enum(list(BAND_VARIABLES)),
+        "band": pl.Enum(list(BAND_NAMES)),
+        "set": pl.Enum(list(BAND_SETS)),
+    }
+    required_enum = required_.with_columns(
+        pl.col(c).cast(enums[c]) for c in ("set", "band", "variable", "model")
+    )
+    training = pl.DataFrame(
+        schema={
+            **{c: enums[c] for c in ("station_id", "model", "variable", "band")},
+            "hod": pl.Int8,
+            "vdate": pl.Date,
+            "sum_e": pl.Float64,
+            "count": pl.UInt32,
+        }
+    )
+    rain = pl.col("variable") == "precipitation"
+    sums = []
+    for i in range(0, len(run_list), chunk_runs):
+        runs_here = run_list[i : i + chunk_runs]
+        chunk = forecasts.filter(pl.col("run").is_in(runs_here)).select(*RUN_INDEX, *variables)
+        long = (
+            chunk.unpivot(
+                index=RUN_INDEX, on=variables, variable_name="variable", value_name="forecast"
+            )
+            .drop_nulls("forecast")
+            .with_columns(pl.col("forecast").cast(pl.Float64), pl.col("lead_h").cast(pl.Int16))
+            .join(observed.lazy(), on=["station_id", "valid_time", "variable"])
+            .with_columns(
+                *(pl.col(c).cast(enums[c]) for c in ("station_id", "model", "variable")),
+                band_of(pl.col("lead_h")).cast(enums["band"]).alias("band"),
+                pl.col("run").dt.date().alias("day"),
+                pl.col("valid_time").dt.date().alias("vdate"),
+                pl.col("valid_time").dt.hour().cast(pl.Int8).alias("hod"),
+                (pl.col("forecast") - pl.col("observed")).alias("error"),
+            )
+            .collect()
+        )
+        if long.height == 0:
+            continue
+        # every pair of a model trains its own bias (fair set or not)
+        first_day = runs_here[0].date()
+        training = (
+            pl.concat(
+                [
+                    training.filter(
+                        pl.col("vdate") >= first_day - timedelta(days=BIAS_TRAINING_DAYS + 3)
+                    ),
+                    long.filter(pl.col("variable").is_in(BAND_CORRECTED))
+                    .group_by(train_keys)
+                    .agg(
+                        pl.col("error").sum().alias("sum_e"),
+                        pl.len().cast(pl.UInt32).alias("count"),
+                    ),
+                ],
+                how="vertical_relaxed",
+            )
+            .group_by(train_keys)
+            .agg(pl.col("sum_e").sum(), pl.col("count").sum())
+        )
+        days = sorted(set(long["day"].unique().to_list()))
+        bias = _bias_table(training, days)
+        fair = (
+            long.join(required_enum, on=["lead_h", "variable", "model"])
+            .filter(
+                pl.len().over("set", "run", "station_id", "lead_h", "variable")
+                == pl.col("n_required")
+            )
+            .join(
+                bias,
+                on=["station_id", "model", "variable", "band", "hod", "day"],
+                how="left",
+            )
+            .with_columns(
+                (
+                    pl.col("b").count().over("set", "run", "station_id", "lead_h", "variable")
+                    == pl.col("n_required")
+                ).alias("all_bias")
+            )
+        )
+        corrected = (pl.col("error") - pl.col("b")).abs()
+        counts = [e for t in BAND_THRESHOLDS for e in metrics.contingency_counts(t)]
+        sums.append(
+            fair.group_by(group).agg(
+                *metrics.error_sums(),
+                pl.col("all_bias").sum().cast(pl.Int64).alias("n_bc"),
+                corrected.filter("all_bias").sum().alias("sum_abs_err_bc"),
+                *counts,
+                pl.col("run")
+                .dt.hour()
+                .replace_strict(RUN_BITS, default=0, return_dtype=pl.UInt8)
+                .unique()
+                .sum()
+                .cast(pl.UInt8)
+                .alias("run_bits"),
+            )
+        )
+        if log:
+            done = f"{i + 1}-{i + len(runs_here)} of {len(run_list)}"
+            log(f"bands: runs {done}, {fair.height:,} pairs")
+    if not sums:
+        return pl.DataFrame(), info
+    table = pl.concat(sums).with_columns(pl.col(c).cast(pl.String) for c in group[:5])
+    table = table.with_columns(
+        pl.when(rain).then(pl.col(c)).otherwise(None).alias(c)
+        for t in BAND_THRESHOLDS
+        for c in metrics.counts_columns(t)
+    )
+    return table, info
+
+
+def _band_regions(sums: pl.DataFrame, level: str, stations: pl.DataFrame) -> pl.DataFrame:
+    """``sums`` with ``region`` for a level (kraje with at least ``BAND_MIN_STATIONS``
+    stations in a group only)."""
+    if level == "cz":
+        return sums.with_columns(pl.lit("cz").alias("region"))
+    if level == "network":
+        return sums.with_columns(
+            pl.when(pl.col("station_id").str.starts_with(MAIN_PREFIX))
+            .then(pl.lit("main"))
+            .otherwise(pl.lit("other"))
+            .alias("region")
+        )
+    kraj = stations.select(pl.col("id").alias("station_id"), pl.col("kraj_code").alias("region"))
+    return sums.join(kraj, on="station_id").drop_nulls("region")
+
+
+def band_scores(
+    sums: pl.DataFrame,
+    stations: pl.DataFrame,
+    resamples: int = 1000,
+    seed: int = 0,
+) -> pl.DataFrame:
+    """Scores and ranking of every level, region, band, set and variable from the
+    station-day sums of one window (``BAND_COLUMNS``). Models are ranked by MAE; the 95 %
+    interval of each model's MAE minus the best one's comes from resampling whole days
+    (``ranking.bootstrap_group``); ``tied``: that interval contains 0."""
+    from meteoverdict.ranking import bootstrap_group
+
+    frames = []
+    groups = ["region", "set", "band", "variable"]
+    for level in BAND_LEVELS:
+        here = _band_regions(sums, level, stations)
+        size = here.group_by(groups).agg(pl.col("station_id").n_unique().alias("_st"))
+        here = here.join(
+            size.filter(pl.col("_st") >= (BAND_MIN_STATIONS if level == "kraj" else 1)),
+            on=groups,
+            how="semi",
+        )
+        if here.height == 0:
+            continue
+        keys = [*groups, "model"]
+        totals = here.group_by(keys).agg(
+            *(metrics.total(c) if c in metrics.SUMS else pl.col(c).sum() for c in BAND_SUMS),
+            pl.col("station_id").n_unique().alias("stations"),
+            pl.col("day").n_unique().alias("days"),
+        )
+        runs = (
+            here.group_by([*keys, "day"])
+            .agg(pl.col("run_bits").bitwise_or())
+            .group_by(keys)
+            .agg(pl.col("run_bits").bitwise_count_ones().sum().cast(pl.Int64).alias("runs"))
+        )
+        table = metrics.continuous_scores(totals.join(runs, on=keys))
+        for t in BAND_THRESHOLDS:
+            table = metrics.categorical_scores(table, t)
+        table = table.with_columns(
+            pl.when(pl.col("n_bc") > 0)
+            .then(pl.col("sum_abs_err_bc") / pl.col("n_bc"))
+            .alias("mae_bc"),
+            pl.lit(level).alias("level"),
+        )
+        daily = (
+            here.group_by([*keys, "day"])
+            .agg(metrics.total("sum_abs_err"), metrics.total("n"))
+            .sort("day")
+        )
+        ranks = []
+        for key, part in daily.partition_by(groups, as_dict=True).items():
+            sae = part.pivot(on="model", index="day", values="sum_abs_err").sort("day").fill_null(0)
+            n = part.pivot(on="model", index="day", values="n").sort("day").fill_null(0)
+            ids = [c for c in sae.columns if c != "day"]
+            a = sae.select(ids).to_numpy().astype(float)
+            m = n.select(ids).to_numpy().astype(float)
+            if len(ids) == 1:
+                order, diff, bounds = np.array([0]), np.array([0.0]), np.zeros((2, 1))
+            else:
+                text = "|".join(map(str, (level, *key))).encode()
+                rng = np.random.default_rng([seed, zlib.crc32(text)])
+                order, diff, bounds = bootstrap_group(a, m, rng, resamples)
+            tied = (bounds[0] <= 0) & (bounds[1] >= 0) & (order.argsort() > 0)
+            clear = len(ids) > 1 and not tied.any()
+            for position, index in enumerate(order):
+                ranks.append(
+                    (*key, ids[index], position + 1, bool(tied[index]),
+                     bool(position == 0 and clear), float(diff[index]),
+                     float(bounds[0][index]), float(bounds[1][index]))
+                )  # fmt: skip
+        rank_table = pl.DataFrame(
+            ranks,
+            schema={
+                "region": pl.String,
+                "set": pl.String,
+                "band": pl.String,
+                "variable": pl.String,
+                "model": pl.String,
+                "rank": pl.Int16,
+                "tied": pl.Boolean,
+                "clear": pl.Boolean,
+                "diff": pl.Float64,
+                "diff_low": pl.Float64,
+                "diff_high": pl.Float64,
+            },
+            orient="row",
+        )
+        frames.append(table.join(rank_table, on=keys).select(BAND_COLUMNS))
+    if not frames:
+        return pl.DataFrame(schema=BAND_COLUMNS)
+    order = {b: i for i, b in enumerate(BAND_NAMES)}
+    return (
+        pl.concat(frames)
+        .with_columns(
+            pl.col("level").replace_strict({k: i for i, k in enumerate(BAND_LEVELS)}).alias("_l"),
+            pl.col("band").replace_strict(order).alias("_b"),
+        )
+        .sort("_l", "region", "set", "_b", "variable", "rank")
+        .drop("_l", "_b")
+    )
+
+
+def window_sums(sums: pl.DataFrame, days: int | None) -> pl.DataFrame:
+    """The station-day sums of the last ``days`` days up to the last run's day (all for None)."""
+    if days is None or sums.height == 0:
+        return sums
+    last = sums["day"].max()
+    return sums.filter(pl.col("day") > last - timedelta(days=days))
+
+
+def band_rankings(
+    forecasts: pl.LazyFrame | pl.DataFrame,
+    observations: pl.LazyFrame | pl.DataFrame,
+    models: list[Model],
+    stations: pl.DataFrame,
+    chunk_runs: int = 8,
+    resamples: int = 1000,
+    log=None,
+) -> dict[str, tuple[pl.DataFrame, dict]]:
+    """``{window: (band_scores table, facts)}`` for ``BAND_WINDOWS``. The sums of all runs
+    serve the 90-day window too unless its own fair sets differ (a model only covered
+    in the last 90 days, ``runs.coverage``); then its runs are scored again."""
+    forecasts = forecasts.lazy()
+    whole, info = band_sums(forecasts, observations, models, chunk_runs, log)
+    out = {}
+    for window, days in BAND_WINDOWS.items():
+        sums, facts = whole, info
+        if days is not None and info["last_run"] is not None:
+            since = info["last_run"] - timedelta(days=days)
+            recent = forecasts.filter(pl.col("run") > since)
+            summary_ = run_summary(recent.filter(pl.col("lead_h").is_between(1, MAX_LEAD_H)))
+            cover = runs_mod.coverage(summary_)
+            kept = summary_.join(cover.filter("covered").select("model"), on="model", how="semi")
+            req = band_required(horizons(kept), models, gust_models(kept))
+            if not req.sort(req.columns).equals(info["required"].sort(req.columns)):
+                sums, facts = band_sums(recent, observations, models, chunk_runs, log)
+        sums = window_sums(sums, days)
+        table = band_scores(sums, stations, resamples) if sums.height else pl.DataFrame()
+        facts = {
+            **facts,
+            "first_day": sums["day"].min() if sums.height else None,
+            "last_day": sums["day"].max() if sums.height else None,
+        }
+        out[window] = (table, facts)
+    return out
+
+
+def band_default(table: pl.DataFrame) -> str | None:
+    """``DEFAULT_BAND`` when its 90-day ranking of temperature for Czechia rests on at
+    least ``DEFAULT_BAND_DAYS`` days, else None (the page then opens at D+1)."""
+    if table.height == 0:
+        return None
+    found = table.filter(
+        pl.col("level") == "cz",
+        pl.col("band") == DEFAULT_BAND,
+        pl.col("set") == "hourly",
+        pl.col("variable") == "temperature_2m",
+    )
+    return DEFAULT_BAND if found.height and found["days"].max() >= DEFAULT_BAND_DAYS else None
+
+
+def band_documents(
+    table: pl.DataFrame,
+    facts: dict,
+    window: str,
+    generated: datetime,
+    region_names: dict[str, str],
+    names: dict[str, str] | None = None,
+    default: str | None = None,
+) -> dict[str, dict]:
+    """``{file name: document}``: ``leads-bands-<window>.json`` (Czechia and the station
+    kinds) and ``leads-bands-<window>-kraj.json`` (kraje), ``{"columns", "rows"}``."""
+    stamp = "%Y-%m-%dT%H:%MZ"
+    required_ = facts["required"]
+    members: dict = {}
+    for set_, band, variable, model in (
+        required_.select("set", "band", "variable", "model").unique().sort(pl.all()).rows()
+    ):
+        members.setdefault(band, {}).setdefault(set_, {}).setdefault(variable, []).append(model)
+    used = sorted(set(required_["model"])) if required_.height else []
+    header = {
+        "generated": generated.strftime(stamp),
+        "source": "Open-Meteo Single Runs (free, non-commercial use) and ČHMÚ observations",
+        "about": (
+            "Models ranked by lead band, run by run: every lead hour of the 00, 06, 12 and "
+            "18 UTC runs against the ČHMÚ observation at its valid time (run + lead), "
+            "pooled over the band. Not the D+N scores."
+        ),
+        "window": window,
+        "first_run": facts["first_run"].strftime(stamp) if facts.get("first_run") else None,
+        "last_run": facts["last_run"].strftime(stamp) if facts.get("last_run") else None,
+        "first_day": facts["first_day"].isoformat() if facts.get("first_day") else None,
+        "last_day": facts["last_day"].isoformat() if facts.get("last_day") else None,
+        "bands": {band_name(a, b): [a, b] for a, b in BANDS},
+        "sets": {
+            "hourly": (
+                "models with hourly output over the whole band, every lead hour of the "
+                "band; temperature, wind, hourly precipitation, gusts (models with gusts)"
+            ),
+            "6h": (
+                "every model reaching the band, at the lead hours that are multiples of 6 "
+                "(own output of 3- and 6-hourly models too); temperature and wind"
+            ),
+        },
+        "fair_set": (
+            "A model enters a band only if its runs reach the band's last hour in every run "
+            "hour it has. Within a set only the (run, station, lead hour, variable) that "
+            "every model of the set has are scored, so all models share the same pairs. "
+            f"Models with fewer than {runs_mod.MIN_COVERAGE:.0%} of the runs are left out "
+            "(short_record)."
+        ),
+        "ranking": (
+            "Rank by MAE. diff, diff_low, diff_high: MAE minus the best model's MAE and its "
+            "95 % interval from resampling whole days of runs (1000 times); tied: the "
+            "interval contains 0 (not significantly worse than the best); clear: the best "
+            "model with no model tied."
+        ),
+        "bias_corrected": (
+            "mae_bc (temperature, wind): each model's own mean error at the station, band "
+            f"and valid hour of day over the {BIAS_TRAINING_DAYS} valid dates before the "
+            f"run's day (observed before the run started; at least {BIAS_MIN_DAYS}) is "
+            "removed; only pairs where every model of the set has such a bias (n_bc)."
+        ),
+        "preliminary_days": PRELIMINARY_DAYS,
+        "default_band": default,
+        "short_record": facts.get("short_record", {}),
+        "reach_h": {m: facts["reach"].get(m) for m in used},
+        "members": members,
+        "models": {m: (names or {}).get(m, m) for m in used},
+        "variables": {
+            **UNITS,
+            "precipitation": "mm in the hour ending at the valid time",
+            "wind_gusts_10m": "m/s, gust at the valid time (observed: hourly maximum)",
+        },
+        "column_notes": {
+            "level": "cz, network (region main = WMO main stations, other) or kraj",
+            "n": "pairs (station x run x lead hour) per model",
+            "runs, stations, days": "runs, stations and days of runs behind the result",
+            "ets_0p1, ets_1, pod_1, far_1": "precipitation >= 0.1 / 1 mm in the hour",
+        },
+        "columns": BAND_COLUMNS,
+    }
+    rounded = (
+        table.with_columns(
+            pl.col(c).round(3)
+            for c in (
+                "mae",
+                "bias",
+                "rmse",
+                "mae_bc",
+                "ets_0p1",
+                "ets_1",
+                "pod_1",
+                "far_1",
+                "diff",
+                "diff_low",
+                "diff_high",
+            )
+        )
+        if table.height
+        else table
+    )
+    docs = {}
+    for name, levels in (
+        (f"leads-bands-{window}.json", ("cz", "network")),
+        (f"leads-bands-{window}-kraj.json", ("kraj",)),
+    ):
+        part = rounded.filter(pl.col("level").is_in(levels)) if rounded.height else rounded
+        codes = sorted(set(part["region"])) if part.height else []
+        docs[name] = {
+            **header,
+            "regions": {c: region_names.get(c, c) for c in codes},
+            "rows": part.select(BAND_COLUMNS).rows() if part.height else [],
+        }
+    return docs

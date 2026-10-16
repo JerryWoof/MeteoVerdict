@@ -10,6 +10,8 @@ import {
   blendVerdict, blendVerdicts, fmt, okresVerdictCounts, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
   leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, singleModelVerdicts, unpublishedHours,
   RANK_BY, STATION_SETS, hasValues, sortByEts,
+  BAND_RANK_BY, BAND_VARIABLES, BAND_WINDOWS, LEAD_BANDS, LEAD_DAYS, bandBasis, bandRecords, bandSets, bandVariable,
+  bandsIn, dayVariable, defaultLead, isBand, krajOf, leadLabel, maeByBand, parseLead,
 } from "./compare.js";
 import { binLabel, count, etsColor, etsTextColor, farmChoices, farmGrid, plain, score } from "./farm.js";
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
@@ -69,25 +71,73 @@ const pct = (v) => (v == null ? "–" : `${v > 0 ? "+" : ""}${Math.round(v * 100
 const width = () => Math.min(900, document.querySelector(".content").clientWidth);
 const PRECIPITATION = new Set(["precipitation_24h", "precipitation_daily"]);
 
-// --- view, kept in the URL: #variable/lead/window/region/blend-test variable/stations/sort
+// --- view, kept in the URL: #variable/lead/window/region/blend-test variable/stations/sort/set
 // The first four drive the model ranking; the fifth only the blend-test section; the
-// last two only the ranking table (and, for the stations, the charts below it). Links
-// from before the fifth existed open the blend test at the ranking's variable, as then;
-// links without the last two show all stations sorted by MAE.
+// last three only the ranking table (and, for the stations and the set, the charts below
+// it). The lead is a lead day (1…5, D+N scores) or a band of hours ahead (h13-24, run by
+// run). Links from before the fifth existed open the blend test at the ranking's
+// variable, as then; links without the last ones show all stations sorted by MAE.
 function readView() {
   const view = parseHash(window.location.hash);
   const parts = window.location.hash.replace(/^#/, "").split("/");
+  const lead = parseLead(parts[1]);
+  view.leadGiven = lead != null;
+  if (lead != null) view.leadDay = lead;
+  // the band variables that are no D+N variable (hourly precipitation, gusts)
+  if (isBand(view.leadDay) && BAND_VARIABLES.includes(parts[0])) view.variable = parts[0];
   view.region = parts[3] || "cz";
   view.blendVariable = BLEND_TEST_VARIABLES.includes(parts[4]) ? parts[4] : blendTestVariable(view.variable);
   view.stations = STATION_SETS.includes(parts[5]) ? parts[5] : "all";
-  view.rankBy = RANK_BY.includes(parts[6]) ? parts[6] : "mae";
+  view.rankBy = [...RANK_BY, ...BAND_RANK_BY].includes(parts[6]) ? parts[6] : "mae";
+  view.set = parts[7] === "6h" ? "6h" : "hourly";
+  if (BAND_WINDOWS.includes(parts[2])) view.window = parts[2];
   return view;
 }
 
 function writeView(view) {
   const base = `#${view.variable}/${view.leadDay}/${view.window}/${view.region}/${view.blendVariable}`;
-  const extra = view.stations !== "all" || view.rankBy !== "mae" ? `/${view.stations}/${view.rankBy}` : "";
+  const extra = view.stations !== "all" || view.rankBy !== "mae" || view.set !== "hourly"
+    ? `/${view.stations}/${view.rankBy}${view.set !== "hourly" ? `/${view.set}` : ""}`
+    : "";
   window.history.replaceState(null, "", base + extra);
+}
+
+// --- the ranking by lead band (leads-bands-<window>[-kraj].json; hidden until it exists)
+const bandCache = new Map();
+/** {doc, rows} of a band file: Czechia and the station kinds, or the kraje. */
+function loadBands(window_, kraj = false) {
+  const path = `data/scores/leads-bands-${window_}${kraj ? "-kraj" : ""}.json`;
+  if (!bandCache.has(path)) {
+    bandCache.set(path, getJson(path).then((doc) => {
+      if (!doc) bandCache.delete(path);
+      return { doc, rows: bandRecords(doc) };
+    }));
+  }
+  return bandCache.get(path);
+}
+
+/** The band window for the page's window: 90 days or all (the seasons are D+N only). */
+const bandWindow = (window_) => (BAND_WINDOWS.includes(window_) ? window_ : "90d");
+
+/** The lead select: hours ahead (from every run) and days ahead, as two groups. */
+function fillLead(bands, days, current) {
+  const select = document.getElementById("lead");
+  const group = (label, leads) => {
+    const g = document.createElement("optgroup");
+    g.label = label;
+    g.append(...leads.map((lead) => {
+      const option = document.createElement("option");
+      option.value = String(lead);
+      option.textContent = leadLabel(lead);
+      option.selected = String(lead) === String(current);
+      return option;
+    }));
+    return g;
+  };
+  const groups = [];
+  if (bands.length) groups.push(group(t("compare.leadBands"), bands));
+  groups.push(group(t("compare.leadDays"), days));
+  select.replaceChildren(...groups);
 }
 
 /** A segmented switch: `options` [[value, label]]; `onPick(value)` when another is chosen. */
@@ -124,7 +174,18 @@ function fillRegions(kraje, okresy, current) {
   cz.value = "cz";
   cz.textContent = t("region.cz");
   cz.selected = current === "cz";
-  select.replaceChildren(cz, group(t("compare.kraje"), kraje), group(t("compare.okresy"), okresy));
+  okresGroup = group(t("compare.okresy"), okresy);
+  select.replaceChildren(cz, group(t("compare.kraje"), kraje), okresGroup);
+}
+
+let okresGroup = null;
+/** Region code → name (kraje and okresy), for regions without scores in the view shown. */
+const regionNames = new Map();
+/** Okresy cannot be chosen for a band of hours (too few run stations): disabled, said so. */
+function setOkresChoice(enabled) {
+  if (!okresGroup) return;
+  okresGroup.disabled = !enabled;
+  okresGroup.label = enabled ? t("compare.okresy") : t("compare.okresyDaysOnly");
 }
 
 // --- the small map: best model per okres, click to choose ---------------------------
@@ -149,6 +210,11 @@ function addLayers(onPick) {
   map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
   map.addSource("kraje", { type: "geojson", data: "data/kraje.geojson" });
   map.addLayer({ id: "fill", type: "fill", source: "okresy", paint: { "fill-color": NO_DATA, "fill-opacity": 0.8 } });
+  // bands of hours: the best model per kraj (no okres level)
+  map.addLayer({
+    id: "kraj-fill", type: "fill", source: "kraje", layout: { visibility: "none" },
+    paint: { "fill-color": NO_DATA, "fill-opacity": 0.8 },
+  });
   map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#ffffff", "line-width": 0.5 } });
   map.addLayer({ id: "kraje-line", type: "line", source: "kraje", paint: { "line-color": "#4b5863", "line-width": 1 } });
   for (const [id, source] of [["sel-okres", "okresy"], ["sel-kraj", "kraje"]]) {
@@ -160,14 +226,21 @@ function addLayers(onPick) {
       paint: { "line-color": "#1d2329", "line-width": 2.5 },
     });
   }
-  map.on("click", "fill", (event) => onPick(event.features[0].properties.code));
-  map.on("mouseenter", "fill", () => (map.getCanvas().style.cursor = "pointer"));
-  map.on("mouseleave", "fill", () => (map.getCanvas().style.cursor = ""));
+  for (const layer of ["fill", "kraj-fill"]) {
+    map.on("click", layer, (event) => onPick(event.features[0].properties.code));
+    map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
+    map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
+  }
 }
 
-function paintMap(okresRows, view, colors, names) {
-  const best = bestByRegion(okresRows, view.leadDay);
-  map.setPaintProperty("fill", "fill-color", fillExpression(best, colors));
+/** The map: best model per okres (lead days) or per kraj (bands of hours). */
+function paintMap(areaRows, view, colors, names) {
+  const band = isBand(view.leadDay);
+  const best = bestByRegion(areaRows, view.leadDay);
+  const layer = band ? "kraj-fill" : "fill";
+  map.setLayoutProperty("fill", "visibility", band ? "none" : "visible");
+  map.setLayoutProperty("kraj-fill", "visibility", band ? "visible" : "none");
+  map.setPaintProperty(layer, "fill-color", fillExpression(best, colors));
   // legend: the models that win somewhere, by number of okresy
   const wins = new Map();
   for (const entry of best.values()) if (entry.model) wins.set(entry.model, (wins.get(entry.model) ?? 0) + 1);
@@ -190,7 +263,7 @@ function paintMap(okresRows, view, colors, names) {
 function renderSummary(rows, view, names, colors) {
   const box = document.getElementById("summary");
   const s = regionSummary(rows, view.leadDay, view.region);
-  const name = view.region === "cz" ? t("region.cz") : displayName(s?.name ?? view.region);
+  const name = view.region === "cz" ? t("region.cz") : displayName(s?.name ?? regionNames.get(view.region) ?? view.region);
   const heading = cell("h2", name);
   if (!s) {
     box.replaceChildren(heading, cell("p", t("compare.empty")));
@@ -201,13 +274,20 @@ function renderSummary(rows, view, names, colors) {
   const swatch = cell("span", "", "swatch");
   swatch.style.background = colors[s.model] ?? "#888888";
   best.append(swatch, cell("strong", names[s.model] ?? s.model), ` · MAE ${fmt(s.mae)}`);
+  const band = isBand(view.leadDay);
+  const variable = band ? t(`bandVariable.${bandVariable(view.variable)}`) : t(`variable.${view.variable}`);
+  const windowName = t(`window.${band ? bandWindow(view.window) : view.window}`).toLowerCase();
+  const basis = band ? bandBasis(rows, view.leadDay, view.region) : null;
   const lines = [
-    t(`variable.${view.variable}`) + `, D+${view.leadDay}, ` + t(`window.${view.window}`).toLowerCase(),
+    `${variable}, ${leadLabel(view.leadDay)}${band ? ` (${t("compare.fromRuns")})` : ""}, ${windowName}`,
     s.clear ? t("compare.clear") : t("compare.notClear", { n: s.tied }),
-    t("compare.basis", { stations: s.stations, days: s.days }) +
-      (s.borrowed ? ` ${t("compare.borrowed", { n: s.borrowed })}` : ""),
+    basis
+      ? t("compare.bandBasisShort", basis)
+      : t("compare.basis", { stations: s.stations, days: s.days }) +
+        (s.borrowed ? ` ${t("compare.borrowed", { n: s.borrowed })}` : ""),
   ];
   const children = [heading, cell("p", lines[0], "note"), best, cell("p", lines[1]), cell("p", lines[2], "note")];
+  if (basis?.preliminary) children.push(cell("p", t("compare.preliminary", { days: basis.days }), "note preliminary"));
   if (levelOf(view.region) === "okres") {
     const blend = cell("p", null, "note");
     children.push(blend);
@@ -246,22 +326,27 @@ function renderStations(view, choice, rows, onChange) {
 
 /** The sort switch above the table (precipitation with event scores only): MAE or ETS. */
 function rankByChoice(view, data) {
-  if (!PRECIPITATION.has(view.variable)) return { options: [], shown: "mae" };
-  const options = RANK_BY.filter((key) => key === "mae" || hasValues(data, key));
+  const band = isBand(view.leadDay);
+  if (band ? bandVariable(view.variable) !== "precipitation" : !PRECIPITATION.has(view.variable)) {
+    return { options: [], shown: "mae" };
+  }
+  const options = (band ? BAND_RANK_BY : RANK_BY).filter((key) => key === "mae" || hasValues(data, key));
   return { options, shown: options.includes(view.rankBy) ? view.rankBy : "mae" };
 }
 
 function renderTable(rows, view, names, region, onChange) {
   const table = document.getElementById("ranking");
-  const rain = PRECIPITATION.has(view.variable);
+  const band = isBand(view.leadDay);
+  const rain = band ? bandVariable(view.variable) === "precipitation" : PRECIPITATION.has(view.variable);
   const data = rankingTable(rows, view.leadDay, region);
   const choice = rankByChoice(view, data);
   const block = document.getElementById("rank-by-block");
   block.hidden = choice.options.length < 2;
   document.getElementById("rank-by-note").hidden = !rain;
-  document.getElementById("rank-by-note").textContent = rain ? t("compare.rankByNote") : "";
+  document.getElementById("rank-by-note").textContent = rain ? t(band ? "compare.rankByNoteBand" : "compare.rankByNote") : "";
   if (!block.hidden) {
-    fillSegmented("rank-by", choice.options.map((key) => [key, t(`compare.rankBy.${key}`)]), choice.shown, (key) => {
+    const rankLabel = (key) => t(band && key !== "mae" ? `compare.rankByBand.${key}` : `compare.rankBy.${key}`);
+    fillSegmented("rank-by", choice.options.map((key) => [key, rankLabel(key)]), choice.shown, (key) => {
       view.rankBy = key;
       onChange();
     });
@@ -279,7 +364,8 @@ function renderTable(rows, view, names, region, onChange) {
   const bc = hasValues(data, "maeBc") ? ["maeBc"] : [];
   const keys = byEts
     ? ["rank", "model", choice.shown, ...events.filter((k) => k !== choice.shown), "mae", "bias", "stations", "days"]
-    : ["rank", "model", "mae", ...bc, "diff", "skill", "bias", "rmse", ...(rain ? events : []), "stations", "days"];
+    : ["rank", "model", "mae", ...bc, "diff", ...(band ? [] : ["skill"]), "bias", "rmse", ...(rain ? events : []),
+      "stations", "days"];
   const label = (key) => {
     if (key === pod || key === far) return t(`table.${key.slice(0, 3)}At`, { mm });
     return t(`table.${key}`);
@@ -325,7 +411,7 @@ function renderTable(rows, view, names, region, onChange) {
   table.replaceChildren(head, ...body);
   const bcNote = document.getElementById("bc-note");
   bcNote.hidden = bc.length === 0 || byEts;
-  bcNote.textContent = bcNote.hidden ? "" : t("compare.bcNote");
+  bcNote.textContent = bcNote.hidden ? "" : t(band ? "compare.bcNoteBand" : "compare.bcNote");
   const aladinNote = document.getElementById("aladin-note");
   aladinNote.hidden = !data.some((r) => isAladin(r.model));
   aladinNote.textContent = aladinNote.hidden ? "" : t("compare.aladinNote");
@@ -362,7 +448,9 @@ function renderIntervals(rows, view, names, colors, region = view.region) {
 
 function renderByLead(rows, view, names, colors, region = view.region) {
   const target = document.getElementById("by-lead");
-  const data = maeByLead(rows, region);
+  const band = isBand(view.leadDay);
+  document.getElementById("by-lead-note").textContent = t(band ? "compare.byBandNote" : "compare.byLeadNote");
+  const data = band ? maeByBand(rows, region) : maeByLead(rows, region);
   if (data.length === 0) {
     target.replaceChildren(cell("p", t("compare.empty")));
     return;
@@ -374,7 +462,11 @@ function renderByLead(rows, view, names, colors, region = view.region) {
       width: width(),
       height: 300,
       marginLeft: 50,
-      x: { label: t("control.lead"), ticks: [1, 2, 3, 4, 5], tickFormat: (d) => `D+${d}` },
+      marginRight: band ? 36 : 20,
+      x: {
+        label: band ? t("compare.leadBands") : t("control.lead"), ticks: [1, 2, 3, 4, 5],
+        tickFormat: (d) => (band ? leadLabel(LEAD_BANDS[d - 1]) : `D+${d}`),
+      },
       y: { label: "MAE", grid: true, zero: true },
       color: {
         domain: models.map(label),
@@ -382,7 +474,7 @@ function renderByLead(rows, view, names, colors, region = view.region) {
         legend: true,
       },
       marks: [
-        Plot.ruleX([view.leadDay], { stroke: "#ddd8cc", strokeWidth: 8 }),
+        Plot.ruleX([band ? LEAD_BANDS.indexOf(view.leadDay) + 1 : view.leadDay], { stroke: "#ddd8cc", strokeWidth: 8 }),
         Plot.lineY(
           data.filter((r) => r.model !== "blend"),
           { x: "lead_day", y: "mae", stroke: (r) => label(r.model), strokeWidth: 1.5, marker: "circle", tip: true },
@@ -628,6 +720,7 @@ const HIGHLIGHT = 3; // the best models over the lead hours get bold lines
 const leadHoursView = { runHour: "all" };
 
 async function renderLeadHours(view, names, colors) {
+  const chosen = isBand(view.leadDay) ? view.leadDay.slice(1).split("-").map(Number) : null;
   const section = document.getElementById("lead-hours-section");
   const doc = await leadsDoc;
   const variable = leadHourVariable(view.variable);
@@ -678,6 +771,12 @@ async function renderLeadHours(view, names, colors) {
         text: () => t("compare.leadHoursUnpublished"), fontSize: 10, fill: "#4b5863",
       }),
     );
+  }
+  if (chosen) {
+    // the band chosen above: the ranking pools these hours
+    marks.push(Plot.rectX([{ x1: chosen[0] - 0.5, x2: chosen[1] + 0.5 }], {
+      x1: "x1", x2: "x2", fill: "#1f78b4", fillOpacity: 0.08,
+    }));
   }
   marks.push(
     Plot.ruleX([1, 6, 12, 24, 48, 72], { stroke: "#ddd8cc", strokeDasharray: "2,3" }),
@@ -796,7 +895,7 @@ async function renderFarm(names) {
 
 function renderBias(rows, view, names, colors) {
   const section = document.getElementById("elevation-section");
-  section.hidden = view.region !== "cz";
+  section.hidden = view.region !== "cz" || isBand(view.leadDay);
   if (section.hidden) return;
   const target = document.getElementById("bias");
   const data = biasByElevation(rows, view.leadDay);
@@ -819,6 +918,23 @@ function renderBias(rows, view, names, colors) {
   );
 }
 
+/** The band set switch (temperature and wind): every lead hour of the hourly models, or every model at H+6, H+12, … */
+function renderBandSet(view, sets, shown, rows, onChange) {
+  const block = document.getElementById("band-set-block");
+  const note = document.getElementById("band-set-note");
+  block.hidden = !isBand(view.leadDay) || sets.length < 2;
+  note.hidden = !isBand(view.leadDay) || sets.length === 0;
+  if (note.hidden) return;
+  const models = new Set(rows.filter((r) => r.lead_day === view.leadDay).map((r) => r.model)).size;
+  const key = sets.length < 2 ? "only" : shown;
+  note.textContent = t(`compare.bandSetNote.${key}`, { n: models, band: leadLabel(view.leadDay) });
+  if (block.hidden) return;
+  fillSegmented("band-set", sets.map((set) => [set, t(`compare.bandSet.${set}`)]), shown, (set) => {
+    view.set = set;
+    onChange();
+  });
+}
+
 async function main() {
   const meta = await getJson("data/scores/meta.json");
   document.getElementById("status").textContent = statusText(meta, t);
@@ -828,26 +944,89 @@ async function main() {
   // only periods with scored days: an empty one is never offered nor kept from a link
   const windows = availableWindows(meta?.windows);
   view.window = pickWindow(view.window, windows);
+  const variables = availableVariables(meta);
+  const language = document.documentElement.lang;
   blendView.variable = view.blendVariable;
   blendView.onChange = () => {
     view.blendVariable = blendView.variable;
     writeView(view);
   };
   renderBlendTest(names).then(() => (view.blendVariable = blendView.variable));
+  // bands of hours ahead: offered once the files exist; the page opens at the band the
+  // data suggests (enough days, `default_band`) unless the link names a lead
+  const bands90 = await loadBands("90d");
+  const bandList = bandsIn(bands90.rows);
+  if (!view.leadGiven) view.leadDay = defaultLead(bands90.doc);
+  if (isBand(view.leadDay) && !bandList.includes(view.leadDay)) view.leadDay = 1;
+  let leadDays = LEAD_DAYS;
 
-  async function render() {
+  /** The D+N view: score files of the variable, okresy on the map. */
+  async function dayData() {
+    view.variable = dayVariable(view.variable, variables);
+    view.window = pickWindow(view.window, windows);
     const level = levelOf(view.region);
     const [rows, okresRows, networkRows] = await Promise.all([
       load(view, level), load(view, "okres"), view.region === "cz" ? load(view, "network") : [],
     ]);
-    const leadDays = availableLeadDays(rows);
+    leadDays = availableLeadDays(rows);
     if (!leadDays.includes(view.leadDay)) view.leadDay = leadDays[0];
-    fillSelect("lead", leadDays.map((d) => [d, `D+${d}`]), view.leadDay);
+    fillSelect("variable", variables.map((v) => [v, t(`variable.${v}`)]), view.variable);
+    fillSelect("window", windows.map((w) => [w, windowLabel(w, meta?.windows, t, language)]), view.window);
+    return { rows, areaRows: okresRows, networkRows };
+  }
+
+  /** The band view: Czechia, station kinds and kraje of one fair set; kraje on the map. */
+  async function bandData() {
+    const window_ = bandWindow(view.window);
+    const [cz, kraj, other] = await Promise.all([
+      loadBands(window_), loadBands(window_, true), loadBands(window_ === "90d" ? "all" : "90d"),
+    ]);
+    const present = BAND_VARIABLES.filter((v) => cz.rows.some((r) => r.variable === v));
+    const variable = present.includes(bandVariable(view.variable)) ? bandVariable(view.variable) : present[0];
+    const sets = bandSets(cz.rows, variable);
+    const set = sets.includes(view.set) ? view.set : sets[0];
+    const pick = (rows, level) => rows.filter((r) => r.level === level && r.variable === variable && r.set === set);
+    const czRows = pick(cz.rows, "cz");
+    const krajRows = pick(kraj.rows, "kraj");
+    fillSelect("variable", present.map((v) => [v, t(`bandVariable.${v}`)]), variable);
+    // the band windows with their real days (the seasons are for D+N only)
+    const spans = Object.fromEntries([[window_, cz.doc], [bandWindow(other.doc?.window), other.doc]]
+      .filter(([, doc]) => doc?.first_day)
+      .map(([w, doc]) => [w, { from: doc.first_day, to: doc.last_day }]));
+    const offered = BAND_WINDOWS.filter((w) => w === window_ || spans[w]);
+    fillSelect("window", offered.map((w) => [w, windowLabel(w, spans, t, language)]), window_);
+    const rows = view.region === "cz" ? czRows : krajRows;
+    return {
+      rows, areaRows: krajRows, networkRows: pick(cz.rows, "network"), sets, set,
+      setRows: view.region === "cz" ? czRows : krajRows, preliminaryDays: cz.doc?.preliminary_days ?? 30,
+    };
+  }
+
+  async function render() {
+    const band = isBand(view.leadDay);
+    if (band) view.region = krajOf(view.region);
+    setOkresChoice(!band);
+    const data = band ? await bandData() : await dayData();
+    const { rows, areaRows, networkRows } = data;
+    fillLead(bandList, leadDays, view.leadDay);
     document.getElementById("region").value = view.region;
     document.getElementById("ranking-title").textContent = t("compare.rankingIn", {
-      region: view.region === "cz" ? t("region.cz") : displayName(regionList(rows).find((r) => r.code === view.region)?.name ?? view.region),
+      region: view.region === "cz"
+        ? t("region.cz")
+        : displayName(regionList([...rows, ...areaRows]).find((r) => r.code === view.region)?.name ?? view.region),
     });
     renderSummary(rows, view, names, colors);
+    // what a band result rests on, and which models (fair set) it compares
+    const basisNote = document.getElementById("band-basis");
+    const basis = band ? bandBasis(rows, view.leadDay, view.region, data.preliminaryDays) : null;
+    basisNote.hidden = !band;
+    basisNote.textContent = !band
+      ? ""
+      : basis
+        ? t("compare.bandBasis", { ...basis, band: leadLabel(view.leadDay) }) +
+          (basis.preliminary ? ` ${t("compare.preliminary", { days: basis.days })}` : "")
+        : t("compare.bandFewStations");
+    renderBandSet(view, band ? data.sets : [], band ? data.set : "hourly", band ? data.setRows : [], render);
     // the station switch (Czechia): the table and the two charts below it
     const stations = stationChoice(view, networkRows);
     const [rankRows, rankRegion] = stations.shown === "all" ? [rows, view.region] : [networkRows, stations.shown];
@@ -856,23 +1035,26 @@ async function main() {
     renderIntervals(rankRows, view, names, colors, rankRegion);
     renderByLead(rankRows, view, names, colors, rankRegion);
     renderLeadHours(view, names, colors);
-    renderBias(view.region === "cz" ? await load(view, "elevation") : [], view, names, colors);
-    if (map.getLayer("fill")) paintMap(okresRows, view, colors, names);
+    renderBias(view.region === "cz" && !band ? await load(view, "elevation") : [], view, names, colors);
+    document.getElementById("map-note").textContent = t(band ? "compare.mapNoteBand" : "compare.mapNote");
+    const bandNote = document.getElementById("map-band-note");
+    bandNote.hidden = !band;
+    bandNote.textContent = band ? t("compare.mapBandNote") : "";
+    if (map.getLayer("fill")) paintMap(areaRows, view, colors, names);
     writeView(view);
   }
 
-  const [kraje, okresy] = await Promise.all([load(view, "kraj"), load(view, "okres")]);
+  // the region lists come from the D+N files (a band variable such as gusts has none)
+  const listView = { ...view, variable: dayVariable(view.variable, variables) };
+  const [kraje, okresy] = await Promise.all([load(listView, "kraj"), load(listView, "okres")]);
   const known = new Set(["cz", ...regionList(kraje).map((r) => r.code), ...regionList(okresy).map((r) => r.code)]);
   if (!known.has(view.region)) view.region = "cz";
   fillRegions(regionList(kraje), regionList(okresy), view.region);
-  fillSelect("variable", availableVariables(meta).map((v) => [v, t(`variable.${v}`)]), view.variable);
-  // each period with its real dates and days, so a short history explains itself
-  const language = document.documentElement.lang;
-  fillSelect("window", windows.map((w) => [w, windowLabel(w, meta?.windows, t, language)]), view.window);
+  for (const { code, name } of [...regionList(kraje), ...regionList(okresy)]) regionNames.set(code, name);
   for (const [id, key, parse] of [
     ["region", "region", String],
     ["variable", "variable", String],
-    ["lead", "leadDay", Number],
+    ["lead", "leadDay", parseLead],
     ["window", "window", String],
   ]) {
     document.getElementById(id).addEventListener("change", (event) => {
