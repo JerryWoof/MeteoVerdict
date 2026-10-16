@@ -484,7 +484,12 @@ function tick(now) {
   if (!playing) return;
   const dt = lastTick == null ? 0 : Math.min(100, now - lastTick);
   lastTick = now;
-  const next = advanceClock(clockState, dt, { first: firstTime(), last: lastTime(), rate: MINUTE / msPerDataMinute(speed), holdMs: 1000 });
+  // every frame gets the same time on screen (a 5-minute frame's at this speed): the
+  // nowcast's 10-minute steps and gaps in the data do not play slower
+  const { i: at } = locate(steps, clockState.ms);
+  const span = (steps[at + 1]?.time ?? 0) - (steps[at]?.time ?? 0);
+  const rate = (span > 0 ? span : 5 * MINUTE) / (5 * msPerDataMinute(speed));
+  const next = advanceClock(clockState, dt, { first: firstTime(), last: lastTime(), rate, holdMs: 1000 });
   // a frame that could not be loaded is not waited on: go straight to the next one
   if (has("radar")) {
     let { i } = locate(steps, next.ms);
