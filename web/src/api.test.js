@@ -26,7 +26,24 @@ test("an okres file: forecast by hour and part of day, licence and attribution",
   assert.deepEqual(DOC.forecast.hourly.temperature_2m, HOURLY_DOC.okresy.CZ0201.temperature_2m);
   const parts = DOC.forecast.parts;
   assert.equal(parts.length, 6 * 5);
-  assert.deepEqual(Object.keys(parts[0]), ["day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol", "sunrise", "sunset"]);
+  assert.deepEqual(Object.keys(parts[0]), [
+    "day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol",
+    "sunrise", "sunset",
+    "night_min", "coldest_site", "coldest_min", "frost_probability", "frost", "ground_min", "ground_frost",
+  ]);
+  // an outlook file from before the frost fields: they are there, null
+  assert.equal(parts[0].night_min, null);
+});
+
+test("the frost fields of an outlook row are passed through", () => {
+  const columns = [...OUTLOOK.columns, "night_min", "coldest_site", "coldest_min", "frost_probability", "frost", "ground_min", "ground_frost"];
+  const rows = OUTLOOK.rows.map((r) => [...r, -0.4, "Valley", -2.1, 0.6, true, -4.2, true]);
+  const doc = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, weightsDoc: WEIGHTS, scores: SCORES, meta: META });
+  const night = doc.forecast.parts[0];
+  assert.equal(night.night_min, -0.4);
+  assert.equal(night.coldest_site, "Valley");
+  assert.equal(night.frost, true);
+  assert.equal(night.ground_frost, true);
 });
 
 test("model ranking per variable and lead day, with the weights of our forecast", () => {
