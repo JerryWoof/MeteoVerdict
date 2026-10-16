@@ -426,38 +426,81 @@ a slightly higher ETS. Risks: only August–September data so far (winter rain a
 will change the coefficients; the nightly refit follows with a 90-day lag), and the
 showers threshold of 0.40 was the best of 0.30/0.35/0.40 on the same test period.
 
-### Does it beat the best single model? (roadmap 6.4)
+### Does it beat one model used everywhere? (roadmap 6.4)
 
 `mvd blend-test` (run daily, shown at the top of the comparison page) replays the
 combination on past days **out of sample**:
 
-- For day *d* at lead day *N*, the weights, bias corrections and the okres's best
-  model come only from the okres scores of the 90 days ending on *d − N*: what the
-  daily run had published when that D+N forecast was made. Same code and shrinkage
-  as the live forecast; the temperature and wind regression is fitted on the station
-  pairs of the same window, and its corrections are taken at each station's own
-  elevation.
+- For day *d* at lead day *N*, the weights, bias corrections, the okres's best model
+  and the best model for the whole of Czechia come only from the scores of the 90 days
+  ending on *d − N*: what the daily run had published when that D+N forecast was made.
+  Same code and shrinkage as the live forecast; the temperature and wind regression is
+  fitted on the station pairs of the same window, and its corrections are taken at each
+  station's own elevation. Only models with scores on at least 80 % of the window's
+  scored days are trained on: the backfill fetches a newly added model newest window
+  first, and a model with one 14-day block would otherwise cut every model's fair
+  station-days (and with them the training) down to that block.
 - The combination is applied to the models' stored D+N forecasts at the okres's
-  stations (borrowed ones included) and scored like the mean of all models:
-  temperature and wind at 00, 06, 12 and 18 UTC, precipitation as UTC-day totals, on
-  the station-days every model has.
-- It is compared with **the best model at the time** (the okres's rank-1 model in that
-  training window, chosen anew every day: what a user following our ranking would have
-  used), the **best model in hindsight** (each okres's model with the lowest MAE over
-  the whole test: an upper bound nobody could pick in advance), the mean of all models
-  and every single model. Czechia sums the 77 okresy.
-- 95 % intervals of the MAE difference to the best model at the time come from the
-  same day bootstrap as the ranking. **Warm-up:** an okres is tested only after 14
-  scored training days.
+  stations (borrowed ones included; for the latest days the D+N rebuilt from the single
+  runs, as the daily scores) and scored like the mean of all models: temperature and
+  wind at 00, 06, 12 and 18 UTC, precipitation as UTC-day totals. The station-days are
+  fair **day by day**: on each day the models compared are those with scores that day,
+  so a model with part of the test period only (a newly added one, or the fresh days
+  with fewer models) does not drop the other days.
+- It is compared with:
+  - **the best model for the whole of Czechia at the time** (`best_cz_oos`: the model
+    with the lowest Czechia-wide MAE in that training window, chosen anew every day and
+    used at every station). This is the headline: most people use one model everywhere.
+  - **the best model in each okres at the time** (`best_oos`: each okres's rank-1 model in
+    that window, a different model in every okres if need be). Harder to beat than any
+    one model.
+  - the **best model in hindsight** (each okres's model with the lowest MAE over the
+    whole test: an upper bound nobody could pick in advance), the mean of all models,
+    and **every single model used everywhere** (Czechia, each on the days it has data;
+    ČHMÚ ALADIN CZ 1 km first on the page).
+- Czechia sums the 77 okresy; a series counts on a day only if it is compared in every
+  okres tested that day. 95 % intervals of the MAE differences (ours minus the
+  competitor) come from the same whole-day bootstrap as the ranking
+  (`ranking.bootstrap_group`). **Warm-up:** an okres is tested only after 14 scored
+  training days.
 
-**Result so far** (24 test days, 7–30 September 2026, after 14 warm-up days; Czechia;
-negative = our forecast has the smaller MAE; 95 % interval in brackets):
+On 16 October 2026 the published test briefly covered only 5 days (21–25 September):
+the backfill had just delivered the eight models added on 15 October for their newest
+window (21 September – 4 October), and the fair comparison over the whole period then
+kept only station-days from 21 September on, both in the training windows (too few days
+left for the warm-up) and in the test. The coverage rule and the day-by-day fairness
+above fixed it.
+
+**Result so far** (26 test days, 7–30 September and 14–15 October 2026, after 14
+warm-up days; Czechia; negative = our forecast has the smaller MAE; 95 % interval in
+brackets; bold = significant).
+
+Against **the best model for all of Czechia at the time**, used everywhere (most often
+ECMWF AIFS, DWD ICON-EU for wind):
 
 | | D+1 | D+2 | D+3 | D+4 | D+5 |
 |---|---|---|---|---|---|
-| Temperature (°C) | **−0.18** (−0.21…−0.14) | **−0.16** (−0.19…−0.12) | **−0.19** (−0.22…−0.15) | **−0.13** (−0.18…−0.08) | **−0.20** (−0.26…−0.14) |
-| Wind (m/s) | **−0.17** (−0.19…−0.15) | **−0.17** (−0.20…−0.15) | **−0.20** (−0.23…−0.17) | **−0.21** (−0.25…−0.17) | **−0.35** (−0.39…−0.31) |
-| Precipitation (mm/day) | **−0.25** (−0.49…−0.08) | **−0.20** (−0.41…−0.07) | **−0.28** (−0.54…−0.08) | **−0.18** (−0.31…−0.06) | **−0.26** (−0.60…−0.02) |
+| Temperature (°C) | **−0.22** (−0.26…−0.18) | **−0.26** (−0.33…−0.20) | **−0.21** (−0.32…−0.12) | **−0.12** (−0.19…−0.04) | **−0.20** (−0.27…−0.13) |
+| Wind (m/s) | **−0.22** (−0.24…−0.20) | **−0.20** (−0.23…−0.17) | **−0.21** (−0.24…−0.18) | **−0.21** (−0.25…−0.17) | **−0.35** (−0.41…−0.30) |
+| Precipitation (mm/day) | **−0.27** (−0.64…−0.01) | **−0.25** (−0.68…−0.01) | −0.04 (−0.38…+0.27) | −0.02 (−0.27…+0.26) | −0.32 (−0.77…+0.03) |
+
+Against **ČHMÚ ALADIN CZ 1 km** used everywhere (it reaches D+2): temperature −0.27 °C
+(−20 %) at D+1 and −0.19 °C (−13 %) at D+2, wind −0.54 and −0.52 m/s (−40 %, −37 %),
+precipitation −0.20 and −0.30 mm (−17 %, −21 %); all significant. Of all 196 model ×
+variable × lead day comparisons ours is significantly better in 168 and not
+significantly different in 28 (all precipitation), worse in none.
+
+Against **the best model in each okres at the time**:
+
+| | D+1 | D+2 | D+3 | D+4 | D+5 |
+|---|---|---|---|---|---|
+| Temperature (°C) | **−0.17** (−0.20…−0.15) | **−0.17** (−0.20…−0.13) | **−0.19** (−0.23…−0.16) | **−0.13** (−0.18…−0.07) | **−0.19** (−0.26…−0.14) |
+| Wind (m/s) | **−0.17** (−0.20…−0.16) | **−0.18** (−0.20…−0.15) | **−0.21** (−0.23…−0.18) | **−0.21** (−0.25…−0.17) | **−0.34** (−0.38…−0.31) |
+| Precipitation (mm/day) | **−0.26** (−0.51…−0.07) | **−0.21** (−0.42…−0.07) | **−0.28** (−0.55…−0.08) | **−0.18** (−0.31…−0.06) | **−0.28** (−0.63…−0.02) |
+
+For precipitation one well-chosen model for the whole country does about as well as the
+per-okres choice or better (its choice is steadier), so at D+3–D+5 our advantage over it is not
+significant.
 
 MAE of the combination with the regression blend against the method before it (same
 test): temperature 1.221 → 1.066 °C at D+1 (−12.7 %), −8.5 %, −6.5 %, −4.4 % and
@@ -466,8 +509,7 @@ test): temperature 1.221 → 1.066 °C at D+1 (−12.7 %), −8.5 %, −6.5 %, �
 temperature and 9 for wind (Chomutov up to +12 %, Semily, Nový Jičín, Prostějov,
 Hodonín; 26, up to +34 %, without the wind guard).
 
-Our forecast is now clearly better than the model a user of the ranking would have
-picked for every variable and lead day (before the regression blend it was worse for
+Our forecast is clearly better than the per-okres pick for every variable and lead day (before the regression blend it was worse for
 wind at D+1, by 0.03 m/s against DWD's ICON models, and not significantly different at
 several other lead days). For precipitation it is about as good as the plain mean of all
 models, and both beat the per-okres "best" model, partly because that choice jumps
@@ -476,9 +518,9 @@ for precipitation: a fixed, well-chosen model can do better, but nobody knows it
 advance. For temperature and wind the test scores the combination at the stations, with
 each station's own elevation in the correction; the published forecast gets the
 elevation term only for its one point per okres, so part of the gain (the elevation
-term) shows up there only as far as the point differs from the okres's stations. **This rests on 24 autumn days and is not yet a verdict**:
+term) shows up there only as far as the point differs from the okres's stations. **This rests on 26 autumn days and is not yet a verdict**:
 intervals ignore that consecutive days are alike (so they are too narrow), and the
-weights themselves had at most 37 days of scores behind them. The test is repeated
+weights themselves had at most 40 days of scores behind them. The test is repeated
 every day as history grows. Not yet done: training windows of 30 and 45 days and a
 decaying average (roadmap 6.4); with under 45 days of history they would be almost
 the same as 90 days.

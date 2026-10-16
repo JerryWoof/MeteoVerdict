@@ -201,10 +201,14 @@ export function unpublishedHours(doc, fallback = 4) {
 
 // --- does our combined forecast beat the best model? (blend-test.json, `mvd blend-test`)
 // Out of sample: on each past day the combination used only scores known before it,
-// and is compared with the model our ranking had as best at that time (best_oos).
+// and is compared with the model that was best for the whole of Czechia at that time
+// and used everywhere (best_cz_oos, what most people do), with the best model of each
+// okres at that time (best_oos, a harder competitor) and with every single model.
 
 export const BLEND_TEST_VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitation_daily"];
-export const BLEND_TEST_SERIES = ["combined", "best_oos", "blend", "best_hindsight"];
+export const BLEND_TEST_SERIES = ["combined", "best_cz_oos", "best_oos", "blend", "best_hindsight"];
+/** The model most people in Czechia use: listed first among the single models. */
+export const HOME_MODEL = "chmi_aladin_cz_1km";
 
 /** The tested variable closest to a page variable (temperature by hour, wind, rain). */
 export function blendTestVariable(variable) {
@@ -228,18 +232,28 @@ export function blendTestRows(doc, region = "cz") {
  * difference). `amount` is how much better (positive) or worse, with its interval
  * in the same direction (low ≤ high).
  */
-export function blendVerdict(row) {
-  const { diff_combined: diff, low_combined: low, high_combined: high } = row ?? {};
+export function blendVerdict(row, against = "okres") {
+  const suffix = against === "cz" ? "_vs_cz" : "";
+  return verdictOf(row?.[`diff_combined${suffix}`], row?.[`low_combined${suffix}`], row?.[`high_combined${suffix}`]);
+}
+
+function verdictOf(diff, low, high) {
   if (diff == null) return null;
   if (high != null && high < 0) return { verdict: "better", amount: -diff, low: -high, high: -low };
   if (low != null && low > 0) return { verdict: "worse", amount: diff, low, high };
   return { verdict: "same", amount: diff, low, high };
 }
 
-/** Verdicts by variable and lead day: [{variable, lead_day, days, verdict, amount, low, high}]. */
-export function blendVerdicts(rows) {
+/**
+ * Verdicts by variable and lead day: [{variable, lead_day, days, best, verdict, amount,
+ * low, high}]. `against`: "okres" = the best model of each okres (best_oos), "cz" =
+ * the best model for the whole of Czechia used everywhere (best_cz_oos; files written
+ * before it existed have no such verdicts).
+ */
+export function blendVerdicts(rows, against = "okres") {
+  const best = against === "cz" ? "best_cz_oos" : "best_oos";
   return rows
-    .map((r) => ({ variable: r.variable, lead_day: r.lead_day, days: r.days, best: r.best_oos, ...blendVerdict(r) }))
+    .map((r) => ({ variable: r.variable, lead_day: r.lead_day, days: r.days, best: r[best], ...blendVerdict(r, against) }))
     .filter((r) => r.verdict)
     .sort((a, b) => BLEND_TEST_VARIABLES.indexOf(a.variable) - BLEND_TEST_VARIABLES.indexOf(b.variable)
       || a.lead_day - b.lead_day);
@@ -270,4 +284,41 @@ export function okresVerdictCounts(doc, variable, leadDay) {
     if (v) counts[v.verdict] += 1;
   }
   return counts;
+}
+
+/**
+ * Our forecast against every single model used everywhere in Czechia, for one variable
+ * (blend-test.json `single_models`): [{model, cells: {lead_day: cell}}] with the cell
+ * {verdict, diff, low, high, pct, pctLow, pctHigh, mae, maeCombined, days}: diff = our
+ * MAE minus the model's (negative = ours better), pct the same relative to the model's
+ * MAE. ALADIN CZ 1 km first, then by MAE at the shortest lead day (best first). Files
+ * written before the intervals existed have no `diff_combined`: no rows.
+ */
+export function singleModelVerdicts(doc, variable) {
+  const table = doc?.single_models;
+  if (!table?.rows?.length || !table.columns.includes("diff_combined")) return [];
+  const byModel = new Map();
+  for (const row of table.rows) {
+    const r = Object.fromEntries(table.columns.map((c, i) => [c, row[i]]));
+    if (r.variable !== variable) continue;
+    const v = verdictOf(r.diff_combined, r.low_combined, r.high_combined);
+    if (!v) continue;
+    const share = (x) => (x == null || !r.mae ? null : x / r.mae);
+    if (!byModel.has(r.model)) byModel.set(r.model, { model: r.model, cells: {} });
+    byModel.get(r.model).cells[r.lead_day] = {
+      verdict: v.verdict, diff: r.diff_combined, low: r.low_combined, high: r.high_combined,
+      pct: share(r.diff_combined), pctLow: share(r.low_combined), pctHigh: share(r.high_combined),
+      mae: r.mae, maeCombined: r.mae_combined, days: r.days,
+    };
+  }
+  const first = (m) => {
+    const leads = Object.keys(m.cells).map(Number).sort((a, b) => a - b);
+    return leads.length ? [leads[0], m.cells[leads[0]].mae] : [Infinity, Infinity];
+  };
+  return [...byModel.values()].sort((a, b) => {
+    if ((a.model === HOME_MODEL) !== (b.model === HOME_MODEL)) return a.model === HOME_MODEL ? -1 : 1;
+    const [la, ma] = first(a);
+    const [lb, mb] = first(b);
+    return la - lb || ma - mb || a.model.localeCompare(b.model);
+  });
 }

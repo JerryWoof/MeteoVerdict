@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 
 import {
-  biasByElevation, blendTestLines, blendTestRows, blendTestVariable, blendVerdict, blendVerdicts, fmt,
+  biasByElevation, blendTestLines, blendTestRows, blendTestVariable, blendVerdict, blendVerdicts, fmt, singleModelVerdicts,
   okresVerdictCounts, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
   leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, unpublishedHours,
 } from "./compare.js";
@@ -227,6 +227,52 @@ test("blend test verdicts: better, same, worse with intervals in the verdict's d
     ["temperature_2m", 1, "same"], ["temperature_2m", 2, "better"], ["wind_speed_10m", 1, "worse"],
   ]);
   assert.deepEqual(blendVerdicts(blendTestRows(null)), []);
+});
+
+test("blend test: verdicts against one model for all of Czechia", () => {
+  const doc = {
+    groups: {
+      columns: ["level", "region", "variable", "lead_day", "days", "best_oos", "best_cz_oos", "diff_combined",
+        "low_combined", "high_combined", "diff_combined_vs_cz", "low_combined_vs_cz", "high_combined_vs_cz"],
+      rows: [["cz", "cz", "temperature_2m", 1, 26, "icon", "aifs", -0.01, -0.03, 0.01, -0.2, -0.25, -0.15]],
+    },
+  };
+  const rows = blendTestRows(doc, "cz");
+  assert.deepEqual(blendVerdicts(rows).map((v) => [v.verdict, v.best]), [["same", "icon"]]);
+  const [cz] = blendVerdicts(rows, "cz");
+  assert.equal(cz.verdict, "better");
+  assert.equal(cz.best, "aifs");
+  assert.ok(Math.abs(cz.amount - 0.2) < 1e-9 && cz.low === 0.15 && cz.high === 0.25);
+  // a file from before best_cz_oos: no such verdicts
+  assert.deepEqual(blendVerdicts(blendTestRows(BLEND_TEST, "cz"), "cz"), []);
+});
+
+test("blend test: every single model, ALADIN CZ first, then by MAE", () => {
+  const columns = ["variable", "lead_day", "model", "mae", "diff", "low", "high", "days", "mae_combined",
+    "diff_combined", "low_combined", "high_combined"];
+  const doc = {
+    single_models: {
+      columns,
+      rows: [
+        ["temperature_2m", 1, "ecmwf_ifs", 1.2, 0.0, null, null, 26, 1.0, -0.2, -0.25, -0.15],
+        ["temperature_2m", 2, "ecmwf_ifs", 1.4, 0.0, null, null, 24, 1.2, 0.1, 0.05, 0.15],
+        ["temperature_2m", 1, "chmi_aladin_cz_1km", 1.3, 0.1, 0.03, 0.15, 26, 1.0, -0.3, -0.35, -0.2],
+        ["temperature_2m", 1, "dwd_icon", 1.1, 0.0, null, null, 8, 1.0, -0.01, -0.05, 0.03],
+        ["wind_speed_10m", 1, "dwd_icon", 1.1, 0.0, null, null, 8, 1.0, -0.01, -0.05, 0.03],
+      ],
+    },
+  };
+  const out = singleModelVerdicts(doc, "temperature_2m");
+  assert.deepEqual(out.map((m) => m.model), ["chmi_aladin_cz_1km", "dwd_icon", "ecmwf_ifs"]);
+  const aladin = out[0].cells[1];
+  assert.equal(aladin.verdict, "better");
+  assert.ok(Math.abs(aladin.pct + 0.3 / 1.3) < 1e-9);
+  assert.equal(out[1].cells[1].verdict, "same");
+  assert.equal(out[2].cells[2].verdict, "worse");
+  assert.equal(out[0].cells[2], undefined);
+  // files from before the intervals: nothing to show
+  assert.deepEqual(singleModelVerdicts({ single_models: { columns: columns.slice(0, 7), rows: [] } }, "temperature_2m"), []);
+  assert.deepEqual(singleModelVerdicts(null, "temperature_2m"), []);
 });
 
 test("blend test chart lines and okres counts", () => {
