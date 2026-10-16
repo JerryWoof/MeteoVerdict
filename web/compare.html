@@ -18,19 +18,17 @@
         <a href="station.html" data-i18n="page.station">Stations</a>
         <a href="api.html" data-i18n="page.api">Open data</a>
       </nav>
-      <form id="controls">
-        <label><span data-i18n="control.region">Region</span> <select id="region"></select></label>
-        <label><span data-i18n="control.variable">Variable</span> <select id="variable"></select></label>
-        <label><span data-i18n="control.lead">Lead time</span> <select id="lead"></select></label>
-        <label><span data-i18n="control.window">Period</span> <select id="window"></select>
-          <span class="help" tabindex="0" role="note" data-i18n-title="window.help">?</span></label>
-      </form>
       <button type="button" id="language">Česky</button>
     </header>
     <main class="content wide">
-      <section id="blend-test-section" class="blend-test" hidden>
-        <h2 data-i18n="blendTest.title">Is our forecast better than one model for all of Czechia?</h2>
+      <section id="blend-test-section" class="blend-test" hidden aria-labelledby="blend-test-title">
+        <h2 id="blend-test-title" data-i18n="blendTest.title">Is our forecast better than one model for all of Czechia?</h2>
+        <p class="scope" id="blend-test-scope"></p>
         <p class="note" data-i18n="blendTest.intro"></p>
+        <div class="blend-test-switch">
+          <span id="blend-test-variable-label" data-i18n="blendTest.show">Variable</span>
+          <div class="segmented" id="blend-test-variable" role="group" aria-labelledby="blend-test-variable-label"></div>
+        </div>
         <div class="blend-test-grid">
           <div>
             <div id="blend-test-cz">
@@ -46,44 +44,62 @@
           </div>
           <div id="blend-test-chart"></div>
         </div>
-        <p class="note" id="blend-test-basis"></p>
         <div id="blend-test-models-block" hidden>
           <h3 id="blend-test-models-title"></h3>
           <p class="note" data-i18n="blendTest.modelsIntro"></p>
           <table id="blend-test-models" class="blend-test-table blend-test-models"></table>
           <p class="note" id="blend-test-models-note"></p>
         </div>
+        <p class="note" id="blend-test-basis"></p>
         <p class="note" data-i18n="blendTest.caveats"></p>
       </section>
-      <section class="overview">
-        <div>
-          <div id="mini-map" aria-label="Map: best model per okres"></div>
-          <p class="note" data-i18n="compare.mapNote"></p>
-          <div id="mini-legend" class="mini-legend"></div>
+      <section id="ranking-section" class="ranking-section" aria-labelledby="ranking-section-title">
+        <h2 id="ranking-section-title" class="section-title" data-i18n="compare.rankingSection">Model ranking</h2>
+        <p class="note" data-i18n="compare.rankingSectionNote"></p>
+        <form id="controls" class="ranking-controls" aria-labelledby="ranking-section-title">
+          <label><span data-i18n="control.region">Region</span> <select id="region"></select></label>
+          <label><span data-i18n="control.variable">Variable</span> <select id="variable"></select></label>
+          <label><span data-i18n="control.lead">Lead time</span> <select id="lead"></select></label>
+          <label><span data-i18n="control.window">Period</span> <select id="window"></select>
+            <span class="help" tabindex="0" role="note" data-i18n-title="window.help">?</span></label>
+        </form>
+        <div class="overview">
+          <div>
+            <div id="mini-map" aria-label="Map: best model per okres"></div>
+            <p class="note" data-i18n="compare.mapNote"></p>
+            <div id="mini-legend" class="mini-legend"></div>
+          </div>
+          <div id="summary" aria-live="polite"></div>
         </div>
-        <div id="summary" aria-live="polite"></div>
+        <h3 id="ranking-title" data-i18n="compare.ranking">Ranking</h3>
+        <p class="note" data-i18n="compare.rankingNote"></p>
+        <div class="scroll"><table id="ranking"></table></div>
+        <h3 data-i18n="compare.intervals">How sure is the ranking?</h3>
+        <p class="note" data-i18n="compare.intervalsNote"></p>
+        <div id="intervals"></div>
+        <h3 data-i18n="compare.byLead">Error by lead time</h3>
+        <p class="note" data-i18n="compare.byLeadNote"></p>
+        <div id="by-lead"></div>
+        <div id="elevation-section">
+          <h3 data-i18n="compare.bias">Bias by elevation</h3>
+          <p class="note" data-i18n="compare.biasNote"></p>
+          <div id="bias"></div>
+        </div>
+        <div id="lead-hours-section" hidden>
+          <h3 data-i18n="compare.leadHours">Error by hours ahead (run-based)</h3>
+          <p class="scope" data-i18n="compare.leadHoursScope"></p>
+          <p class="note" data-i18n="compare.leadHoursNote"></p>
+          <p class="note" id="lead-hours-basis"></p>
+          <label class="lead-hours-runs"><span data-i18n="compare.leadHoursRuns">Runs</span>
+            <select id="lead-hours-run"></select></label>
+          <div id="lead-hours"></div>
+          <p class="note" data-i18n="compare.leadHoursFair"></p>
+          <p class="note" data-i18n="compare.leadHoursSource"></p>
+        </div>
       </section>
-      <h2 id="ranking-title" data-i18n="compare.ranking">Ranking</h2>
-      <p class="note" data-i18n="compare.rankingNote"></p>
-      <div class="scroll"><table id="ranking"></table></div>
-      <h2 data-i18n="compare.intervals">How sure is the ranking?</h2>
-      <p class="note" data-i18n="compare.intervalsNote"></p>
-      <div id="intervals"></div>
-      <h2 data-i18n="compare.byLead">Error by lead time</h2>
-      <p class="note" data-i18n="compare.byLeadNote"></p>
-      <div id="by-lead"></div>
-      <section id="lead-hours-section" hidden>
-        <h2 data-i18n="compare.leadHours">Error by hours ahead (run-based)</h2>
-        <p class="note" data-i18n="compare.leadHoursNote"></p>
-        <p class="note" id="lead-hours-basis"></p>
-        <label class="lead-hours-runs"><span data-i18n="compare.leadHoursRuns">Runs</span>
-          <select id="lead-hours-run"></select></label>
-        <div id="lead-hours"></div>
-        <p class="note" data-i18n="compare.leadHoursFair"></p>
-        <p class="note" data-i18n="compare.leadHoursSource"></p>
-      </section>
-      <section id="farm-section" hidden>
-        <h2 data-i18n="farm.title">For farmers: frost, gusts, 3-hour rain (run-based)</h2>
+      <section id="farm-section" class="farm-section" hidden aria-labelledby="farm-title">
+        <h2 id="farm-title" class="section-title" data-i18n="farm.title">For farmers: frost, gusts, 3-hour rain (run-based)</h2>
+        <p class="scope" data-i18n="farm.scope"></p>
         <p class="note" data-i18n="farm.intro"></p>
         <p class="note" id="farm-basis"></p>
         <label class="lead-hours-runs"><span data-i18n="farm.event">Event</span>
@@ -94,11 +110,6 @@
         <p class="note" data-i18n="farm.howToRead"></p>
         <p class="note" data-i18n="farm.definitions"></p>
         <p class="note" data-i18n="farm.fair"></p>
-      </section>
-      <section id="elevation-section">
-        <h2 data-i18n="compare.bias">Bias by elevation</h2>
-        <p class="note" data-i18n="compare.biasNote"></p>
-        <div id="bias"></div>
       </section>
     </main>
     <footer data-footer="models" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/methodology.md">
