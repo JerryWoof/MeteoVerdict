@@ -49,6 +49,8 @@ export function okresModels(code, scores, weightsDoc, names) {
         tied_with_best: Boolean(r.tied_with_best),
         weight: w ? round(w.weight, 4) : null,
         correction: w ? round(w.correction, 4) : null,
+        // temperature and wind: weight in the regression blend (null without one)
+        mos_weight: w?.mos_weight != null ? round(w.mos_weight, 4) : null,
       });
     }
     const first = rows[0];
@@ -72,7 +74,7 @@ export function okresDoc({ okres, outlook, hourly, weightsDoc, scores, meta }) {
     okres: { code: okres.code, name: okres.name, lat: okres.lat, lon: okres.lon },
     forecast: {
       generated: hourly?.generated ?? outlook?.generated ?? null,
-      method: "all models combined with weights and bias corrections from their scores in this okres over the last 90 days (docs/methodology.md)",
+      method: "all models combined with weights and bias corrections from their scores in this okres over the last 90 days; temperature and wind by a regression on the models with hour-of-day and elevation corrections (docs/methodology.md)",
       time_zone_of_parts: outlook?.time_zone ?? "Europe/Prague",
       units: hourly?.variables ?? null,
       hourly: series ? { time: hourly.time, ...series } : null,
@@ -83,7 +85,7 @@ export function okresDoc({ okres, outlook, hourly, weightsDoc, scores, meta }) {
       window: "90d",
       from: window?.from ?? null,
       to: window?.to ?? null,
-      metrics: "MAE, bias (forecast minus observed) and RMSE at D+1…D+5; rank 1 = smallest MAE; tied_with_best: not significantly worse (95 % bootstrap interval over days); weight/correction: as used in our forecast",
+      metrics: "MAE, bias (forecast minus observed) and RMSE at D+1…D+5; rank 1 = smallest MAE; tied_with_best: not significantly worse (95 % bootstrap interval over days); weight/correction: as used in our forecast (correction: mean over the day); mos_weight: weight in the temperature and wind regression blend, used when all its models have a value",
       variables: okresModels(okres.code, scores, weightsDoc, meta?.models ?? {}),
     },
   };

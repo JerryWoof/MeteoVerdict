@@ -37,7 +37,7 @@ import httpx
 import polars as pl
 
 from meteoverdict import frost, rain_calibration, sun_cloud_gust
-from meteoverdict.combine import combine_values, okres_points
+from meteoverdict.combine import BLEND_COLUMNS, combine_values, okres_points
 from meteoverdict.forecasts import _reason, call_weight
 from meteoverdict.sun import sun_times
 
@@ -265,8 +265,10 @@ def combine_hourly(fc: pl.DataFrame, weights: pl.DataFrame, now: datetime) -> pl
         *[pl.col(v).mean() for v in MEANS], pl.col("model").n_unique().alias("models")
     )
     for variable in COMBINED:
+        # with the regression blend's weights and slot corrections where there are some
+        blend_columns = [c for c in BLEND_COLUMNS if c in lead.columns]
         w = lead.filter(pl.col("variable") == variable).select(
-            "okres", "lead_day", "model", "weight", "correction"
+            "okres", "lead_day", "model", *blend_columns
         )
         part = combine_values(
             fc.select("okres", "time", "model", "lead_day", "fade", variable)

@@ -333,6 +333,38 @@ def test_a_model_without_weights_in_an_okres_is_left_out_there():
     assert sorted(partial["model"].unique()) == MODELS
 
 
+def test_the_regression_weights_and_slot_corrections_are_used():
+    # temperature D+1 in Benešov: a regression on two models, corrections by hour
+    benesov = (pl.col("region") == "CZ0201") & (pl.col("variable") == "temperature_2m")
+    pair = ["ecmwf_ifs", "dwd_icon_eu"]
+    regression = pl.col("model").is_in(pair) & benesov & (pl.col("lead_day") == 1)
+    slots = dict(zip(combine.SLOT_CORRECTIONS, [0.0, 1.0, 2.0, 3.0], strict=True))
+    w = WEIGHTS.with_columns(
+        pl.when(regression)
+        .then(pl.when(pl.col("model") == "ecmwf_ifs").then(0.8).otherwise(0.2))
+        .alias("mos_weight"),
+        pl.when(regression).then(2).alias("mos_models"),
+        *(pl.when(regression).then(v).otherwise(pl.col("correction")).alias(c)
+          for c, v in slots.items()),
+    )  # fmt: skip
+    hourly = outlook.combine_hourly(FC, w, NOW)
+    for hour, correction in ((12, 2.0), (15, 2.5)):
+        when = datetime(2026, 10, 12, hour, tzinfo=UTC)
+        rows = FC.filter(pl.col("okres") == "CZ0201", pl.col("time") == when)
+        value = dict(rows.select("model", "temperature_2m").rows())
+        expected = 0.8 * (value["ecmwf_ifs"] - correction) + 0.2 * (
+            value["dwd_icon_eu"] - correction
+        )
+        got = hourly.filter(pl.col("okres") == "CZ0201", pl.col("time") == when)
+        assert got["temperature_2m"].item() == pytest.approx(expected)
+    # other okresy and variables as before
+    full = outlook.combine_hourly(FC, WEIGHTS, NOW)
+    praha = pl.col("okres") == "CZ0100"
+    for v in ("temperature_2m", "wind_speed_10m", "precipitation"):
+        new, old = hourly.filter(praha)[v], full.filter(praha)[v]
+        assert new.to_list() == pytest.approx(old.to_list(), nan_ok=True)
+
+
 def calibration(flag_at=0.01):
     """A made-up calibration: wetter with more wet models, heavy rain flagged early."""
     return rain_calibration.Calibration(

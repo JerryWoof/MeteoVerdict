@@ -181,6 +181,11 @@ def test_publish_latest_replaces_the_bundle(tmp_path):
     names = sorted(a["name"] for a in gh.assets.values())
     assert names == ["aggregates.parquet", "site-data.zip"]  # replaced, not duplicated
     assert b"agg v2" in [a["content"] for a in gh.assets.values()]
+    # the forecast's weights too, where mvd daily wrote them
+    (tmp_path / "forecast-weights.parquet").write_bytes(b"weights")
+    store.publish_latest(gh.store(), tmp_path, site)
+    names = sorted(a["name"] for a in gh.assets.values())
+    assert names == ["aggregates.parquet", "forecast-weights.parquet", "site-data.zip"]
 
 
 def test_publish_folder_zips_into_data_latest(tmp_path):

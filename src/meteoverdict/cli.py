@@ -27,6 +27,7 @@ from meteoverdict import (
     frost,
     gauges,
     leads,
+    mos,
     observations,
     outlook,
     partitions,
@@ -1069,8 +1070,11 @@ def outlook_cmd(
         event_hooks={"request": [meter]},
     ) as client:
         releases = _release_store(client) if github_release else None
+        weights_path = aggregates_path.with_name(combine.FORECAST_WEIGHTS_FILE)
         if releases:
             releases.download(store.LATEST_TAG, "aggregates.parquet", aggregates_path)
+            if combine.FORECAST_WEIGHTS_FILE in releases.names(store.LATEST_TAG):
+                releases.download(store.LATEST_TAG, combine.FORECAST_WEIGHTS_FILE, weights_path)
             if rain_calibration.FILE in releases.names(store.LATEST_TAG):
                 releases.download(store.LATEST_TAG, rain_calibration.FILE, calibration_path)
             if sun_cloud_gust.NAME in releases.names(store.LATEST_TAG):
@@ -1078,7 +1082,12 @@ def outlook_cmd(
         corrections = sun_cloud_gust.load(corrections_path)
         if not aggregates_path.exists():
             raise typer.BadParameter(f"{aggregates_path} not found; run `mvd aggregate`")
-        weights = combine.weights(pl.read_parquet(aggregates_path))
+        # the forecast's weights with the temperature and wind regression (mvd daily),
+        # else the inverse-error weights of the okres scores alone
+        if weights_path.exists():
+            weights = pl.read_parquet(weights_path)
+        else:
+            weights = combine.forecast_weights(pl.read_parquet(aggregates_path))
         if weights.is_empty():
             typer.echo("mvd outlook: no okres weights yet", err=True)
             raise typer.Exit(code=1)
@@ -1507,6 +1516,33 @@ def _model_names() -> dict[str, str]:
     return {m.id: m.name for m in [*catalogue.load_models(), blend.MODEL]}
 
 
+def _forecast_weights(
+    table: pl.DataFrame, scores: pl.LazyFrame, station_table: pl.DataFrame, data_dir: Path
+) -> pl.DataFrame:
+    """The forecast's weight table (``combine.forecast_weights``), with the temperature
+    and wind regression fitted on the observations and forecasts of the last 90 days in
+    ``data_dir`` where they are there (``mvd daily``); written to
+    ``data_dir/forecast-weights.parquet`` for ``mvd outlook``."""
+    coefficients = None
+    if table.height:
+        as_of = table.filter(pl.col("window") == combine.WINDOW)["to"].max()
+        allowed = combine.weights(table).select("variable", "lead_day", "model").unique()
+        if as_of is not None:
+            # the forecasts of fc/ plus the recent days rebuilt from the single runs, as
+            # scored by mvd daily (fresh), so the regression is as recent as the scores
+            first, last = mos.training_span(as_of)
+            fc = partitions.scan_months(data_dir / "fc", first, last)
+            obs = observations.scan(data_dir, first, last)
+            models = [m for m in catalogue.load_models() if m.enabled]
+            fc, _ = daily_mod.add_fresh(data_dir, models, as_of, obs, fc)
+            coefficients = mos.recent(data_dir, scores, station_table, as_of, allowed, fc)
+    fitted = 0 if coefficients is None else coefficients["region"].n_unique()
+    typer.echo(f"regression blend (temperature, wind): {fitted} okresy")
+    forecast = combine.forecast_weights(table, coefficients)
+    forecast.write_parquet(data_dir / combine.FORECAST_WEIGHTS_FILE, compression="zstd")
+    return forecast
+
+
 def _publish_aggregates(
     files: list[Path],
     station_table: pl.DataFrame,
@@ -1522,13 +1558,14 @@ def _publish_aggregates(
     ranks = ranking.rank(scores, station_table, as_of, resamples=resamples)
     table = table.join(ranks, on=[*ranking.GROUP, "model"], how="left")
     table.write_parquet(data_dir / "aggregates.parquet", compression="zstd")
+    forecast = _forecast_weights(table, scores, station_table, data_dir)
     names = _model_names()
     meta = aggregate.metadata(table, names, datetime.now(UTC))
     meta["sources"] = fresh.sources(scores)
     written = [
         *aggregate.write_json(table, out, meta),
         aggregate.write_stations(station_table, out),
-        *combine.write_forecast(table, out),
+        *combine.write_forecast(table, out, forecast),
     ]
     if table.height:
         last = table["to"].max()

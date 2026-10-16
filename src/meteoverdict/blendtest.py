@@ -13,6 +13,9 @@ the models:
    live forecast) and the **best single model** of the okres (lowest MAE, i.e. rank 1
    of the ranking a user would have looked at). ``aggregate.aggregate`` builds those
    okres scores exactly as the daily run does (fair station-days, borrowed stations).
+   For temperature and wind also the regression blend of ``meteoverdict.mos``, fitted
+   on the station pairs (00/06/12/18 UTC) of the same window and okres pools, with its
+   corrections taken at each test station's own elevation.
 2. **Warm-up.** An okres, variable and lead day is tested on ``d`` only when its
    training had at least ``MIN_TRAINING_DAYS`` scored days; earlier days are left out.
 3. **The combined forecast** applies those weights (``combine.combine_values``) to the
@@ -51,7 +54,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from meteoverdict import aggregate, blend, combine, forecasts, metrics, ranking, scoring
+from meteoverdict import aggregate, blend, combine, forecasts, metrics, mos, ranking, scoring
 
 #: Open-Meteo variable → score variable it is tested on (as ``combine.VARIABLES``)
 SCORE_VARIABLES = {name: score for name, (score, _) in combine.VARIABLES.items()}
@@ -110,14 +113,36 @@ def training(
     as_of_days: list[date],
     window: str = combine.WINDOW,
     min_days: int = MIN_TRAINING_DAYS,
+    pairs: pl.DataFrame | None = None,
+    okres_pools: pl.DataFrame | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Weights and best models for every ``as_of`` day, from the scores up to it.
 
     Returns ``(weights, best)`` with ``date`` = the day they are used for
     (``as_of + lead_day``): the rows of ``combine.weights`` (Open-Meteo variable names)
     and of ``best_models`` (score variable names), only for groups whose training had
-    at least ``min_days`` scored days.
+    at least ``min_days`` scored days. With ``pairs`` (``mos.pairs``) and
+    ``okres_pools``, also the regression coefficients of temperature and wind fitted
+    on the window ending on ``as_of`` (``combine.with_mos``), as the live forecast.
     """
+    w, b = _score_training(scores, stations, as_of_days, window, min_days)
+    if pairs is None or okres_pools is None or w.is_empty():
+        return combine.with_mos(w, None) if not w.is_empty() else w, b
+    length = int(window.removesuffix("d"))
+    allowed = w.select("variable", "lead_day", "model").unique()
+    coefficients = mos.coefficients(
+        pairs, okres_pools, stations, as_of_days, length, allowed=allowed, min_days=min_days
+    )
+    return combine.with_mos(w, coefficients, keys=("as_of", "region")), b
+
+
+def _score_training(
+    scores: pl.DataFrame,
+    stations: pl.DataFrame,
+    as_of_days: list[date],
+    window: str,
+    min_days: int,
+) -> tuple[pl.DataFrame, pl.DataFrame]:
     length = int(window.removesuffix("d")) if window.endswith("d") else None
     weights, best = [], []
     for as_of in as_of_days:
@@ -156,40 +181,50 @@ def pools(scores: pl.LazyFrame | pl.DataFrame, stations: pl.DataFrame) -> pl.Dat
     """The stations each okres is tested on, per score variable (``variable``,
     ``region``, ``region_name``, ``station_id``): its own and, where it has fewer than
     ``aggregate.MIN_STATIONS``, borrowed ones, as in the ranking."""
-    in_period = scores.lazy().join(aggregate.station_info(stations), on="station_id")
-    distance = aggregate.okres_distances(stations)
-    return (
-        aggregate.with_regions(in_period, "okres", distance)
-        .select("variable", "region", "region_name", "station_id")
-        .unique()
-        .collect()
-    )
+    return mos.pools(scores, stations)
 
 
 def combined_forecasts(
-    fc: pl.LazyFrame | pl.DataFrame, okres_pools: pl.DataFrame, weights: pl.DataFrame
+    fc: pl.LazyFrame | pl.DataFrame,
+    okres_pools: pl.DataFrame,
+    weights: pl.DataFrame,
+    stations: pl.DataFrame | None = None,
 ) -> pl.DataFrame:
     """The combined forecast of every okres at its stations, in the forecast table's
     layout (``forecasts.SCHEMA``) with ``model`` = ``combined@<okres>``.
 
     Each hour takes the weights of the day it is scored on: the UTC day of the hour for
     temperature and wind, the day the hour ends in for precipitation (as ``scoring``).
+    With the regression coefficients in ``weights`` (``combine.with_mos``) the slot
+    corrections are taken at each station's elevation (from ``stations``).
     """
     keys = ["region", "station_id", "time", "lead_day"]
     raw = fc.lazy().filter(pl.col("model") != blend.ID)
+    regression = "mos_weight" in weights.columns
+    elevation = (
+        stations.select(pl.col("id").alias("station_id"), pl.col("elevation").alias("_elevation"))
+        if stations is not None and regression and "elevation" in stations.columns
+        else None
+    )
     parts = []
     for name, score in SCORE_VARIABLES.items():
         start = pl.col("time") - timedelta(hours=1) if name == "precipitation" else pl.col("time")
+        extra = list(mos.COEFFICIENT_COLUMNS) if regression else []
         w = weights.filter(pl.col("variable") == name).select(
-            "date", "region", "lead_day", "model", "weight", "correction"
+            "date", "region", "lead_day", "model", "weight", "correction", *extra
         )
-        stations = okres_pools.filter(pl.col("variable") == score).select("region", "station_id")
+        members = okres_pools.filter(pl.col("variable") == score).select("region", "station_id")
         rows = (
             raw.select("station_id", "time", "lead_day", "model", name)
             .with_columns(start.dt.date().alias("date"))
-            .join(stations.lazy(), on="station_id")
+            .join(members.lazy(), on="station_id")
             .join(w.lazy(), on=["date", "region", "lead_day", "model"])
         )
+        if regression:
+            at = pl.col("_elevation") if elevation is not None else pl.lit(None, pl.Float64)
+            if elevation is not None:
+                rows = rows.join(elevation.lazy(), on="station_id", how="left")
+            rows = rows.with_columns(combine.slot_corrections(at))
         parts.append(combine.combine_values(rows, name, keys))
     out = parts[0]
     for part in parts[1:]:
@@ -421,32 +456,44 @@ def run(
     resamples: int = ranking.RESAMPLES,
     seed: int = 0,
     log=lambda _: None,
+    regression: bool = True,
 ) -> tuple[pl.DataFrame, list[list], list[list], dict]:
     """The whole test for the days ``first`` … ``last``: ``(days, groups, models,
-    info)`` with the day totals (``series``), the rows of ``results`` and counts."""
+    info)`` with the day totals (``series``), the rows of ``results`` and counts.
+    ``regression``: temperature and wind with the regression blend (``mos``), as the
+    live forecast; False: the inverse-error weights alone (the method before)."""
     scores = scores.filter(pl.col("variable").is_in(list(SCORE_VARIABLES.values())))
     lead_days = sorted(scores["lead_day"].unique().to_list())
     max_lead = max(lead_days) if lead_days else 1
     as_of_days = [first - timedelta(days=k) for k in range(max_lead, 0, -1)]
     as_of_days += [first + timedelta(days=k) for k in range((last - first).days)]
-    weights, best = training(scores, stations, as_of_days, window, min_training_days)
-    log(f"training: {len(as_of_days)} days, {weights.height} weight rows")
     tested = scores.filter(pl.col("date").is_between(first, last))
     info = {"scored_dates": sorted(scores["date"].unique().to_list())}
-    if weights.is_empty() or tested.is_empty():
+    if tested.is_empty():
         return pl.DataFrame(), [], [], info
     okres_pools = pools(tested, stations)
+    pairs = None
+    if regression:
+        length = int(window.removesuffix("d")) if window.endswith("d") else mos.WINDOW_DAYS
+        start = as_of_days[0] - timedelta(days=length - 1)
+        pairs = mos.pairs(observations, fc, start, last)
+        log(f"regression: {pairs.height} temperature and wind pairs from {start}")
+    weights, best = training(
+        scores, stations, as_of_days, window, min_training_days, pairs, okres_pools
+    )
+    log(f"training: {len(as_of_days)} days, {weights.height} weight rows")
+    if weights.is_empty():
+        return pl.DataFrame(), [], [], info
     # day by day, which keeps the memory small: the hours scored on day d (00:00 …
     # 24:00, precipitation up to the hour ending at 24:00)
-    stations = okres_pools["station_id"].unique().to_list()
-    fc = fc.lazy().filter(pl.col("station_id").is_in(stations))
+    members = okres_pools["station_id"].unique().to_list()
+    fc = fc.lazy().filter(pl.col("station_id").is_in(members))
     parts = []
     for day in sorted(weights.filter(pl.col("date").is_between(first, last))["date"].unique()):
         start = datetime(day.year, day.month, day.day, tzinfo=UTC)
         hours = pl.col("time").is_between(start, start + timedelta(days=1))
-        parts.append(
-            combined_forecasts(fc.filter(hours), okres_pools, weights.filter(pl.col("date") == day))
-        )
+        today = weights.filter(pl.col("date") == day)
+        parts.append(combined_forecasts(fc.filter(hours), okres_pools, today, stations))
     combined = pl.concat(parts) if parts else pl.DataFrame(schema=forecasts.SCHEMA)
     log(f"combined forecasts: {combined.height} rows")
     if combined.is_empty():
@@ -463,7 +510,10 @@ METHOD = (
     "For every day d and lead day N, the combination's weights and bias corrections and "
     "the best single model of each okres come only from the okres scores of the {window} "
     "window ending on d - N (what the daily run had published when the D+N forecast was "
-    "made), with the same shrinkage towards the plain mean as the live forecast. The "
+    "made), with the same shrinkage towards the plain mean as the live forecast; for "
+    "temperature and wind, as live, the regression blend (hour-of-day and elevation "
+    "corrections, ridge-regression weights) fitted on the station pairs of that window, "
+    "with the corrections taken at each station's elevation. The "
     "combination is applied to the models' stored D+N forecasts at the okres's stations "
     "(borrowed ones included) and scored like the mean of all models: temperature and "
     "wind at 00, 06, 12 and 18 UTC, precipitation as UTC-day totals, on the station-days "
@@ -507,6 +557,14 @@ def document(
         "training_window": window,
         "shrink_days": combine.SHRINK_DAYS,
         "bias_shrink_days": combine.BIAS_SHRINK_DAYS,
+        "regression": {
+            "variables": list(mos.VARIABLES),
+            "slot_shrink_days": mos.SLOT_SHRINK_DAYS,
+            "national_ridge": mos.NATIONAL_RIDGE,
+            "okres_ridge": mos.OKRES_RIDGE,
+            "min_coverage": mos.MIN_COVERAGE,
+            "min_days": mos.MIN_DAYS,
+        },
         "min_training_days": min_training_days,
         "min_okres_days": MIN_OKRES_DAYS,
         "first_scored": str(scored[0]) if scored else None,

@@ -259,6 +259,104 @@ best in the okres for each day of the forecast (it can be a different model on D
 D+3), and lists the largest weights of every lead day. Precipitation weights come from daily totals but are
 applied to hourly values. Details: [data-sources.md](data-sources.md#combination-weights-roadmap-62).
 
+### Temperature and wind: regression blend
+
+For temperature and wind the inverse-error weights and the all-hours bias are replaced
+by a small model output statistics step (`meteoverdict.mos`), refitted every day on
+the forecast–observation pairs of the last 90 days at 00, 06, 12 and 18 UTC (the hours
+every model has natively), per variable and lead day:
+
+1. **Rows**: station × slot × day, only the models with a value in at least 80 % of
+   the rows, and only rows where all of those have one. An okres uses the stations of
+   its pool (its own, plus borrowed ones where it has fewer than three). *D* = days
+   with rows.
+2. **Hour-of-day bias** per okres, slot and model, shrunk towards the okres's
+   all-hours bias: `B = (D·b_slot + 10·b_all) / (D + 10)`.
+3. **Elevation term**: `dz` = (station elevation − mean elevation of the okres's
+   stations) / 100 m; the error left after step 2 is regressed on `dz` through the
+   origin, nationally per slot and model (β). The models are too slow at stations
+   above their okres's average and too fast below it (wind about −0.35 m/s per
+   100 m at night, −0.16 at noon); higher stations are warmer at night than the
+   models say (inversions) and slightly cooler around midday. The correction is
+   `C = B + β·dz`.
+4. **Weights**: ridge regression of the observations on the corrected forecasts
+   `f − C`, constrained to sum to 1: first for Czechia (towards equal weights,
+   penalty 0.1 per row), then per okres towards the Czech weights (penalty 1 per row).
+   Weights can be negative (a model that errs like a better one is subtracted).
+5. **Forecast**: `Σ w · (f − D/(D+5)·C)`, wind not below 0. Between the four slots
+   the correction is interpolated linearly. At the okres's forecast point `dz` is the
+   point's elevation (Open-Meteo's, committed in `okres-elevations.csv`) minus the
+   station mean, limited to the range of the okres's stations, and the elevation term
+   counts **half** (see below).
+6. **Guard (wind only)**: the regression is also fitted without the last 7 days of its
+   window and scored on them against the method before (inverse-error weights,
+   all-hours bias), per okres; an okres where it did worse keeps the method before.
+
+Fallbacks: an hour where one of the regression's models has no value (or fades out)
+uses the inverse-error weights with the corrections of steps 2–3, rescaled over the
+models present; with fewer than 14 days of pairs, no pairs in an okres, or a guarded
+okres (wind) everything is as before. The weights without a sum-to-one constraint did
+better for wind at stations (−13.8 % instead of −10.9 %) but pull the forecast towards
+0 without an intercept, so they are not used. The pairs include the recent days that
+`mvd daily` rebuilds from the single runs (`meteoverdict.fresh`), so the regression is
+as recent as the scores.
+
+Out of sample (rolling origin, training only on days up to *d − N*, 11–30 September
+2026, against the previous method on the same rows) this cut the MAE by 6.9 % for
+temperature (D+1 −13.5 % … D+5 −3.7 %) and 10.9 % for wind (−9 … −12 % at every lead
+day), in line with the research run it was chosen from (−7.0 %, −10.9 %; 95 %
+block-bootstrap intervals −9.7…−3.3 and −12.0…−9.7; the last week, held out when
+choosing it, gained as much). The gains are largest where the old all-hours bias did
+worst: by night for wind, by day for temperature. Tried and not used: a bias per
+station (larger gains at stations, but the forecast is for one point per okres), the
+previous run as extra members, exponentially decaying training weights, a
+multiplicative wind correction, only the best 3 or 5 models, and an elevation slope
+per okres (it mostly learns the okres's few stations). The data cover late summer and
+autumn only, so the slopes are refitted daily rather than fixed (the winter inversions
+will change them).
+
+**Stations at very different heights.** Where an okres's pool mixes lowland and
+mountain stations (Chomutov: Tušimice 322 m and the borrowed Klínovec 1236 m) the
+national linear elevation term over-corrects the lowland station, and wind in
+Chomutov, Liberec and Nový Jičín got 10–34 % worse at stations. Tested out of sample at
+the stations (11–30 Sep, the last week held out), against the method before:
+
+| Wind, change of MAE | all days | held out | okres × lead day groups > 5 % worse |
+|---|---|---|---|
+| regression as specified | −12.7 % | −14.0 % | 26 of 385 |
+| pools without stations > 400 m from the point's height | −6.6 % | −6.4 % | 7 |
+| … > 300 m / > 500 m / no mountain stations | −5.7 / −7.0 / −7.1 % | | 4 / 13 / 7 |
+| elevation slope fitted only on \|dz\| ≤ 3 | −12.4 % | −13.6 % | 20 |
+| **guard (7 days, worse at all → method before)** | **−13.0 %** | **−14.4 %** | **10** |
+| guard with 14 days / with a 3 % or 5 % margin | −12.9 / −13.1 / −13.1 % | | 22 / 12 / 14 |
+
+Dropping the distant stations loses half the national gain (the mountain stations
+gain most from the elevation term); the guard keeps it and removes most of the
+losses (Chomutov +32 % → +9 %, Liberec +13 % → +2 %, Nový Jičín +13 % → +3 %). For
+temperature the guard cost 0.8 points of the gain and only 4 groups were worse than
+5 % without it, so it is used for wind only.
+
+**The elevation term at the forecast point.** The test above scores each station with
+its own elevation; the published forecast has one point per okres, often well below
+the stations' mean (Trutnov −540 m, Zlín −640 m, both with mountain stations in the
+pool). Checked with the station nearest each point as the truth (its forecasts and
+observations, the okres's coefficients, 11–30 Sep, held out 24–30 Sep), MAE change
+against no elevation term at the point (dz = 0):
+
+| | full term, all / held out | half term, all / held out | okresy > 5 % worse (wind): full / half |
+|---|---|---|---|
+| Temperature | −0.6 % / **−1.5 %** [−2.2, −0.7] | −0.4 % / **−0.9 %** [−1.2, −0.5] | |
+| Wind | −4.6 % / **−4.4 %** [−5.4, −3.5] | −3.5 % / **−3.3 %** [−4.1, −2.7] | 15 / 4 (of 77) |
+
+(Only okresy whose nearest station is within 150 m of the point's height: wind −6.7 %
+full, −4.1 % half, held out.) Both are clearly better than no term, so the data support
+an elevation correction at the point, including Trutnov (nearest station: wind MAE
+1.20 m/s without, 0.73 full, 0.70 half). The full term is a little better on average
+but makes wind clearly worse in 15 okresy (Chomutov +13 %), the
+half term in 4; against the okres's mean over its stations, which a single number for
+the whole okres is also read as, no term is best (half +5.5 %, full +14.5 % for wind).
+Half strength is the compromise used.
+
 How this compares with operational practice (Bureau of Meteorology OCF, NOAA's
 National Blend of Models, MeteoSwiss) and what still has to be tested:
 [forecast-research.md](forecast-research.md).
@@ -336,7 +434,9 @@ combination on past days **out of sample**:
 - For day *d* at lead day *N*, the weights, bias corrections and the okres's best
   model come only from the okres scores of the 90 days ending on *d − N*: what the
   daily run had published when that D+N forecast was made. Same code and shrinkage
-  as the live forecast.
+  as the live forecast; the temperature and wind regression is fitted on the station
+  pairs of the same window, and its corrections are taken at each station's own
+  elevation.
 - The combination is applied to the models' stored D+N forecasts at the okres's
   stations (borrowed ones included) and scored like the mean of all models:
   temperature and wind at 00, 06, 12 and 18 UTC, precipitation as UTC-day totals, on
@@ -355,18 +455,28 @@ negative = our forecast has the smaller MAE; 95 % interval in brackets):
 
 | | D+1 | D+2 | D+3 | D+4 | D+5 |
 |---|---|---|---|---|---|
-| Temperature (°C) | −0.02 (−0.06…+0.02) | **−0.05** (−0.09…−0.01) | **−0.09** (−0.13…−0.04) | −0.04 (−0.10…+0.03) | **−0.12** (−0.26…−0.01) |
-| Wind (m/s) | **+0.03** (+0.00…+0.06) | +0.03 (−0.01…+0.07) | −0.01 (−0.03…+0.02) | −0.03 (−0.06…+0.00) | **−0.13** (−0.16…−0.10) |
+| Temperature (°C) | **−0.18** (−0.21…−0.14) | **−0.16** (−0.19…−0.12) | **−0.19** (−0.22…−0.15) | **−0.13** (−0.18…−0.08) | **−0.20** (−0.26…−0.14) |
+| Wind (m/s) | **−0.17** (−0.19…−0.15) | **−0.17** (−0.20…−0.15) | **−0.20** (−0.23…−0.17) | **−0.21** (−0.25…−0.17) | **−0.35** (−0.39…−0.31) |
 | Precipitation (mm/day) | **−0.25** (−0.49…−0.08) | **−0.20** (−0.41…−0.07) | **−0.28** (−0.54…−0.08) | **−0.18** (−0.31…−0.06) | **−0.26** (−0.60…−0.02) |
 
-So far our forecast is never clearly worse than the model a user of the ranking would
-have picked, except wind at D+1 (by 0.03 m/s against DWD's ICON models),
-and clearly better for daily precipitation at every lead day and for temperature at
-D+2, D+3 and D+5. For precipitation it is about as good as the plain mean of all
+MAE of the combination with the regression blend against the method before it (same
+test): temperature 1.221 → 1.066 °C at D+1 (−12.7 %), −8.5 %, −6.5 %, −4.4 % and
+−3.9 % at D+2…D+5; wind 0.949 → 0.818 m/s at D+1 (−13.8 %), −12.7 %, −12.7 %,
+−11.8 % and −13.1 %. Of the 385 okres × lead day groups 4 got more than 5 % worse for
+temperature and 9 for wind (Chomutov up to +12 %, Semily, Nový Jičín, Prostějov,
+Hodonín; 26, up to +34 %, without the wind guard).
+
+Our forecast is now clearly better than the model a user of the ranking would have
+picked for every variable and lead day (before the regression blend it was worse for
+wind at D+1, by 0.03 m/s against DWD's ICON models, and not significantly different at
+several other lead days). For precipitation it is about as good as the plain mean of all
 models, and both beat the per-okres "best" model, partly because that choice jumps
 between models on a short, noisy history (probably). The best model in hindsight is still better
-for precipitation and wind at D+1–D+2: a fixed, well-chosen model can do better, but
-nobody knows it in advance. **This rests on 24 autumn days and is not yet a verdict**:
+for precipitation: a fixed, well-chosen model can do better, but nobody knows it in
+advance. For temperature and wind the test scores the combination at the stations, with
+each station's own elevation in the correction; the published forecast gets the
+elevation term only for its one point per okres, so part of the gain (the elevation
+term) shows up there only as far as the point differs from the okres's stations. **This rests on 24 autumn days and is not yet a verdict**:
 intervals ignore that consecutive days are alike (so they are too narrow), and the
 weights themselves had at most 37 days of scores behind them. The test is repeated
 every day as history grows. Not yet done: training windows of 30 and 45 days and a

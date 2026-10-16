@@ -5,7 +5,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from meteoverdict import aggregate, blendtest, combine, scoring
+from meteoverdict import aggregate, blendtest, combine, mos, scoring
 from meteoverdict.forecasts import SCHEMA as FC_SCHEMA
 from meteoverdict.models import load_models
 from meteoverdict.observations import SCHEMA as OBS_SCHEMA
@@ -164,6 +164,26 @@ def test_combined_forecast_is_the_weighted_corrected_mean():
     assert out["temperature_2m"] == pytest.approx(0.75 * 10 + 0.25 * 9)
     assert out["wind_speed_10m"] == pytest.approx(2.5)
     assert out["precipitation"] == pytest.approx(0.25)
+    # with the regression blend: its weights, and the 12 UTC correction at the
+    # station's elevation (300 m, 1 x 100 m above the okres mean, lapse -0.5)
+    coefficients = pl.DataFrame(
+        [
+            ("CZ0201", "temperature_2m", 1, m, mw, 2, 30, *[b] * 4, *[-0.5] * 4, 200.0, -2.0, 2.0)
+            for m, mw, b in (("a", 1.2, 1.0), ("b", -0.2, 0.0))
+        ],
+        schema=["region", "variable", "lead_day", "model", *mos.COEFFICIENT_COLUMNS],
+        orient="row",
+    ).with_columns(pl.lit(date(2026, 9, 9)).alias("as_of"), pl.col("lead_day").cast(pl.Int8))
+    with_regression = combine.with_mos(
+        weights.with_columns(pl.lit(date(2026, 9, 9)).alias("as_of")),
+        coefficients,
+        keys=("as_of", "region"),
+    )
+    stations = pl.DataFrame({"id": ["s1"], "elevation": [300.0]})
+    out = blendtest.combined_forecasts(fc, pools, with_regression, stations).row(0, named=True)
+    # a: 12 - (1 - 0.5) = 11.5, b: 9 - (0 - 0.5) = 9.5 → 1.2 * 11.5 - 0.2 * 9.5
+    assert out["temperature_2m"] == pytest.approx(1.2 * 11.5 - 0.2 * 9.5)
+    assert out["wind_speed_10m"] == pytest.approx(2.5)  # no regression there
 
 
 def test_command_writes_the_json(tmp_path):
