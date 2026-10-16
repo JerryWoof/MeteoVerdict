@@ -90,6 +90,9 @@ def test_custom_catalogue_defaults_to_enabled(tmp_path):
         (VALID + "    run_hours: [0, 3]\n", "run_hours"),
         (VALID + "    run_hours: []\n", "run_hours"),
         (VALID + "    run_hours: 12\n", "run_hours"),
+        (VALID + "    previous_runs_step_h: 4\n", "previous_runs_step_h"),
+        (VALID + "    previous_runs_max_lead_h: {5: 47}\n", "previous_runs_max_lead_h"),
+        (VALID + "    previous_runs_max_lead_h: {6: soon}\n", "previous_runs_max_lead_h"),
         (VALID.replace("forecast_days: 2", "forecast_days: 0.5"), "implausible"),
         (VALID.replace("max_lead_day: 1", "max_lead_day: 3"), "max_lead_day must be 1..2"),
         (VALID.replace("max_lead_day: 1", "max_lead_day: 0"), "max_lead_day"),
@@ -150,6 +153,22 @@ def test_coarser_fields_go_together(tmp_path):
         load_models(write(tmp_path, VALID + "    coarser_after_h: 24\n"))
     with pytest.raises(ModelCatalogError, match="go together"):
         load_models(write(tmp_path, VALID + "    coarser_after_h: 24\n    coarser_step_h: 2\n"))
+
+
+def test_previous_runs_archive_fields(tmp_path):
+    (model,) = load_models(write(tmp_path, VALID))
+    assert model.previous_runs_step_h == 6 and model.previous_runs_max_lead_h == {}
+    by_id = {m.id: m for m in load_models()}
+    # measured live 2026-10-16 against the Single Runs API (docs/data-sources.md)
+    assert {i: m.previous_runs_step_h for i, m in by_id.items() if m.previous_runs_step_h < 6} == {
+        "dwd_icon_d2": 3,
+        "geosphere_arome_austria": 3,
+        "dmi_harmonie_arome_europe": 3,
+        "knmi_harmonie_arome_europe": 1,
+    }
+    assert {
+        i: m.previous_runs_max_lead_h for i, m in by_id.items() if m.previous_runs_max_lead_h
+    } == {"ukmo_global_deterministic_10km": {6: 47, 18: 47}}
 
 
 def test_run_hours_default_and_narrowed(tmp_path):
