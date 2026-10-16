@@ -12,6 +12,7 @@ from meteoverdict.observations import SCHEMA as OBS_SCHEMA
 
 MODELS = [m for m in load_models() if m.id in ("ecmwf_ifs", "ncep_gfs_global", "ecmwf_ifs025")]
 BIASED, GOOD, NOISY = "ecmwf_ifs", "ncep_gfs_global", "ecmwf_ifs025"
+LATE = "dwd_icon"  # a model the backfill delivers the newest days of only
 STATIONS = pl.DataFrame(
     {
         "id": ["s1", "s2", "s3"],
@@ -27,10 +28,11 @@ FIRST = date(2026, 9, 1)
 DAYS = 24
 
 
-def _data(days=DAYS, change_from=None):
+def _data(days=DAYS, change_from=None, late_from=None):
     """Observations (10 °C, 2 m/s, no rain) and D+1 forecasts of three models: one
     2 °C too warm, one good (±0.5), one noisy (±2); from ``change_from`` on the good
-    model turns bad."""
+    model turns bad; from ``late_from`` on a fourth model (1 °C too cold) has
+    forecasts too."""
     rng = np.random.default_rng(1)
     start = datetime(FIRST.year, FIRST.month, FIRST.day, tzinfo=UTC)
     times = [start + timedelta(hours=h) for h in range(24 * days + 1)]
@@ -49,6 +51,8 @@ def _data(days=DAYS, change_from=None):
                 (NOISY, 2.0 * rng.choice([-1, 1])),
             ):
                 fc.append((s, t, model, 1, 10.0 + error, 0.1, 2.0 + error / 4))
+            if late_from is not None and t.date() >= late_from:
+                fc.append((s, t, LATE, 1, 9.0, 0.1, 1.75))
     return (
         pl.DataFrame(obs, schema=OBS_SCHEMA, orient="row"),
         pl.DataFrame(fc, schema=FC_SCHEMA, orient="row"),
@@ -57,7 +61,8 @@ def _data(days=DAYS, change_from=None):
 
 def _scores(obs, fc, days=DAYS):
     last = FIRST + timedelta(days=days - 1)
-    return scoring.daily_scores(obs, fc, MODELS, FIRST, last)
+    models = MODELS + [m for m in load_models() if m.id == LATE]
+    return scoring.daily_scores(obs, fc, models, FIRST, last)
 
 
 def test_combine_values_rescales_over_the_models_present_and_clips():
@@ -129,11 +134,59 @@ def test_out_of_sample_test_end_to_end():
     )
     # the plain mean: (2 ± 0.5 ± 2) / 3 per hour, never better than the good model
     assert cz[at["mae_blend"]] > cz[at["mae_best_oos"]]
-    assert {r[2] for r in models if r[0] == "temperature_2m"} == {BIASED, GOOD, NOISY}
+    # one model everywhere: with a single okres the same as the okres's best
+    assert cz[at["best_cz_oos"]] == GOOD and cz[at["best_cz_oos_models"]] == 1
+    assert cz[at["mae_best_cz_oos"]] == cz[at["mae_best_oos"]]
+    assert cz[at["diff_combined_vs_cz"]] == pytest.approx(cz[at["diff_combined"]], abs=1e-3)
+    assert cz[at["low_combined_vs_cz"]] <= cz[at["diff_combined_vs_cz"]]
+    assert cz[at["diff_best_oos_vs_cz"]] == 0
+    assert len(cz) == len(blendtest.GROUP_COLUMNS)
+    # every single model: ours minus it, with an interval, on the same days
+    mat = {c: i for i, c in enumerate(blendtest.MODEL_COLUMNS)}
+    by_model = {r[mat["model"]]: r for r in models if r[mat["variable"]] == "temperature_2m"}
+    assert set(by_model) == {BIASED, GOOD, NOISY}
+    for r in by_model.values():
+        assert r[mat["days"]] == DAYS - 5 and r[mat["mae_combined"]] == cz[at["mae_combined"]]
+        assert r[mat["diff_combined"]] == pytest.approx(
+            r[mat["mae_combined"]] - r[mat["mae"]], abs=2e-3
+        )
+        assert r[mat["low_combined"]] <= r[mat["diff_combined"]] <= r[mat["high_combined"]]
+        assert r[mat["low"]] is not None and r[mat["high"]] is not None
+    # the biased model is 2 °C off every hour: ours is clearly better
+    assert by_model[BIASED][mat["high_combined"]] < 0
     doc = blendtest.document(days, groups, models, info, {}, datetime(2026, 10, 1, tzinfo=UTC))
     assert doc["test_days"] == DAYS - 5 and doc["warm_up_days"] == 5
     assert doc["from"] == str(FIRST + timedelta(days=5)) and doc["to"] == str(last)
     assert any("D+1" in line for line in blendtest.summary(groups))
+
+
+def test_a_model_with_the_newest_days_only_does_not_shrink_the_test():
+    # regression: a newly added model, delivered by the backfill for its newest window
+    # only, made the fair station-days of every model start on its first day, both in
+    # each training window (no warm-up left) and in the test period (2026-10-16: 5
+    # test days instead of 24)
+    late_from = FIRST + timedelta(days=DAYS - 6)
+    obs, fc = _data(late_from=late_from)
+    scores = _scores(obs, fc)
+    late_rows = scores.filter(pl.col("model") == LATE, pl.col("variable") == "temperature_2m")
+    assert late_rows["date"].min() == late_from
+    last = FIRST + timedelta(days=DAYS - 1)
+    days, groups, models, info = blendtest.run(
+        scores, fc, obs, STATIONS, FIRST, last, min_training_days=5, resamples=200
+    )
+    doc = blendtest.document(days, groups, models, info, {}, datetime(2026, 10, 1, tzinfo=UTC))
+    assert doc["test_days"] == DAYS - 5 and doc["warm_up_days"] == 5
+    at = {c: i for i, c in enumerate(blendtest.GROUP_COLUMNS)}
+    cz = next(r for r in groups if r[0] == "cz" and r[at["variable"]] == "temperature_2m")
+    assert cz[at["days"]] == DAYS - 5 and cz[at["best_cz_oos"]] == GOOD
+    # the late model is compared with ours on the days it has
+    mat = {c: i for i, c in enumerate(blendtest.MODEL_COLUMNS)}
+    late = next(r for r in models if r[mat["model"]] == LATE and r[0] == "temperature_2m")
+    assert late[mat["days"]] == 6 and late[mat["high_combined"]] < 0
+    # not trained on while it covers too few of the window's days
+    weights, _ = blendtest.training(scores, STATIONS, [last - timedelta(days=1)], min_days=5)
+    assert LATE not in weights["model"].to_list()
+    assert weights["days"].max() == DAYS - 1
 
 
 def test_combined_forecast_is_the_weighted_corrected_mean():

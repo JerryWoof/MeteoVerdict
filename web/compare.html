@@ -29,16 +29,30 @@
     </header>
     <main class="content wide">
       <section id="blend-test-section" class="blend-test" hidden>
-        <h2 data-i18n="blendTest.title">Does our forecast beat the best model?</h2>
+        <h2 data-i18n="blendTest.title">Is our forecast better than one model for all of Czechia?</h2>
         <p class="note" data-i18n="blendTest.intro"></p>
         <div class="blend-test-grid">
           <div>
-            <div class="scroll"><table id="blend-test-table"></table></div>
+            <div id="blend-test-cz">
+              <h3 data-i18n="blendTest.czTitle">Against the best single model for all of Czechia</h3>
+              <div class="scroll"><table id="blend-test-table" class="blend-test-table"></table></div>
+              <p class="note" id="blend-test-cz-note"></p>
+              <p class="note" data-i18n="blendTest.cellsNote"></p>
+            </div>
+            <h3 data-i18n="blendTest.okresTitle">Against the best model in each okres (a harder competitor)</h3>
+            <p class="note" data-i18n="blendTest.okresIntro"></p>
+            <div class="scroll"><table id="blend-test-okres-table" class="blend-test-table"></table></div>
             <p class="note" id="blend-test-okres"></p>
           </div>
           <div id="blend-test-chart"></div>
         </div>
         <p class="note" id="blend-test-basis"></p>
+        <div id="blend-test-models-block" hidden>
+          <h3 id="blend-test-models-title"></h3>
+          <p class="note" data-i18n="blendTest.modelsIntro"></p>
+          <table id="blend-test-models" class="blend-test-table blend-test-models"></table>
+          <p class="note" id="blend-test-models-note"></p>
+        </div>
         <p class="note" data-i18n="blendTest.caveats"></p>
       </section>
       <section class="overview">

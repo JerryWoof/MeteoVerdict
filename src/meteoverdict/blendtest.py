@@ -1,4 +1,4 @@
-"""Does our combined forecast beat the best single model? Out of sample (roadmap 6.4).
+"""Does our combined forecast beat the single models? Out of sample (roadmap 6.4).
 
 The forecast of ``meteoverdict.combine`` weights the models of an okres by their scores
 of the last 90 days. Here it is rebuilt for past days from the stored D+N forecasts at
@@ -10,9 +10,13 @@ the models:
    forecast for ``d`` is made about N days before ``d``, and a day's scores are
    published the next morning. From those scores ``combine.weights`` (same
    inverse-error weights, bias corrections and shrinkage towards the plain mean as the
-   live forecast) and the **best single model** of the okres (lowest MAE, i.e. rank 1
-   of the ranking a user would have looked at). ``aggregate.aggregate`` builds those
-   okres scores exactly as the daily run does (fair station-days, borrowed stations).
+   live forecast), the **best single model** of the okres (lowest MAE, i.e. rank 1
+   of the ranking a user would have looked at) and the best single model for the
+   whole of Czechia. ``aggregate.aggregate`` builds those scores exactly as the daily
+   run does (fair station-days, borrowed stations), from the models with scores on at
+   least ``MIN_MODEL_COVERAGE`` of the window's scored days: a model the backfill has
+   delivered only its newest 14-day window of would otherwise cut every model's fair
+   station-days, and with them the training, down to that window.
    For temperature and wind also the regression blend of ``meteoverdict.mos``, fitted
    on the station pairs (00/06/12/18 UTC) of the same window and okres pools, with its
    corrections taken at each test station's own elevation.
@@ -25,26 +29,34 @@ the models:
    temperature and wind at 00, 06, 12 and 18 UTC, precipitation as daily totals).
    Variables: ``temperature_2m``, ``wind_speed_10m``, ``precipitation_daily`` (the
    weights of hourly precipitation come from daily totals, as in the live forecast).
-4. **Compared**, per okres, variable and lead day, on the station-days every model, the
-   mean of all models and the combination have (``aggregate.common_days``), with:
+4. **Compared**, per okres, variable and lead day, on the station-days every model of
+   that day, the mean of all models and the combination have (``aggregate.common_days``
+   day by day, so a model with scores on part of the test period only, or the fresh
+   days rebuilt from the single runs of fewer models, does not drop the other days),
+   with:
 
+   - ``best_cz_oos``: on each day the model that was best in the whole of Czechia in
+     the training window, used at every station (one model everywhere, what most
+     people do; the headline comparison);
    - ``best_oos``: on each day the model that was best in the okres in the training
-     window (chosen out of sample, the honest competitor);
+     window (chosen out of sample; a harder competitor than any one model);
    - ``best_hindsight``: the one model with the lowest MAE over the whole test period
      (an upper bound: nobody could have known it in advance);
    - ``blend``: the plain mean of all models (``meteoverdict.blend``);
-   - every single model (Czechia only).
+   - every single model (Czechia only), each on the days it has.
 
    Czechia sums the okresy (a station borrowed by two okresy counts for both, with
-   each okres's own weights). Intervals: ``ranking.bootstrap_group`` (whole days
-   resampled) of the MAE difference to ``best_oos``; negative = better than the model
-   a user of our ranking would have picked.
+   each okres's own weights); a series counts on a day only if it is compared in every
+   okres tested that day. Intervals: ``ranking.bootstrap_group`` (whole days
+   resampled) of the MAE difference to ``best_oos`` and to ``best_cz_oos``, and of
+   ours minus each single model; negative = ours (or the series) better.
 
 Output (``write``): ``site/data/blend-test.json``, see ``document``.
 """
 
 from __future__ import annotations
 
+import copy
 import json
 import zlib
 from dataclasses import replace
@@ -63,13 +75,22 @@ UNITS = {"temperature_2m": "°C", "wind_speed_10m": "m/s", "precipitation_daily"
 MIN_TRAINING_DAYS = 14
 #: results of an okres are published with at least this many test days
 MIN_OKRES_DAYS = 10
+#: a model is trained on only when it has scores on this share of the window's scored
+#: days (as ``mos.MIN_COVERAGE``): a model the backfill has delivered only a few days of
+#: would otherwise shrink the fair station-days of every model to those few days
+MIN_MODEL_COVERAGE = mos.MIN_COVERAGE
 COMBINED = "combined"
 BEST_OOS = "best_oos"
+BEST_CZ_OOS = "best_cz_oos"
 BEST_HINDSIGHT = "best_hindsight"
 #: model id prefix of the combination of one okres while it is scored
 PREFIX = "combined@"
 #: compared with ``best_oos`` in the published rows
 COMPARED = (COMBINED, BEST_HINDSIGHT, blend.ID)
+#: compared with ``best_cz_oos`` (one model everywhere) in the published rows
+COMPARED_CZ = (COMBINED, BEST_OOS, BEST_HINDSIGHT, blend.ID)
+#: the series that are not single models
+SERIES = (COMBINED, BEST_OOS, BEST_CZ_OOS, BEST_HINDSIGHT, blend.ID)
 
 GROUP_COLUMNS = [
     "level", "region", "region_name", "variable", "lead_day", "days", "stations",
@@ -78,17 +99,27 @@ GROUP_COLUMNS = [
     "diff_combined", "low_combined", "high_combined",
     "diff_best_hindsight", "low_best_hindsight", "high_best_hindsight",
     "diff_blend", "low_blend", "high_blend",
+    # added later: one model for the whole of Czechia (``best_cz_oos``) as the reference
+    "best_cz_oos", "best_cz_oos_models", "mae_best_cz_oos",
+    *(f"{k}_{c}_vs_cz" for c in COMPARED_CZ for k in ("diff", "low", "high")),
 ]  # fmt: skip
-MODEL_COLUMNS = ["variable", "lead_day", "model", "mae", "diff", "low", "high"]
+#: ``diff`` = the model's MAE minus ``best_oos``'s; ``diff_combined`` = ours minus the
+#: model's (negative = ours better), both on the ``days`` both series have
+MODEL_COLUMNS = [
+    "variable", "lead_day", "model", "mae", "diff", "low", "high",
+    "days", "mae_combined", "diff_combined", "low_combined", "high_combined",
+]  # fmt: skip
 
 
-def best_models(table: pl.DataFrame, window: str = combine.WINDOW) -> pl.DataFrame:
-    """The best single model (lowest MAE) per okres, score variable and lead day of an
-    aggregated table, among regions with enough stations: ``region``, ``variable``,
-    ``lead_day``, ``model``, ``days``."""
+def best_models(
+    table: pl.DataFrame, window: str = combine.WINDOW, level: str = "okres"
+) -> pl.DataFrame:
+    """The best single model (lowest MAE) per okres (``level="cz"``: for Czechia),
+    score variable and lead day of an aggregated table, among regions with enough
+    stations: ``region``, ``variable``, ``lead_day``, ``model``, ``days``."""
     return (
         table.filter(
-            pl.col("level") == "okres",
+            pl.col("level") == level,
             pl.col("window") == window,
             pl.col("variable").is_in(list(SCORE_VARIABLES.values())),
             pl.col("model") != blend.ID,
@@ -120,8 +151,11 @@ def training(
 
     Returns ``(weights, best)`` with ``date`` = the day they are used for
     (``as_of + lead_day``): the rows of ``combine.weights`` (Open-Meteo variable names)
-    and of ``best_models`` (score variable names), only for groups whose training had
-    at least ``min_days`` scored days. With ``pairs`` (``mos.pairs``) and
+    and of ``best_models`` (score variable names; the okresy and, with ``region`` =
+    ``cz``, the best model for the whole of Czechia), only for groups whose training had
+    at least ``min_days`` scored days. Only the models with scores on at least
+    ``MIN_MODEL_COVERAGE`` of the window's scored days are trained on
+    (``covered_models``). With ``pairs`` (``mos.pairs``) and
     ``okres_pools``, also the regression coefficients of temperature and wind fitted
     on the window ending on ``as_of`` (``combine.with_mos``), as the live forecast.
     """
@@ -144,17 +178,21 @@ def _score_training(
     min_days: int,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     length = int(window.removesuffix("d")) if window.endswith("d") else None
-    weights, best = [], []
+    weights, best, best_cz = [], [], []
     for as_of in as_of_days:
         part = scores.lazy().filter(pl.col("date") <= as_of)
         if length:  # only the window is needed
             part = part.filter(pl.col("date") > as_of - timedelta(days=length))
         if part.select(pl.len()).collect().item() == 0:
             continue
-        table = aggregate.aggregate(part, stations, as_of, windows=(window,), levels=("okres",))
+        part = part.join(covered_models(part).lazy(), on=["variable", "lead_day", "model"])
+        table = aggregate.aggregate(
+            part, stations, as_of, windows=(window,), levels=("okres", "cz")
+        )
         stamp = pl.lit(as_of).alias("as_of")
         weights.append(combine.weights(table, window).with_columns(stamp))
         best.append(best_models(table, window).with_columns(stamp))
+        best_cz.append(best_models(table, window, level="cz").with_columns(stamp))
     if not weights:
         return pl.DataFrame(), pl.DataFrame()
     w = pl.concat(weights).with_columns(_target_date().alias("date"))
@@ -165,16 +203,34 @@ def _score_training(
         .drop("days")
     )
     w = w.join(enough, on=["as_of", "region", "variable", "lead_day"], how="semi")
-    b = (
-        pl.concat(best)
-        .with_columns(_target_date().alias("date"))
-        .join(
-            enough.with_columns(pl.col("variable").replace_strict(SCORE_VARIABLES)),
-            on=["as_of", "region", "variable", "lead_day"],
-            how="semi",
-        )
+    b = pl.concat(best).join(
+        enough.with_columns(pl.col("variable").replace_strict(SCORE_VARIABLES)),
+        on=["as_of", "region", "variable", "lead_day"],
+        how="semi",
     )
+    cz = pl.concat(best_cz).filter(pl.col("days") >= min_days)
+    b = pl.concat([b, cz.select(b.columns)]).with_columns(_target_date().alias("date"))
     return w, b
+
+
+def covered_models(scores: pl.LazyFrame | pl.DataFrame) -> pl.DataFrame:
+    """``variable``, ``lead_day`` and ``model`` of the models with scores on at least
+    ``MIN_MODEL_COVERAGE`` of the days that variable and lead day has scores on.
+
+    The fair comparison (``aggregate.common_days``) keeps only the station-days every
+    model of the period has; a model the backfill has delivered for its newest window
+    only (it fetches newest first, so a newly added model starts with a 14-day block)
+    would cut every model's training down to that block, and with it the warm-up."""
+    group = ["variable", "lead_day"]
+    return (
+        scores.lazy()
+        .group_by(*group, "model")
+        .agg(pl.col("date").n_unique().alias("_days"))
+        .join(scores.lazy().group_by(group).agg(pl.col("date").n_unique().alias("_all")), on=group)
+        .filter(pl.col("_days") >= MIN_MODEL_COVERAGE * pl.col("_all"))
+        .select(*group, "model")
+        .collect()
+    )
 
 
 def pools(scores: pl.LazyFrame | pl.DataFrame, stations: pl.DataFrame) -> pl.DataFrame:
@@ -256,7 +312,12 @@ def daily_errors(
 ) -> pl.DataFrame:
     """Day totals (``sum_abs_err``, ``n``, ``stations``) per okres, score variable, lead
     day, date and model (the models, ``blend`` and ``combined``) on the fair
-    station-days of each okres, with the combination counting as one more model."""
+    station-days of each okres, with the combination counting as one more model.
+
+    Fair day by day: on each day the models compared are those with a score in the
+    okres that day, so a model that has scores on part of the test period only (a newly
+    added model the backfill has delivered one window of; the fresh days, rebuilt from
+    the single runs of fewer models) does not drop the other days."""
     members = okres_pools.select("variable", "region", "station_id")
     columns = ["date", "station_id", "model", "lead_day", "variable", "region", "sum_abs_err", "n"]
     rows = pl.concat(
@@ -267,8 +328,9 @@ def daily_errors(
             .select(columns),
         ]
     )
+    day = pl.concat_str(pl.col("region"), pl.col("date").cast(pl.String), separator="|")
     return (
-        aggregate.common_days(rows, by="region")
+        aggregate.common_days(rows.with_columns(day.alias("_region_day")), by="_region_day")
         .group_by("region", "variable", "lead_day", "date", "model")
         .agg(
             metrics.total("sum_abs_err"),
@@ -281,27 +343,40 @@ def daily_errors(
 
 def series(daily: pl.DataFrame, best: pl.DataFrame) -> pl.DataFrame:
     """Day totals per okres, variable, lead day, date and series on the days that have
-    both the combination and the out-of-sample choice: the models, ``blend``,
-    ``combined``, ``best_oos`` (the day's out-of-sample choice) and ``best_hindsight``
+    the combination and both out-of-sample choices: the models, ``blend``,
+    ``combined``, ``best_oos`` (the day's out-of-sample choice in the okres),
+    ``best_cz_oos`` (the day's out-of-sample choice for the whole of Czechia, ``best``
+    rows with ``region`` = ``cz``, the same model in every okres) and ``best_hindsight``
     (the okres's model with the lowest MAE over those days), with the model behind the
-    last two in ``chosen``."""
-    chosen = best.select("region", "variable", "lead_day", "date", pl.col("model").alias("chosen"))
-    oos = daily.join(
-        chosen, left_on=["region", "variable", "lead_day", "date", "model"],
-        right_on=["region", "variable", "lead_day", "date", "chosen"],
-    ).with_columns(pl.col("model").alias("chosen"), pl.lit(BEST_OOS).alias("model"))  # fmt: skip
+    last three in ``chosen``."""
     keys = ["region", "variable", "lead_day", "date"]
+    chosen = best.select(*keys, pl.col("model").alias("chosen"))
+    oos = daily.join(
+        chosen.filter(pl.col("region") != "cz"), left_on=[*keys, "model"],
+        right_on=[*keys, "chosen"],
+    ).with_columns(pl.col("model").alias("chosen"), pl.lit(BEST_OOS).alias("model"))  # fmt: skip
+    oos_cz = daily.join(
+        chosen.filter(pl.col("region") == "cz").drop("region"),
+        left_on=["variable", "lead_day", "date", "model"],
+        right_on=["variable", "lead_day", "date", "chosen"],
+    ).with_columns(pl.col("model").alias("chosen"), pl.lit(BEST_CZ_OOS).alias("model"))
     tested = (
-        pl.concat([daily.filter(pl.col("model") == COMBINED).select(keys), oos.select(keys)])
+        pl.concat(
+            [
+                daily.filter(pl.col("model") == COMBINED).select(keys),
+                oos.select(keys),
+                oos_cz.select(keys),
+            ]
+        )
         .group_by(keys)
         .len()
-        .filter(pl.col("len") == 2)
+        .filter(pl.col("len") == 3)
         .drop("len")
     )
-    out = pl.concat([daily.with_columns(pl.lit(None, pl.String).alias("chosen")), oos])
+    out = pl.concat([daily.with_columns(pl.lit(None, pl.String).alias("chosen")), oos, oos_cz])
     out = out.join(tested, on=keys, how="semi").filter(pl.col("n") > 0)
     group = ["region", "variable", "lead_day"]
-    single = out.filter(~pl.col("model").is_in([COMBINED, BEST_OOS, blend.ID]))
+    single = out.filter(~pl.col("model").is_in(SERIES))
     hindsight = (
         single.group_by(*group, "model")
         .agg((pl.col("sum_abs_err").sum() / pl.col("n").sum()).alias("mae"), pl.len().alias("d"))
@@ -321,59 +396,122 @@ def series(daily: pl.DataFrame, best: pl.DataFrame) -> pl.DataFrame:
 
 
 def czechia(days: pl.DataFrame) -> pl.DataFrame:
-    """Sum the okresy per variable, lead day, date and series; a model counts only if
-    it is compared in every okres of that variable and lead day."""
-    regions = days.group_by("variable", "lead_day").agg(pl.col("region").n_unique().alias("all"))
+    """Sum the okresy per variable, lead day, date and series; a series counts on a day
+    only if it is compared in every okres tested that day (so that all series of a day
+    cover the same station-days)."""
+    day = ["variable", "lead_day", "date"]
+    regions = days.group_by(day).agg(pl.col("region").n_unique().alias("all"))
     everywhere = (
-        days.group_by("variable", "lead_day", "model")
+        days.group_by(*day, "model")
         .agg(pl.col("region").n_unique().alias("regions"))
-        .join(regions, on=["variable", "lead_day"])
+        .join(regions, on=day)
         .filter(pl.col("regions") == pl.col("all"))
-        .select("variable", "lead_day", "model")
+        .select(*day, "model")
     )
     return (
-        days.join(everywhere, on=["variable", "lead_day", "model"], how="semi")
-        .group_by("variable", "lead_day", "date", "model")
+        days.join(everywhere, on=[*day, "model"], how="semi")
+        .group_by(*day, "model")
         .agg(pl.col("sum_abs_err").sum(), pl.col("n").sum(), pl.col("stations").sum())
         .with_columns(pl.lit("cz").alias("region"), pl.lit(None, pl.String).alias("chosen"))
     )
+
+
+def _differences(
+    a: np.ndarray,
+    m: np.ndarray,
+    rng: np.random.Generator,
+    resamples: int,
+    columns: list[str],
+    reference: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """MAE difference of every column to ``reference`` with its 95 % interval
+    (``ranking.bootstrap_group``, whole days resampled); no interval with one day. The
+    generator is copied, so every reference sees the same resamples."""
+    if a.shape[0] >= 2:
+        ranked = np.array([c == reference for c in columns])
+        _, diff, bounds = ranking.bootstrap_group(a, m, copy.deepcopy(rng), resamples, ranked)
+        return diff, bounds[0], bounds[1]
+    mae = a.sum(axis=0) / m.sum(axis=0)
+    nan = np.full(len(columns), np.nan)
+    return mae - mae[columns.index(reference)], nan, nan
+
+
+def _matrices(days: pl.DataFrame) -> tuple[list[str], pl.DataFrame, pl.DataFrame]:
+    abs_err = days.pivot(on="model", index="date", values="sum_abs_err").sort("date")
+    n = days.pivot(on="model", index="date", values="n").sort("date")
+    return [c for c in abs_err.columns if c != "date"], abs_err, n
 
 
 def compare(
     days: pl.DataFrame, key: str, rng: np.random.Generator, resamples: int = ranking.RESAMPLES
 ) -> dict | None:
     """MAE of every series of one group and the bootstrap interval of its difference to
-    ``best_oos``.
+    ``best_oos`` and to ``best_cz_oos``.
 
     ``days`` has ``date``, ``model``, ``sum_abs_err`` and ``n`` of one region,
     variable and lead day. Returns ``{"days", "series": {name: (mae, diff, low,
-    high)}}`` or None without the combination or the choice.
+    high)}, "vs_cz": {name: (diff, low, high)}}`` (``vs_cz`` empty without
+    ``best_cz_oos``) or None without the combination or the choice. Only the series
+    with every day are compared (single models with fewer days: ``model_rows``).
     """
-    abs_err = days.pivot(on="model", index="date", values="sum_abs_err").sort("date")
-    n = days.pivot(on="model", index="date", values="n").sort("date")
-    names = [c for c in abs_err.columns if c != "date"]
+    names, abs_err, n = _matrices(days)
     if COMBINED not in names or BEST_OOS not in names:
         return None
     # every compared series must cover every day (the fair set makes the models do so)
     full = [c for c in names if n[c].null_count() == 0 and abs_err[c].null_count() == 0]
     if COMBINED not in full or BEST_OOS not in full:
         return None
-    columns = full
     a = abs_err.select(full).to_numpy().astype(float)
     m = n.select(full).to_numpy().astype(float)
-    ranked = np.array([c == BEST_OOS for c in columns])
-    if a.shape[0] >= 2:
-        _, diff, bounds = ranking.bootstrap_group(a, m, rng, resamples, ranked)
-    else:
-        mae_all = a.sum(axis=0) / m.sum(axis=0)
-        diff = mae_all - mae_all[columns.index(BEST_OOS)]
-        bounds = np.full((2, len(columns)), np.nan)
     totals = a.sum(axis=0) / m.sum(axis=0)
+    diff, low, high = _differences(a, m, rng, resamples, full, BEST_OOS)
     out = {
-        c: (float(totals[i]), float(diff[i]), float(bounds[0][i]), float(bounds[1][i]))
-        for i, c in enumerate(columns)
+        c: (float(totals[i]), float(diff[i]), float(low[i]), float(high[i]))
+        for i, c in enumerate(full)
     }
-    return {"days": a.shape[0], "series": out}
+    vs_cz = {}
+    if BEST_CZ_OOS in full:
+        diff, low, high = _differences(a, m, rng, resamples, full, BEST_CZ_OOS)
+        vs_cz = {c: (float(diff[i]), float(low[i]), float(high[i])) for i, c in enumerate(full)}
+    return {"days": a.shape[0], "series": out, "vs_cz": vs_cz}
+
+
+def model_rows(
+    days: pl.DataFrame,
+    variable: str,
+    lead_day: int,
+    key: str,
+    seed: int = 0,
+    resamples: int = ranking.RESAMPLES,
+) -> list[list]:
+    """``MODEL_COLUMNS`` rows of every single model of one group (Czechia): its MAE and
+    the difference to ``best_oos`` (model minus it), and ours minus the model, each
+    with its 95 % interval, on the days the model, ``combined`` and ``best_oos`` all
+    have (a model with scores on part of the test period only is compared on those)."""
+    names, abs_err, n = _matrices(days)
+    if COMBINED not in names or BEST_OOS not in names:
+        return []
+    rows = []
+    for model in sorted(c for c in names if c not in SERIES):
+        columns = [model, COMBINED, BEST_OOS]
+        have = pl.all_horizontal(pl.col(c).is_not_null() for c in columns)
+        a = abs_err.select(columns).filter(have.alias("_have")).to_numpy().astype(float)
+        m = n.select(columns).filter(have.alias("_have")).to_numpy().astype(float)
+        if a.shape[0] == 0 or (m.sum(axis=0) == 0).any():
+            continue
+        rng = _seed(seed, f"{key}|{model}")
+        mae = a.sum(axis=0) / m.sum(axis=0)
+        diff, low, high = _differences(a, m, rng, resamples, columns, BEST_OOS)
+        ours, ours_low, ours_high = _differences(a, m, rng, resamples, columns, model)
+        rows.append(
+            [
+                variable, lead_day, model,
+                *(_nan_to_none(v) for v in (mae[0], diff[0], low[0], high[0])),
+                a.shape[0],
+                *(_nan_to_none(v) for v in (mae[1], ours[1], ours_low[1], ours_high[1])),
+            ]
+        )  # fmt: skip
+    return rows
 
 
 def _most(chosen: pl.Series) -> str | None:
@@ -402,7 +540,7 @@ def results(
     """Rows of the published tables (``GROUP_COLUMNS``, ``MODEL_COLUMNS``): Czechia
     and every okres with at least ``min_okres_days`` test days; the single models for
     Czechia only."""
-    groups, model_rows = [], []
+    groups, models = [], []
     frames = [("cz", czechia(days)), ("okres", days)]
     for level, frame in frames:
         for (region, variable, lead_day), part in sorted(
@@ -412,11 +550,12 @@ def results(
             result = compare(part, key, _seed(seed, key), resamples)
             if result is None or (level == "okres" and result["days"] < min_okres_days):
                 continue
-            s = result["series"]
+            s, vs_cz = result["series"], result["vs_cz"]
             here = days.filter(pl.col("variable") == variable, pl.col("lead_day") == lead_day)
             if level == "okres":
                 here = here.filter(pl.col("region") == region)
             chosen = here.filter(pl.col("model") == BEST_OOS)["chosen"]
+            chosen_cz = here.filter(pl.col("model") == BEST_CZ_OOS).unique("date")["chosen"]
             stations = part.group_by("date").agg(pl.col("stations").max())["stations"].max()
             row = [
                 level, region, "Česko" if level == "cz" else okres_names.get(region, region),
@@ -428,20 +567,17 @@ def results(
             row += [_nan_to_none(s.get(c, (None,))[0]) for c in (BEST_HINDSIGHT, blend.ID)]
             for c in COMPARED:
                 row += [_nan_to_none(v) for v in s.get(c, (None, None, None, None))[1:]]
+            row += [
+                _most(chosen_cz),
+                chosen_cz.n_unique() if chosen_cz.len() else None,
+                _nan_to_none(s.get(BEST_CZ_OOS, (None,))[0]),
+            ]
+            for c in COMPARED_CZ:
+                row += [_nan_to_none(v) for v in vs_cz.get(c, (None, None, None))]
             groups.append(row)
             if level == "cz":
-                for model, (mae, diff, low, high) in s.items():
-                    if model in (COMBINED, BEST_OOS, BEST_HINDSIGHT, blend.ID):
-                        continue
-                    model_rows.append(
-                        [
-                            variable,
-                            lead_day,
-                            model,
-                            *(_nan_to_none(v) for v in (mae, diff, low, high)),
-                        ]
-                    )
-    return groups, model_rows
+                models += model_rows(part, variable, lead_day, key, seed, resamples)
+    return groups, models
 
 
 def run(
@@ -522,9 +658,14 @@ METHOD = (
     "the training window, chosen anew every day (what a user following the ranking would "
     "have used); best_hindsight: the single model with the lowest MAE over the test "
     "period (an upper bound nobody could have picked in advance); blend: the plain mean "
-    "of all models. Czechia sums all okresy. diff = MAE minus the MAE of best_oos "
-    "(negative = better), with a 95 % interval from {resamples} bootstrap resamples of "
-    "whole days."
+    "of all models; best_cz_oos: the model that was best in the whole of Czechia in the "
+    "training window, used everywhere (one model for the whole country). Only models "
+    "with scores on at least {coverage:.0%} of a training window's scored days are "
+    "trained on; on each test day the models compared are those with scores that day. "
+    "Czechia sums all okresy. diff = MAE minus the MAE of best_oos, *_vs_cz = MAE minus "
+    "the MAE of best_cz_oos, single models: diff_combined = our MAE minus the model's "
+    "(negative = better), each with a 95 % interval from {resamples} bootstrap resamples "
+    "of whole days."
 )
 
 
@@ -545,7 +686,9 @@ def document(
     variable and lead day with the MAE of the combination, the out-of-sample best
     model, the best model in hindsight and the mean of all models, and the difference
     of each to the out-of-sample best with its 95 % interval (``low``, ``high``).
-    ``models`` (``MODEL_COLUMNS``): every single model in Czechia, same differences.
+    ``models`` (``MODEL_COLUMNS``): every single model in Czechia, its difference to
+    the out-of-sample best and ours minus it, with intervals. The ``*_vs_cz`` columns
+    compare with ``best_cz_oos``, the best model for the whole of Czechia.
     """
     tested = sorted(days["date"].unique().to_list()) if days.height else []
     first_test = tested[0] if tested else None
@@ -553,7 +696,13 @@ def document(
     warm_up = sum(1 for d in scored if first_test is None or d < first_test)
     return {
         "generated": generated.isoformat(timespec="seconds"),
-        "method": METHOD.format(window=window, min_days=min_training_days, resamples=resamples),
+        "method": METHOD.format(
+            window=window,
+            min_days=min_training_days,
+            resamples=resamples,
+            coverage=MIN_MODEL_COVERAGE,
+        ),
+        "min_model_coverage": MIN_MODEL_COVERAGE,
         "training_window": window,
         "shrink_days": combine.SHRINK_DAYS,
         "bias_shrink_days": combine.BIAS_SHRINK_DAYS,
@@ -593,17 +742,29 @@ def summary(groups: list[list]) -> list[str]:
         if row[at["level"]] != "cz":
             continue
         low, high = row[at["low_combined"]], row[at["high_combined"]]
-        verdict = (
-            "better" if high is not None and high < 0
-            else "worse" if low is not None and low > 0
-            else "no significant difference"
-        )  # fmt: skip
+        verdict = _verdict(low, high)
+        cz_low, cz_high = row[at["low_combined_vs_cz"]], row[at["high_combined_vs_cz"]]
+        cz_diff = row[at["diff_combined_vs_cz"]]
         lines.append(
             f"{row[at['variable']]:<20} D+{row[at['lead_day']]}  {row[at['days']]:>3} days  "
-            f"combined {row[at['mae_combined']]:.3f}  best (out of sample) "
+            f"vs one model everywhere ({row[at['best_cz_oos']]}) "
+            f"{row[at['mae_best_cz_oos']] or float('nan'):.3f}: "
+            f"{cz_diff if cz_diff is not None else float('nan'):+.3f} "
+            f"[{cz_low if cz_low is not None else float('nan'):+.3f}, "
+            f"{cz_high if cz_high is not None else float('nan'):+.3f}] "
+            f"{_verdict(cz_low, cz_high)}  |  "
+            f"combined {row[at['mae_combined']]:.3f}  best per okres "
             f"{row[at['mae_best_oos']]:.3f}  hindsight {row[at['mae_best_hindsight']] or 0:.3f}  "
             f"mean {row[at['mae_blend']] or 0:.3f}  diff {row[at['diff_combined']]:+.3f} "
             f"[{low if low is not None else float('nan'):+.3f}, "
             f"{high if high is not None else float('nan'):+.3f}]  {verdict}"
         )
     return lines
+
+
+def _verdict(low: float | None, high: float | None) -> str:
+    if high is not None and high < 0:
+        return "better"
+    if low is not None and low > 0:
+        return "worse"
+    return "no significant difference"

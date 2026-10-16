@@ -1491,7 +1491,7 @@ body.radar #show-box {
   margin: 0 0 0.3rem;
 }
 .blend-test h3 {
-  margin: 0;
+  margin: 0.6rem 0 0.2rem;
   font-size: 0.9rem;
   font-weight: 600;
 }
@@ -1501,32 +1501,82 @@ body.radar #show-box {
   gap: 1rem;
   align-items: start;
 }
-#blend-test-table {
+.blend-test-table {
+  width: 100%;
   border-collapse: collapse;
   font-size: 0.82rem;
 }
-#blend-test-table th,
-#blend-test-table td {
+.blend-test-table th,
+.blend-test-table td {
   padding: 0.3rem 0.45rem;
   border: 1px solid #e3ddd0;
   text-align: left;
   vertical-align: top;
 }
-#blend-test-table td small {
+.blend-test-table td small {
   color: #4b5863;
 }
-#blend-test-table td.better {
+.blend-test-table td.better {
   background: #e3f1e0;
 }
-#blend-test-table td.worse {
+.blend-test-table td.worse {
   background: #f8e1de;
 }
-#blend-test-table td.same {
+.blend-test-table td.same {
   background: #f1efe9;
+}
+/* our forecast vs every single model: fits a phone without scrolling sideways */
+.blend-test-models {
+  width: 100%;
+  table-layout: fixed;
+}
+.blend-test-models th:first-child {
+  width: 30%;
+  overflow-wrap: anywhere;
+}
+.blend-test-models th,
+.blend-test-models td {
+  padding: 0.25rem 0.3rem;
+}
+.blend-test-models td {
+  text-align: center;
+  white-space: nowrap;
+}
+.blend-test-models td small {
+  font-size: 0.68rem;
+}
+.blend-test-models tr.home th {
+  font-weight: 700;
+}
+.blend-test-models tr.home td,
+.blend-test-models tr.home th {
+  border-bottom: 2px solid #4b5863;
 }
 @media (max-width: 700px) {
   .blend-test-grid {
-    grid-template-columns: 1fr;
+    /* minmax(0, …): a wide table scrolls in its box instead of widening the page */
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .blend-test {
+    padding: 0.5rem 0.5rem;
+  }
+  .blend-test-table {
+    font-size: 0.74rem;
+  }
+  .blend-test-table th,
+  .blend-test-table td {
+    padding: 0.2rem 0.2rem;
+  }
+  .blend-test-models th:first-child {
+    width: 26%;
+  }
+  .blend-test-models td small {
+    font-size: 0.58rem;
+    letter-spacing: -0.02em;
+  }
+  .blend-test-models th,
+  .blend-test-models td {
+    padding: 0.2rem 0.1rem;
   }
 }
 

@@ -6,9 +6,9 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
 import {
-  BLEND_TEST_SERIES, BLEND_TEST_VARIABLES, biasByElevation, blendTestLines, blendTestRows, blendTestVariable,
+  BLEND_TEST_SERIES, BLEND_TEST_VARIABLES, HOME_MODEL, biasByElevation, blendTestLines, blendTestRows, blendTestVariable,
   blendVerdict, blendVerdicts, fmt, okresVerdictCounts, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
-  leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, unpublishedHours,
+  leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, singleModelVerdicts, unpublishedHours,
 } from "./compare.js";
 import { binLabel, count, etsColor, etsTextColor, farmChoices, farmGrid, plain, score } from "./farm.js";
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
@@ -288,52 +288,140 @@ function renderByLead(rows, view, names, colors) {
   );
 }
 
-// --- does our forecast beat the best model? (blend-test.json; hidden until it exists) --
+// --- does our forecast beat one model? (blend-test.json; hidden until it exists) -----
 const blendTestDoc = getJson("data/scores/blend-test.json");
-const SERIES_COLORS = { combined: "#c0392b", best_oos: "#1f78b4", blend: "#1d2329", best_hindsight: "#7f8c8d" };
+const SERIES_COLORS = {
+  combined: "#c0392b", best_cz_oos: "#1f78b4", best_oos: "#6a3d9a", blend: "#1d2329", best_hindsight: "#7f8c8d",
+};
+// [series, stroke width, dash]: ours on top
+const SERIES_STYLE = [
+  ["best_hindsight", 1.5, "4,3"], ["blend", 1.5, null], ["best_oos", 1.5, "2,2"], ["best_cz_oos", 2.2, null],
+  ["combined", 3, null],
+];
+const MARK = { better: "✓", same: "≈", worse: "✗" };
 
-function verdictText(v, unit, long = false) {
-  const values = { amount: fmt(v.amount), unit, low: fmt(v.low), high: fmt(v.high) };
+/** Long or short words for a verdict; `model`: against that model used everywhere. */
+function verdictText(v, unit, long = false, model = null) {
+  const values = { amount: fmt(v.amount), unit, low: fmt(v.low), high: fmt(v.high), model };
   if (v.verdict === "same") {
     values.amount = fmt(v.amount, true);
     values.low = fmt(v.low, true);
     values.high = fmt(v.high, true);
   }
-  return t(`blendTest.${v.verdict}${long ? "Long" : ""}`, values);
+  return t(`blendTest.${v.verdict}${long ? "Long" : ""}${long && model ? "Cz" : ""}`, values);
 }
 
-async function renderBlendTest(view) {
-  const section = document.getElementById("blend-test-section");
-  const doc = await blendTestDoc;
-  const verdicts = blendVerdicts(blendTestRows(doc, "cz"));
-  section.hidden = verdicts.length === 0;
-  if (section.hidden) return;
-  const unit = (variable) => doc.units?.[variable] ?? "";
-  // verdict table: a row per variable, a column per lead day
-  const leads = [...new Set(verdicts.map((v) => v.lead_day))].sort((a, b) => a - b);
+/**
+ * A table of verdicts: a row per variable and a column per lead day, or on a phone
+ * (where five lead-day columns do not fit) a row per lead day and a column per variable.
+ */
+function verdictTable(id, verdicts, leads, unit, modelName, against) {
+  const variables = BLEND_TEST_VARIABLES.filter((variable) => verdicts.some((v) => v.variable === variable));
+  const verdictCell = (variable, lead) => {
+    const v = verdicts.find((x) => x.variable === variable && x.lead_day === lead);
+    if (!v) return cell("td", "–");
+    const td = cell("td", null, `verdict ${v.verdict}`);
+    const model = against === "cz" ? modelName(v.best) : null;
+    td.title = `${verdictText(v, unit(variable), true, model)} · ${v.days} d`;
+    td.tabIndex = 0;
+    td.append(cell("strong", `${MARK[v.verdict]} ${verdictText(v, unit(variable))}`), document.createElement("br"));
+    const range = v.verdict === "same"
+      ? t("blendTest.sameInterval", { amount: fmt(v.amount, true), unit: unit(variable), low: fmt(v.low, true), high: fmt(v.high, true) })
+      : t("blendTest.interval", { low: fmt(v.low), high: fmt(v.high) });
+    td.append(cell("small", range));
+    if (model) td.append(document.createElement("br"), cell("small", t("blendTest.vsModel", { model }), "model"));
+    return td;
+  };
   const head = document.createElement("tr");
-  head.append(cell("th", t("blendTest.variable")), ...leads.map((d) => cell("th", `D+${d}`)));
-  const body = BLEND_TEST_VARIABLES.filter((variable) => verdicts.some((v) => v.variable === variable)).map((variable) => {
+  let body;
+  if (window.matchMedia("(max-width: 700px)").matches) {
+    head.append(cell("th", ""), ...variables.map((variable) => cell("th", t(`variable.${variable}`))));
+    body = leads.map((lead) => {
+      const tr = document.createElement("tr");
+      tr.append(cell("th", `D+${lead}`), ...variables.map((variable) => verdictCell(variable, lead)));
+      return tr;
+    });
+  } else {
+    head.append(cell("th", t("blendTest.variable")), ...leads.map((d) => cell("th", `D+${d}`)));
+    body = variables.map((variable) => {
+      const tr = document.createElement("tr");
+      tr.append(cell("th", t(`variable.${variable}`)), ...leads.map((lead) => verdictCell(variable, lead)));
+      return tr;
+    });
+  }
+  document.getElementById(id).replaceChildren(head, ...body);
+}
+
+const signedPct = (x) => (x == null ? "–" : `${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(Math.round(x * 100))}`);
+
+/** Our forecast vs every single model used everywhere, at the page's variable. */
+function renderSingleModels(doc, variable, leads, unit, modelName) {
+  const block = document.getElementById("blend-test-models-block");
+  const data = singleModelVerdicts(doc, variable);
+  block.hidden = data.length === 0;
+  if (block.hidden) return;
+  document.getElementById("blend-test-models-title").textContent =
+    t("blendTest.modelsTitle", { variable: t(`variable.${variable}`) });
+  const most = Math.max(...data.flatMap((m) => Object.values(m.cells).map((c) => c.days)));
+  let few = false;
+  const head = document.createElement("tr");
+  head.append(cell("th", t("blendTest.model")), ...leads.map((d) => cell("th", `D+${d}`)));
+  const body = data.map((m) => {
     const tr = document.createElement("tr");
-    tr.append(cell("th", t(`variable.${variable}`)));
+    if (m.model === HOME_MODEL) tr.className = "home";
+    tr.append(cell("th", modelName(m.model)));
     for (const lead of leads) {
-      const v = verdicts.find((x) => x.variable === variable && x.lead_day === lead);
-      const td = cell("td", null, v ? `verdict ${v.verdict}` : "");
-      if (v) {
-        td.title = `${verdictText(v, unit(variable), true)} · ${v.days} d`;
-        td.append(cell("strong", verdictText(v, unit(variable))), document.createElement("br"));
-        const range = v.verdict === "same"
-          ? t("blendTest.sameInterval", { amount: fmt(v.amount, true), unit: unit(variable), low: fmt(v.low, true), high: fmt(v.high, true) })
-          : t("blendTest.interval", { low: fmt(v.low), high: fmt(v.high) });
-        td.append(cell("small", range));
-      } else {
-        td.textContent = "–";
+      const c = m.cells[lead];
+      if (!c) {
+        tr.append(cell("td", "–"));
+        continue;
       }
+      const short = c.days < 0.75 * most;
+      few ||= short;
+      const td = cell("td", null, `verdict ${c.verdict}`);
+      td.append(
+        cell("strong", `${MARK[c.verdict]} ${signedPct(c.pct)}${short ? "*" : ""}`),
+        document.createElement("br"),
+        cell("small", `${signedPct(c.pctLow)}…${signedPct(c.pctHigh)}`),
+      );
+      const v = c.verdict === "better"
+        ? { verdict: "better", amount: -c.diff, low: -c.high, high: -c.low }
+        : { verdict: c.verdict, amount: c.diff, low: c.low, high: c.high };
+      td.title = t("blendTest.modelTip", {
+        verdict: verdictText(v, unit(variable), true, modelName(m.model)), ours: fmt(c.maeCombined),
+        theirs: fmt(c.mae), model: modelName(m.model), unit: unit(variable), days: c.days,
+      });
+      td.tabIndex = 0;
       tr.append(td);
     }
     return tr;
   });
-  document.getElementById("blend-test-table").replaceChildren(head, ...body);
+  document.getElementById("blend-test-models").replaceChildren(head, ...body);
+  document.getElementById("blend-test-models-note").textContent = few ? t("blendTest.fewDays") : "";
+}
+
+async function renderBlendTest(view, names) {
+  const section = document.getElementById("blend-test-section");
+  const doc = await blendTestDoc;
+  const czRows = blendTestRows(doc, "cz");
+  const verdicts = blendVerdicts(czRows);
+  section.hidden = verdicts.length === 0;
+  if (section.hidden) return;
+  const unit = (variable) => doc.units?.[variable] ?? "";
+  const modelName = (m) => (m == null ? "–" : (names[m] ?? doc.models?.[m] ?? m));
+  const leads = [...new Set(verdicts.map((v) => v.lead_day))].sort((a, b) => a - b);
+  // headline: one model for the whole of Czechia (files before it: the okres table only)
+  const czVerdicts = blendVerdicts(czRows, "cz");
+  document.getElementById("blend-test-cz").hidden = czVerdicts.length === 0;
+  if (czVerdicts.length) {
+    verdictTable("blend-test-table", czVerdicts, leads, unit, modelName, "cz");
+    const picks = new Map();
+    for (const v of czVerdicts) if (v.best) picks.set(v.best, (picks.get(v.best) ?? 0) + 1);
+    document.getElementById("blend-test-cz-note").textContent = t("blendTest.czNote", {
+      models: [...picks].sort((a, b) => b[1] - a[1]).map(([m]) => modelName(m)).join(", "),
+    });
+  }
+  verdictTable("blend-test-okres-table", verdicts, leads, unit, modelName, "okres");
   // the chosen okres (or how the okresy came out) at the page's variable and lead day
   const variable = blendTestVariable(view.variable);
   const okresRow = levelOf(view.region) !== "okres" ? null : blendTestRows(doc, view.region).find((r) => r.variable === variable && r.lead_day === view.leadDay);
@@ -349,36 +437,32 @@ async function renderBlendTest(view) {
       ? t("blendTest.okresy", { variable: t(`variable.${variable}`).toLowerCase(), lead: view.leadDay, ...counts })
       : "";
   }
-  // MAE by lead day of the page's variable: ours, the best model then, the mean, hindsight
-  const lines = blendTestLines(blendTestRows(doc, "cz"), variable);
+  // MAE by lead day of the page's variable: ours, one model, the best per okres, ...
+  const lines = blendTestLines(czRows, variable);
+  const present = BLEND_TEST_SERIES.filter((s) => lines.some((r) => r.series === s));
   const label = (s) => t(`blendTest.series.${s}`);
   const chart = document.getElementById("blend-test-chart");
   chart.replaceChildren(
     cell("h3", t("blendTest.chartTitle", { variable: t(`variable.${variable}`) })),
     Plot.plot({
       width: Math.max(280, Math.min(480, chart.clientWidth || 400)),
-      height: 240,
+      height: 260,
       marginLeft: 45,
       x: { label: t("control.lead"), ticks: leads, tickFormat: (d) => `D+${d}` },
       y: { label: `MAE (${unit(variable)})`, grid: true },
-      color: {
-        domain: BLEND_TEST_SERIES.map(label),
-        range: BLEND_TEST_SERIES.map((s) => SERIES_COLORS[s]),
-        legend: true,
-      },
-      marks: [
-        ...[["best_hindsight", 1.5, "4,3"], ["blend", 1.5, null], ["best_oos", 2, null], ["combined", 3, null]].map(
-          ([series, strokeWidth, strokeDasharray]) => Plot.lineY(lines.filter((r) => r.series === series), {
-            x: "lead_day", y: "mae", stroke: (r) => label(r.series), marker: "circle", tip: true, strokeWidth,
-            strokeDasharray,
-          }),
-        ),
-      ],
+      color: { domain: present.map(label), range: present.map((s) => SERIES_COLORS[s]), legend: true },
+      marks: SERIES_STYLE.filter(([series]) => present.includes(series)).map(
+        ([series, strokeWidth, strokeDasharray]) => Plot.lineY(lines.filter((r) => r.series === series), {
+          x: "lead_day", y: "mae", stroke: (r) => label(r.series), marker: "circle", tip: true, strokeWidth,
+          strokeDasharray,
+        }),
+      ),
     }),
   );
   document.getElementById("blend-test-basis").textContent = t("blendTest.basis", {
     days: doc.test_days, from: doc.from, to: doc.to, warmup: doc.warm_up_days, min: doc.min_training_days,
   });
+  renderSingleModels(doc, variable, leads, unit, modelName);
 }
 
 // --- run-based errors by lead hour (leads.json; hidden until it exists) -------------
@@ -595,7 +679,7 @@ async function main() {
     document.getElementById("ranking-title").textContent = t("compare.rankingIn", {
       region: view.region === "cz" ? t("region.cz") : displayName(regionList(rows).find((r) => r.code === view.region)?.name ?? view.region),
     });
-    renderBlendTest(view);
+    renderBlendTest(view, names);
     renderSummary(rows, view, names, colors);
     renderTable(rows, view, names);
     renderIntervals(rows, view, names, colors);
