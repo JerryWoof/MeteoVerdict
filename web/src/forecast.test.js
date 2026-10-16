@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  bestModel, bestPerLeadDay, combine, taper, winnersByLeadDay, dailySummary, forecastUrl, leadDay, localDay, localTime,
+  bestModel, bestPerLeadDay, combine, correctionAt, taper, winnersByLeadDay, dailySummary, forecastUrl, leadDay, localDay, localTime,
   nightBands, parseForecast, weightTable, weightedModels, weightsAt,
 } from "./forecast.js";
 import { parseOutlook, sunFor } from "./tv.js";
@@ -159,4 +159,28 @@ test("no sun times (older outlook files): no nights; one known day: its nights e
     { start: Date.parse("2026-10-12T16:14Z"), end: Date.parse("2026-10-13T05:19Z") },
     { start: Date.parse("2026-10-13T16:14Z"), end: Date.parse("2026-10-14T05:19Z") },
   ]);
+});
+
+test("slot corrections are interpolated by UTC hour (as combine.hourly_correction)", () => {
+  const r = { correction: 9, correction_00: 0, correction_06: 2, correction_12: 4, correction_18: 6 };
+  const at = (h) => correctionAt(r, Date.parse(`2026-10-12T${String(h).padStart(2, "0")}:00Z`));
+  assert.deepEqual([0, 3, 6, 12, 21].map(at), [0, 1, 2, 4, 3]);
+  assert.equal(correctionAt({ correction: 9 }, NOW), 9);
+});
+
+test("the regression weights are used only when all their models have a value", () => {
+  const t0 = Date.parse("2026-10-12T00:00Z");
+  const now = t0 - 3600 * 1000;
+  const slots = { correction_00: 1, correction_06: 1, correction_12: 1, correction_18: 1 };
+  const table = new Map([["temperature_2m|1", [
+    { model: "a", weight: 0.5, correction: 1, mos_weight: 1.5, mos_models: 2, ...slots },
+    { model: "b", weight: 0.5, correction: 1, mos_weight: -0.5, mos_models: 2, ...slots },
+    { model: "c", weight: 0.5, correction: 0, mos_weight: null, mos_models: null },
+  ]]]);
+  const both = { times: [t0, t0], values: { temperature_2m: { a: [11, 11], b: [13, 13], c: [20, 20] } } };
+  // Σ mos_weight · (forecast − correction) = 1.5 · 10 − 0.5 · 12
+  assert.deepEqual(combine(both, table, "temperature_2m", now, 1), [9, 9]);
+  const missing = { times: [t0], values: { temperature_2m: { a: [11], c: [20] } } };
+  // b is missing: the inverse-error weights over a and c
+  assert.deepEqual(combine(missing, table, "temperature_2m", now, 1), [15]);
 });

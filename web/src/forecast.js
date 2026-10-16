@@ -94,10 +94,33 @@ export function taper(values) {
   return values.map((_, i) => Math.min(1, (last - i + 1) / (TAPER_HOURS + 1)));
 }
 
+// corrections at 00, 06, 12 and 18 UTC (temperature and wind, `mvd daily`)
+export const SLOT_CORRECTIONS = ["correction_00", "correction_06", "correction_12", "correction_18"];
+
+/**
+ * A model's correction at an hour: the slot corrections interpolated linearly in UTC
+ * hour (00 → 06 → 12 → 18 → 00) where the weight file has them, else `correction`
+ * (as combine.hourly_correction).
+ */
+export function correctionAt(r, time) {
+  if (r.correction_00 == null) return r.correction ?? 0;
+  const d = new Date(time);
+  const position = (d.getUTCHours() + d.getUTCMinutes() / 60) / 6;
+  const index = Math.floor(position) % 4;
+  const fraction = position - Math.floor(position);
+  const a = r[SLOT_CORRECTIONS[index]];
+  const b = r[SLOT_CORRECTIONS[(index + 1) % 4]];
+  return a * (1 - fraction) + b * fraction;
+}
+
 /**
  * The combined forecast per hour: Σ weight · (forecast − correction) over the models
  * that have a value for that hour (tapered at their end), the weights rescaled to sum
  * to 1; null when fewer than `minModels` models have a value.
+ *
+ * Temperature and wind with a regression blend (`mos_weight`, `mos_models`, as
+ * combine.combine_values): where all `mos_models` models of it have a value and none
+ * is fading out, Σ mos_weight · (forecast − correction) over them instead.
  */
 export function combine(forecast, table, variable, now, minModels = 2) {
   const series = forecast.values[variable] ?? {};
@@ -106,16 +129,25 @@ export function combine(forecast, table, variable, now, minModels = 2) {
     let sum = 0;
     let total = 0;
     let count = 0;
+    let regression = 0;
+    let present = 0;
+    let expected = 0;
     for (const r of weightsAt(table, variable, leadDay(time, now))) {
+      if (r.mos_models > 0) expected = r.mos_models;
       const value = series[r.model]?.[i];
       if (value == null) continue;
+      const corrected = value - correctionAt(r, time);
       const weight = r.weight * fades[r.model][i];
-      sum += weight * (value - r.correction);
+      sum += weight * corrected;
       total += weight;
       count += 1;
+      if (r.mos_weight != null && fades[r.model][i] >= 1) {
+        regression += r.mos_weight * corrected;
+        present += 1;
+      }
     }
     if (count < minModels || total <= 0) return null;
-    const value = sum / total;
+    const value = expected > 0 && present === expected ? regression : sum / total;
     return NON_NEGATIVE.has(variable) ? Math.max(0, value) : value;
   });
 }
