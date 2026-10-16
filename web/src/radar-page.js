@@ -108,8 +108,9 @@ const lastObserved = () => steps.findLast((s) => !s.forecast)?.time ?? null;
 const radarUrl = (s) => frameUrl(base, s.forecast ? "nowcast" : "maxz", s.radar);
 
 // --- decoded frames -----------------------------------------------------------------------
-// url → Promise<{codes, w, h} | null>, least recently used dropped beyond CACHE_SIZE
-const CACHE_SIZE = 120;
+// url → Promise<{codes, w, h} | null>, least recently used dropped beyond cacheSize():
+// the whole loop (radar and rain frames) fits, so a replay starts from memory
+const cacheSize = () => Math.min(400, Math.max(120, 2 * steps.length + 16));
 const frames = new Map();
 const ready = new Map(); // url → decoded (only those finished)
 const failed = new Set(); // urls that could not be loaded
@@ -154,7 +155,7 @@ function frame(url) {
     return decoded;
   });
   frames.set(url, promise);
-  while (frames.size > CACHE_SIZE) {
+  while (frames.size > cacheSize()) {
     const oldest = frames.keys().next().value;
     frames.delete(oldest);
     ready.delete(oldest);
@@ -467,7 +468,10 @@ function drawAll() {
 /** Decode the next frames (and their motion) ahead of the animation. */
 function prefetch() {
   const { i } = locate(steps, shownMs);
-  for (const s of steps.slice(i, i + (playing ? 4 : 2))) {
+  const ahead = steps.slice(i, i + (playing ? 4 : 2));
+  // near the end of a playing loop: the first frames too, so the replay starts at once
+  if (playing && i >= steps.length - 4) ahead.push(...steps.slice(0, 4));
+  for (const s of ahead) {
     if (has("radar")) frame(radarUrl(s));
     if (has("rain") && s.rain) frame(frameUrl(base, "merge1h", s.rain));
   }
@@ -480,7 +484,15 @@ function tick(now) {
   if (!playing) return;
   const dt = lastTick == null ? 0 : Math.min(100, now - lastTick);
   lastTick = now;
-  const next = advanceClock(clockState, dt, { first: firstTime(), last: lastTime(), rate: MINUTE / msPerDataMinute(speed), holdMs: 1400 });
+  const next = advanceClock(clockState, dt, { first: firstTime(), last: lastTime(), rate: MINUTE / msPerDataMinute(speed), holdMs: 1000 });
+  // a frame that could not be loaded is not waited on: go straight to the next one
+  if (has("radar")) {
+    let { i } = locate(steps, next.ms);
+    while (i < steps.length - 1 && failed.has(radarUrl(steps[i]))) {
+      i += 1;
+      next.ms = steps[i].time;
+    }
+  }
   const target = quantize(next.ms);
   if (target !== shownMs) {
     const previous = shownMs;
