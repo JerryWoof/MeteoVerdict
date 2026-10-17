@@ -265,12 +265,13 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
 
   // the whole country stays in view while the map changes size, until someone moves it
   let keepFit = true;
+  let lastRight = null;
   map.on("movestart", (event) => {
     if (event.originalEvent) keepFit = false;
   });
   new ResizeObserver(() => {
     map.resize();
-    if (keepFit) map.fitBounds(BOUNDS, { padding: 10, duration: 0 });
+    if (keepFit) map.fitBounds(BOUNDS, { padding: { top: 10, bottom: 10, left: 10, right: lastRight ?? 10 }, duration: 0 });
     declutter();
   }).observe(container);
 
@@ -284,10 +285,20 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
       popup.remove();
       if (loaded) paint();
     },
+    /** Fit Czechia beside an open okres panel on wide screens, and back when it closes
+     * (as the forecast map does). */
+    fitBeside(panel) {
+      const right = window.innerWidth > 900 && panel && !panel.hidden ? panel.offsetWidth + 70 : 10;
+      if (right === lastRight) return;
+      const first = lastRight === null;
+      lastRight = right;
+      keepFit = true;
+      map.fitBounds(BOUNDS, { padding: { top: 10, bottom: 10, left: 10, right }, duration: first ? 0 : 400 });
+    },
     /** Make it fit its box again (after being hidden). */
     resize() {
       map.resize();
-      if (keepFit) map.fitBounds(BOUNDS, { padding: 10, duration: 0 });
+      if (keepFit) map.fitBounds(BOUNDS, { padding: { top: 10, bottom: 10, left: 10, right: lastRight ?? 10 }, duration: 0 });
       declutter();
     },
     ready,
