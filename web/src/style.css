@@ -35,8 +35,10 @@
   --fs-ui: 0.85rem;
   --fs-small: 0.75rem;
   --fs-title: 1.2rem;
-  --content-max: 72rem;
-  --map-height: clamp(460px, 74vh, 800px);
+  /* one width for every page, centred; large screens get a wider page and a taller map */
+  --content-max: 100rem;
+  --gutter: max(1rem, calc((100vw - var(--content-max)) / 2));
+  --map-height: clamp(460px, calc(100vh - 230px), 1100px);
   --map-height-phone: clamp(250px, 66vw, 520px);
 }
 :root {
@@ -55,6 +57,62 @@ body {
 }
 select {
   max-width: 100%;
+}
+/* ---------------------------------------------------------------------------------------
+   Page colours: each section has a pastel tint for its control strip and tabs and a stronger
+   accent for the active tab and the menu (the Measured page's teal, one per section). All
+   text on the tints keeps at least 4.5:1. Data colours (palette.js) and map fills are apart.
+   --------------------------------------------------------------------------------------- */
+body.theme-map {
+  --theme-bg: #e7eff9;
+  --theme-line: #c4d5ec;
+  --theme-accent: #2662a6;
+  --theme-ink: #1d4a7c;
+}
+body.theme-forecast {
+  --theme-bg: #fbefda;
+  --theme-line: #efd3a2;
+  --theme-accent: #a8580a;
+  --theme-ink: #6e3c06;
+}
+body.theme-radar {
+  --theme-bg: #eeebfa;
+  --theme-line: #d4ccf0;
+  --theme-accent: #5a44b5;
+  --theme-ink: #3d2f8c;
+}
+body.theme-measured {
+  --theme-bg: var(--measured-bg);
+  --theme-line: var(--measured-line);
+  --theme-accent: var(--measured);
+  --theme-ink: var(--measured-ink);
+}
+body.theme-compare {
+  --theme-bg: #fbe9e6;
+  --theme-line: #f1c7c0;
+  --theme-accent: #b23f35;
+  --theme-ink: #842a22;
+}
+body.theme-data {
+  --theme-bg: #e8edf2;
+  --theme-line: #c8d1dc;
+  --theme-accent: #486078;
+  --theme-ink: #30465b;
+}
+body[class*="theme-"] {
+  --strip-bg: var(--theme-bg);
+  --strip-line: var(--theme-line);
+  --strip-edge: var(--theme-accent);
+}
+/* the menu: the current section in its colour (the detailed forecast is in Forecast's) */
+.site-nav a[aria-current="page"],
+.site-nav a.current-section {
+  margin: 0 -0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--theme-bg, transparent);
+  box-shadow: inset 0 -2px 0 var(--theme-accent, var(--ink));
+  color: var(--theme-ink, var(--ink));
 }
 /* ---------------------------------------------------------------------------------------
    Shared components: every page is built from these (the Measured page's look)
@@ -290,7 +348,7 @@ header {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.5rem 1rem;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem var(--gutter);
 }
 /* the same menu on every page, right after the title; the language button at the end of
    that row; the page's own controls always on a full row of their own below it */
@@ -299,9 +357,9 @@ header {
   flex-wrap: wrap;
   gap: 0.25rem 0.9rem;
 }
-.site-nav a[aria-current="page"] {
+.site-nav a[aria-current="page"],
+.site-nav a.current-section {
   font-weight: 600;
-  color: inherit;
   text-decoration: none;
 }
 #language {
@@ -362,7 +420,7 @@ header p {
 footer {
   font-size: var(--fs-small);
   margin-top: 0.5rem;
-  padding: 0.5rem 1rem 0.6rem;
+  padding: 0.5rem var(--gutter) 0.6rem;
   border-top: 1px solid var(--line);
   color: var(--muted);
 }
@@ -371,8 +429,11 @@ header h1 a {
   text-decoration: none;
 }
 .content {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--content-max) + 2rem);
+  margin-inline: auto;
   padding: 0 1rem 1rem;
-  max-width: var(--content-max);
   min-width: 0;
 }
 .content h2 {
@@ -526,7 +587,7 @@ body.tv > * {
   vertical-align: -0.1em;
 }
 .daytab[aria-pressed="true"] {
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--theme-accent, var(--accent));
   background: var(--surface);
 }
 .when-row {
@@ -1159,7 +1220,7 @@ body.tv.past #ribbon {
 
 /* model comparison (compare.html) */
 .content.wide {
-  max-width: 64rem;
+  max-width: calc(var(--content-max) + 2rem);
 }
 .overview {
   display: grid;
@@ -1423,7 +1484,7 @@ img.eink {
 }
 /* the station page: one chart per resolution, then all elements */
 .content.station-page {
-  max-width: 72rem;
+  max-width: calc(var(--content-max) + 2rem);
 }
 #controls input[type="search"] {
   margin-left: 0.3rem;

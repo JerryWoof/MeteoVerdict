@@ -695,6 +695,8 @@ async function renderLanding() {
     okresPanel.render(data, landing);
   }
   $("measured-panel").classList.toggle("with-panel", Boolean(landing.okres));
+  // as on the forecast map: Czechia moves beside the open okres panel
+  measuredMap.fitBeside(landing.layer === "okresy" && landing.okres ? $("okres-panel") : null);
 }
 
 for (const button of document.querySelectorAll("#layer [data-layer]")) {
