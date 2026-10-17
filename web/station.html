@@ -28,16 +28,16 @@
     <main class="content station-page">
       <!-- the landing: what the stations measured, as the forecast map (measured.js) -->
       <section id="measured" class="measured" aria-labelledby="measured-title">
-        <div class="measured-head">
-          <h2 id="measured-title" data-i18n="measured.heading">Measured weather</h2>
+        <div class="page-head measured-head">
+          <h2 id="measured-title" class="page-title" data-i18n="measured.heading">Measured weather</h2>
           <div id="mode" class="segmented measured-mode" role="group" data-i18n-aria="measured.mode">
             <button type="button" data-mode="measured" data-i18n="measured.mode.weather">Measured weather</button>
             <button type="button" data-mode="kinds" data-i18n="measured.mode.kinds">Kinds of station</button>
           </div>
         </div>
-        <p id="measured-intro" class="note" data-i18n="measured.intro">What ČHMÚ's stations measured.</p>
+        <p id="measured-intro" class="page-intro" data-i18n="measured.intro">What ČHMÚ's stations measured.</p>
         <div id="measured-panel">
-          <nav id="ribbon" class="measured-ribbon" data-i18n-aria="tv.when">
+          <nav id="ribbon" class="strip attached measured measured-ribbon" data-i18n-aria="tv.when">
             <div class="when">
               <div class="day-row">
                 <div id="days" class="daytabs"></div>
@@ -51,10 +51,10 @@
               </div>
             </div>
           </nav>
-          <div class="measured-map-wrap">
-            <aside id="headline" class="past" aria-live="polite"></aside>
-            <div id="measured-map" class="measured-map"></div>
-            <aside id="show-box">
+          <div class="map-wrap measured-map-wrap">
+            <aside id="headline" class="map-box info past" aria-live="polite"></aside>
+            <div id="measured-map" class="map-frame measured-map"></div>
+            <aside id="show-box" class="map-box legend">
               <details id="show" open>
                 <summary data-i18n="tv.onMap">On the map</summary>
                 <fieldset>
@@ -68,37 +68,37 @@
                 </fieldset>
               </details>
             </aside>
-            <aside id="okres-panel" aria-live="polite"></aside>
+            <aside id="okres-panel" class="map-box panel" aria-live="polite"></aside>
           </div>
-          <p id="measured-hint" class="muted small measured-hint" data-i18n="measured.hint">Zoom in for the values of more stations.</p>
+          <p id="measured-hint" class="muted small map-hint measured-hint" data-i18n="measured.hint">Zoom in for the values of more stations.</p>
         </div>
       </section>
       <div id="station-head" class="station-head">
         <p id="back" class="measured-back" hidden><a id="back-link" href="#"></a></p>
-        <h2 id="title" data-i18n="station.title">ČHMÚ station</h2>
-        <p id="facts" class="note"></p>
+        <h2 id="title" class="page-title" data-i18n="station.title">ČHMÚ station</h2>
+        <p id="facts" class="page-intro"></p>
         <p id="message" class="note"></p>
       </div>
       <section id="diary" class="diary" aria-labelledby="diary-title" hidden>
         <h2 id="diary-title" data-i18n="diary.title">Weather at the station</h2>
         <p class="note" data-i18n="diary.intro">What the station measured, day by day: like the forecast, but for the past.</p>
-        <form id="diary-controls" class="diary-controls" autocomplete="off">
+        <form id="diary-controls" class="diary-controls strip standalone measured" autocomplete="off">
           <div class="diary-views segmented" role="group" data-i18n-aria="diary.views">
             <button type="button" data-view="days" data-i18n="diary.view.days">14 days</button>
             <button type="button" data-view="week" data-i18n="diary.view.week">Week</button>
             <button type="button" data-view="month" data-i18n="diary.view.month">Month</button>
           </div>
           <div class="diary-when">
-            <button type="button" id="diary-prev" class="diary-step" data-i18n-aria="diary.prev" aria-label="Earlier">‹</button>
+            <button type="button" id="diary-prev" class="btn diary-step" data-i18n-aria="diary.prev" aria-label="Earlier">‹</button>
             <label><span class="sr-only" data-i18n="diary.date">Day</span><input type="date" id="diary-date" required /></label>
-            <button type="button" id="diary-next" class="diary-step" data-i18n-aria="diary.next" aria-label="Later">›</button>
-            <button type="button" id="diary-latest" data-i18n="diary.latest">Latest</button>
+            <button type="button" id="diary-next" class="btn diary-step" data-i18n-aria="diary.next" aria-label="Later">›</button>
+            <button type="button" id="diary-latest" class="btn" data-i18n="diary.latest">Latest</button>
           </div>
           <p id="diary-range" class="muted small"></p>
         </form>
         <h3 id="diary-period" class="diary-period"></h3>
         <p id="diary-message" class="note" aria-live="polite"></p>
-        <div class="table-scroll"><table id="diary-table" class="diary-table"></table></div>
+        <div class="table-scroll"><table id="diary-table" class="diary-table data-table"></table></div>
         <div id="diary-summary" class="diary-summary"></div>
         <div id="diary-day" class="diary-day" aria-live="polite"></div>
         <details class="diary-defs">
@@ -109,35 +109,35 @@
       <h2 id="detail-title" data-i18n="station.detail" hidden>Detailed data</h2>
       <div id="station-top" class="station-top browse">
         <p class="station-map-actions">
-          <button type="button" id="map-toggle" aria-controls="map-panel" aria-expanded="true" hidden></button>
+          <button type="button" id="map-toggle" class="btn" aria-controls="map-panel" aria-expanded="true" hidden></button>
           <a id="map-all" href="#kinds" data-i18n="map.all" hidden>All stations on a large map</a>
         </p>
         <section id="map-panel" class="station-map-panel" aria-labelledby="map-title">
           <h3 id="map-title" class="sr-only" data-i18n="map.title">Map of stations</h3>
           <p id="map-hint" class="note" data-i18n="map.hint">Click a station on the map or search by name.</p>
-          <form id="map-tools" class="station-map-tools">
-            <label><span data-i18n="map.colour">Colour</span>
+          <form id="map-tools" class="station-map-tools strip attached">
+            <label class="field"><span data-i18n="map.colour">Colour</span>
               <select id="map-colour">
                 <option value="kind" data-i18n="map.colour.kind">by kind</option>
                 <option value="elevation" data-i18n="map.colour.elevation">by elevation</option>
               </select></label>
-            <label id="map-measure-box" hidden><span data-i18n="map.measure">Only stations measuring</span>
+            <label id="map-measure-box" class="field" hidden><span data-i18n="map.measure">Only stations measuring</span>
               <select id="map-measure"></select></label>
             <span id="map-count" class="muted" aria-live="polite"></span>
           </form>
-          <div id="station-map" class="station-map"></div>
-          <div id="map-legend" class="station-map-legend"></div>
+          <div id="station-map" class="map-frame station-map"></div>
+          <div id="map-legend" class="station-map-legend legend-card"></div>
           <p class="muted small station-map-network" data-i18n="map.network">All are ČHMÚ's official network (no amateur stations).</p>
           <p class="muted small station-map-keys" data-i18n="map.keys">Keyboard: focus the map, move it with the arrow keys, zoom with + and −; Enter opens the station in the middle.</p>
         </section>
       </div>
-      <form id="pick" hidden>
-        <label><span data-i18n="station.element">Element</span> <select id="element"></select></label>
+      <form id="pick" class="strip standalone measured" hidden>
+        <label class="field"><span data-i18n="station.element">Element</span> <select id="element"></select></label>
         <span id="how" class="muted small"></span>
       </form>
       <div id="charts"></div>
       <h2 id="elements-title" data-i18n="station.elements" hidden>All elements of this station</h2>
-      <table id="elements" class="doc-table station-elements"></table>
+      <table id="elements" class="doc-table data-table station-elements"></table>
       <p id="note" class="note" data-i18n="station.note"></p>
     </main>
     <footer data-footer="station" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/data-sources.md#chmi-archive">
