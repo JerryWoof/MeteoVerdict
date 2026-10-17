@@ -529,7 +529,7 @@ def station_pages_cmd(
         typer.Option(help="Upload the JSON as station-data.zip to the release data-latest."),
     ] = False,
 ) -> None:
-    """Per-station JSON with every element and its history, for web/station.html."""
+    """Per-station JSON with every element and its history, for web/measured.html."""
     if not stations_path.exists():
         raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
     table = pl.read_parquet(stations_path)
@@ -578,7 +578,7 @@ def observed_map_cmd(
     ] = False,
 ) -> None:
     """What the weather was like: measured values per okres and part of day for the past
-    days of the forecast map (web/tv.html), with our archived forecast beside them."""
+    days of the forecast map (web/forecast.html), with our archived forecast beside them."""
     if not stations_path.exists():
         raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
     if publish and not github_release:
