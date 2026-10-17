@@ -27,6 +27,10 @@ const BOUNDS = [
 // hours of each part of the day, shown under its name
 const HOURS = { night: "0–6", morning: "6–12", afternoon: "12–18", evening: "18–24", day: "0–24" };
 
+// the detailed forecast per okres used to live at forecast.html#CZ0423 (now
+// forecast-detail.html): send those old links there
+if (/^#CZ\w{4}$/.test(window.location.hash)) window.location.replace(`forecast-detail.html${window.location.hash}`);
+
 const map = new MapLibreMap({
   container: "map",
   style: {
@@ -536,7 +540,7 @@ function renderPanel(outlook) {
     week.append(tr);
   }
   const detail = element("a", t("tv.detail"));
-  detail.href = `forecast.html#${state.okres}`;
+  detail.href = `forecast-detail.html#${state.okres}`;
   panel.replaceChildren(
     close,
     element("h2", displayName(info?.name ?? state.okres)),
@@ -809,5 +813,5 @@ async function main() {
 
 // the past days moved to the measured page: an old link to a past day opens it there
 const measured = measuredRedirect(window.location.hash, today(Date.now()));
-if (measured) window.location.replace(`station.html${measured}`);
+if (measured) window.location.replace(`measured.html${measured}`);
 else main();

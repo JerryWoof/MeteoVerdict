@@ -1120,7 +1120,7 @@ files are then partial, so the state is not saved.
 ### Station pages
 
 `mvd station-pages` (module `meteoverdict.station_pages`) writes one JSON per station
-for `web/station.html`, from the archive (`--github-release` first downloads the files it
+for `web/measured.html`, from the archive (`--github-release` first downloads the files it
 needs into `--archive`, default `data/chmi`; `--publish` uploads the folder as
 `station-data.zip` to `data-latest`, which the Pages workflow unpacks into
 `data/scores/station/`):
@@ -1160,7 +1160,7 @@ and 2 GB of memory.
 The top of a station's page, "Počasí na stanici / Weather at the station", shows what
 the station measured day by day, like the forecast but for the past: the last 14 days,
 or any week or month back to the station's first daily record (a date field and
-earlier/later buttons; `station.html?view=month&day=2010-07-15#<WSI>` links to one),
+earlier/later buttons; `measured.html?view=month&day=2010-07-15#<WSI>` links to one),
 with a summary of the period and, for a clicked day, its course. Module
 `meteoverdict.station_diary`, written by `mvd station-pages` with the other station
 files; page logic in `web/src/diary.js`.
@@ -1241,7 +1241,7 @@ growing by about 1 MB a year. Each page view loads one or two decade files of
 
 ## Observed map (`mvd observed-map`)
 
-The measured page (`web/station.html`, "Naměřeno / Measured"; the forecast map shows
+The measured page (`web/measured.html`, "Naměřeno / Measured"; the forecast map shows
 the coming days only, and its old links to a past day open this page) shows what ČHMÚ's
 stations measured by day and part of day: each station with its own values
 ("Stanice / Stations", `<day>-stations.json`, `web/src/measured.js`), or each okres with
