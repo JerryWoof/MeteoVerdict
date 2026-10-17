@@ -11,7 +11,7 @@ import { renderScale } from "./palette.js";
 import { fillPicker, issuedText } from "./picker.js";
 import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, currentPart, dayLabel, displayName, ease,
-  iconName, labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView,
+  iconName, labelFor, lerpRow, mixColor, okresColours, parseOutlook, parseView,
   placeMarkers, playSteps, rampKey, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary,
   today, viewHash, measuredRedirect,
 } from "./tv.js";
@@ -645,14 +645,13 @@ async function transition(target, token) {
 
 /**
  * Play the parts of the shown day ("day") or of every day ("week"), from the part shown
- * now; after each round start again with the next map colour (temperature → rain →
- * wind → cloud → temperature), which is then also shown at the okresy.
+ * now, round after round, with exactly the options chosen (colour, values, legend): play
+ * never switches them.
  */
 async function play(scope) {
   stopPlay();
   playing = scope;
   const token = ++playToken;
-  const chosen = state.shown;
   // a single model: only the parts it covers
   const steps = playSteps(shownView(), scope, state.day);
   if (steps.length === 0) return stopPlay();
@@ -663,12 +662,7 @@ async function play(scope) {
     await sleep(HOLD_MS);
     if (token !== playToken) return;
     i += 1;
-    let target = steps[i % steps.length];
-    if (i % steps.length === 0) {
-      const colour = nextColour(state.colour);
-      target = { ...target, colour, shown: LAYERS.filter((l) => chosen.includes(l) || l === colour) };
-    }
-    if (!(await transition(target, token))) return;
+    if (!(await transition(steps[i % steps.length], token))) return;
   }
 }
 
