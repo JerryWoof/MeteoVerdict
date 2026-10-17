@@ -11,7 +11,8 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 
 import { drawIcon, glyph, iconCanvas } from "./icons.js";
 import { pickLabels } from "./measured.js";
-import { ALL_LAYERS, NEUTRAL, RAMPS, colorFor, iconName, labelFor, rampKey, valueFor } from "./tv.js";
+import { NEUTRAL, RAMPS, colorFor, rampKey } from "./palette.js";
+import { ALL_LAYERS, iconName, labelFor, valueFor } from "./tv.js";
 
 setWorkerUrl(workerUrl);
 
