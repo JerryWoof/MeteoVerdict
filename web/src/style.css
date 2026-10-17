@@ -1,7 +1,48 @@
+/* ---------------------------------------------------------------------------------------
+   Design tokens: the Measured page's look, shared by every page (data colours stay in
+   palette.js / radar-palette.js)
+   --------------------------------------------------------------------------------------- */
+:root {
+  --ink: #1d2329;
+  --ink-soft: #3d4a55;
+  --muted: #5b6670;
+  --muted-strong: #4b5863;
+  --faint: #8a949c;
+  --paper: #f4f1ea;
+  --surface: #ffffff;
+  --surface-warm: #fffdf8;
+  --surface-hover: #f8f6f1;
+  --line: #ddd8cc;
+  --line-strong: #9aa7b1;
+  --map-edge: #c9cfd4;
+  --link: #1f5fa8;
+  --model: #2b7bd1;
+  --accent: #c0392b;
+  --danger: #a3191e;
+  --measured: #0f766e;
+  --measured-ink: #134e4a;
+  --measured-bg: #e6f2f0;
+  --measured-line: #b9d7d2;
+  /* the control strip above a map or a table (neutral; teal on the Measured page) */
+  --strip-bg: #ffffff;
+  --strip-line: #ddd8cc;
+  --strip-edge: #9aa7b1;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --shadow: 0 1px 4px rgba(29, 35, 41, 0.18);
+  --shadow-soft: 0 1px 4px rgba(29, 35, 41, 0.12);
+  --box-bg: rgba(255, 255, 255, 0.95);
+  --fs-ui: 0.85rem;
+  --fs-small: 0.75rem;
+  --fs-title: 1.2rem;
+  --content-max: 72rem;
+  --map-height: clamp(460px, 74vh, 800px);
+  --map-height-phone: clamp(250px, 66vw, 520px);
+}
 :root {
   font-family: system-ui, sans-serif;
-  color: #1d2329;
-  background: #f4f1ea;
+  color: var(--ink);
+  background: var(--paper);
 }
 body {
   margin: 0;
@@ -9,9 +50,233 @@ body {
   grid-template-rows: auto 1fr auto;
   /* one column no wider than the screen: a long select or code line must not widen the page */
   grid-template-columns: minmax(0, 1fr);
-  height: 100vh;
+  min-height: 100vh;
+  background: var(--paper);
 }
 select {
+  max-width: 100%;
+}
+/* ---------------------------------------------------------------------------------------
+   Shared components: every page is built from these (the Measured page's look)
+   --------------------------------------------------------------------------------------- */
+a {
+  color: var(--link);
+}
+/* form controls: one look for every select, date and search field */
+select,
+input[type="date"],
+input[type="search"],
+input[type="text"] {
+  font: inherit;
+  font-size: var(--fs-ui);
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+/* buttons: white with a grey edge, dark when pressed (segmented, play, step, language) */
+.btn {
+  font: inherit;
+  font-size: var(--fs-ui);
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.btn[aria-pressed="true"] {
+  background: var(--ink);
+  color: #ffffff;
+}
+.btn:disabled {
+  color: var(--line-strong);
+  cursor: default;
+}
+/* the page header: a title (with its view switch on the right), then one line saying what
+   the page shows */
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 0.5rem 0 0.25rem;
+}
+.content .page-head h2,
+.page-title {
+  margin: 0;
+  font-size: var(--fs-title);
+}
+.page-intro {
+  font-size: var(--fs-ui);
+  color: var(--muted);
+  margin: 0 0 0.6rem;
+}
+/* the control strip: right above the map or table it drives (attached to a map below) */
+.strip {
+  padding: 0.35rem 0.6rem 0.5rem;
+  border-radius: var(--radius);
+  background: var(--strip-bg);
+  box-shadow: inset 0 -2px 0 var(--strip-edge);
+  font-size: var(--fs-ui);
+}
+.strip.attached {
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.strip + .strip,
+.strip.standalone {
+  margin-bottom: 0.6rem;
+}
+.strip.measured {
+  --strip-bg: var(--measured-bg);
+  --strip-edge: var(--measured);
+  --strip-line: var(--measured-line);
+}
+.strip .day-row {
+  border-bottom-color: var(--strip-line);
+}
+.strip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  min-width: 0;
+}
+.strip-row + .strip-row {
+  margin-top: 0.4rem;
+}
+/* a labelled control in a strip: the label in bold, the control after it */
+.field {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.4rem;
+  min-width: 0;
+  max-width: 100%;
+  font-weight: 600;
+}
+.field select,
+.field input {
+  min-width: 0;
+  max-width: 100%;
+  font-weight: 400;
+}
+/* a map: framed, its boxes floating on it (on phones they move above and below it) */
+.map-wrap {
+  position: relative;
+}
+.map-frame {
+  position: relative;
+  height: var(--map-height);
+  border: 1px solid var(--map-edge);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--paper);
+}
+.strip.attached + .map-wrap .map-frame,
+.strip.attached + .map-frame {
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+.map-hint {
+  margin: 0.3rem 0 0.8rem;
+}
+.map-box {
+  position: absolute;
+  z-index: 2;
+  background: var(--box-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: var(--fs-ui);
+}
+.map-box.info {
+  left: 0.75rem;
+  top: 0.75rem;
+  padding: 0.5rem 0.8rem;
+  max-width: 21rem;
+}
+.map-box.legend {
+  left: 0.75rem;
+  bottom: 1.6rem;
+  width: 15rem;
+  padding: 0.4rem 0.7rem 0.5rem;
+}
+.map-box.panel {
+  right: 3.2rem;
+  top: 0.75rem;
+  width: 21rem;
+  /* ends above the map attribution in the bottom right corner (it scrolls when longer) */
+  max-height: calc(100% - 3.2rem);
+  overflow-y: auto;
+  padding: 0.6rem 0.9rem 0.8rem;
+}
+.map-box:empty {
+  display: none;
+}
+/* a box's heading and the small capitals over a group in it */
+.box-title,
+.map-box summary {
+  font-weight: 600;
+}
+.map-box summary {
+  cursor: pointer;
+}
+.box-label,
+.map-box fieldset > legend {
+  padding: 0;
+  font-size: var(--fs-small);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+/* a legend under a small map or beside a chart: the boxes' look, in the page */
+.legend-card {
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.7rem 0.5rem;
+  background: var(--box-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+  font-size: 0.8rem;
+}
+/* a panel in the page (a summary, a test, a day's detail) */
+.card {
+  padding: 0.6rem 0.9rem;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+}
+/* tables: the diary's look (bold grey heads, thin lines, figures right-aligned) */
+.data-table {
+  border-collapse: collapse;
+  font-size: var(--fs-ui);
+}
+.data-table th {
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.data-table .num,
+.data-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.data-table tr.current {
+  background: var(--paper);
+  font-weight: 600;
+}
+/* charts (Observable Plot): on white, as the station's charts */
+.chart-card svg,
+#charts svg {
+  background: var(--surface);
+  border-radius: var(--radius-sm);
   max-width: 100%;
 }
 /* header parts and their labels shrink to the screen too, so a long select can */
@@ -43,7 +308,7 @@ header {
   order: 1;
   margin-left: auto;
 }
-#controls {
+header #controls {
   order: 2;
   flex-basis: 100%;
   display: flex;
@@ -51,7 +316,8 @@ header {
   gap: 0.5rem 1rem;
   font-size: 0.85rem;
 }
-#controls select {
+header #controls select,
+header #controls input {
   margin-left: 0.3rem;
 }
 /* "?" with a tooltip, e.g. what the periods cover */
@@ -60,9 +326,9 @@ header {
   width: 1.1rem;
   height: 1.1rem;
   margin-left: 0.3rem;
-  border: 1px solid #5b6670;
+  border: 1px solid var(--muted);
   border-radius: 50%;
-  color: #5b6670;
+  color: var(--muted);
   font-size: 0.75rem;
   line-height: 1.1rem;
   text-align: center;
@@ -74,25 +340,16 @@ header h1 {
 }
 header p {
   margin: 0;
-  color: #5b6670;
+  color: var(--muted);
 }
 #map {
   min-height: 300px;
   position: relative;
 }
 #legend {
-  position: absolute;
-  z-index: 1;
-  left: 0.75rem;
-  bottom: 1.5rem;
-  padding: 0.5rem 0.75rem;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 4px;
+  width: auto;
   font-size: 0.8rem;
   line-height: 1.5;
-}
-#legend:empty {
-  display: none;
 }
 .swatch {
   display: inline-block;
@@ -103,13 +360,11 @@ header p {
   border-radius: 2px;
 }
 footer {
-  font-size: 0.75rem;
-  padding: 0.4rem 1rem;
-  color: #5b6670;
-}
-body.page {
-  height: auto;
-  min-height: 100vh;
+  font-size: var(--fs-small);
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem 0.6rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
 }
 header h1 a {
   color: inherit;
@@ -117,7 +372,8 @@ header h1 a {
 }
 .content {
   padding: 0 1rem 1rem;
-  max-width: 60rem;
+  max-width: var(--content-max);
+  min-width: 0;
 }
 .content h2 {
   font-size: 1.05rem;
@@ -125,25 +381,13 @@ header h1 a {
 }
 .note {
   font-size: 0.85rem;
-  color: #5b6670;
+  color: var(--muted);
   margin: 0 0 0.6rem;
 }
 #ranking,
-#days,
+table#days,
 #weights {
-  border-collapse: collapse;
-  font-size: 0.85rem;
   width: 100%;
-}
-#ranking th,
-#ranking td,
-#days th,
-#days td,
-#weights th,
-#weights td {
-  text-align: left;
-  padding: 0.25rem 0.5rem;
-  border-bottom: 1px solid #ddd8cc;
 }
 #weights td {
   vertical-align: top;
@@ -152,30 +396,12 @@ header h1 a {
 #weights .winner {
   font-weight: 600;
 }
-#ranking .num,
-#days .num,
-#days th.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
 #days .sun {
   font-size: inherit;
 }
 /* which forecast the forecast page shows: on a row of its own, as wide as the screen allows */
-#model-pick {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.3rem 0.5rem;
-  margin: 0.3rem 0 0.6rem;
-  font-weight: 600;
-}
 #model-pick select {
-  flex: 1 1 14rem;
-  min-width: 0;
   max-width: 28rem;
-  font-size: 1rem;
-  padding: 0.35rem 0.4rem;
 }
 /* the day table fits a phone: tighter cells, sunrise above sunset; the tables scroll on their own
    rather than widening the page if they still do not fit */
@@ -206,32 +432,25 @@ header h1 a {
   font-size: 0.9rem;
 }
 #ranking tr.baseline {
-  color: #5b6670;
+  color: var(--muted);
   font-style: italic;
 }
 #ranking tr.short {
-  color: #5b6670;
+  color: var(--muted);
 }
 #language {
   margin-left: auto;
   font: inherit;
   font-size: 0.8rem;
-  padding: 0.15rem 0.5rem;
-  border: 1px solid #9aa7b1;
-  border-radius: 3px;
-  background: #ffffff;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
 }
 
 /* TV-style forecast map (tv.html) */
-body.tv {
-  grid-template-rows: auto auto 1fr auto;
-  height: auto;
-  min-height: 100vh;
-}
-body.tv #map {
-  min-height: 70vh;
-}
 /* grid items may shrink below their content (the day tabs scroll instead) */
 body.tv > * {
   min-width: 0;
@@ -241,14 +460,14 @@ body.tv > * {
   vertical-align: -0.15em;
 }
 /* when: day tabs, then the parts of the day as one segmented control */
-#ribbon {
-  padding: 0 1rem 0.5rem;
-}
 .day-row {
   display: flex;
   align-items: flex-end;
   gap: 1rem;
-  border-bottom: 2px solid #ddd8cc;
+  border-bottom: 2px solid var(--strip-line);
+}
+.day-row .daytabs {
+  flex: 1 1 auto;
 }
 .day-row .play {
   margin-bottom: 0.3rem;
@@ -277,12 +496,12 @@ body.tv > * {
   border-bottom: 3px solid transparent;
   background: none;
   font: inherit;
-  color: #5b6670;
+  color: var(--muted);
   cursor: pointer;
 }
 .daytab strong {
   font-size: 1rem;
-  color: #1d2329;
+  color: var(--ink);
   white-space: nowrap;
 }
 .daytab small {
@@ -297,7 +516,7 @@ body.tv > * {
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  color: #5b6670;
+  color: var(--muted);
 }
 .sun .glyph + span + .glyph {
   margin-left: 0.35rem;
@@ -307,8 +526,8 @@ body.tv > * {
   vertical-align: -0.1em;
 }
 .daytab[aria-pressed="true"] {
-  border-bottom-color: #c0392b;
-  background: #ffffff;
+  border-bottom-color: var(--accent);
+  background: var(--surface);
 }
 .when-row {
   display: flex;
@@ -319,10 +538,10 @@ body.tv > * {
 }
 .segmented {
   display: inline-flex;
-  border: 1px solid #9aa7b1;
+  border: 1px solid var(--line-strong);
   border-radius: 6px;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--surface);
 }
 .segmented button {
   display: flex;
@@ -330,11 +549,11 @@ body.tv > * {
   align-items: center;
   padding: 0.25rem 0.8rem;
   border: none;
-  border-left: 1px solid #ddd8cc;
+  border-left: 1px solid var(--line);
   background: none;
   font: inherit;
   font-size: 0.85rem;
-  color: #1d2329;
+  color: var(--ink);
   cursor: pointer;
 }
 .segmented button:first-child {
@@ -342,10 +561,10 @@ body.tv > * {
 }
 .segmented button small {
   font-size: 0.7rem;
-  color: #5b6670;
+  color: var(--muted);
 }
 .segmented button[aria-pressed="true"] {
-  background: #1d2329;
+  background: var(--ink);
   color: #ffffff;
 }
 .segmented button[aria-pressed="true"] small {
@@ -355,14 +574,15 @@ body.tv > * {
   white-space: nowrap;
   font: inherit;
   font-size: 0.85rem;
-  padding: 0.35rem 0.8rem;
-  border: 1px solid #9aa7b1;
-  border-radius: 999px;
-  background: #ffffff;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
 }
 .play[aria-pressed="true"] {
-  background: #1d2329;
+  background: var(--ink);
   color: #ffffff;
 }
 /* which forecast the whole map shows (beside the parts of the day) */
@@ -381,14 +601,14 @@ body.tv > * {
   font: inherit;
   font-weight: 400;
   padding: 0.3rem 0.4rem;
-  border: 1px solid #2b7bd1;
+  border: 1px solid var(--model);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--surface);
 }
 /* a single model on the map: marked so it is not taken for ours */
 #headline.single {
   box-shadow:
-    inset 4px 0 0 #2b7bd1,
+    inset 4px 0 0 var(--model),
     0 1px 4px rgba(29, 35, 41, 0.18);
 }
 #headline .model-banner {
@@ -412,29 +632,13 @@ body.tv > * {
   font: inherit;
   font-weight: 600;
   padding: 0.2rem 0.6rem;
-  border: 1px solid #2b7bd1;
+  border: 1px solid var(--model);
   border-radius: 999px;
-  background: #ffffff;
-  color: #1f5fa8;
+  background: var(--surface);
+  color: var(--link);
   cursor: pointer;
 }
 /* boxes on the map */
-#headline,
-#show-box,
-#okres-panel {
-  position: absolute;
-  z-index: 2;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(29, 35, 41, 0.18);
-  font-size: 0.85rem;
-}
-#headline {
-  left: 0.75rem;
-  top: 0.75rem;
-  padding: 0.5rem 0.8rem;
-  max-width: 21rem;
-}
 #headline h2 {
   font-size: 1.05rem;
   margin: 0 0 0.25rem;
@@ -446,7 +650,7 @@ body.tv > * {
   margin: 0.1rem 0 0.3rem;
   padding: 0.1rem 0.6rem;
   border-radius: 999px;
-  background: #1d2329;
+  background: var(--ink);
   color: #ffffff;
   font-weight: 600;
 }
@@ -456,27 +660,10 @@ body.tv > * {
   align-items: center;
   margin: 0.15rem 0;
 }
-#show-box {
-  left: 0.75rem;
-  bottom: 1.6rem;
-  width: 15rem;
-  padding: 0.4rem 0.7rem 0.5rem;
-}
-#show summary {
-  font-weight: 600;
-  cursor: pointer;
-}
 #show fieldset {
   border: none;
   margin: 0.4rem 0 0;
   padding: 0;
-}
-#show legend {
-  padding: 0;
-  font-size: 0.75rem;
-  color: #5b6670;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
 }
 #values,
 #colours {
@@ -503,20 +690,8 @@ body.tv > * {
   font-size: 0.75rem;
 }
 #scale .scale-ends {
-  color: #5b6670;
+  color: var(--muted);
   font-size: 0.75rem;
-}
-#okres-panel {
-  right: 3.2rem;
-  top: 0.75rem;
-  width: 21rem;
-  /* ends above the map attribution in the bottom right corner (it scrolls when longer) */
-  max-height: calc(100% - 3.2rem);
-  overflow-y: auto;
-  padding: 0.6rem 0.9rem 0.8rem;
-}
-#okres-panel:empty {
-  display: none;
 }
 #okres-panel h2 {
   font-size: 1.15rem;
@@ -524,7 +699,7 @@ body.tv > * {
 }
 #okres-panel .when {
   margin: 0 0 0.3rem;
-  color: #5b6670;
+  color: var(--muted);
 }
 #okres-panel .close {
   float: right;
@@ -552,12 +727,12 @@ body.tv > * {
 #okres-panel .model-note {
   margin: 0 0 0.3rem;
   font-size: 0.75rem;
-  color: #5b6670;
+  color: var(--muted);
 }
 /* a single model's raw forecast: marked so it is not taken for ours */
 #okres-panel.single {
   box-shadow:
-    inset 4px 0 0 #2b7bd1,
+    inset 4px 0 0 var(--model),
     0 1px 4px rgba(29, 35, 41, 0.18);
 }
 #okres-panel .now {
@@ -576,7 +751,7 @@ body.tv > * {
 /* strong-gust warning (outlook.json gust_warning), also in the forecast page's table */
 #okres-panel .gust-warning,
 #days .gust-warning {
-  color: #a3191e;
+  color: var(--danger);
   font-weight: 600;
 }
 #okres-panel .strip {
@@ -592,14 +767,14 @@ body.tv > * {
   align-items: center;
   padding: 0.3rem 0;
   border-radius: 4px;
-  background: #f4f1ea;
+  background: var(--paper);
 }
 #okres-panel .part-name {
   font-size: 0.75rem;
-  color: #5b6670;
+  color: var(--muted);
 }
 .rain {
-  color: #2b7bd1;
+  color: var(--model);
 }
 #okres-panel .week {
   width: 100%;
@@ -608,7 +783,7 @@ body.tv > * {
 }
 #okres-panel .week td {
   padding: 0.15rem 0.3rem;
-  border-bottom: 1px solid #ddd8cc;
+  border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
 #okres-panel .week .num {
@@ -620,7 +795,7 @@ body.tv > * {
   cursor: pointer;
 }
 #okres-panel .week tr.current {
-  background: #f4f1ea;
+  background: var(--paper);
   font-weight: 600;
 }
 .wx-marker {
@@ -632,7 +807,7 @@ body.tv > * {
   background: none;
   cursor: pointer;
   font: inherit;
-  color: #1d2329;
+  color: var(--ink);
   text-shadow:
     0 0 3px #ffffff,
     0 0 3px #ffffff,
@@ -677,7 +852,7 @@ body.tv [hidden] {
   white-space: nowrap;
 }
 .wx-chip.precipitation {
-  color: #1f5fa8;
+  color: var(--link);
 }
 .wx-chip.wind {
   color: #23703a;
@@ -696,36 +871,12 @@ body.tv [hidden] {
   text-decoration: underline;
 }
 @media (max-width: 700px) {
-  #okres-panel {
-    left: 0.5rem;
-    right: 0.5rem;
-    top: auto;
-    /* above the map attribution, like the "on the map" box */
-    bottom: 1.8rem;
-    width: auto;
-    max-height: 45%;
-  }
   .wx-marker {
     font-size: 0.8rem;
-  }
-  #headline {
-    max-width: calc(100% - 4rem);
-    font-size: 0.8rem;
-  }
-  #show-box {
-    left: 0.5rem;
-    bottom: 1.8rem;
-    width: auto;
-    max-width: calc(100% - 1rem);
   }
   /* pinch to zoom */
   body.tv .maplibregl-ctrl-top-right {
     display: none;
-  }
-  #headline {
-    left: 0.5rem;
-    right: 0.5rem;
-    max-width: none;
   }
   /* phones: day tabs and parts of the day each take a full row (the tabs scroll),
      both play buttons share the row below at their natural width */
@@ -740,7 +891,7 @@ body.tv [hidden] {
   }
   .daytabs {
     flex: 1 0 100%;
-    border-bottom: 2px solid #ddd8cc;
+    border-bottom: 2px solid var(--strip-line);
   }
   .segmented {
     flex: 1 0 100%;
@@ -800,16 +951,16 @@ body.tv [hidden] {
    a forecast: teal tabs, a tinted ribbon, a "Measured" banner and badge */
 .daytab.past {
   min-width: 6.5rem;
-  color: #134e4a;
+  color: var(--measured-ink);
   background: repeating-linear-gradient(135deg, #eef6f4 0 6px, #e3f0ed 6px 12px);
 }
 .daytab.past small {
-  color: #0f766e;
+  color: var(--measured);
   font-weight: 600;
 }
 .daytab.past[aria-pressed="true"] {
-  border-bottom-color: #0f766e;
-  background: #ffffff;
+  border-bottom-color: var(--measured);
+  background: var(--surface);
 }
 .daytab.older {
   cursor: default;
@@ -822,33 +973,35 @@ body.tv [hidden] {
   padding: 0 0.15rem;
   border: 1px solid #8fbab3;
   border-radius: 4px;
-  background: #ffffff;
+  background: var(--surface);
 }
 .daytabs-divider {
   flex: none;
   width: 2px;
   margin: 0.35rem 0.35rem 0.3rem;
-  background: #0f766e;
+  background: var(--measured);
   opacity: 0.5;
 }
+/* the forecast map on a past day: its strip turns the Measured page's teal */
 body.tv.past #ribbon {
-  background: #e6f2f0;
-  box-shadow: inset 0 -2px 0 #0f766e;
+  --strip-bg: var(--measured-bg);
+  --strip-edge: var(--measured);
+  --strip-line: var(--measured-line);
 }
 .map-model-note {
   margin: 0;
   min-width: 0;
   font-size: 0.8rem;
-  color: #134e4a;
+  color: var(--measured-ink);
 }
 .segmented button:disabled {
-  color: #9aa7b1;
+  color: var(--line-strong);
   cursor: not-allowed;
 }
 #headline.past,
 #okres-panel.past {
   box-shadow:
-    inset 4px 0 0 #0f766e,
+    inset 4px 0 0 var(--measured),
     0 1px 4px rgba(29, 35, 41, 0.18);
 }
 .past-banner {
@@ -859,7 +1012,7 @@ body.tv.past #ribbon {
   margin: 0 0 0.35rem;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
-  background: #0f766e;
+  background: var(--measured);
   color: #ffffff;
 }
 .past-banner strong {
@@ -869,13 +1022,13 @@ body.tv.past #ribbon {
 #headline .source {
   margin: 0.3rem 0 0;
   font-size: 0.72rem;
-  color: #5b6670;
+  color: var(--muted);
 }
 .past-badge {
   display: inline-block;
   padding: 0 0.45rem;
   border-radius: 999px;
-  background: #0f766e;
+  background: var(--measured);
   color: #ffffff;
   font-size: 0.75rem;
   font-weight: 600;
@@ -888,17 +1041,17 @@ body.tv.past #ribbon {
 }
 /* a value from the neighbours' stations (an okres without its own) */
 #okres-panel .facts .borrowed {
-  color: #134e4a;
+  color: var(--measured-ink);
 }
 #okres-panel .facts .borrowed::before {
   content: "↔ ";
-  color: #0f766e;
+  color: var(--measured);
 }
 .obs-stations ul.borrowed {
   columns: 1;
 }
 .obs-stations .borrowed .where {
-  color: #5b6670;
+  color: var(--muted);
   font-size: 0.85em;
 }
 #okres-panel h3 {
@@ -920,12 +1073,12 @@ body.tv.past #ribbon {
 .compare-table th {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #5b6670;
+  color: var(--muted);
   text-align: left;
 }
 .compare-table td {
   padding: 0.15rem 0.25rem;
-  border-bottom: 1px solid #ddd8cc;
+  border-bottom: 1px solid var(--line);
   vertical-align: middle;
   white-space: nowrap;
 }
@@ -944,7 +1097,7 @@ body.tv.past #ribbon {
   cursor: pointer;
 }
 .compare-table tr.current {
-  background: #f4f1ea;
+  background: var(--paper);
   font-weight: 600;
 }
 /* the okres panel's forecast vs. measured: one row per forecast, Δ under each value */
@@ -961,19 +1114,19 @@ body.tv.past #ribbon {
 .compare-table.matrix th.lead {
   font-size: 0.8rem;
   text-align: left;
-  color: #1d2329;
+  color: var(--ink);
   padding: 0.15rem 0.25rem;
-  border-bottom: 1px solid #ddd8cc;
+  border-bottom: 1px solid var(--line);
 }
 .compare-table.matrix th.lead small {
   display: block;
   font-weight: 400;
-  color: #5b6670;
+  color: var(--muted);
   font-size: 0.68rem;
   white-space: normal;
 }
 .compare-table.matrix tr.measured {
-  background: #e6f2f0;
+  background: var(--measured-bg);
 }
 .compare-table.matrix tr.rebuilt th.lead small {
   color: #8a5a00;
@@ -981,7 +1134,7 @@ body.tv.past #ribbon {
 .compare-table.matrix td.sym {
   text-align: center;
   font-size: 0.7rem;
-  color: #5b6670;
+  color: var(--muted);
 }
 .compare-table.matrix td.num span {
   display: block;
@@ -989,7 +1142,7 @@ body.tv.past #ribbon {
 .compare-table.matrix .delta {
   display: block;
   font-size: 0.7rem;
-  color: #5b6670;
+  color: var(--muted);
 }
 .obs-stations ul {
   margin: 0 0 0.4rem;
@@ -1016,11 +1169,12 @@ body.tv.past #ribbon {
 }
 #mini-map {
   height: 340px;
-  border-radius: 6px;
-  overflow: hidden;
 }
 .mini-legend {
   display: flex;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
   flex-wrap: wrap;
   gap: 0.15rem 0.8rem;
   font-size: 0.78rem;
@@ -1030,10 +1184,6 @@ body.tv.past #ribbon {
 }
 #summary {
   align-self: start;
-  padding: 0.6rem 0.9rem;
-  background: #ffffff;
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(29, 35, 41, 0.12);
   font-size: 0.9rem;
 }
 #summary h2 {
@@ -1064,8 +1214,8 @@ body.tv.past #ribbon {
 
 /* open data page (api.html) */
 pre.code {
-  background: #1d2329;
-  color: #f4f1ea;
+  background: var(--ink);
+  color: var(--paper);
   padding: 0.6rem 0.8rem;
   border-radius: 6px;
   overflow-x: auto;
@@ -1076,16 +1226,11 @@ pre.code {
   display: block;
   max-width: 100%;
   overflow-x: auto;
-  border-collapse: collapse;
-  font-size: 0.85rem;
   width: 100%;
 }
 .doc-table th,
 .doc-table td {
-  text-align: left;
   vertical-align: top;
-  padding: 0.3rem 0.5rem;
-  border-bottom: 1px solid #ddd8cc;
 }
 #links {
   font-size: 0.85rem;
@@ -1112,16 +1257,16 @@ pre.code {
 }
 .legend-item.static {
   cursor: default;
-  color: #5b6670;
+  color: var(--muted);
 }
 .legend-item .count {
   margin-left: auto;
   padding-left: 0.6rem;
-  color: #5b6670;
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 .legend-item[aria-pressed="true"] {
-  background: #1d2329;
+  background: var(--ink);
   color: #ffffff;
 }
 .legend-item[aria-pressed="true"] .count {
@@ -1131,13 +1276,13 @@ button.legend-item:hover {
   background: #ece8de;
 }
 button.legend-item[aria-pressed="true"]:hover {
-  background: #1d2329;
+  background: var(--ink);
 }
 .legend-hint {
   margin-top: 0.3rem;
   max-width: 14rem;
   font-size: 0.72rem;
-  color: #5b6670;
+  color: var(--muted);
 }
 #hover {
   position: absolute;
@@ -1154,27 +1299,10 @@ button.legend-item[aria-pressed="true"]:hover {
   display: none;
 }
 .muted {
-  color: #5b6670;
+  color: var(--muted);
 }
 .small {
   font-size: 0.75rem;
-}
-#detail {
-  position: absolute;
-  z-index: 2;
-  right: 3.2rem;
-  top: 0.75rem;
-  width: 22rem;
-  max-height: calc(100% - 1.5rem);
-  overflow-y: auto;
-  padding: 0.6rem 0.9rem 0.8rem;
-  background: rgba(255, 255, 255, 0.97);
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(29, 35, 41, 0.18);
-  font-size: 0.85rem;
-}
-#detail:empty {
-  display: none;
 }
 #detail h2 {
   font-size: 1.15rem;
@@ -1185,7 +1313,7 @@ button.legend-item[aria-pressed="true"]:hover {
   margin: 0.7rem 0 0.25rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #5b6670;
+  color: var(--muted);
 }
 #detail p {
   margin: 0.2rem 0;
@@ -1203,7 +1331,7 @@ button.legend-item[aria-pressed="true"]:hover {
   border: none;
   background: none;
   padding: 0;
-  color: #1f5fa8;
+  color: var(--link);
   font: inherit;
   cursor: pointer;
 }
@@ -1243,7 +1371,7 @@ button.legend-item[aria-pressed="true"]:hover {
   gap: 0.2rem;
   padding: 0.1rem 0.45rem 0.1rem 0.3rem;
   border-radius: 999px;
-  background: #f4f1ea;
+  background: var(--paper);
   font-size: 0.75rem;
 }
 #detail .chip b {
@@ -1263,7 +1391,7 @@ button.legend-item[aria-pressed="true"]:hover {
   padding: 0;
   font: inherit;
   font-size: 0.8rem;
-  color: #1f5fa8;
+  color: var(--link);
   cursor: pointer;
 }
 #detail .links {
@@ -1273,14 +1401,6 @@ button.legend-item[aria-pressed="true"]:hover {
   margin-top: 0.6rem;
 }
 @media (max-width: 700px) {
-  #detail {
-    left: 0.5rem;
-    right: 0.5rem;
-    top: auto;
-    bottom: 0.5rem;
-    width: auto;
-    max-height: 55%;
-  }
   .legend-hint {
     display: none;
   }
@@ -1292,7 +1412,7 @@ img.eink {
   width: 100%;
   max-width: 800px;
   height: auto;
-  border: 1px solid #9aa7b1;
+  border: 1px solid var(--line-strong);
   border-radius: 6px;
 }
 
@@ -1312,23 +1432,19 @@ img.eink {
 #pick {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem 1rem;
   margin: 0.5rem 0 0.75rem;
 }
 #pick[hidden] {
   display: none;
 }
-#pick select {
-  margin-left: 0.3rem;
-  max-width: calc(100% - 0.3rem);
-}
 .station-chart h3 {
   font-size: 0.95rem;
   margin: 1rem 0 0.25rem;
 }
 .station-chart svg {
-  background: #ffffff;
+  background: var(--surface);
   border-radius: 4px;
   max-width: 100%;
 }
@@ -1336,7 +1452,7 @@ img.eink {
   font-size: 0.8rem;
 }
 .station-elements tr.muted td {
-  color: #8a949c;
+  color: var(--faint);
 }
 /* wide tables scroll sideways on phones instead of widening the page */
 table.station-elements {
@@ -1370,7 +1486,7 @@ body.station #facts {
   margin-top: 0;
 }
 .radar-when .hint {
-  color: #5b6670;
+  color: var(--muted);
   font-size: 0.75rem;
 }
 #day-pick,
@@ -1390,12 +1506,12 @@ body.station #facts {
   font: inherit;
   font-size: 0.85rem;
   padding: 0.25rem 0.4rem;
-  border: 1px solid #9aa7b1;
+  border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--surface);
 }
 .segmented button:disabled {
-  color: #9aa7b1;
+  color: var(--line-strong);
   cursor: default;
 }
 /* what the map shows: the big time label */
@@ -1419,14 +1535,14 @@ body.station #facts {
   font-weight: 600;
 }
 #rel {
-  color: #4b5863;
+  color: var(--muted-strong);
 }
 #when .badge,
 #headline .badge {
   display: inline-block;
   padding: 0.1rem 0.6rem;
   border-radius: 999px;
-  background: #1d2329;
+  background: var(--ink);
   color: #ffffff;
   font-size: 0.8rem;
   font-weight: 600;
@@ -1452,7 +1568,7 @@ body.station #facts {
   position: relative;
   z-index: 1;
   background: transparent;
-  accent-color: #1d2329;
+  accent-color: var(--ink);
 }
 #ticks {
   position: absolute;
@@ -1474,7 +1590,7 @@ body.station #facts {
   bottom: 0;
   width: 1px;
   height: 0.3rem;
-  background: #9aa7b1;
+  background: var(--line-strong);
 }
 #ticks .frame.forecast {
   background: #d9822b;
@@ -1483,13 +1599,13 @@ body.station #facts {
   bottom: -0.15rem;
   width: 1px;
   height: 0.55rem;
-  background: #1d2329;
+  background: var(--ink);
 }
 #ticks .now {
   top: -0.1rem;
   bottom: -0.2rem;
   width: 2px;
-  background: #c0392b;
+  background: var(--accent);
 }
 #tick-labels {
   position: absolute;
@@ -1499,7 +1615,7 @@ body.station #facts {
   height: 1rem;
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
-  color: #4b5863;
+  color: var(--muted-strong);
 }
 #tick-labels span {
   position: absolute;
@@ -1508,7 +1624,7 @@ body.station #facts {
 }
 #ticks .now-label {
   top: -0.95rem;
-  color: #c0392b;
+  color: var(--accent);
   font-size: 0.7rem;
   font-weight: 700;
   line-height: 1;
@@ -1521,7 +1637,7 @@ body.station #facts {
 #headline .muted,
 #radar-legend .note,
 #point-panel .muted {
-  color: #5b6670;
+  color: var(--muted);
   font-size: 0.75rem;
 }
 #headline .fresh {
@@ -1531,7 +1647,7 @@ body.station #facts {
 #headline .fresh.stale,
 #headline .warning,
 #status.stale {
-  color: #a3191e;
+  color: var(--danger);
   font-weight: 600;
 }
 #headline .warning {
@@ -1612,7 +1728,7 @@ body.radar.forecast #map::after {
   outline: 1px solid rgba(0, 0, 0, 0.12);
 }
 .legend-rows .mm {
-  color: #4b5863;
+  color: var(--muted-strong);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1631,7 +1747,7 @@ body.radar.forecast #map::after {
   margin: 0.25rem 0 0;
 }
 #radar-legend .note.strong {
-  color: #1d2329;
+  color: var(--ink);
   font-weight: 600;
 }
 .radar-scale {
@@ -1655,7 +1771,7 @@ body.radar.forecast #map::after {
 .radar-scale .numbers span {
   font-size: 0.6rem;
   font-variant-numeric: tabular-nums;
-  color: #5b6670;
+  color: var(--muted);
   overflow: visible;
   white-space: nowrap;
 }
@@ -1670,7 +1786,7 @@ body.radar #show-box {
   top: 5.2rem;
   bottom: auto;
   width: 19rem;
-  max-height: calc(100% - 7.5rem);
+  max-height: calc(100% - 8.2rem);
   overflow-y: auto;
 }
 #point-hint {
@@ -1680,23 +1796,20 @@ body.radar #show-box {
 #point-hint .locate {
   font: inherit;
   padding: 0.1rem 0.5rem;
-  border: 1px solid #9aa7b1;
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--surface);
   cursor: pointer;
 }
 /* rain at a place */
+/* rain at a place: bottom left (the layers are on the right) */
 #point-panel {
-  position: absolute;
-  z-index: 2;
   left: 0.75rem;
+  right: auto;
+  top: auto;
   bottom: 1.6rem;
   width: 20rem;
-  padding: 0.5rem 0.7rem;
-  background: rgba(255, 255, 255, 0.96);
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(29, 35, 41, 0.18);
-  font-size: 0.85rem;
+  max-height: calc(100% - 3.2rem);
 }
 #point-panel .point-title {
   display: flex;
@@ -1734,14 +1847,14 @@ body.radar #show-box {
   stroke-width: 1;
 }
 .point-chart .base {
-  stroke: #9aa7b1;
+  stroke: var(--line-strong);
 }
 .point-chart .now {
-  stroke: #c0392b;
+  stroke: var(--accent);
   stroke-width: 1.5;
 }
 .point-chart .shown {
-  stroke: #1d2329;
+  stroke: var(--ink);
   stroke-dasharray: 2 2;
 }
 .point-chart .bar.forecast {
@@ -1749,7 +1862,7 @@ body.radar #show-box {
 }
 .point-chart .axis {
   font-size: 9px;
-  fill: #4b5863;
+  fill: var(--muted-strong);
 }
 .cell-popup .maplibregl-popup-content {
   font-size: 0.82rem;
@@ -1785,23 +1898,6 @@ body.radar #show-box {
     order: 0;
     padding: 0.3rem 0.6rem;
   }
-  body.radar #show-box {
-    left: 0.5rem;
-    right: auto;
-    top: auto;
-    bottom: 1.8rem;
-    width: auto;
-    max-width: calc(100% - 1rem);
-    max-height: 55%;
-  }
-  #point-panel {
-    left: 0.5rem;
-    right: 0.5rem;
-    bottom: 1.8rem;
-    width: auto;
-    max-height: 60%;
-    overflow-y: auto;
-  }
   #headline h2 {
     font-size: 0.95rem;
     margin: 0;
@@ -1819,27 +1915,19 @@ body.radar #show-box {
 }
 /* event skill for farmers (compare.html) */
 .farm-table {
-  border-collapse: collapse;
-  font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
 }
 .farm-table th,
 .farm-table td {
-  padding: 0.3rem 0.55rem;
-  border-bottom: 1px solid #ddd8cc;
-  text-align: left;
   white-space: nowrap;
-}
-.farm-table .num {
-  text-align: right;
 }
 .farm-table td.num {
   min-width: 4.2rem;
-  border-left: 2px solid #f4f1ea;
+  border-left: 2px solid var(--paper);
 }
 .farm-table td.best {
   font-weight: 700;
-  outline: 2px solid #1d2329;
+  outline: 2px solid var(--ink);
   outline-offset: -2px;
 }
 .farm-table td.empty {
@@ -1848,7 +1936,7 @@ body.radar #show-box {
 .farm-table tr.events th,
 .farm-table tr.events td {
   font-size: 0.78rem;
-  color: #5b6670;
+  color: var(--muted);
   border-bottom: none;
 }
 .farm-table tr.events td.small {
@@ -1861,10 +1949,6 @@ body.radar #show-box {
 /* does our forecast beat the best model? (compare.html) */
 .blend-test {
   margin-top: 0.8rem;
-  padding: 0.6rem 0.9rem;
-  background: #ffffff;
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(29, 35, 41, 0.12);
 }
 .blend-test h2 {
   margin: 0 0 0.3rem;
@@ -1893,7 +1977,7 @@ body.radar #show-box {
   vertical-align: top;
 }
 .blend-test-table td small {
-  color: #4b5863;
+  color: var(--muted-strong);
 }
 .blend-test-table td.better {
   background: #e3f1e0;
@@ -1929,7 +2013,7 @@ body.radar #show-box {
 }
 .blend-test-models tr.home td,
 .blend-test-models tr.home th {
-  border-bottom: 2px solid #4b5863;
+  border-bottom: 2px solid var(--muted-strong);
 }
 @media (max-width: 700px) {
   .blend-test-grid {
@@ -1969,7 +2053,7 @@ body.radar #show-box {
   margin: 0 0 0.5rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #4b5863;
+  color: var(--muted-strong);
 }
 .ranking-section h3 {
   font-size: 1.05rem;
@@ -1980,24 +2064,15 @@ body.radar #show-box {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem 1.2rem;
-  padding: 0.5rem 0.8rem;
-  background: #ffffff;
-  border: 1px solid #ddd8cc;
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(29, 35, 41, 0.12);
-  font-size: 0.85rem;
 }
 .ranking-controls label {
   min-width: 0;
   max-width: 100%;
 }
-.ranking-controls select {
-  margin-left: 0.3rem;
-}
 .farm-section {
   margin-top: 1.6rem;
   padding-top: 0.2rem;
-  border-top: 2px solid #ddd8cc;
+  border-top: 2px solid var(--line);
 }
 .blend-test-switch {
   display: flex;
@@ -2015,7 +2090,7 @@ body.radar #show-box {
   margin-top: 0.2rem;
 }
 .blend-test-table tr.group th {
-  background: #f4f1ea;
+  background: var(--paper);
   font-weight: 600;
 }
 @media (min-width: 701px) {
@@ -2077,10 +2152,10 @@ body.radar #show-box {
 .station-map {
   position: relative;
   height: 16rem;
-  border: 1px solid #c9cfd4;
+  border: 1px solid var(--map-edge);
   border-radius: 6px;
   overflow: hidden;
-  background: #f4f1ea;
+  background: var(--paper);
 }
 .station-top.browse .station-map {
   height: clamp(320px, 62vh, 640px);
@@ -2096,8 +2171,8 @@ body.radar #show-box {
   margin: -11px 0 0 -11px;
   pointer-events: none;
   background:
-    linear-gradient(#1d2329, #1d2329) center / 2px 100% no-repeat,
-    linear-gradient(#1d2329, #1d2329) center / 100% 2px no-repeat;
+    linear-gradient(var(--ink), var(--ink)) center / 2px 100% no-repeat,
+    linear-gradient(var(--ink), var(--ink)) center / 100% 2px no-repeat;
   opacity: 0.7;
 }
 .station-map canvas:focus-visible {
@@ -2107,21 +2182,15 @@ body.radar #show-box {
 .station-map-tools {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 0.35rem 1rem;
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-}
-.station-map-tools select {
-  margin-left: 0.3rem;
-  max-width: 100%;
+  margin: 0;
 }
 .station-map-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem 1rem;
-  margin-top: 0.4rem;
-  font-size: 0.8rem;
+  margin-top: 0.5rem;
 }
 .station-map-legend-item {
   display: inline-flex;
@@ -2137,7 +2206,7 @@ body.radar #show-box {
   box-shadow: 0 0 0 1px #ffffff;
 }
 .station-map-legend .dot.hollow {
-  background: #ffffff;
+  background: var(--surface);
   box-shadow: inset 0 0 0 2px var(--dot);
 }
 .station-map-ramp {
@@ -2226,10 +2295,10 @@ body.radar #show-box {
   font: inherit;
   font-size: 0.9rem;
   padding: 0.3rem 0.6rem;
-  border: 1px solid #9aa7b1;
+  border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #ffffff;
-  color: #1d2329;
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
 }
 .diary-when .diary-step {
@@ -2238,7 +2307,7 @@ body.radar #show-box {
   padding: 0.3rem 0.7rem;
 }
 .diary-when button:disabled {
-  color: #9aa7b1;
+  color: var(--line-strong);
   cursor: default;
 }
 .diary-period {
@@ -2251,13 +2320,13 @@ body.radar #show-box {
 }
 .diary-table th {
   font-weight: 600;
-  color: #3d4a55;
+  color: var(--ink-soft);
 }
 .diary-table th,
 .diary-table td {
   text-align: left;
   padding: 0.2rem 0.45rem;
-  border-bottom: 1px solid #ddd8cc;
+  border-bottom: 1px solid var(--line);
   vertical-align: middle;
   white-space: nowrap;
 }
@@ -2273,11 +2342,11 @@ body.radar #show-box {
   background: #f8f6f1;
 }
 .diary-table tr.current {
-  background: #f4f1ea;
+  background: var(--paper);
   font-weight: 600;
 }
 .diary-table .muted {
-  color: #8a949c;
+  color: var(--faint);
 }
 .diary-table .tmax {
   color: #a3341f;
@@ -2297,7 +2366,7 @@ body.radar #show-box {
   font: inherit;
   color: inherit;
   cursor: pointer;
-  text-decoration: underline dotted #9aa7b1;
+  text-decoration: underline dotted var(--line-strong);
   text-underline-offset: 3px;
 }
 .diary-unchecked {
@@ -2314,7 +2383,7 @@ body.radar #show-box {
   padding: 0 0.45rem;
   border-radius: 999px;
   background: #e9eef2;
-  color: #1d2329;
+  color: var(--ink);
   font-size: 0.75rem;
   white-space: nowrap;
 }
@@ -2340,7 +2409,7 @@ body.radar #show-box {
   font-size: 0.85rem;
 }
 .diary-summary dl > dt {
-  color: #5b6670;
+  color: var(--muted);
 }
 .diary-summary dl > dd {
   margin: 0 0 0.35rem;
@@ -2350,12 +2419,13 @@ body.radar #show-box {
 .diary-day {
   position: relative;
 }
+/* a day's detail: a card, as the okres panel */
 .diary-day:not(:empty) {
   margin-top: 0.8rem;
   padding: 0.2rem 0.8rem 0.6rem;
-  border: 1px solid #ddd8cc;
-  border-radius: 6px;
-  background: #fffdf8;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
 }
 .diary-day .close {
   float: right;
@@ -2372,7 +2442,7 @@ body.radar #show-box {
 .diary-day svg {
   display: block;
   max-width: 100%;
-  background: #ffffff;
+  background: var(--surface);
 }
 .diary-defs {
   margin-top: 0.8rem;
@@ -2380,11 +2450,11 @@ body.radar #show-box {
 }
 .diary-defs summary {
   cursor: pointer;
-  color: #3d4a55;
+  color: var(--ink-soft);
 }
 .diary-defs ul {
   padding-left: 1.1rem;
-  color: #3d4a55;
+  color: var(--ink-soft);
 }
 .diary-table .head-unit {
   display: none;
@@ -2430,31 +2500,8 @@ body.station [hidden] {
 .measured-mode button {
   padding: 0.3rem 0.8rem;
 }
-#ribbon.measured-ribbon {
-  padding: 0.25rem 0.5rem 0.5rem;
-  border-radius: 6px 6px 0 0;
-  background: #e6f2f0;
-  box-shadow: inset 0 -2px 0 #0f766e;
-}
-.measured-ribbon .day-row {
-  border-bottom-color: #b9d7d2;
-}
 .measured-ribbon .daytab.older {
   order: 1;
-}
-.measured-map-wrap {
-  position: relative;
-}
-.measured-map {
-  height: clamp(460px, 74vh, 800px);
-  border: 1px solid #c9cfd4;
-  border-top: none;
-  border-radius: 0 0 6px 6px;
-  overflow: hidden;
-  background: #f4f1ea;
-}
-.measured-hint {
-  margin: 0.3rem 0 0.8rem;
 }
 .measured-map .station-label.selected .wx-top {
   text-decoration: underline;
@@ -2476,66 +2523,72 @@ body.station [hidden] {
   margin-top: 0.25rem;
 }
 @media (max-width: 700px) {
-  /* phones: the boxes leave the map (the map stays visible): "on the map" folded above
-     it, the headline and an okres's panel below */
-  .measured-map-wrap {
+  .measured-map-wrap .past-banner span {
+    display: none;
+  }
+}
+
+/* phones, every map: the boxes leave the map (the map stays visible): "on the map" folded
+   above it, the headline and a clicked okres's panel below; the strip on its own */
+@media (max-width: 700px) {
+  .map-wrap {
     display: flex;
     flex-direction: column;
   }
-  .measured-map-wrap #headline,
-  .measured-map-wrap #show-box,
-  .measured-map-wrap #okres-panel {
+  .map-wrap > .map-box {
     position: static;
     width: auto;
     max-width: none;
     max-height: none;
     margin: 0.4rem 0 0;
+    font-size: 0.8rem;
   }
-  .measured-map-wrap #show-box {
+  .map-wrap > .map-box.legend {
     order: -1;
     margin: 0 0 0.4rem;
   }
-  .measured-map-wrap #okres-panel {
+  .map-wrap > .map-box.panel {
     order: 1;
   }
-  .measured-map-wrap #headline {
+  .map-wrap > .map-box.info {
     order: 2;
   }
-  .measured-map {
-    /* Czechia is about twice as wide as high */
-    height: clamp(250px, 66vw, 520px);
-    border-top: 1px solid #c9cfd4;
-    border-radius: 6px;
+  .map-wrap > .map-box.after {
+    order: 3;
+    margin: 0.4rem 0 0;
   }
-  #ribbon.measured-ribbon {
-    border-radius: 6px;
+  .map-frame {
+    /* Czechia is about twice as wide as high */
+    height: var(--map-height-phone);
+  }
+  .strip.attached + .map-wrap .map-frame,
+  .strip.attached + .map-frame {
+    border-top: 1px solid var(--map-edge);
+    border-radius: var(--radius);
+  }
+  .strip.attached {
+    border-radius: var(--radius);
     margin-bottom: 0.4rem;
   }
-  .measured-ribbon .when {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
+  .page-head {
+    margin-top: 0.3rem;
   }
-  .measured-ribbon .day-row,
-  .measured-ribbon .when-row {
-    display: contents;
+  /* one control per row, the controls lined up after their labels */
+  .strip .field {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+    align-items: center;
+    width: 100%;
   }
-  .measured-ribbon .daytabs {
-    flex: 1 0 100%;
+  .strip .field select {
+    width: 100%;
   }
-  .measured-ribbon .segmented {
-    flex: 1 0 100%;
-  }
-  .measured-ribbon .daytab {
-    min-width: 5rem;
-    padding: 0.3rem 0.5rem;
-  }
-  .measured-ribbon .segmented button {
-    flex: 1 1 auto;
-    padding: 0.25rem 0.3rem;
-    white-space: nowrap;
-  }
-  .measured-map-wrap .past-banner span {
-    display: none;
+}
+@media (max-width: 700px) {
+  body.radar #show-box,
+  #point-panel {
+    width: auto;
+    max-height: none;
+    overflow: visible;
   }
 }
