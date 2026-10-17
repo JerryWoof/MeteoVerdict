@@ -9,6 +9,8 @@ export const CC_BY = "https://creativecommons.org/licenses/by/4.0/";
 export const CC_BY_SA = "https://creativecommons.org/licenses/by-sa/4.0/";
 export const ECCC_LICENCE = "https://eccc-msc.github.io/open-data/licence/readme_en/";
 export const JMA_TERMS = "https://www.jma.go.jp/jma/en/copyright.html";
+export const OSM_COPYRIGHT = "https://www.openstreetmap.org/copyright";
+export const TERRAIN_ATTRIBUTION = "https://github.com/tilezen/joerd/blob/master/docs/attribution.md";
 
 /** Model providers behind Open-Meteo's data that we show (models.yaml), credited by
  * name; ECCC and JMA follow with the wording their terms ask for. */
@@ -89,7 +91,19 @@ export function footerParts(kind, t, { method, year = new Date().getUTCFullYear(
       " ",
       ...licence(),
       SEP,
-      ...boundaries(t),
+      `${t("footer.boundaries")}, ${t("footer.places")}: ČÚZK `,
+      ...licence(),
+      SEP,
+      `${t("footer.basemap")}: `,
+      link("OpenFreeMap", "https://openfreemap.org/"),
+      ", ",
+      link("© OpenMapTiles", "https://www.openmaptiles.org/"),
+      ", ",
+      link("© OpenStreetMap contributors", OSM_COPYRIGHT),
+      " (ODbL); ",
+      `${t("footer.relief")}: `,
+      link("Terrain Tiles", TERRAIN_ATTRIBUTION),
+      " (EU-DEM © Copernicus, SRTM/GMTED2010 USGS, DGM Österreich, ETOPO1 NOAA)",
       SEP,
       `${t("footer.radarProcessed")}; ${t("footer.ours")}: `,
       link("CC BY 4.0", CC_BY),
