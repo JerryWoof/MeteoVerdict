@@ -32,6 +32,7 @@ import { OBSERVED_LAYERS, nearestDay, observedSummary, parseObservedDay, parseOb
 import {
   DEFAULT_SHOWN, dayLabel, displayName, labelFor, okresColours, rampKey, today, valueFor,
 } from "./tv.js";
+import { keepRoomForPanels } from "./panel-room.js";
 
 const t = setUpLanguage();
 const language = document.documentElement.lang;
@@ -469,6 +470,9 @@ const measuredMap = createMeasuredMap({
   },
   onOkres: (code) => openOkres(code),
 });
+// a long okres panel reaches below the map instead of resizing it
+keepRoomForPanels($("measured-map").parentElement, $("measured-map"), [$("okres-panel")]);
+
 
 /** Open an okres's panel (okres layer); on phones it is under the map: bring it into view. */
 async function openOkres(code) {
