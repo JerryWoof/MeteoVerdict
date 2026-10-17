@@ -241,8 +241,7 @@ input[type="text"] {
 }
 /* the map's boxes (headline, "on the map", a clicked okres): never over the country. Wide
    screens: a column beside the map (the headline, then the clicked okres, then "on the
-   map"; it grows with its content, never a scroll box of its own, and the map stays in
-   view beside it); narrower: above and below the map */
+   map"; it scrolls when longer than the map); narrower: above and below the map */
 .map-box {
   background: var(--box-bg);
   border-radius: var(--radius);
@@ -274,6 +273,8 @@ input[type="text"] {
     flex-direction: column;
     gap: 0.5rem;
     box-sizing: border-box;
+    max-height: var(--map-h);
+    overflow-y: auto;
     /* room for the boxes' shadows */
     padding: 0.5rem 4px 4px 1px;
   }
@@ -281,9 +282,6 @@ input[type="text"] {
     grid-column: 2;
     grid-row: 1;
     height: var(--map-h);
-    /* a long okres panel beside it: the map stays on screen while you read it */
-    position: sticky;
-    top: 0.5rem;
   }
   /* the map beside the column: framed on its own, under the strip */
   .strip.attached + .map-wrap .map-frame {
