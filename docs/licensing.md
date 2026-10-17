@@ -58,11 +58,13 @@ below, and public data is the point of the project.
 3. **Respect rate limits:** batch locations, request 14-day windows (same cost as one
    day), back off on HTTP 429. The free tier allows 300,000 calls a month, so a full
    backfill of all stations takes months and must be spread out (roadmap 2.6). All
-   workflows together stay below the daily and the monthly limit: outlook ≤ 1,600, the
-   newest single runs 3,400 and 4,500 shared by the backfill and the histories a day,
-   ≤ 294,500 in a 31-day month ([budget](data-sources.md#open-meteo-budget)); the single
-   runs ask about 100 stations, not all ~500, to fit, and no request weighs more than 500
-   (the limit is 600 a minute).
+   workflows together stay below the daily and the monthly limit: outlook ≤ 1,700, the
+   single runs' fallback ≤ 400 and 7,400 shared by the backfill and the histories a day,
+   ≤ 294,500 in a 31-day month ([budget](data-sources.md#open-meteo-budget)); the newest
+   single runs come from Open-Meteo's open-data bucket on AWS (no API calls; same CC BY
+   4.0 data and attribution, read with range requests of a few kB per station), the API
+   asks about 100 stations, not all ~500, and no request weighs more than 500 (the limit
+   is 600 a minute).
 4. **The forecast page** (`forecast.html`, roadmap 6.3) asks the Open-Meteo Forecast
    API from each visitor's browser, one request per okres shown, so each visitor uses
    their own free-tier allowance; the page credits Open-Meteo and the model providers

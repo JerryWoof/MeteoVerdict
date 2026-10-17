@@ -2,8 +2,9 @@
 
 No Open-Meteo calls: the single runs (``runs``, release ``runs-YYYY-MM``) already hold
 every model's hourly ``wind_gusts_10m`` (maximum of the preceding hour) at the ~100 run
-stations, four runs a day, each fetched once it is ``runs.MIN_AGE_H`` hours old. The
-outlook takes the newest stored run (about 10-16 hours old):
+stations, four runs a day, stored model by model as they reach Open-Meteo's bucket. The
+outlook takes the newest stored run at least ``runs.MIN_AGE_H`` hours old (by then every
+model has it; about 10-16 hours old):
 
 1. **Stations of an okres** (``okres_stations``): the run stations in the okres at most
    ``sun_cloud_gust.LOWLAND_MAX_M`` high and at most ``frost.MAX_SITE_ABOVE_POINT`` above
@@ -50,6 +51,8 @@ MIN_PART_VALUES = 2
 MIN_MODELS = 3
 #: the newest run is used only up to this age (hours); older: no gusts
 MAX_RUN_AGE_H = 36
+#: ... and from this age on (``runs.MIN_AGE_H``: every model has reached Open-Meteo)
+MIN_RUN_AGE_H = 10
 #: an okres without its own lowland station takes the nearest one this close
 FALLBACK_KM = 30.0
 #: observed part maximum: at least this many hourly gusts of the part
@@ -113,14 +116,15 @@ def okres_stations(
 
 
 def newest_run(runs: pl.LazyFrame | pl.DataFrame, now: datetime) -> datetime | None:
-    """The newest run with gusts of at least ``MIN_MODELS`` models, at most
-    ``MAX_RUN_AGE_H`` hours old."""
+    """The newest run with gusts of at least ``MIN_MODELS`` models, from
+    ``MIN_RUN_AGE_H`` to ``MAX_RUN_AGE_H`` hours old (a younger run may still lack
+    models: the bucket's runs are stored model by model as they arrive)."""
     found = (
         runs.lazy()
         .filter(
             pl.col("wind_gusts_10m").is_not_null(),
             pl.col("run") >= now - timedelta(hours=MAX_RUN_AGE_H),
-            pl.col("run") <= now,
+            pl.col("run") <= now - timedelta(hours=MIN_RUN_AGE_H),
         )
         .group_by("run")
         .agg(pl.col("model").n_unique().alias("models"))

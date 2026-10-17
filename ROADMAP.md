@@ -52,8 +52,8 @@ start later for one variable (ARPEGE wind); see `docs/data-sources.md#models`.
 | README badge | `site/data/badge.json` ("last updated"), committed by the daily run | repo |
 | Web app | Static: Vite + MapLibre GL + Observable Plot, reads JSON | GitHub Pages |
 | ALADIN archive | `mvd archive-aladin` every 3 h, one Parquet per run as Release assets (`aladin-YYYY-MM`) | GitHub Actions |
-| Backfill | `mvd backfill` daily within the shared 4,500 Open-Meteo calls (last 90 days first, older windows after the single-runs history), progress in Release `data-state` | GitHub Actions |
-| Single runs | `mvd fetch-runs` four times a day, 3,400 Open-Meteo calls a day (Single Runs API, ~100 stations), plus what the backfill leaves of the shared 4,500, progress in Release `runs-state` | GitHub Actions |
+| Backfill | `mvd backfill` daily within the shared 7,400 Open-Meteo calls (last 90 days first, then one year at the single-runs stations, older windows after the single runs' API history), progress in Release `data-state` | GitHub Actions |
+| Single runs | `mvd fetch-runs` four times a day: every run from Open-Meteo's open-data bucket on AWS (~100 stations, no API calls, catching up the bucket's last 90 days), the Single Runs API only for the bucket's gaps (≤ 400 calls a day) and, with what the backfill leaves of the shared 7,400, the history before the bucket's window; progress in Release `runs-state` | GitHub Actions |
 | Outlook | `mvd outlook` twice a day: combined forecast for every okres (≈ 340 calls) → `outlook.json` in Release `data-latest` | GitHub Actions |
 | Development | Claude scheduled task, weekdays, works from this roadmap, opens PRs | Claude (Cowork) |
 

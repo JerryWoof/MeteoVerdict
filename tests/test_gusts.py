@@ -116,6 +116,11 @@ def test_no_recent_run_no_gusts():
     older = single_run({"m1": 1.0, "m2": 1.0, "m3": 1.0}, run=RUN - timedelta(hours=6))
     table = gusts.okres_gusts(pl.concat([older, frame]), mapping, PLAIN, NOW)
     assert (table["gust"] == 12.0).all()
+    # a run younger than MIN_RUN_AGE_H may still lack models (stored as they reach the
+    # bucket): the one before is used
+    young = single_run({"m1": 30.0, "m2": 30.0, "m3": 30.0}, run=RUN + timedelta(hours=6))
+    table = gusts.okres_gusts(pl.concat([older, frame, young]), mapping, PLAIN, NOW)
+    assert (table["gust"] == 12.0).all()
 
 
 def test_okres_stations_lowland_and_not_far_above_the_point():

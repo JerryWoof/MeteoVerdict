@@ -17,12 +17,14 @@ month from ``recent/`` (last 12 months; older ones are imported once with
 ``GAUGE_DELAY_DAYS`` before the last day (manual readings arrive about a month late);
 newer months are refreshed by the daily run.
 
-Priorities (docs/data-sources.md#open-meteo-budget): the outlook and the newest single
-runs have budgets of their own; a daily **shared** budget is spent on (3) the *current*
+Priorities (docs/data-sources.md#open-meteo-budget): the outlook and the single runs'
+API fallback (the newest runs come from Open-Meteo's bucket, ``bucket``) have budgets of
+their own; a daily **shared** budget is spent on (3) the *current*
 windows (``CURRENT_DAYS``: the ones the 90-day ranking and the combination weights read),
 then (3b) the *priority* windows (ending on or after ``priority_from``, e.g. one full year
 back, so every season is in the scores) at the station ``subset`` only (the ~100 stations
-of the single runs, about a fifth of the calls), then (4a) the single runs' history and
+of the single runs, about a fifth of the calls), then (4a) the single runs' API history
+(older than the bucket's three months, and the bucket's gaps) and
 only then (4b) the *older* windows, and the rest of the stations of the priority
 windows. So ``run`` takes older windows only when asked (``older``; ``mvd backfill
 --older-windows after-runs-history`` asks once the single-runs history is complete), and
