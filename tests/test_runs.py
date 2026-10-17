@@ -1,5 +1,4 @@
 import dataclasses
-import json
 from datetime import UTC, date, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
@@ -180,35 +179,52 @@ def test_select_stations_rule():
 
 
 def test_run_lists():
-    recent = runs.recent_runs(NOW)
-    # at 14:25 the 06 UTC run is 8.4 h old: too fresh; 48 h back to 2026-10-11 18 UTC
-    assert recent[0] == datetime(2026, 10, 13, 0, tzinfo=UTC)
-    assert recent[-1] == datetime(2026, 10, 11, 18, tzinfo=UTC)
-    assert len(recent) == 6
-    history = runs.history_runs(NOW)
-    assert history[0] == datetime(2026, 10, 11, 12, tzinfo=UTC)
+    # at 14:25 the bucket may have the 12 UTC run already; back 90 days
+    bucket_runs = runs.bucket_runs(NOW)
+    assert bucket_runs[0] == datetime(2026, 10, 13, 12, tzinfo=UTC)
+    assert bucket_runs[-1] == runs.bucket_start(NOW) == datetime(2026, 7, 15, 18, tzinfo=UTC)
+    # the API only for runs at least 24 h old (younger ones may still reach the bucket)
+    api = runs.api_runs(NOW)
+    assert api[0] == datetime(2026, 10, 12, 12, tzinfo=UTC)
     # back to the first run with ALADIN by default, to the archive start on request
     assert (
-        history[-1]
+        api[-1]
         == datetime(2026, 6, 23, 0, tzinfo=UTC)
         == datetime.combine(runs.HISTORY_FROM, datetime.min.time(), UTC)
     )
-    archive = runs.history_runs(NOW, RUNS_FROM)
+    archive = runs.api_runs(NOW, RUNS_FROM)
     assert archive[-1] == datetime.combine(RUNS_FROM, datetime.min.time(), UTC)
-    assert archive[: len(history)] == history
-    assert not set(recent) & set(history)
+    assert archive[: len(api)] == api
+    assert runs.all_runs(NOW)[0] == bucket_runs[0]
     assert runs.parse_run("2026-10-12T06") == RUN
     assert runs.parse_run("2026101206") == RUN
     with pytest.raises(ValueError):
         runs.parse_run("2026-10-12T05")
 
 
+def test_what_the_bucket_and_the_api_are_asked_for(tmp_path):
+    two = [BY_ID["dwd_icon_eu"], BY_ID["ecmwf_ifs"]]
+    state = runs.State(tmp_path / runs.STATE_NAME)
+    old = datetime(2026, 7, 1, 0, tzinfo=UTC)  # before the bucket's window
+    state.fetched[runs.key(RUN)] = {"dwd_icon_eu"}
+    state.bucket_missing[runs.key(RUN)] = {"ecmwf_ifs"}
+    state.missing[runs.key(old)] = {"ecmwf_ifs"}
+    assert state.bucket_todo(RUN, two) == []
+    assert state.api_todo(RUN, two, NOW) == [BY_ID["ecmwf_ifs"]]
+    other = datetime(2026, 10, 12, 0, tzinfo=UTC)  # in the window, not tried yet
+    assert state.bucket_todo(other, two) == two and state.api_todo(other, two, NOW) == []
+    assert state.api_todo(old, two, NOW) == [BY_ID["dwd_icon_eu"]]  # older: everything
+    state.save()
+    again = runs.State.load(state.path)
+    assert again.bucket_missing == {"2026101206": {"ecmwf_ifs"}}
+
+
 def test_history_floor_is_the_first_aladin_run():
     aladin = [m for m in MODELS if m.id.startswith("chmi_aladin")]
     assert aladin and {m.single_runs_from for m in aladin} == {runs.HISTORY_FROM}
-    history = runs.history_runs(NOW)
     assert all(
-        runs.wanted(MODELS, r) == [m for m in MODELS if r.hour in m.run_hours] for r in history
+        runs.wanted(MODELS, r) == [m for m in MODELS if r.hour in m.run_hours]
+        for r in runs.api_runs(NOW)
     )
 
 
@@ -273,7 +289,7 @@ def test_parse_several_models_and_a_missing_one():
     payload = answer(params, no_data_at={(49.5, "dwd_icon_d2")})
     models = [BY_ID["dwd_icon_d2"], BY_ID["dwd_icon_eu"]]
     rows = runs.parse(payload, ["a", "b"], models, RUN)
-    assert rows.schema == pl.Schema(runs.SCHEMA)
+    assert rows.schema == pl.Schema(runs.HOURLY_SCHEMA)
     counts = dict(
         rows.group_by("station_id", "model")
         .len()
@@ -381,60 +397,63 @@ def test_fetch_run_unknown_model_name_is_an_error():
         runs.fetch_run(c, STATIONS, RUN, MODELS, budget())
 
 
-def test_collect_recent_first_then_history_and_resume(tmp_path):
+def test_collect_bucket_gaps_first_then_history_and_resume(tmp_path):
     two = [BY_ID["dwd_icon_eu"], BY_ID["ecmwf_ifs"]]
+    state = runs.State(tmp_path / runs.STATE_NAME)
+    state.bucket_missing = {"2026101206": {"ecmwf_ifs"}, "2026100100": {"dwd_icon_eu", "ecmwf_ifs"}}
+    state.save()
     api = FakeApi()
     with client(api) as c:
-        # 2 stations x 0.6 -> 2 calls per run (at least 1 per station): 3 runs fit in 7
-        result = runs.collect(c, STATIONS, two, tmp_path, budget(7), NOW)
-    assert result.runs == ["2026101300", "2026101218", "2026101212"]
-    assert "budget" in result.stopped
-    assert result.calls["2026101300"] == pytest.approx(2)
+        # 2 stations, at least 1 call each: 2 calls a run; the first history run does
+        # not fit in what is left
+        result = runs.collect(c, STATIONS, two, tmp_path, budget(5), NOW)
+    assert result.runs == ["2026101206", "2026100100"]
+    assert [r["models"] for r in api.requests] == ["ecmwf_ifs", "dwd_icon_eu,ecmwf_ifs"]
+    assert result.stopped == "budget of 5 calls reached (4 used)"
+    assert result.calls["2026101206"] == pytest.approx(2)
     stored = pl.read_parquet(tmp_path / "runs" / "2026-10.parquet")
-    assert stored.select("run", "model", "station_id").unique().height == 3 * 2 * 2
-    state = json.loads((tmp_path / runs.STATE_NAME).read_text())
-    assert sorted(state["fetched"]) == ["2026101212", "2026101218", "2026101300"]
+    assert set(stored["source"]) == {"api"}
+    # stored at native steps: ICON-EU hourly to 78 h, then every 3 hours
+    eu = stored.filter(pl.col("model") == "dwd_icon_eu", pl.col("station_id") == "a")
+    assert 79 not in eu["lead_h"].to_list() and 81 in eu["lead_h"].to_list()
     with client(api) as c:
         again = runs.collect(c, STATIONS, two, tmp_path, budget(4), NOW)
-    assert again.runs == ["2026101206", "2026101200"]  # continues, nothing twice
+    # then the history older than the bucket's window, newest first
+    assert again.runs == ["2026071512", "2026071506"]
 
 
-def test_the_newest_pending_run_goes_first_and_older_ones_wait(tmp_path):
-    # 2026-10-15 19:54 (a late schedule): the 12 UTC run is only 7.9 h old, so the
-    # 06 UTC run is the newest one to fetch; the budget fits one run, and the older
-    # pending runs (00 UTC, the day before) are left for later instead of going first
-    now = datetime(2026, 10, 15, 19, 54, tzinfo=UTC)
-    two = [BY_ID["dwd_icon_eu"], BY_ID["ecmwf_ifs"]]
+def test_a_budget_too_small_for_all_models_takes_some(tmp_path):
+    three = [BY_ID["dwd_icon_eu"], BY_ID["ecmwf_ifs"], BY_ID["dwd_icon"]]
+    state = runs.State(tmp_path / runs.STATE_NAME)
+    state.bucket_missing = {runs.key(RUN): {m.id for m in three}}
+    state.save()
     api = FakeApi()
     with client(api) as c:
-        result = runs.collect(c, STATIONS, two, tmp_path, budget(2), now)
-    assert result.runs == ["2026101506"]
-    assert [r["run"] for r in api.requests] == ["2026-10-15T06:00"]
-    assert "budget" in result.stopped
-    state = runs.State.load(tmp_path / runs.STATE_NAME)
-    older = datetime(2026, 10, 15, 0, tzinfo=UTC)
-    assert state.todo(older, two) == two
-    # the next schedule, after the 12 UTC run is 10 h old: that one first, then 00 UTC
-    later = datetime(2026, 10, 15, 22, 20, tzinfo=UTC)
-    with client(api) as c:
-        again = runs.collect(c, STATIONS, two, tmp_path, budget(4), later)
-    assert again.runs == ["2026101512", "2026101500"]
+        # three models cost 2 x 1.2; two models 2 (at least one call per station)
+        result = runs.collect(c, STATIONS, three, tmp_path, budget(2), NOW, modes=("recent",))
+    assert [r["models"] for r in api.requests] == ["dwd_icon_eu,ecmwf_ifs"]
+    assert result.runs == ["2026101206"]
+    left = runs.State.load(tmp_path / runs.STATE_NAME).api_todo(RUN, three, NOW)
+    assert [m.id for m in left] == ["dwd_icon"]
+    assert runs.affordable(100, 19, 400) == 10  # 4 x 10 / 10 = 4 a station
+    assert runs.affordable(100, 3, 100) == 2
+    assert runs.affordable(100, 1, 99) == 0
 
 
 def test_a_model_added_later_is_fetched_newest_run_first(tmp_path):
     two, added = [BY_ID["dwd_icon_eu"], BY_ID["ecmwf_ifs"]], BY_ID["dwd_icon"]
     api = FakeApi()
     with client(api) as c:
-        runs.collect(c, STATIONS, two, tmp_path, budget(), NOW, modes=("recent",))
+        runs.collect(c, STATIONS, two, tmp_path, budget(6), NOW, modes=("history",))
     done = len(api.requests)
     with client(api) as c:
         result = runs.collect(
-            c, STATIONS, [*two, added], tmp_path, budget(), NOW, modes=("recent",)
+            c, STATIONS, [*two, added], tmp_path, budget(6), NOW, modes=("history",)
         )
     asked = api.requests[done:]
     assert {r["models"] for r in asked} == {"dwd_icon"}  # only the new model
     assert [r["run"] for r in asked] == sorted((r["run"] for r in asked), reverse=True)
-    assert result.runs[0] == "2026101300"
+    assert result.runs[0] == "2026071512"
 
 
 def test_gaps_of_young_runs_are_asked_again(tmp_path):
@@ -645,7 +664,8 @@ def test_shared_budget_falls_back_when_the_state_cannot_be_read(tmp_path):
 
 def test_history_done_for_the_backfill(tmp_path):
     state = runs.State(tmp_path / runs.STATE_NAME)
-    history = runs.history_runs(NOW)
+    edge = runs.bucket_start(NOW)
+    history = [r for r in runs.api_runs(NOW) if r < edge]
     ok, why = runs.history_done(lambda: state, MODELS, NOW)
     assert (
         not ok and why == f"single-runs history first: {len(history)} runs since 2026-06-23 pending"
@@ -657,10 +677,13 @@ def test_history_done_for_the_backfill(tmp_path):
         True,
         f"single-runs history complete ({runs.HISTORY_SLACK} runs pending)",
     )
+    # a gap in the bucket counts too
+    state.bucket_missing[runs.key(RUN)] = {"ecmwf_ifs"}
+    assert runs.history_pending(state, MODELS, NOW) == runs.HISTORY_SLACK + 1
     # a model added later makes the history pending again
     newcomer = dataclasses.replace(BY_ID["dwd_icon"], id="new_model")
     assert not runs.history_done(lambda: state, [*MODELS, newcomer], NOW)[0]
-    assert runs.history_pending(state, [*MODELS, newcomer], NOW) == len(history)
+    assert runs.history_pending(state, [*MODELS, newcomer], NOW) == len(history) + 1
 
     def broken():
         raise ValueError("bad json")
@@ -669,6 +692,34 @@ def test_history_done_for_the_backfill(tmp_path):
         False,
         "single-runs state not readable: bad json",
     )
+
+
+def hourly_rows(model, last=120, precipitation=0.1, source=None):
+    rows = [
+        (RUN, model, "a", h, RUN + timedelta(hours=h), 10.0 + h, precipitation, 2.0, 3.0)
+        for h in range(1, last + 1)
+    ]
+    frame = pl.DataFrame(rows, schema=runs.HOURLY_SCHEMA, orient="row")
+    return frame.with_columns(pl.lit(source, pl.String).alias("source"))
+
+
+def test_native_keeps_the_native_hours_with_their_totals():
+    legacy = hourly_rows("ecmwf_ifs025")  # 3-hourly, every hour filled by the API
+    gap = hourly_rows("dwd_icon_eu").filter(pl.col("lead_h") != 80)
+    bucket_rows = hourly_rows("jma_gsm", source="bucket")  # kept as they are
+    out = runs.native(pl.concat([legacy, gap, bucket_rows]), MODELS).collect()
+    ifs = out.filter(pl.col("model") == "ecmwf_ifs025").sort("lead_h")
+    assert ifs["lead_h"].to_list() == list(range(3, 121, 3))
+    assert ifs["precipitation"].to_list() == pytest.approx([0.3] * 40)
+    assert ifs["temperature_2m"][0] == pytest.approx(13.0)
+    eu = out.filter(pl.col("model") == "dwd_icon_eu").sort("lead_h")
+    assert eu.filter(pl.col("lead_h") == 81)["precipitation"].to_list() == [None]  # 80 lacks
+    assert eu.filter(pl.col("lead_h") == 78)["precipitation"].to_list() == [pytest.approx(0.1)]
+    assert out.filter(pl.col("model") == "jma_gsm").height == 120
+    # without a source column at all (month files from before 2026-10-17)
+    assert runs.native(legacy.drop("source"), MODELS).collect().height == 40
+    stored = runs.from_api(legacy.drop("source"), MODELS)
+    assert stored.schema == pl.Schema(runs.SCHEMA) and set(stored["source"]) == {"api"}
 
 
 def test_summary_states_the_budget(tmp_path):

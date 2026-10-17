@@ -162,6 +162,28 @@ def test_block_units_use_own_output_hours():
     assert rain.filter(pl.col("model") == AIFS).height == 0  # 6-hourly: not scored
 
 
+def test_rain_blocks_from_native_steps_and_from_hourly_api_rows():
+    models = [MODELS[m] for m in (D2, IFS025, EU)]
+    # the API, every hour filled (stored before 2026-10-17): IFS 0.25° spreads its 3-hour
+    # total of 1.5 mm over the hours 1-3
+    spread = {(IFS025, RUN + timedelta(hours=h)): 0.5 for h in (1, 2, 3)}
+    hourly = forecasts([m.id for m in models], rain={**spread, (D2, RUN + timedelta(hours=2)): 0.7})
+    # the bucket: native steps only, the 3-hour total at its end
+    native = (
+        forecasts([IFS025, EU], rain={(IFS025, RUN + timedelta(hours=3)): 1.5})
+        .with_columns(pl.lit("bucket").alias("source"))
+        .filter(pl.col("lead_h") % (pl.when(pl.col("model") == IFS025).then(3).otherwise(1)) == 0)
+        .filter((pl.col("model") != EU) | (pl.col("lead_h") <= 78) | (pl.col("lead_h") % 3 == 0))
+    )
+    for frame in (hourly, native):
+        units = farm.forecast_units(frame, models, "rain3h")
+        assert row(units, model=IFS025, end_lead=3)["forecast"] == pytest.approx(1.5)
+        assert row(units, model=EU, end_lead=81)["forecast"] == pytest.approx(0.0)
+    units = farm.forecast_units(hourly, models, "rain3h")
+    assert row(units, model=D2, end_lead=3)["forecast"] == pytest.approx(0.7)
+    assert units.filter(pl.col("model") == IFS025).height == 40  # every 3-hour block
+
+
 def test_night_units():
     models = [MODELS[m] for m in (D2, AIFS)]
     temp = {(D2, utc(15, 4)): -1.0, (AIFS, utc(15, 0)): -3.0, (AIFS, utc(15, 4)): -9.0}

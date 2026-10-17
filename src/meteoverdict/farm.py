@@ -1,6 +1,6 @@
 """Event skill for farmers: frost, wind gusts and 3-hour rain, run by run (``farm.json``).
 
-The same single runs as ``leads`` (Open-Meteo Single Runs API, ~100 stations, the 00,
+The same single runs as ``leads`` (Open-Meteo's single runs, ~100 stations, the 00,
 06, 12 and 18 UTC runs, leads 1-120), verified as yes/no events instead of errors:
 
 **Frost** (unit: station x night). A night is 18:00 to 09:00 Prague local time (16
@@ -24,9 +24,10 @@ few minutes early or late should not count as a miss and a false alarm.
 
 **3-hour rain** (unit: station x 3-hour block as above). Event: at least 0.5 mm (2, 5)
 in the block. Observed: the sum of the three hourly ČHMÚ sums, all required. Forecast:
-the sum of the model's three hourly values (for 3-hourly output Open-Meteo spreads the
-period's total over its hours, so the sum is the model's own 3-hour total, as in
-``align``); models with 6-hourly output there are not scored.
+the model's own 3-hour total: the sum of its three hourly values for hourly output, its
+one value at the block's end for 3-hourly output (the single runs are stored at native
+steps, ``runs.native``, so that value is the total since the step before); models with
+6-hourly output there are not scored.
 
 Runs start at 00/06/12/18 UTC, so blocks end at leads 3, 6, 9, … and never straddle a
 run's start; a block belongs to the bin of its end lead.
@@ -247,7 +248,7 @@ def forecast_units(forecasts: pl.DataFrame, models: list[Model], event: str) -> 
     variable = spec["variable"]
     steps = _steps(models)
     rows = (
-        forecasts.lazy()
+        runs_mod.native(forecasts, models)
         .select(
             "run",
             "model",
@@ -301,15 +302,13 @@ def forecast_units(forecasts: pl.DataFrame, models: list[Model], event: str) -> 
     blocks = rows.with_columns(
         (pl.col("lead_h") + (BLOCK_H - 1) - (pl.col("lead_h") - 1) % BLOCK_H).alias("end_lead")
     )
-    if variable == "precipitation":
-        value, needed = pl.col("v").sum(), pl.lit(BLOCK_H)
-        use = blocks
-    else:  # gusts: the model's own output hours only
-        value = pl.col("v").max()
-        needed = pl.lit(BLOCK_H) // pl.col("step_max")
-        use = blocks.filter(pl.col("native"))
+    # the model's own output hours only: totals over the step for precipitation, the
+    # gust of the hour (Open-Meteo: maximum of the preceding hour) for gusts
+    value = pl.col("v").sum() if variable == "precipitation" else pl.col("v").max()
+    needed = pl.lit(BLOCK_H) // pl.col("step_max")
     return (
-        use.group_by("run", "model", "station_id", "end_lead")
+        blocks.filter(pl.col("native"))
+        .group_by("run", "model", "station_id", "end_lead")
         .agg(
             value.alias("forecast"),
             pl.col("v").count().alias("n"),
@@ -510,6 +509,7 @@ def farm_scores(
     names = forecasts.collect_schema().names()
     if "wind_gusts_10m" not in names:  # month files from before the gusts
         forecasts = forecasts.with_columns(pl.lit(None, pl.Float32).alias("wind_gusts_10m"))
+    forecasts = runs_mod.native(forecasts, models)
     run_cover = runs_mod.coverage(forecasts)
     forecasts = forecasts.join(
         run_cover.filter("covered").select("model").lazy(), on="model", how="semi"
@@ -600,7 +600,8 @@ def document(
             reach.setdefault(model, {})[variable] = [first_h, last_h]
     return {
         "generated": generated.strftime(stamp),
-        "source": "Open-Meteo Single Runs API (free, non-commercial use); ČHMÚ observations",
+        "source": "Open-Meteo single runs: open-data bucket on AWS and Single Runs API "
+        "(free, non-commercial use); ČHMÚ observations",
         "about": (
             "Yes/no events for farmers verified run by run: frost nights, strong gusts and "
             "3-hour rain, per model and lead time bin, against ČHMÚ observations at about "

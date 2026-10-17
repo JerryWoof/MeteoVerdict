@@ -1,34 +1,45 @@
-"""Single model runs at a fixed station subset, from Open-Meteo's Single Runs API.
+"""Single model runs at a fixed station subset: from Open-Meteo's open-data bucket on AWS
+(``bucket``), with Open-Meteo's Single Runs API as the fallback and for the history.
 
 The D+N scores use the Previous Runs API (``forecasts``), which blends runs. To verify
-every model run by run and lead hour by lead hour (``leads``), ``mvd fetch-runs`` asks
-the Single Runs API (``run=YYYY-MM-DDTHH:00``, the run's start) for each 00, 06, 12 and
-18 UTC run: all enabled models in one request, temperature, precipitation, wind and
-wind gusts at the ~100 stations of ``data/run-stations.csv`` (with their elevation), 121 hours from
-the run's start (lead 0 to 120; lead 0 is not stored).
+every model run by run and lead hour by lead hour (``leads``), every 00, 06, 12 and 18
+UTC run of every enabled model is stored at the ~100 stations of ``data/run-stations.csv``:
+temperature, precipitation, wind and wind gusts, lead 1 to 120 hours, at the station's
+elevation, **at the model's native output steps** (``native``).
 
-Cost (Open-Meteo's weighted calls, ``forecasts.call_weight``): per station
-variables x models / 10, e.g. 4 x 19 / 10 = 7.6, so about 760 calls a run (720 for the
-06 and 18 UTC runs, which GEM Global does not have: ``Model.run_hours``); 121 hours are
-less than 14 days, so asking for the whole 5 days costs no more than one day. One request
-stays at or below ``MAX_REQUEST`` calls (Open-Meteo allows 600 a minute), so the stations
-of a run are split into equal batches.
+**Sources** (``source`` column), in this order (``mvd fetch-runs``):
+
+1. **the bucket** (``bucket.collect``, no API calls): every run within the bucket's
+   window (``BUCKET_DAYS``: it keeps per-run files for about three months), so each
+   execution also catches up any run not stored yet before it ages out;
+2. **the Single Runs API** (``collect``), within a call budget, newest first: a
+   model-run the bucket does not have complete once it is ``BUCKET_FINAL_H`` old
+   (``State.bucket_missing``: the fallback), and the history older than the bucket's
+   window back to ``HISTORY_FROM``.
+
+The API asks ``run=YYYY-MM-DDTHH:00`` (the run's start) for all models still to fetch in
+one request. Cost (Open-Meteo's weighted calls, ``forecasts.call_weight``): per station
+max(1, variables x models / 10), e.g. 4 x 19 / 10 = 7.6, so about 760 calls a run of all
+models (720 for the 06 and 18 UTC runs, which GEM Global does not have:
+``Model.run_hours``), and 100 for one or two models (at least one call per station);
+121 hours are less than 14 days, so the whole 5 days cost no more than one day. One
+request stays at or below ``MAX_REQUEST`` calls (Open-Meteo allows 600 a minute), so the
+stations of a run are split into equal batches. The API fills every hour (interpolated
+between native steps); its rows are stored at the native steps too (``native``).
 
 If one requested model does not have the run, Open-Meteo fails the whole request
 (HTTP 400 "The requested model run is not available. Model: X"): X is dropped and the
 rest asked again. A model missing from a run older than ``PENDING_H`` hours is recorded
-as a gap; a younger run is asked again for it later (models arrive at different times).
+as a gap.
 
-Progress is kept in ``runs-state.json`` (per run: models fetched and models missing),
-so runs are fetched once and a run stopped by the call budget continues next time.
-"Recent" runs (the last ``RECENT_H`` hours, at least ``MIN_AGE_H`` old) come first,
-then "history" newest first back to ``HISTORY_FROM`` (not to the archive start
-``models.RUNS_FROM``; see ``HISTORY_FROM``).
+Progress is kept in ``runs-state.json`` (per run: models fetched, models missing for
+good, models missing in the bucket), so a model-run is stored once and a collection
+stopped by the call budget or the time limit continues next time.
 
-The call budget of a scheduled run can grow by what the D+N backfill leaves of the
+The API's call budget of a scheduled run can grow by what the D+N backfill leaves of the
 daily shared budget (``shared_budget``, ``backfill.share_left``) once its current and
-priority windows are done; the backfill in turn fetches its older windows only once this
-history is complete (``history_pending``).
+priority windows are done; the backfill in turn fetches its older windows only once the
+API's work here is done (``history_pending``).
 
 See docs/data-sources.md#single-runs-mvd-fetch-runs.
 """
@@ -54,11 +65,18 @@ URL = "https://single-runs-api.open-meteo.com/v1/forecast"
 RUN_HOURS = (0, 6, 12, 18)
 MAX_LEAD_H = 120  # 5 days
 FORECAST_HOURS = MAX_LEAD_H + 1  # Open-Meteo's answer starts at the run's start (lead 0)
-#: A run is fetched once it is this old: every model has reached Open-Meteo by then
-#: (checked 2026-10-13: at 8.4 h the 06 UTC run was complete for the first 11 models).
+#: Every model of a run has reached Open-Meteo (API and bucket) when it is this old
+#: (latest seen 2026-07..10: 13.4 h, JMA GSM; most within 10 h); the outlook's gusts
+#: count on runs about this old
 MIN_AGE_H = 10
-#: "Recent" runs: up to this old (missed schedules catch up), newer than history.
-RECENT_H = 48
+#: Runs within this many days are read from the bucket (it keeps them ~93 days)
+BUCKET_DAYS = 90
+#: Runs younger than this are not looked for in the bucket (the first models arrive
+#: after ~2 h)
+BUCKET_MIN_AGE_H = 1
+#: A model-run still incomplete in the bucket at this age is missing there for good and
+#: asked from the API instead
+BUCKET_FINAL_H = 24
 #: A model missing from a run younger than this is asked again later, not a gap yet.
 PENDING_H = 24
 BATCH = 100  # stations per request at most
@@ -103,7 +121,13 @@ SCHEMA = {
     "precipitation": pl.Float32,
     "wind_speed_10m": pl.Float32,
     "wind_gusts_10m": pl.Float32,
+    #: "bucket" (Open-Meteo's open-data bucket) or "api" (Single Runs API); null in rows
+    #: stored before 2026-10-17 (API, every hour filled: ``native`` converts them)
+    "source": pl.String,
 }
+SOURCES = ("bucket", "api")
+#: An API answer before ``native`` (every hour filled, no source yet)
+HOURLY_SCHEMA = {k: v for k, v in SCHEMA.items() if k != "source"}
 
 STATE_NAME = "runs-state.json"
 STATE_TAG = "runs-state"
@@ -111,14 +135,19 @@ STATIONS_FILE = "run-stations.csv"
 
 RELEASE_NOTES = (
     "Single model runs at about 100 ČHMÚ stations, one Parquet file per month of run "
-    "start (runs-YYYY-MM.parquet), written by `mvd fetch-runs` from the Open-Meteo "
-    "Single Runs API (free, non-commercial tier). Forecasts: Open-Meteo.com, CC BY 4.0, "
-    "from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, ČHMÚ, KNMI, DMI, "
-    "Environment and Climate Change Canada (Data Server End-use Licence), the Japan "
-    "Meteorological Agency, the China Meteorological Administration and the UK Met "
-    "Office (CC BY-SA 4.0). Format: docs/data-sources.md#single-runs-mvd-fetch-runs. "
-    "These files are published under CC BY-SA 4.0 "
-    "(https://creativecommons.org/licenses/by-sa/4.0/); see docs/licensing.md."
+    "start (runs-YYYY-MM.parquet), written by `mvd fetch-runs` at each model's native "
+    "output steps: from Open-Meteo's open-data bucket on AWS (s3://openmeteo, AWS "
+    "Registry of Open Data; column source = bucket) and, where the bucket lacks a run, "
+    "from the Open-Meteo Single Runs API (free, non-commercial tier; source = api). "
+    "Weather data by Open-Meteo.com, CC BY 4.0 "
+    "(https://creativecommons.org/licenses/by/4.0/), from ČHMÚ, DWD, ECMWF, NOAA, "
+    "Météo-France, GeoSphere Austria, KNMI, DMI, Environment and Climate Change Canada "
+    "(Data Server End-use Licence), the Japan Meteorological Agency, the China "
+    "Meteorological Administration and the UK Met Office (CC BY-SA 4.0); without "
+    "warranty, Open-Meteo is not affiliated with these services. Format: "
+    "docs/data-sources.md#single-runs-mvd-fetch-runs. These files are published under "
+    "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/); see "
+    "docs/licensing.md."
 )
 
 # --- the station subset --------------------------------------------------------------
@@ -287,26 +316,35 @@ def _latest_run(time: datetime) -> datetime:
     return time.replace(hour=time.hour // 6 * 6, minute=0, second=0, microsecond=0)
 
 
-def recent_runs(now: datetime) -> list[datetime]:
-    """Runs from ``RECENT_H`` to ``MIN_AGE_H`` hours ago, newest first."""
-    run = _latest_run(now - timedelta(hours=MIN_AGE_H))
-    found = []
-    while now - run <= timedelta(hours=RECENT_H):
+def _runs_between(newest: datetime, oldest: datetime) -> list[datetime]:
+    """Run times from ``newest`` back to ``oldest`` (both included), newest first."""
+    found, run = [], newest
+    while run >= oldest:
         found.append(run)
         run -= timedelta(hours=6)
     return found
 
 
-def history_runs(now: datetime, first: date = HISTORY_FROM) -> list[datetime]:
-    """Runs older than the recent ones, newest first, back to ``first`` 00 UTC."""
-    recent = recent_runs(now)
-    run = (recent[-1] if recent else _latest_run(now)) - timedelta(hours=6)
+def bucket_start(now: datetime) -> datetime:
+    """The oldest run read from the bucket: ``BUCKET_DAYS`` back (rounded up to a run)."""
+    edge = now - timedelta(days=BUCKET_DAYS)
+    run = _latest_run(edge)
+    return run if run == edge else run + timedelta(hours=6)
+
+
+def bucket_runs(now: datetime) -> list[datetime]:
+    """Runs to look for in the bucket: at least ``BUCKET_MIN_AGE_H`` old and from
+    ``bucket_start`` on, newest first."""
+    return _runs_between(_latest_run(now - timedelta(hours=BUCKET_MIN_AGE_H)), bucket_start(now))
+
+
+def api_runs(now: datetime, first: date = HISTORY_FROM) -> list[datetime]:
+    """Runs the Single Runs API may be asked for, newest first: at least
+    ``BUCKET_FINAL_H`` old (younger ones may still reach the bucket), back to ``first``
+    00 UTC. Within the bucket's window only for the models missing there
+    (``State.api_todo``)."""
     start = datetime.combine(first, datetime.min.time(), UTC)
-    found = []
-    while run >= start:
-        found.append(run)
-        run -= timedelta(hours=6)
-    return found
+    return _runs_between(_latest_run(now - timedelta(hours=BUCKET_FINAL_H)), start)
 
 
 def wanted(models: list[Model], run: datetime) -> list[Model]:
@@ -320,9 +358,13 @@ def wanted(models: list[Model], run: datetime) -> list[Model]:
 @dataclass
 class State:
     path: Path
-    #: run key (YYYYMMDDHH) -> model ids fetched / missing at Open-Meteo for good
+    #: run key (YYYYMMDDHH) -> model ids stored (from the bucket or the API)
     fetched: dict[str, set[str]] = field(default_factory=dict)
+    #: run key -> model ids Open-Meteo's API does not have (gaps for good)
     missing: dict[str, set[str]] = field(default_factory=dict)
+    #: run key -> model ids not complete in the bucket once ``BUCKET_FINAL_H`` old: the
+    #: API is asked for them
+    bucket_missing: dict[str, set[str]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> State:
@@ -333,19 +375,36 @@ class State:
             path,
             {k: set(v) for k, v in doc.get("fetched", {}).items()},
             {k: set(v) for k, v in doc.get("missing", {}).items()},
+            {k: set(v) for k, v in doc.get("bucket_missing", {}).items()},
         )
 
     def save(self) -> None:
         doc = {
             "fetched": {k: sorted(v) for k, v in sorted(self.fetched.items())},
             "missing": {k: sorted(v) for k, v in sorted(self.missing.items()) if v},
+            "bucket_missing": {k: sorted(v) for k, v in sorted(self.bucket_missing.items()) if v},
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(doc, indent=0) + "\n", encoding="utf-8")
 
     def todo(self, run: datetime, models: list[Model]) -> list[Model]:
+        """Models of ``run`` not stored and not a gap for good."""
         done = self.fetched.get(key(run), set()) | self.missing.get(key(run), set())
         return [m for m in models if m.id not in done]
+
+    def bucket_todo(self, run: datetime, models: list[Model]) -> list[Model]:
+        """Models of ``run`` to look for in the bucket."""
+        gone = self.bucket_missing.get(key(run), set())
+        return [m for m in self.todo(run, models) if m.id not in gone]
+
+    def api_todo(self, run: datetime, models: list[Model], now: datetime) -> list[Model]:
+        """Models of ``run`` to ask the API for: within the bucket's window only those
+        missing there, older runs all not stored yet."""
+        todo = self.todo(run, models)
+        if run < bucket_start(now):
+            return todo
+        gone = self.bucket_missing.get(key(run), set())
+        return [m for m in todo if m.id in gone]
 
 
 # --- requests ------------------------------------------------------------------------
@@ -407,12 +466,12 @@ def parse(payload: list | dict, station_ids: list[str], models: list[Model], run
                             for var, v in values.items()
                         },
                     },
-                    schema=SCHEMA,
+                    schema=HOURLY_SCHEMA,
                     strict=False,
                 )
             )
     if not frames:
-        return pl.DataFrame(schema=SCHEMA)
+        return pl.DataFrame(schema=HOURLY_SCHEMA)
     return pl.concat(frames).filter(
         pl.col("lead_h").is_between(1, MAX_LEAD_H),
         ~pl.all_horizontal(pl.col(v).is_null() for v in VARIABLES),
@@ -491,9 +550,9 @@ def fetch_run(
             todo.remove(model)
             unavailable.add(model.id)
             continue
-        table = pl.concat([pl.DataFrame(schema=SCHEMA), *frames])
+        table = pl.concat([pl.DataFrame(schema=HOURLY_SCHEMA), *frames])
         return table, {m.id for m in todo}, unavailable
-    return pl.DataFrame(schema=SCHEMA), set(), unavailable
+    return pl.DataFrame(schema=HOURLY_SCHEMA), set(), unavailable
 
 
 # --- release storage -----------------------------------------------------------------
@@ -546,6 +605,70 @@ class RunsSync:
             self.store.put(STATE_TAG, STATE_NAME, state, label=store.sha256(state))
 
 
+# --- native steps ----------------------------------------------------------------------
+
+
+def native_steps(models: list[Model]) -> pl.LazyFrame:
+    """``model``, ``lead_h`` (1-120), ``_step``: the output step at each lead hour."""
+    return pl.LazyFrame(
+        [(m.id, h, m.step_at(h)) for m in models for h in range(1, MAX_LEAD_H + 1)],
+        schema={"model": pl.String, "lead_h": pl.Int16, "_step": pl.Int16},
+        orient="row",
+    )
+
+
+def native(frame: pl.LazyFrame | pl.DataFrame, models: list[Model]) -> pl.LazyFrame:
+    """The rows at each model's native output steps (``Model.step_at``), the stored
+    convention: rows with a ``source`` are kept as they are; rows without one (the
+    Single Runs API, stored before 2026-10-17 with every hour filled by Open-Meteo's
+    interpolation) only at native hours, with the precipitation summed over the native
+    period ending there (null unless every hour of it has a value). Models not in
+    ``models`` count as hourly."""
+    frame = frame.lazy()
+    if "source" not in frame.collect_schema().names():
+        frame = frame.with_columns(pl.lit(None, pl.String).alias("source"))
+    columns = frame.collect_schema().names()
+    kept = frame.filter(pl.col("source").is_not_null())
+    old = (
+        frame.filter(pl.col("source").is_null())
+        .join(native_steps(models), on=["model", "lead_h"], how="left")
+        .with_columns(pl.col("_step").fill_null(1))
+    )
+    lead, step = pl.col("lead_h"), pl.col("_step")
+    sums = (
+        old.with_columns((lead + (step - lead % step) % step).cast(pl.Int16).alias("lead_h"))
+        .group_by("run", "model", "station_id", "lead_h")
+        .agg(
+            pl.col("precipitation").sum().alias("_sum"),
+            pl.col("precipitation").count().alias("_n"),
+        )
+    )
+    converted = (
+        old.filter(lead % step == 0)
+        .join(sums, on=["run", "model", "station_id", "lead_h"], how="left")
+        .with_columns(
+            pl.when(pl.col("_n") == step)
+            .then(pl.col("_sum"))
+            .otherwise(None)
+            .cast(pl.Float32)
+            .alias("precipitation")
+        )
+        .select(columns)
+    )
+    return pl.concat([kept, converted])
+
+
+def from_api(table: pl.DataFrame, models: list[Model]) -> pl.DataFrame:
+    """An API answer (``HOURLY_SCHEMA``) as stored: native steps, ``source`` "api"."""
+    return (
+        native(table, models)
+        .with_columns(pl.lit("api").alias("source"))
+        .select(list(SCHEMA))
+        .cast(SCHEMA)
+        .collect()
+    )
+
+
 # --- the collection ------------------------------------------------------------------
 
 
@@ -557,6 +680,11 @@ class Result:
     stopped: str = ""  # why the collection stopped early, if it did
     #: weighted calls per run key, as spent
     calls: dict[str, float] = field(default_factory=dict)
+
+
+def affordable(n_stations: int, n_models: int, left: float) -> int:
+    """How many of ``n_models`` one run can ask for within ``left`` calls (0: none)."""
+    return max((k for k in range(n_models + 1) if run_cost(n_stations, k) <= left), default=0)
 
 
 def collect(
@@ -572,19 +700,31 @@ def collect(
     log: Callable[[str], None] = lambda _: None,
     first: date = HISTORY_FROM,
 ) -> Result:
-    """Fetch the runs not done yet: ``runs`` if given, else the recent ones, then the
-    history (newest first), until done or the call budget is used up."""
+    """Ask the Single Runs API, newest first, until done or the call budget is used up:
+    ``runs`` if given (every model not stored yet), else ``api_runs``: "recent" (within
+    the bucket's window: only the model-runs missing there, the fallback) and "history"
+    (older runs back to ``first``). When the budget left does not cover all models of a
+    run, as many as it covers are asked (the rest wait for the next run)."""
     state = State.load(data_dir / STATE_NAME)
+    explicit = runs is not None
     if runs is None:
+        edge = bucket_start(now)
         runs = [
-            *(recent_runs(now) if "recent" in modes else []),
-            *(history_runs(now, first) if "history" in modes else []),
+            r
+            for r in api_runs(now, first)
+            if ("recent" in modes and r >= edge) or ("history" in modes and r < edge)
         ]
     result, pulled = Result(), set()
     for run in runs:
-        todo = state.todo(run, wanted(models, run))
+        every = wanted(models, run)
+        todo = state.todo(run, every) if explicit else state.api_todo(run, every, now)
         if not todo:
             continue
+        fits = affordable(stations.height, len(todo), budget.max_calls - budget.used)
+        if fits == 0:
+            result.stopped = f"budget of {budget.max_calls:g} calls reached ({budget.used:g} used)"
+            break
+        todo = todo[:fits]
         month = f"{run:%Y-%m}"
         if sync and month not in pulled:  # merge into the stored month, not over it
             sync.pull([month])
@@ -602,7 +742,9 @@ def collect(
         finally:
             result.calls[key(run)] = result.calls.get(key(run), 0) + budget.used - before
         if table.height:
-            partitions.write_monthly(table, data_dir / "runs", KEYS, "run")
+            partitions.write_monthly(
+                from_api(table, models), data_dir / "runs", KEYS, "run", replace=["run", "model"]
+            )
         k = key(run)
         state.fetched.setdefault(k, set()).update(fetched)
         if unavailable and now - run >= timedelta(hours=PENDING_H):
@@ -615,17 +757,24 @@ def collect(
             result.gaps[k] = unavailable
         later = "" if now - run >= timedelta(hours=PENDING_H) else " (asked again later)"
         log(
-            f"run {run:%Y-%m-%d %H} UTC: {len(fetched)} models, {table.height:,} rows, "
-            f"{result.calls[k]:g} calls"
+            f"run {run:%Y-%m-%d %H} UTC: {len(fetched)} models from the API, "
+            f"{table.height:,} hourly rows, {result.calls[k]:g} calls"
             + (f"; not available: {', '.join(sorted(unavailable))}{later}" if unavailable else "")
         )
     return result
 
 
+def all_runs(now: datetime, first: date = HISTORY_FROM) -> list[datetime]:
+    """Every run from the newest one in the bucket's reach back to ``first``."""
+    start = datetime.combine(first, datetime.min.time(), UTC)
+    return _runs_between(_latest_run(now - timedelta(hours=BUCKET_MIN_AGE_H)), start)
+
+
 def progress(data_dir: Path, models: list[Model], now: datetime, first: date = HISTORY_FROM):
-    """``(complete, all)`` runs from ``first`` to the newest recent run."""
+    """``(complete, all)`` runs from ``first`` to the newest one (every model stored or
+    a gap for good)."""
     state = State.load(data_dir / STATE_NAME)
-    every = [*recent_runs(now), *history_runs(now, first)]
+    every = all_runs(now, first)
     done = sum(not state.todo(r, wanted(models, r)) for r in every)
     return done, len(every)
 
@@ -638,13 +787,18 @@ def summary(
     now: datetime,
     first: date = HISTORY_FROM,
     budget_note: str = "",
+    bucket_lines: str = "",
 ) -> str:
     """Markdown for the workflow's job summary."""
     done, every = progress(data_dir, models, now, first)
+    state = State.load(data_dir / STATE_NAME)
+    left = history_pending(state, models, now, first)
     lines = [
         "## Single runs",
         "",
-        f"- This run: {len(result.runs)} model runs fetched, {calls:g} Open-Meteo calls",
+        *([bucket_lines.rstrip("\n")] if bucket_lines else []),
+        f"- API: {len(result.runs)} runs asked, {calls:g} Open-Meteo calls; "
+        f"{left} runs still to ask (bucket gaps and history since {first})",
         f"- Progress: {done} of {every} runs complete since {first}",
     ]
     if budget_note:
@@ -665,16 +819,18 @@ def summary(
 def history_pending(
     state: State, models: list[Model], now: datetime, first: date = HISTORY_FROM
 ) -> int:
-    """History runs (older than the recent ones, back to ``first``) still to fetch."""
-    return sum(bool(state.todo(r, wanted(models, r))) for r in history_runs(now, first))
+    """Runs the API still has to be asked for (``api_runs``, ``State.api_todo``): the
+    bucket's gaps and the history older than its window, back to ``first``."""
+    return sum(bool(state.api_todo(r, wanted(models, r), now)) for r in api_runs(now, first))
 
 
 def history_done(
     read_state: Callable[[], State], models: list[Model], now: datetime
 ) -> tuple[bool, str]:
-    """Whether the single-runs history back to ``HISTORY_FROM`` is complete (at most
-    ``HISTORY_SLACK`` runs left), and why; not complete when the state cannot be read
-    (the safe answer: the D+N backfill then keeps to its current windows)."""
+    """Whether the single runs' API work back to ``HISTORY_FROM`` is done (at most
+    ``HISTORY_SLACK`` runs left: ``history_pending``), and why; not complete when the
+    state cannot be read (the safe answer: the D+N backfill then keeps to its current and
+    priority windows)."""
     try:
         left = history_pending(read_state(), models, now)
     except Exception as exc:  # anything: holding back is always safe
