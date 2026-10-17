@@ -590,7 +590,10 @@ def leads_cmd(
     ] = True,
     bands_since: Annotated[
         datetime | None,
-        typer.Option(help="First run of the band ranking's 'all' window (default: all runs)."),
+        typer.Option(
+            help="First run of the band ranking's 'all' window (default: 2026-06-23, the "
+            "first run with ALADIN)."
+        ),
     ] = None,
 ) -> None:
     """Error by lead hour, run by run: every model from Open-Meteo's single runs
@@ -603,7 +606,7 @@ def leads_cmd(
     since, runs_since = hour - timedelta(days=days), hour - timedelta(days=runs_days)
     first = min(since, runs_since)
     if bands_since is None:
-        bands_since = datetime.combine(runs.HISTORY_FROM, datetime.min.time(), tzinfo=UTC)
+        bands_since = datetime.combine(runs.ALADIN_FROM, datetime.min.time(), tzinfo=UTC)
     elif bands_since.tzinfo is None:
         bands_since = bands_since.replace(tzinfo=UTC)
     months = partitions.months(
@@ -905,45 +908,11 @@ def fetch_runs(
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Only print the runs to fetch and their cost.")
     ] = False,
-    history_from: Annotated[
-        datetime | None,
-        typer.Option(
-            formats=["%Y-%m-%d"],
-            help="Oldest day (00 UTC run) of the API's history. Default: the first run "
-            "with ALADIN (runs.HISTORY_FROM).",
-        ),
-    ] = None,
-    shared_calls: Annotated[
-        float,
-        typer.Option(
-            help="The daily budget shared with the D+N backfill: what the backfill leaves "
-            "of it today (its state in the release data-state with --github-release, else "
-            "backfill-state.json in --data-dir) can be added to --max-calls; nothing if "
-            "the state cannot be read.",
-        ),
-    ] = 0,
-    shared_from: Annotated[
-        float, typer.Option(help="This run's part of what is left starts here …")
-    ] = 0,
-    shared_to: Annotated[
-        float | None, typer.Option(help="… and ends here (default: --shared-calls).")
-    ] = None,
-    backfill_from: Annotated[
-        datetime,
-        typer.Option(formats=["%Y-%m-%d"], help="The backfill's --from (for the shared budget)."),
-    ] = datetime(2024, 1, 1),
-    backfill_priority_from: Annotated[
-        datetime | None,
-        typer.Option(
-            formats=["%Y-%m-%d"],
-            help="The backfill's --priority-from: its priority windows come before the "
-            "API's history too (for the shared budget).",
-        ),
-    ] = None,
 ) -> None:
     """Store single model runs (H+1 … H+120) at the station subset: from Open-Meteo's
     open-data bucket (every run of its window not stored yet), then from the Single
-    Runs API within a call budget (the bucket's gaps, then the older history)."""
+    Runs API within a call budget (the bucket's gaps, then the runs since the start of the
+    month the bucket's window starts in; older runs come with `mvd backfill`)."""
     if mode not in ("recent", "history", "all"):
         raise typer.BadParameter("use recent, history or all", param_hint="--mode")
     if source not in ("bucket", "api", "all"):
@@ -955,7 +924,6 @@ def fetch_runs(
     stations_table = runs.load_stations(stations_path)
     models = [m for m in catalogue.load_models() if m.enabled]
     now = datetime.now(UTC)
-    first = history_from.date() if history_from else runs.HISTORY_FROM
     modes = ("recent", "history") if mode == "all" else (mode,)
     bucket_result = bucket.Result()
     with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
@@ -994,23 +962,14 @@ def fetch_runs(
             typer.echo(f"bucket: {stored} model-runs stored, {bucket_result.rows:,} rows")
             for failed, why in sorted(bucket_result.failed.items()):
                 typer.echo(f"bucket error ({failed}): {why}", err=True)
-        max_calls, budget_note = runs.shared_budget(
-            max_calls,
-            shared_calls,
-            (shared_from, shared_calls if shared_to is None else shared_to),
-            lambda: _backfill_state(client if github_release else None, data_dir),
-            models,
-            backfill_from.date(),
-            now.date(),
-            backfill_priority_from.date() if backfill_priority_from else None,
-        )
+        budget_note = f"{max_calls:g} calls"
         typer.echo(f"API budget: {budget_note}")
         if dry_run:
             state = runs.State.load(data_dir / runs.STATE_NAME)
             edge = runs.bucket_start(now)
             todo = chosen or [
                 r
-                for r in runs.api_runs(now, first)
+                for r in runs.api_runs(now)
                 if ("recent" in modes and r >= edge) or ("history" in modes and r < edge)
             ]
             pending = [
@@ -1042,7 +1001,6 @@ def fetch_runs(
                 modes=modes,
                 sync=sync,
                 log=typer.echo,
-                first=first,
             )
     typer.echo(
         f"API: {len(result.runs)} runs fetched, {budget.used:g} calls used"
@@ -1055,7 +1013,6 @@ def fetch_runs(
             data_dir,
             models,
             now,
-            first,
             budget_note,
             bucket_lines=bucket.summary(bucket_result) if source != "api" else "",
         )
@@ -1225,34 +1182,6 @@ def _runs_counts(frame: pl.DataFrame | None) -> dict:
         "runs": frame["run"].n_unique(),
         "by_source": {r["source"]: [r["rows"], r["model_runs"]] for r in by.iter_rows(named=True)},
     }
-
-
-def _backfill_state(client: httpx.Client | None, data_dir: Path) -> backfill_mod.State:
-    """The backfill's progress: from the release data-state (``client``), else local."""
-    path = data_dir / store.STATE_NAME
-    if client is not None:
-        releases = _release_store(client)
-        if store.STATE_NAME not in releases.assets(store.STATE_TAG):
-            raise FileNotFoundError(f"{store.STATE_NAME} not in the release {store.STATE_TAG}")
-        path = data_dir / "backfill" / store.STATE_NAME  # apart from any local backfill
-        releases.download(store.STATE_TAG, store.STATE_NAME, path)
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return backfill_mod.State.load(path)
-
-
-def _runs_state(client: httpx.Client | None, data_dir: Path) -> runs.State:
-    """The single runs' progress: from the release runs-state (``client``), else local."""
-    path = data_dir / runs.STATE_NAME
-    if client is not None:
-        releases = _release_store(client)
-        if runs.STATE_NAME not in releases.assets(runs.STATE_TAG):
-            raise FileNotFoundError(f"{runs.STATE_NAME} not in the release {runs.STATE_TAG}")
-        path = data_dir / "runs-check" / runs.STATE_NAME  # apart from any local runs
-        releases.download(runs.STATE_TAG, runs.STATE_NAME, path)
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return runs.State.load(path)
 
 
 store_app = typer.Typer(help="Raw data store in GitHub Releases (data-YYYY-MM).")
@@ -2176,64 +2105,51 @@ def backfill(
             "GITHUB_REPOSITORY).",
         ),
     ] = False,
-    older_windows: Annotated[
-        str,
+    runs_history: Annotated[
+        bool,
         typer.Option(
-            help="Windows older than the current ones (last 90 days): always, never, or "
-            "after-runs-history (only once the single-runs history is complete: its state "
-            "in the release runs-state with --github-release, else runs-state.json in "
-            "--data-dir; never if it cannot be read). Priority windows are always allowed.",
+            help="With each window also the single runs' API history of its days (runs "
+            "older than the month the bucket's window starts in, at the station subset of "
+            "the single runs; with --github-release in the releases runs-YYYY-MM and "
+            "runs-state, else in --data-dir).",
         ),
-    ] = "always",
-    priority_from: Annotated[
-        datetime | None,
-        typer.Option(
-            formats=["%Y-%m-%d"],
-            help="Priority windows: those ending on or after this day come right after the "
-            "current ones (before the single-runs history and older windows), at the "
-            "station subset of the single runs only (--priority-stations).",
-        ),
-    ] = None,
-    priority_stations: Annotated[
+    ] = True,
+    runs_stations: Annotated[
         Path | None,
-        typer.Option(
-            help="Station subset CSV (column id) for the priority windows. Default: the "
-            "committed subset of the single runs (run-stations.csv).",
-        ),
+        typer.Option(help="Station subset CSV of the single runs. Default: the committed one."),
     ] = None,
 ) -> None:
-    """Backfill history newest first, in 14-day windows, resumable (state in the data dir)."""
-    if older_windows not in ("always", "never", "after-runs-history"):
-        raise typer.BadParameter(
-            "use always, never or after-runs-history", param_hint="--older-windows"
-        )
+    """Backfill history newest first, in 14-day windows, resumable (state in the data
+    dir): each window's D+N at every station and the rain gauges, then the single runs'
+    API history of its days, before the next older window."""
     first, last = start.date(), end.date() if end else _yesterday()
     _check_range(first, last, hint="--from/--to")
     if not stations_path.exists():
         raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
     table = pl.read_parquet(stations_path)
     models = [m for m in catalogue.load_models() if m.enabled]
-    priority = priority_from.date() if priority_from else None
-    subset = set(runs.load_stations(priority_stations)["id"]) if priority else None
+    now = datetime.now(UTC)
     transport = httpx.HTTPTransport(retries=3)
     with httpx.Client(timeout=300, transport=transport, follow_redirects=True) as client:
-        sync = None
+        sync = runs_sync = None
         if github_release:
             sync = store.ReleaseSync(_release_store(client), data_dir, log=typer.echo)
             sync.pull_state()
-        meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
-        points = observations.verification_stations(table, meta2)
-        if priority:
-            n = len(subset & set(points["id"]))
-            typer.echo(f"priority windows: ending since {priority}, at {n} stations")
-        older, why = older_windows == "always", "--older-windows never"
-        if older_windows == "after-runs-history":
-            older, why = runs.history_done(
-                lambda: _runs_state(client if github_release else None, data_dir),
-                models,
-                datetime.now(UTC),
+        history = None
+        if runs_history:
+            if github_release:
+                notes_store = GitHubReleaseStore(
+                    client, *_github_credentials(), notes=runs.RELEASE_NOTES
+                )
+                runs_sync = runs.RunsSync(notes_store, data_dir, log=typer.echo)
+                runs_sync.pull_state()
+            history = backfill_mod.RunsHistory(runs.load_stations(runs_stations), now, runs_sync)
+            typer.echo(
+                f"single runs: with each window, runs before {runs.history_edge(now):%Y-%m-%d} "
+                f"at {history.stations.height} stations"
             )
-        typer.echo(f"older windows: {'allowed' if older else 'held back'} ({why})")
+        meta2 = fetch_current_meta(client, 2, now.date())
+        points = observations.verification_stations(table, meta2)
         budget = forecasts.Budget(max_calls=max_calls)
         result = backfill_mod.run(
             client,
@@ -2246,18 +2162,24 @@ def backfill(
             sync,
             log=typer.echo,
             gauge_points=_gauge_points(table, meta2, points),
-            older=older,
-            held_back="" if older else why,
-            priority_from=priority,
-            subset=subset,
+            history=history,
         )
     typer.echo(
-        f"{result.windows_done} windows done, {budget.used:g} calls used"
+        f"{result.windows_done} windows done, {len(result.runs)} single runs, "
+        f"{budget.used:g} calls used"
         + (f"; stopped: {result.stopped} (run again to continue)" if result.stopped else "")
     )
     job_summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if job_summary:  # shown on the workflow run page
-        text = backfill_mod.summary(result, budget.used, data_dir, first, last, priority)
+        runs_line = ""
+        if history:
+            state = runs.State.load(data_dir / runs.STATE_NAME)
+            left = runs.backfill_pending(state, models, now)
+            runs_line = (
+                f"{left} runs before {runs.history_edge(now):%Y-%m-%d} still to fetch, back "
+                f"to {runs.history_start(models)} (each model from its archive start)"
+            )
+        text = backfill_mod.summary(result, budget.used, data_dir, first, last, runs_line)
         with open(job_summary, "a", encoding="utf-8") as f:
             f.write(text)
 
