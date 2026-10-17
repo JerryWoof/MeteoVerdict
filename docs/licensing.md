@@ -32,7 +32,7 @@ is a summary for the project, not legal advice.
 | Code | this repository | MIT |
 | ALADIN station archive (`aladin-YYYY-MM` releases) | GitHub Release assets | CC BY 4.0, derived from ČHMÚ data only; release notes credit ČHMÚ and list our changes |
 | ČHMÚ station data archive (`chmi-*` releases: every element of every station) | GitHub Release assets | CC BY 4.0, ČHMÚ data only, values unchanged (JSON → Parquet); release notes credit ČHMÚ and state the change |
-| Station pages (`station.html`, `station-data.zip` in `data-latest`) | GitHub Pages | CC BY 4.0, ČHMÚ data only; the page credits ČHMÚ with a link and the licence |
+| Station pages (`measured.html`, `station-data.zip` in `data-latest`) | GitHub Pages | CC BY 4.0, ČHMÚ data only; the page credits ČHMÚ with a link and the licence |
 | Radar archive (`radar-YYYY-MM` releases) and live frames (branch `radar-live`) | GitHub Release assets, a git branch | CC BY 4.0, derived from ČHMÚ data only (echo-top frames, motion fields and storm cells are our derivations from the ČHMÚ composites); release notes and the branch README credit ČHMÚ and list our changes |
 | Satellite archive (`satellite-YYYY-MM` releases), satellite frames in `radar-live` and the radar day sets | GitHub Release assets, a git branch, GitHub Pages | CC BY 4.0; the release notes, the branch README and `index.json` (`satellite_attribution`) credit EUMETSAT ("contains modified EUMETSAT Meteosat data <year>") and ČHMÚ and list our changes |
 | Single model runs at ~100 stations (`runs-YYYY-MM` releases) | GitHub Release assets | **CC BY-SA 4.0** (includes UK Met Office data); release notes credit Open-Meteo and the providers |
@@ -66,7 +66,7 @@ below, and public data is the point of the project.
    asks about 100 stations, not all ~500, and no request weighs more than 500 (the limit
    is 600 a minute).
 4. **The forecast pages** do not ask Open-Meteo from the visitors' browsers (since
-   2026-10-17; before, the detailed forecast page `forecast.html` sent one request per
+   2026-10-17; before, the detailed forecast page `forecast-detail.html` sent one request per
    okres shown). `mvd outlook` makes the only requests, four times a day for all okresy
    (about 420 calls with 11 weighted models, 732 with all 19, in at most two requests),
    and publishes `outlook.json` and, per okres, every model's hourly forecast as Open-Meteo

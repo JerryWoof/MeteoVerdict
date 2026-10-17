@@ -3,7 +3,7 @@
 Our combined forecast and the ranking of the models for every okres, as static JSON
 and CSV files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
 `Access-Control-Allow-Origin: *`). Human-readable page with a picker and examples:
-<https://jerrywoof.github.io/MeteoVerdict/api.html>.
+<https://jerrywoof.github.io/MeteoVerdict/data.html>.
 
 | File | Contains |
 |---|---|

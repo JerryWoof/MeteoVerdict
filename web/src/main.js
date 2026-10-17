@@ -237,7 +237,7 @@ function chips(items, label) {
   return wrap;
 }
 
-/** Under the okres name: links to the pages of all its stations (station.html). */
+/** Under the okres name: links to the pages of all its stations (measured.html). */
 function stationPages(region) {
   const all = stationsIn(current.stationTable, region);
   if (all.length === 0) return null;
@@ -246,7 +246,7 @@ function stationPages(region) {
   all.forEach((s, i) => {
     if (i > 0) line.append(" · ");
     const a = element("a", s.name);
-    a.href = `station.html#${s.id}`;
+    a.href = `measured.html#${s.id}`;
     line.append(a);
   });
   return line;
@@ -335,7 +335,7 @@ async function showRegion(region) {
   links.append(compare);
   if (current.level === "okres") {
     const forecast = element("a", t("detail.forecast"));
-    forecast.href = `forecast.html#${region}`;
+    forecast.href = `forecast-detail.html#${region}`;
     links.append(forecast);
   }
   blocks.push(links);
@@ -353,9 +353,9 @@ async function showStation(code, title, backTo) {
   const children = [close];
   if (backTo) children.push(back);
   children.push(element("h2", title), stationChart(doc, current.view, current.colors, current.names, t));
-  // every element the station measures, with its history (station.html)
+  // every element the station measures, with its history (measured.html)
   const all = element("a", t("station.link"));
-  all.href = `station.html#${code}`;
+  all.href = `measured.html#${code}`;
   const links = element("p", null, "links");
   links.append(all);
   children.push(links);

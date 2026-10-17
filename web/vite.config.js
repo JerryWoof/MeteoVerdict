@@ -8,11 +8,11 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     chunkSizeWarningLimit: 1200,
-    // the score map, the model comparison, the detailed forecast per okres, the
-    // TV-style forecast map, the open data page, the radar and the station page
+    // one page per tab (Map, Forecast, Radar, Measured, Compare, Data) and the detailed
+    // forecast per okres; the old names (tv, station, api) redirect from public/
     rollupOptions: {
       input: {
-        map: "index.html", compare: "compare.html", forecast: "forecast.html", tv: "tv.html", api: "api.html", station: "station.html", radar: "radar.html",
+        map: "index.html", forecast: "forecast.html", detail: "forecast-detail.html", radar: "radar.html", measured: "measured.html", compare: "compare.html", data: "data.html",
       },
     },
   },
