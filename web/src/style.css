@@ -267,29 +267,9 @@ input[type="text"] {
   width: 21rem;
   padding: 0.6rem 0.9rem 0.8rem;
 }
-/* wide screens: a clicked okres's panel is never a scroll box. It shares one grid cell
-   with the map, so a panel longer than the map makes the map taller instead */
-@media (min-width: 1024px) {
-  .map-wrap {
-    display: grid;
-  }
-  .map-wrap > .map-frame,
-  .map-wrap > .map-box.panel:not(#point-panel) {
-    grid-area: 1 / 1;
-  }
-  .map-wrap > .map-frame {
-    height: auto;
-    min-height: var(--map-height);
-  }
-  .map-wrap > .map-box.panel:not(#point-panel) {
-    position: relative;
-    top: auto;
-    right: auto;
-    align-self: start;
-    justify-self: end;
-    margin: 0.75rem 3.2rem 2rem 0;
-  }
-}
+/* a clicked okres's panel is never a scroll box: a long one reaches below the map, the map
+   keeps its size (so Czechia does not move from okres to okres) and the page grows
+   (web/src/panel-room.js makes room under the map) */
 .map-box:empty {
   display: none;
 }
