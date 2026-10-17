@@ -259,3 +259,79 @@ export function nightBands(sunOf, start, end, timeZone = "Europe/Prague") {
   }
   return merged;
 }
+
+// --- which forecast the page shows ------------------------------------------------------
+
+/** The selector's value for our combined forecast (the default). */
+export const COMBINED = "meteoverdict";
+
+const mean = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : null);
+
+/**
+ * The forecast selector's options: our combination first, then the models scored in the
+ * okres by their mean rank over all variables and lead days (ties: larger mean weight
+ * first), then the other models of `names` (meta.json models, without "blend") by name.
+ * [{model, position, rank, weight, scored}]; position 1.. for the scored models.
+ */
+export function modelOptions(table, names) {
+  const stats = new Map();
+  for (const r of [...table.values()].flat()) {
+    if (!stats.has(r.model)) stats.set(r.model, { ranks: [], weights: [] });
+    if (r.rank != null) stats.get(r.model).ranks.push(r.rank);
+    if (r.weight != null) stats.get(r.model).weights.push(r.weight);
+  }
+  const name = (model) => names?.[model] ?? model;
+  const scored = [...stats.entries()]
+    .map(([model, s]) => ({ model, rank: mean(s.ranks), weight: mean(s.weights), scored: true }))
+    .sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || (b.weight ?? 0) - (a.weight ?? 0)
+      || name(a.model).localeCompare(name(b.model), "cs"))
+    .map((o, i) => ({ ...o, position: i + 1 }));
+  const unscored = Object.keys(names ?? {})
+    .filter((model) => model !== "blend" && model !== COMBINED && !stats.has(model))
+    .sort((a, b) => name(a).localeCompare(name(b), "cs"))
+    .map((model) => ({ model, position: null, rank: null, weight: null, scored: false }));
+  return [{ model: COMBINED, position: null, rank: null, weight: null, scored: false }, ...scored, ...unscored];
+}
+
+/** The last hour (ms) with any value of a model, or null without any. */
+export function modelEnd(forecast, model) {
+  let end = null;
+  for (const variable of VARIABLES) {
+    const values = forecast.values[variable]?.[model] ?? [];
+    for (let i = values.length - 1; i >= 0; i -= 1) {
+      if (values[i] != null) {
+        if (end == null || forecast.times[i] > end) end = forecast.times[i];
+        break;
+      }
+    }
+  }
+  return end;
+}
+
+/**
+ * One model's raw daily summary (no correction) on the given days ("YYYY-MM-DD"), as
+ * dailySummary. A day the model does not cover (beyond its horizon, or ending in it):
+ * all values null and `beyond: true`.
+ */
+export function modelDays(forecast, model, days, timeZone = "Europe/Prague") {
+  const series = Object.fromEntries(VARIABLES.map((v) => [v, forecast.values[v]?.[model] ?? []]));
+  const own = new Map(dailySummary(forecast.times, series, timeZone).map((d) => [d.day, d]));
+  return days.map((day) => own.get(day) ?? {
+    day, tmin: null, tmax: null, precipitation: null, wind: null, beyond: true,
+  });
+}
+
+/** Adds another answer's model series to a forecast, matched by time. */
+export function mergeForecast(forecast, extra) {
+  const index = new Map(forecast.times.map((time, i) => [time, i]));
+  for (const variable of VARIABLES) {
+    for (const [model, values] of Object.entries(extra.values[variable] ?? {})) {
+      const column = forecast.times.map(() => null);
+      extra.times.forEach((time, i) => {
+        if (index.has(time)) column[index.get(time)] = values[i];
+      });
+      if (column.some((v) => v != null)) forecast.values[variable][model] = column;
+    }
+  }
+  return forecast;
+}
