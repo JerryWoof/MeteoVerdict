@@ -1608,13 +1608,24 @@ the same reading as `meteoverdict.bucket`) and added to the releases with
   with leads missing, ICON-D2 2026-08-22 00 UTC without v wind, ICON 08-14 12 UTC
   without gusts, ARPEGE Europe 09-17 12 UTC one lead short, IFS 10-16 12 UTC still being
   written) and records them, and every model-run of the harvested runs it lacks, as
-  missing in the bucket (128: GEM Global before 2026-08-18 72, the bucket's missing and
-  partly written runs 56), so the API is asked for them (runs younger than 24 h are
+  missing in the bucket (125: GEM Global before 2026-08-18 72, the bucket's missing and
+  partly written runs 53), so the API is asked for them (runs younger than 24 h are
   left to the bucket);
 - **prefers the bucket for all models**: a model-run of the harvest replaces every
   stored row of that model-run (the API's runs of 2026-10-13 to 10-16, stored hourly),
   so a run's rows always come from one source. The API's runs stored after the harvest
   stay as they were.
+
+Uploaded on 2026-10-17: `runs-2026-07` (69 runs, 1,225 model-runs, 7.8 million rows),
+`runs-2026-08` (124 runs, 2,254, 14.5 million), `runs-2026-09` (120 runs, 2,191, 14.2
+million) and `runs-2026-10` (before: 15 runs, 217 model-runs and 2.1 million hourly rows
+from the API; after: 63 runs, 1,158 model-runs from the bucket plus 3 from the API,
+7.5 million rows); `runs-state` with 6,831 model-runs stored and 125 missing in the
+bucket. Checked afterwards: two runs read live again (2026-08-05 12 and 2026-09-20 00
+UTC) equal the released rows (temperature differs by 0.01 at the rounding edge in 92 of
+241,304 values); the released runs of 2026-10-13 to 10-16 against the API's earlier
+rows: 1.34 million values (49,865 with rain), mean absolute difference 0.032 °C, 0.002
+mm, 0.006 and 0.017 m/s (IFS HRES 0.226 °C).
 
 ### The station subset
 
