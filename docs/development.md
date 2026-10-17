@@ -36,6 +36,7 @@ data comes from recorded fixtures in `tests/fixtures/`. Dates are `YYYY-MM-DD` i
 | ČHMÚ archive (every element) | `mvd chmi-archive`, `mvd chmi-mirror DIR` | releases `chmi-*` ([format](data-sources.md#chmi-archive)) |
 | Station pages | `mvd station-pages` | `site/data/station/<WSI>.json` |
 | Observed map (the measured page, `station.html`) | `mvd observed-map` | `site/data/observed/<YYYY-MM-DD>.json`, `index.json` ([format](data-sources.md#observed-map)) |
+| Rebuilt forecasts of the past days (forecast vs. measured) | `mvd hindcast` | `data/outlook-archive/outlook-hindcast.parquet` ([format](data-sources.md#observed-map)) |
 | Checks | `mvd check` | exit 1 on stale data or many silent stations |
 | Which stations score the models | `mvd station-check` | Markdown ([docs/station-check.md](station-check.md)) |
 

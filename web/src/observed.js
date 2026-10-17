@@ -109,6 +109,10 @@ export function parseObservedDay(doc, okresy) {
         ph: v.ph ?? [],
         sno: v.sno ?? null,
         stations: v.st ?? [],
+        // groups (t, r, w, g, s, c) taken from the nearest stations of other okresy,
+        // as the scoring's borrowed stations: group → [station ids]
+        borrowed: borrowedAt(v.borrowed, i),
+        bst: v.bst ?? [],
       };
       row.symbol = observedSymbol(row, doc.day);
       row.dark = isDark(part, row.light);
@@ -129,9 +133,28 @@ export function parseObservedDay(doc, okresy) {
   };
 }
 
+/** The value groups an okres borrowed in the `i`-th period: {t: [ids], …} (empty: none). */
+function borrowedAt(borrowed, i) {
+  const out = {};
+  for (const [group, lists] of Object.entries(borrowed ?? {})) if (lists?.[i]?.length) out[group] = lists[i];
+  return out;
+}
+
+/** The groups of values (borrowed, counts) and the layers they colour. */
+export const GROUP_OF = { temperature: "t", precipitation: "r", wind: "w", gust: "g", sunshine: "s", cloud: "c" };
+
+/** The borrowed stations of a row's value group, nearest first: [{id, name, okres, km}]. */
+export function borrowedFor(row, group) {
+  const ids = row?.borrowed?.[group];
+  if (!ids?.length) return [];
+  const at = new Map((row.bst ?? []).map((b) => [b.id, b]));
+  return ids.map((id) => at.get(id) ?? { id, name: id, okres: null, km: null });
+}
+
 /**
- * The archived forecasts of a day: [{lead, issued, rows: Map "okres|part" → {tmin, tmax,
- * precipitation, rain_probability, wind, gust, cloud, sunshine, symbol}}], by lead.
+ * The forecasts of a day: [{lead, kind, issued, trainedTo, skyIssued, rows: Map
+ * "okres|part" → {tmin, tmax, precipitation, rain_probability, wind, gust, cloud,
+ * sunshine, symbol}}], by lead (0: the day's morning run).
  */
 export function parseForecasts(doc) {
   const parts = doc?.parts ?? PARTS;
@@ -144,15 +167,14 @@ export function parseForecasts(doc) {
           if (Object.values(row).some((v) => v != null)) rows.set(`${code}|${part}`, row);
         });
       }
-      return { lead: f.lead, issued: f.issued, rows };
+      // kind: "stored" (the map's own parts of day), "stored_sky" (only the sky of a
+      // stored run) or "rebuilt" (rebuilt out of sample, meteoverdict.hindcast)
+      return {
+        lead: f.lead, kind: f.kind ?? "stored", issued: f.issued ?? null,
+        trainedTo: f.trained_to ?? null, skyIssued: f.sky_issued ?? null, rows,
+      };
     })
     .sort((a, b) => a.lead - b.lead);
-}
-
-/** The forecast to show first: one day before if there is one, else the shortest lead. */
-export function defaultLead(forecasts) {
-  if (!forecasts?.length) return null;
-  return forecasts.some((f) => f.lead === 1) ? 1 : forecasts[0].lead;
 }
 
 const best = (rows, value, better) =>

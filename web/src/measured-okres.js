@@ -3,7 +3,7 @@
 // day, what our forecast had said ("forecast vs. measured") and the okres's stations.
 // Moved here from the forecast map, which shows the coming days only.
 import { iconCanvas } from "./icons.js";
-import { defaultLead, difference } from "./observed.js";
+import { borrowedFor, difference } from "./observed.js";
 import { issuedText } from "./picker.js";
 import { PARTS, displayName, iconName, labelFor, rowFor } from "./tv.js";
 
@@ -28,41 +28,50 @@ function element(tag, text, className) {
 export function createOkresPanel({ panel, t, language, dayText, update, stationHref, openStation, stationIndex }) {
   const fmt = (v, digits = 0) => (v == null ? "–" : v.toFixed(digits));
   const fmt1 = (v) => (v == null ? "–" : v.toLocaleString(language, { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
-  const percent = (p) => (p == null ? "–" : `${Math.round(p * 100)} %`);
   const symbolText = (symbol) => (symbol ? t(`symbol.${symbol}`) : "");
   const symbolMeasured = (symbol) => (symbol ? t(`diary.symbol.${symbol}`) : "");
   // "1 stanice", "3 stanice", "12 stanic" / "1 station", "12 stations"
   const plural = new Intl.PluralRules(language);
   const stationsText = (n) => t(`obs.st.${plural.select(n) === "one" ? "one" : plural.select(n) === "few" ? "few" : "other"}`, { n });
-  let lead = null; // the forecast lead of the comparison (null: one day before)
-  let leadDay = null;
+
+  /** "Jevíčko (okres Svitavy)": a borrowed station with its own okres. */
+  const borrowedName = (b) => (b.okres ? t("obs.borrowedName", { name: b.name, okres: b.okres }) : b.name);
+
+  /** Who measured a value: "3 stanice", or "z okolních stanic: Jevíčko (okres Svitavy), …"
+   * where the okres has none of its own for it (the nearest of its neighbours). */
+  function source(row, n, ...groups) {
+    const lent = groups.map((g) => borrowedFor(row, g)).find((list) => list.length);
+    return lent ? t("obs.nearby", { list: lent.map(borrowedName).join(", ") }) : stationsText(n);
+  }
 
   /** The measured values of an okres's part of day, each with its number of stations. */
   function measuredFacts(row) {
     const facts = element("ul", null, "facts");
     const add = (text, className) => facts.append(element("li", text, className));
+    // a value from the neighbours' stations: marked as such
+    const lentClass = (...groups) => (groups.some((g) => borrowedFor(row, g).length) ? "borrowed" : undefined);
     const n = row.counts;
     if (row.symbol) add(symbolMeasured(row.symbol));
     if (n.t) {
-      let text = t("obs.temp", { high: fmt(row.tmax), low: fmt(row.tmin), stations: stationsText(n.t) });
+      let text = t("obs.temp", { high: fmt(row.tmax), low: fmt(row.tmin), stations: source(row, n.t, "t") });
       if (n.t > 1) text += ` ${t("obs.tempRange", { low: fmt(row.tmin_lo), high: fmt(row.tmax_hi) })}`;
-      add(text);
+      add(text, lentClass("t"));
     } else add(t("obs.noTemp"), "missing");
     if (n.r) {
-      let text = t("obs.rain", { amount: fmt1(row.precipitation), stations: stationsText(n.r) });
+      let text = t("obs.rain", { amount: fmt1(row.precipitation), stations: source(row, n.r, "r") });
       if (n.r > 1 && row.precipitation_hi > 0) text += ` ${t("obs.rainMax", { amount: fmt1(row.precipitation_hi) })}`;
-      add(text);
+      add(text, lentClass("r"));
     } else add(t("obs.noRain"), "missing");
     if (n.w && n.g) {
-      add(t("obs.wind", { wind: fmt(row.wind), gust: fmt(row.gust), stations: stationsText(Math.max(n.w, n.g)) }));
+      add(t("obs.wind", { wind: fmt(row.wind), gust: fmt(row.gust), stations: source(row, Math.max(n.w, n.g), "w", "g") }), lentClass("w", "g"));
     } else if (n.g) {
       // older days (daily values): the gust only
-      add(t("obs.gustOnly", { gust: fmt(row.gust), stations: stationsText(n.g) }));
+      add(t("obs.gustOnly", { gust: fmt(row.gust), stations: source(row, n.g, "g") }), lentClass("g"));
     } else if (n.w) {
-      add(t("obs.windOnly", { wind: fmt(row.wind), stations: stationsText(n.w) }));
+      add(t("obs.windOnly", { wind: fmt(row.wind), stations: source(row, n.w, "w") }), lentClass("w"));
     } else add(t("obs.noWind"), "missing");
-    if (n.s) add(t("obs.sunshine", { hours: fmt1(row.sunshine), stations: stationsText(n.s) }));
-    if (n.c) add(t("obs.cloud", { value: fmt(row.cloud), stations: stationsText(n.c) }));
+    if (n.s) add(t("obs.sunshine", { hours: fmt1(row.sunshine), stations: source(row, n.s, "s") }), lentClass("s"));
+    if (n.c) add(t("obs.cloud", { value: fmt(row.cloud), stations: source(row, n.c, "c") }), lentClass("c"));
     if (row.ph?.length) add(t("obs.phenomena", { list: row.ph.map((c) => t(`pheno.${c}`)).join(", ") }));
     return facts;
   }
@@ -78,97 +87,138 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
     return cell;
   }
 
-  /** "13° · 1.4 mm" with the symbol: one side of the comparison. */
-  function compareCell(row, part, measured) {
-    const td = element("td", null, "cmp");
-    if (!row) {
-      td.textContent = "–";
-      return td;
+  /** "+1.2°": a difference, signed; empty without one. */
+  const signed = (v, digits, unit) => {
+    if (v == null) return "";
+    const text = v.toLocaleString(language, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    return `${v > 0 ? "+" : ""}${text}${unit}`;
+  };
+
+  /** A forecast's row label: "1 day ahead", "same day", with how it came about. */
+  function sourceLine(f) {
+    if (f.kind === "rebuilt") return t("obs.kind.rebuilt");
+    if (f.kind === "stored_sky") return t("obs.kind.storedSky", { time: issuedText(f.issued) ?? "–" });
+    return t("obs.kind.stored", { time: issuedText(f.issued) ?? "–" });
+  }
+
+  /** One value cell: the value, and below it the difference to the measured one. */
+  function valueCell(value, delta, deltaText) {
+    const td = element("td", null, "num");
+    td.append(element("span", value));
+    if (delta != null) {
+      const d = element("small", deltaText, "delta");
+      d.title = t("obs.deltaHint");
+      td.append(d);
     }
-    const symbol = measured ? symbolMeasured(row.symbol) : symbolText(row.symbol);
-    td.append(
-      iconCanvas(iconName(row.symbol, part, measured ? row : { dark: part === "night" }), 22, symbol),
-      element("strong", labelFor({ ...row, measured: true }, "temperature", part)),
-      element("span", row.precipitation == null ? "–" : `${fmt1(row.precipitation)} mm`, "rain"),
-    );
-    if (!measured && row.rain_probability != null) td.title = t("tv.rain", { chance: percent(row.rain_probability), amount: fmt1(row.precipitation) });
     return td;
   }
 
-  /** "Forecast vs. measured": our archived forecast of that day beside the measurements. */
-  function compareSection(view, state, rerender) {
+  /** A row of the comparison: the symbol, temperature, rain and wind (with Δ). */
+  function compareRow(label, note, row, measured, part, isMeasured, className) {
+    const tr = element("tr", null, className);
+    const head = element("th", null, "lead");
+    head.scope = "row";
+    head.append(element("span", label));
+    if (note) head.append(element("small", note));
+    tr.append(head);
+    const symbol = element("td", null, "sym");
+    if (row?.symbol) {
+      const text = isMeasured ? symbolMeasured(row.symbol) : symbolText(row.symbol);
+      symbol.append(iconCanvas(iconName(row.symbol, part, isMeasured ? row : { dark: part === "night" }), 24, text));
+      symbol.title = text;
+    } else symbol.textContent = row && !isMeasured && row.precipitation != null ? t("obs.noSky") : "–";
+    tr.append(symbol);
+    const temp = row ? (part === "night" ? row.tmin : row.tmax) : null;
+    const dT = isMeasured ? null : difference(row, measured, "temperature", part);
+    const dR = isMeasured ? null : difference(row, measured, "precipitation", part);
+    const dW = isMeasured ? null : difference(row, measured, "wind", part);
+    tr.append(
+      valueCell(temp == null ? "–" : `${Math.round(temp)}°`, dT, signed(dT, 0, "°")),
+      valueCell(row?.precipitation == null ? "–" : `${fmt1(row.precipitation)} mm`, dR, signed(dR, 1, "")),
+      valueCell(row?.wind == null ? "–" : `${fmt(row.wind)} m/s`, dW, signed(dW, 0, "")),
+    );
+    return tr;
+  }
+
+  /** "Forecast vs. measured" for the part shown: what was measured, then our forecast
+   * of the same day (morning run), 1, 2 and 3 days ahead, stored or rebuilt. */
+  function compareSection(view, state) {
     const box = element("section", null, "compare");
     box.append(element("h3", t("obs.compareTitle")));
     const forecasts = view.forecasts ?? [];
-    if (!forecasts.length) {
-      box.append(element("p", t("obs.noForecast"), "model-note"));
+    const parts = element("div", null, "segmented compare-parts");
+    parts.setAttribute("aria-label", t("tv.part"));
+    for (const part of view.parts) {
+      const button = element("button", t(`part.${part}`));
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(part === state.part));
+      button.addEventListener("click", () => update({ part }));
+      parts.append(button);
+    }
+    if (view.parts.length > 1) box.append(parts);
+    const measured = rowFor(view, state.okres, state.day, state.part);
+    const shown = forecasts.filter((f) => f.rows.get(`${state.okres}|${state.part}`));
+    if (!shown.length) {
+      box.append(element("p", t(forecasts.length ? "obs.noForecastOkres" : "obs.noForecast"), "model-note"));
       return box;
     }
-    const chosenLead = forecasts.some((f) => f.lead === lead) ? lead : defaultLead(forecasts);
-    const chosen = forecasts.find((f) => f.lead === chosenLead);
-    if (forecasts.length > 1) {
-      const leads = element("div", null, "segmented leads");
-      leads.setAttribute("aria-label", t("obs.leadPick"));
-      for (const f of forecasts) {
-        const button = element("button", t(`obs.lead.${Math.min(f.lead, 3)}`, { n: f.lead }));
-        button.type = "button";
-        button.setAttribute("aria-pressed", String(f.lead === chosenLead));
-        button.addEventListener("click", () => {
-          lead = f.lead;
-          rerender();
-        });
-        leads.append(button);
-      }
-      box.append(leads);
-    }
-    box.append(element("p", t(`obs.issued.${Math.min(chosenLead, 3)}`, { n: chosenLead, time: issuedText(chosen.issued) ?? "–" }), "model-note"));
-    const table = element("table", null, "compare-table");
+    const table = element("table", null, "compare-table matrix");
     const head = element("tr");
-    head.append(element("th", ""), element("th", t("obs.forecast")), element("th", t("obs.measured")), element("th", "Δ", "num"));
-    head.lastChild.title = t("obs.deltaHint");
+    for (const key of ["", "obs.col.symbol", "obs.col.temp", "obs.col.rain", "obs.col.wind"]) head.append(element("th", key ? t(key) : ""));
     table.append(head);
-    for (const part of view.parts) {
-      const measured = rowFor(view, state.okres, state.day, part);
-      const forecast = chosen.rows.get(`${state.okres}|${part}`);
-      const tr = element("tr", null, part === state.part ? "current" : "");
-      tr.addEventListener("click", () => update({ part }));
-      const delta = difference(forecast, measured, "temperature", part);
-      tr.append(
-        element("td", t(`part.${part}`)),
-        compareCell(forecast, part, false),
-        compareCell(measured, part, true),
-        element("td", delta == null ? "" : `${delta > 0 ? "+" : ""}${fmt(delta)}°`, "num delta"),
-      );
-      table.append(tr);
+    table.append(compareRow(t("obs.measured"), null, measured, measured, state.part, true, "measured"));
+    for (const f of shown) {
+      const label = t(`obs.lead.${Math.min(f.lead, 3)}`, { n: f.lead });
+      table.append(compareRow(label, sourceLine(f), f.rows.get(`${state.okres}|${state.part}`), measured, state.part, false, f.kind));
     }
-    box.append(table, element("p", t("obs.compareNote"), "model-note"));
+    box.append(table);
+    const notes = [t("obs.compareNote")];
+    if (shown.some((f) => f.kind === "rebuilt")) notes.push(t("obs.rebuiltNote"));
+    for (const note of notes) box.append(element("p", note, "model-note"));
     return box;
   }
 
-  /** The okres's stations that day, linked to their pages (the diary opens on that day). */
+  /** A station linked to its page (the diary opens on that day). */
+  function stationLink(id, name) {
+    const a = element("a", name ?? id);
+    a.href = stationHref(id);
+    a.addEventListener("click", (event) => openStation(id, event));
+    return a;
+  }
+
+  /** The okres's stations that day, then the stations of its neighbours it borrowed. */
   function stationsSection(view, state) {
-    const ids = rowFor(view, state.okres, state.day, "day")?.stations ?? [];
+    const row = rowFor(view, state.okres, state.day, "day");
+    const ids = row?.stations ?? [];
     const box = element("section", null, "obs-stations");
     box.append(element("h3", t("obs.stationsTitle", { stations: stationsText(ids.length) })));
-    if (!ids.length) {
-      box.append(element("p", t("obs.noStations"), "model-note"));
-      return box;
+    if (!ids.length) box.append(element("p", t("obs.noStations"), "model-note"));
+    else {
+      const list = element("ul");
+      const names = new Map();
+      for (const id of ids) {
+        const a = stationLink(id);
+        names.set(id, a);
+        const li = element("li");
+        li.append(a);
+        list.append(li);
+      }
+      stationIndex().then((index) => {
+        for (const s of index?.stations ?? []) if (names.has(s.id)) names.get(s.id).textContent = s.name;
+      });
+      box.append(list);
     }
-    const list = element("ul");
-    const names = new Map();
-    for (const id of ids) {
-      const a = element("a", id);
-      a.href = stationHref(id);
-      a.addEventListener("click", (event) => openStation(id, event));
-      names.set(id, a);
-      const li = element("li");
-      li.append(a);
-      list.append(li);
+    const lent = row?.bst ?? [];
+    if (lent.length) {
+      box.append(element("h3", t("obs.borrowedTitle", { stations: stationsText(lent.length) })));
+      const list = element("ul", null, "borrowed");
+      for (const b of lent) {
+        const li = element("li");
+        li.append(stationLink(b.id, b.name), element("span", ` ${t("obs.borrowedWhere", { okres: b.okres ?? "–", km: fmt1(b.km) })}`, "where"));
+        list.append(li);
+      }
+      box.append(list, element("p", t("obs.borrowedNote"), "model-note"));
     }
-    stationIndex().then((index) => {
-      for (const s of index?.stations ?? []) if (names.has(s.id)) names.get(s.id).textContent = s.name;
-    });
-    box.append(list);
     return box;
   }
 
@@ -178,11 +228,6 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
       panel.replaceChildren();
       return;
     }
-    if (leadDay !== state.day) {
-      lead = null;
-      leadDay = state.day;
-    }
-    const rerender = () => render(view, state);
     panel.classList.add("past");
     const info = view.okresy.find((o) => o.code === state.okres);
     const close = element("button", "×", "close");
@@ -211,7 +256,7 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
     } else {
       children.push(element("p", t("obs.dailyNote"), "model-note"));
     }
-    children.push(compareSection(view, state, rerender), stationsSection(view, state), element("p", t("obs.panelNote"), "model-note"));
+    children.push(compareSection(view, state), stationsSection(view, state), element("p", t("obs.panelNote"), "model-note"));
     panel.replaceChildren(...children);
   }
 

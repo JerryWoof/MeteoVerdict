@@ -155,6 +155,72 @@ def test_okres_values_are_means_with_extremes_and_counts():
     assert brno["n_t"] == 1 and brno["n_r"] == 0 and brno["r"] is None
 
 
+def test_an_okres_without_a_station_borrows_the_nearest_of_its_neighbours():
+    # okres X has a rain gauge only; Y's stations lie 3, 8, 12, 25 and 40 km from X's
+    # border; Z has nothing within 30 km
+    own, y = "0-203-0-X1", [f"0-203-0-Y{i}" for i in range(5)]
+    stations = pl.DataFrame(
+        {"id": [own, *y], "okres_code": ["X", "Y", "Y", "Y", "Y", "Y"]},
+    )
+    km = [3.0, 8.0, 12.0, 25.0, 40.0]
+    distance = pl.DataFrame(
+        {
+            "region": ["X"] * 6 + ["Y"] * 6 + ["Z"] * 6,
+            "region_name": ["X"] * 6 + ["Y"] * 6 + ["Z"] * 6,
+            "station_id": [own, *y] * 3,
+            "distance_km": [0.0, *km, 5.0, 0, 0, 0, 0, 0, *[31.0 + i for i in range(6)]],
+        }
+    )
+
+    def row(station, tmax, r=None, cloud=None):
+        return {
+            "station": station,
+            "day": DAY,
+            "part": "day",
+            **dict.fromkeys(om.STATION_COLUMNS),
+            "tmax": tmax,
+            "tmin": None if tmax is None else tmax - 10,
+            "r": r,
+            "cloud": cloud,
+        }
+
+    values = pl.DataFrame(
+        [
+            row(own, None, r=1.0),
+            row(y[0], None, r=2.0),  # nearest, but no temperature: the next ones lend it
+            row(y[1], 10.0),
+            row(y[2], 12.0),
+            row(y[3], 14.0, cloud=50.0),
+            row(y[4], 30.0),  # beyond 30 km: never
+        ],
+        schema={
+            "station": pl.String,
+            "day": pl.Date,
+            "part": pl.String,
+            **dict.fromkeys(om.STATION_COLUMNS, pl.Float64),
+        },
+    )
+    got = {
+        r["okres"]: r for r in om.okres_periods(values, stations, distance).iter_rows(named=True)
+    }
+    x = got["X"]
+    # its own rain gauge, not borrowed
+    assert x["r"] == 1.0 and x["n_r"] == 1 and x["b_r"] is None
+    # temperature from the three nearest with one (Y1, Y2, Y3), nearest first
+    assert x["b_t"] == [y[1], y[2], y[3]] and x["n_t"] == 3
+    assert x["tmax"] == pytest.approx(12.0) and x["tmax_hi"] == 14.0 and x["tmin_lo"] == 0.0
+    # cloud: the only one within 30 km
+    assert x["b_c"] == [y[3]] and x["cloud"] == 50.0 and x["n_c"] == 1
+    assert x["st"] == [own]  # its own stations only
+    # Y has its own stations: borrows nothing (X's rain gauge is 5 km from Y)
+    assert got["Y"]["b_r"] is None and got["Y"]["b_t"] is None and got["Y"]["n_t"] == 4
+    # Z: nothing near enough, stays empty (a dash on the map)
+    assert "Z" not in got
+    # without distances nothing is borrowed (as before)
+    plain = om.okres_periods(values, stations).filter(pl.col("okres") == "X").row(0, named=True)
+    assert plain["n_t"] == 0 and plain["tmax"] is None
+
+
 def test_daily_values_for_older_days():
     def row(station, element, vtype, hour, value, quality=0):
         return {
@@ -239,10 +305,12 @@ def test_runs_beside_the_measured_day():
         ]
     )
     picked = om.pick_runs(archive, DAY)
-    assert [(lead, at.hour) for lead, at in picked] == [(1, 20), (3, 10)]
+    # the same day: its first run (00:50 Prague), then the newest of each lead
+    assert [(lead, at.hour) for lead, at in picked] == [(0, 22), (1, 20), (3, 10)]
     doc = om.forecast_doc(archive, DAY, om.PERIODS)
-    assert doc[0]["lead"] == 1 and doc[0]["issued"] == "2026-10-14T20:50Z"
-    lit = doc[0]["okresy"]["CZ0423"]
+    assert [(f["lead"], f["kind"]) for f in doc] == [(0, "stored"), (1, "stored"), (3, "stored")]
+    assert doc[1]["lead"] == 1 and doc[1]["issued"] == "2026-10-14T20:50Z"
+    lit = doc[1]["okresy"]["CZ0423"]
     assert lit["tmax"] == [13] * 5 and lit["symbol"][1] == "rain"
     assert lit["rain_probability"][1] == 0.55
     # only runs of the day itself: its first one
@@ -250,13 +318,89 @@ def test_runs_beside_the_measured_day():
         archive.filter(pl.col("issued") >= utc(DAY - timedelta(days=1), 22, 0)), DAY
     )
     assert [(lead, at.hour) for lead, at in only] == [(0, 22)]
+    # a same-day run from the afternoon is not a forecast of the day any more
+    late = om.pick_runs(parts_run(utc(DAY, 11, 0), DAY, 15.0), DAY)
+    assert late == []
 
 
-def write_archive(root, days: list[date]) -> None:
+def sky_run(issued: datetime, day: date, cloud: float) -> pl.DataFrame:
+    """The plain-means archive of one run: hourly cloud and sunshine of a Prague day."""
+    start = utc(day, 0) - timedelta(hours=2)
+    hours = [start + timedelta(hours=h) for h in range(25)]
+    return pl.DataFrame(
+        {
+            "okres": ["CZ0423"] * len(hours),
+            "issued": [issued] * len(hours),
+            "time": hours,
+            "cloud_cover": [cloud] * len(hours),
+            "sunshine_duration": [1800.0] * len(hours),
+        }
+    ).cast({"issued": pl.Datetime("us", "UTC"), "time": pl.Datetime("us", "UTC")})
+
+
+def rebuilt_rows(day: date, leads=(1, 2)) -> pl.DataFrame:
+    from meteoverdict import hindcast
+
+    rows = []
+    for lead in leads:
+        for part in om.PERIODS:
+            rows.append(
+                {
+                    "lead": lead,
+                    "trained_to": day - timedelta(days=lead + 1),
+                    "okres": "CZ0423",
+                    "day": day,
+                    "part": part,
+                    "tmin": 4.0,
+                    "tmax": 10.0 + lead,
+                    "precipitation": 0.0,
+                    "rain_probability": 0.0,
+                    "wind": 3.0,
+                    "symbol": None,
+                }
+            )
+    return (
+        pl.DataFrame(rows)
+        .with_columns(*[pl.lit(None).alias(c) for c in ("gust", "cloud", "sunshine")])
+        .select(list(hindcast.SCHEMA))
+        .cast(hindcast.SCHEMA)
+    )
+
+
+def test_forecasts_stored_first_then_rebuilt_with_the_stored_sky():
+    stored = parts_run(utc(DAY - timedelta(days=2), 10, 50), DAY, 12.0)  # lead 2, stored
+    means = pl.concat(
+        [
+            sky_run(utc(DAY, 1, 11), DAY, 10.0),  # 03:11 Prague: the same day's run
+            sky_run(utc(DAY - timedelta(days=1), 10, 10), DAY, 90.0),  # lead 1
+        ]
+    )
+    doc = om.forecast_doc(stored, DAY, om.PERIODS, rebuilt_rows(DAY), means)
+    kinds = [(f["lead"], f["kind"]) for f in doc]
+    # lead 0: only the sky was stored; lead 1 rebuilt (with the stored sky); lead 2 the
+    # stored parts of day win over the rebuilt ones
+    assert kinds == [(0, "stored_sky"), (1, "rebuilt"), (2, "stored")]
+    same_day = doc[0]
+    assert same_day["issued"] == "2026-10-15T01:11Z" and same_day["columns"] == [
+        "cloud",
+        "sunshine",
+        "symbol",
+    ]
+    assert same_day["okresy"]["CZ0423"]["symbol"][4] == "clear"
+    assert same_day["okresy"]["CZ0423"]["sunshine"][0] == 3.0  # six half-hours at night
+    lead1 = doc[1]
+    assert lead1["trained_to"] == "2026-10-13" and lead1["sky_issued"] == "2026-10-14T10:10Z"
+    lit = lead1["okresy"]["CZ0423"]
+    assert lit["tmax"] == [11] * 5 and lit["cloud"] == [90] * 5 and lit["symbol"] == ["cloudy"] * 5
+    assert "gust" not in lead1["columns"]  # a column no okres has is left out
+    assert doc[2]["okresy"]["CZ0423"]["tmax"] == [12] * 5
+
+
+def write_archive(root, days: list[date], stations=(A, B)) -> None:
     """Captured days (chmi-now) with two stations, in the archive's own schema."""
     rows = []
     for day in days:
-        for station in (A, B):
+        for station in stations:
             for s, t, field, _kind, value in full_day(station, day, rain=0.1):
                 element = {
                     "tmax": "TMA",
@@ -299,7 +443,12 @@ def test_build_writes_days_index_and_forecasts(tmp_path):
     )
     index = json.loads((out / "index.json").read_text())
     assert [d["day"] for d in index["days"]] == ["2026-10-14", "2026-10-15"]
-    assert index["days"][1] == {"day": "2026-10-15", "source": "hourly", "leads": [1]}
+    assert index["days"][1] == {
+        "day": "2026-10-15",
+        "source": "hourly",
+        "leads": [1],
+        "kinds": ["stored"],
+    }
     assert not (out / "2020-01-01.json").exists()
     doc = json.loads((out / "2026-10-15.json").read_text())
     assert doc["parts"] == list(om.PERIODS)
@@ -314,6 +463,46 @@ def test_build_writes_days_index_and_forecasts(tmp_path):
     stations = json.loads((out / "2026-10-15-stations.json").read_text())
     assert set(stations["stations"]) == {A, B}
     assert len(stations["stations"][A]) == len(om.PERIODS) * len(om.STATION_COLUMNS)
+
+
+def test_build_marks_borrowed_stations(tmp_path):
+    # Blansko has no station; C in Brno-město is 10 km from its border
+    root = tmp_path / "chmi"
+    write_archive(root, [DAY - timedelta(days=1), DAY], stations=(A, B, C))
+    stations = STATIONS.with_columns(
+        pl.Series("name", ["Alfa", "Beta", "Brno"]),
+        pl.Series("okres", ["Litoměřice", "Litoměřice", "Brno-město"]),
+    )
+    points = pl.concat(
+        [
+            POINTS,
+            pl.DataFrame({"code": ["CZ0641"], "name": ["Blansko"], "lat": [49.4], "lon": [16.7]}),
+        ]
+    )
+    out = tmp_path / "observed"
+    om.build(
+        root,
+        stations,
+        points,
+        out,
+        DAY + timedelta(days=1),
+        part_days=3,
+        daily_days=3,
+        min_stations=1,
+        log=lambda _: None,
+    )
+    doc = json.loads((out / "2026-10-15.json").read_text())
+    assert doc["borrow"] == {"max_km": 30.0, "stations": 3}
+    blansko = doc["okresy"]["CZ0641"]
+    assert blansko["n_t"] == [1] * 5 and blansko["tmax"][4] == 10.5
+    assert blansko["borrowed"]["t"] == [[C]] * 5 and set(blansko["borrowed"]) == set(om.GROUPS)
+    assert blansko["bst"] == [{"id": C, "name": "Brno", "okres": "Brno-město", "km": 10.2}]
+    assert blansko["st"] == []
+    # Praha: the nearest station is 43 km away, nothing borrowed
+    praha = doc["okresy"]["CZ0100"]
+    assert praha["n_t"] == [0] * 5 and "borrowed" not in praha and "bst" not in praha
+    # okresy with stations of their own borrow nothing
+    assert "borrowed" not in doc["okresy"]["CZ0423"]
 
 
 def test_build_skips_a_day_the_archive_has_not_finished(tmp_path):
