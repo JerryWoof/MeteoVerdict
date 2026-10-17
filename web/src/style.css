@@ -2340,3 +2340,135 @@ body.radar #show-box {
     padding: 0.2rem 0.4rem 0.5rem;
   }
 }
+
+/* the measured-weather page (station.html without a station): the forecast map's look,
+   marked as measured (teal, as the past days had on the forecast map) */
+body.station [hidden] {
+  display: none !important;
+}
+.measured-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 0.5rem 0 0.25rem;
+}
+.measured-head h2 {
+  margin: 0;
+}
+.measured-mode button {
+  padding: 0.3rem 0.8rem;
+}
+#ribbon.measured-ribbon {
+  padding: 0.25rem 0.5rem 0.5rem;
+  border-radius: 6px 6px 0 0;
+  background: #e6f2f0;
+  box-shadow: inset 0 -2px 0 #0f766e;
+}
+.measured-ribbon .day-row {
+  border-bottom-color: #b9d7d2;
+}
+.measured-ribbon .daytab.older {
+  order: 1;
+}
+.measured-map-wrap {
+  position: relative;
+}
+.measured-map {
+  height: clamp(460px, 74vh, 800px);
+  border: 1px solid #c9cfd4;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  overflow: hidden;
+  background: #f4f1ea;
+}
+.measured-hint {
+  margin: 0.3rem 0 0.8rem;
+}
+.station-label .wx-temp {
+  font-size: 0.95rem;
+}
+.measured-map .station-label.selected .wx-top {
+  text-decoration: underline;
+}
+#headline a {
+  color: inherit;
+  font-weight: 600;
+}
+/* a station: the way back to the measured map, then its weather */
+.measured-back {
+  margin: 0.6rem 0 0.2rem;
+  font-size: 0.9rem;
+}
+.station-top:not(.browse) {
+  display: block;
+}
+.station-top:not(.browse) .station-map-panel {
+  max-width: 40rem;
+  margin-top: 0.25rem;
+}
+@media (max-width: 700px) {
+  /* phones: the boxes leave the map (the map stays visible): "on the map" folded above
+     it, the headline and an okres's panel below */
+  .measured-map-wrap {
+    display: flex;
+    flex-direction: column;
+  }
+  .measured-map-wrap #headline,
+  .measured-map-wrap #show-box,
+  .measured-map-wrap #okres-panel {
+    position: static;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    margin: 0.4rem 0 0;
+  }
+  .measured-map-wrap #show-box {
+    order: -1;
+    margin: 0 0 0.4rem;
+  }
+  .measured-map-wrap #okres-panel {
+    order: 1;
+  }
+  .measured-map-wrap #headline {
+    order: 2;
+  }
+  .measured-map {
+    /* Czechia is about twice as wide as high */
+    height: clamp(250px, 66vw, 520px);
+    border-top: 1px solid #c9cfd4;
+    border-radius: 6px;
+  }
+  #ribbon.measured-ribbon {
+    border-radius: 6px;
+    margin-bottom: 0.4rem;
+  }
+  .measured-ribbon .when {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .measured-ribbon .day-row,
+  .measured-ribbon .when-row {
+    display: contents;
+  }
+  .measured-ribbon .daytabs {
+    flex: 1 0 100%;
+  }
+  .measured-ribbon .segmented {
+    flex: 1 0 100%;
+  }
+  .measured-ribbon .daytab {
+    min-width: 5rem;
+    padding: 0.3rem 0.5rem;
+  }
+  .measured-ribbon .segmented button {
+    flex: 1 1 auto;
+    padding: 0.25rem 0.3rem;
+    white-space: nowrap;
+  }
+  .measured-map-wrap .past-banner span {
+    display: none;
+  }
+}
