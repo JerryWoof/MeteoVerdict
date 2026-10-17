@@ -593,7 +593,7 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
   "okresy": [{code, name, lat, lon}], "columns", "rows"}` (about 110 kB with 11 models,
   ~340 kB with the frost and gust fields), `site/data/outlook-hourly.json` (the combined
   hourly series of every okres, the source of the open data files) and the per-model
-  files below; `.github/workflows/outlook.yml` runs it at 04:50, 10:50, 16:50 and 22:50
+  files below (per okres and per model); `.github/workflows/outlook.yml` runs it at 04:50, 10:50, 16:50 and 22:50
   UTC, after each of the 00, 06, 12 and 18 UTC model runs is on Open-Meteo (most models
   3.5–6 h after the run starts; until 2026-10-17 twice a day, 05:52 and 17:52), and
   uploads them to the release `data-latest`, after which the Pages workflow rebuilds
@@ -615,6 +615,29 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
   i.e. ~2–4 MB for the 77 files (~0.5–1 MB zipped). The detailed forecast page and the
   forecast selector of the forecast map read these files: **no visitor's browser asks
   Open-Meteo** (until 2026-10-17 the detailed page did, one request per okres shown).
+- **Every model's parts of day for all okresy** (`outlook.write_model_parts`, no extra
+  calls): `site/data/forecast/models-parts/<model>.json` and `index.json`, published as
+  `outlook-models-parts.zip` in `data-latest` and unzipped by the Pages workflow to
+  `data/scores/forecast/models-parts/` on the site; the forecast map's "Předpověď /
+  Forecast" selector switches the whole map to one model with them. One file per model:
+  `{"generated", "model", "last_hour", "time_zone", "days", "parts": [night, morning,
+  afternoon, evening, day], "columns": [tmin, tmax, precipitation, wind, cloud,
+  sunshine, symbol], "symbols", "rain_probability": null, "okresy": {code: {column:
+  [value per day and part]}}, "notes", "licence", "attribution"}`, the value of day *d*
+  and part *p* at index `d * 5 + p`, `symbol` as a position in `symbols`. The same
+  rules as the outlook, on the model's raw values: Prague parts of day, precipitation
+  and sunshine in the hour before their time, tmin/tmax, the rain total (0.01 mm), the
+  highest hourly wind, the mean cloud cover (a whole day: of 6–18), hours of sunshine.
+  A period the model does not cover in full is null (beyond `last_hour`, its last hour
+  with a temperature, or where it ends inside the period). The symbol is the single-model
+  rule of the okres panel: rain (sleet, snow at a mean of ≤ 2 / ≤ 0.5 °C) when the
+  model's own total is ≥ 0.3 mm, otherwise the sky from its raw cloud cover (30/65 %);
+  never showers, and no probability from one model. `index.json`: `{"generated",
+  "days", "order", "models": [{"model", "mean_rank", "last_hour"}]}`, the models by
+  their mean rank over all okresy, variables and lead days of the forecast weights.
+  Measured on the live run of 17 Oct 2026 (11 models): 61–78 kB per model (global
+  models smaller, the short ones' nulls larger; ≤ 100 kB is checked in the tests),
+  ~0.75 MB for all, ~160 kB zipped.
 - **Budget:** four runs a day ≈ 1,700 calls with 11 models, ≈ 2,930 with 19 (3,400
   budgeted with retries); priority 1 in the [budget split](#open-meteo-budget) with the
   backfill and the single runs.

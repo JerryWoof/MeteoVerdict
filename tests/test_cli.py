@@ -785,6 +785,16 @@ def test_outlook_writes_the_per_model_files_and_archives_them(tmp_path, monkeypa
     doc = json.loads((models / "CZ0100.json").read_text("utf-8"))
     assert doc["okres"] == "CZ0100" and doc["models"]
     assert (tmp_path / "site" / "outlook-hourly.json").exists()
+    # every model's parts of day for all okresy, one file per model, and the index
+    parts = tmp_path / "site" / "forecast" / "models-parts"
+    index = json.loads((parts / "index.json").read_text("utf-8"))
+    assert len(index["models"]) == 11
+    assert {p.stem for p in parts.glob("*.json")} == {
+        "index",
+        *(m["model"] for m in index["models"]),
+    }
+    one = json.loads((parts / "dwd_icon_d2.json").read_text("utf-8"))
+    assert sorted(one["okresy"]) == ["CZ0100", "CZ0201"]
     day = json.loads((tmp_path / "site" / "outlook.json").read_text("utf-8"))["generated"][:10]
     archived = pl.read_parquet(tmp_path / "archive" / f"outlook-models-{day}.parquet")
     assert archived["okres"].unique().sort().to_list() == ["CZ0100", "CZ0201"]

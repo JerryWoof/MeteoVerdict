@@ -153,3 +153,80 @@ export function modelPeriods(parsed, model) {
   }
   return out;
 }
+
+// --- the whole map on one model: forecast/models-parts/<model>.json (all okresy, its
+// parts of day and days by the same rules, written by `mvd outlook`) and index.json (the
+// models by their mean rank over Czechia) -----------------------------------------------
+
+/**
+ * The map's model selector: the models of models-parts/index.json, ranked ones first by
+ * their mean rank over Czechia (ties and unranked ones by name), then the unranked
+ * ones. [{model, name, rank, position}], position 1.. for ranked models, null else.
+ */
+export function mapModelOptions(index, names = {}) {
+  const name = (model) => names?.[model] ?? model;
+  const entries = (index?.models ?? []).filter((m) => m?.model);
+  const ranked = entries
+    .filter((m) => m.mean_rank != null)
+    .sort((a, b) => a.mean_rank - b.mean_rank || name(a.model).localeCompare(name(b.model), "cs"))
+    .map((m, i) => ({ model: m.model, name: name(m.model), rank: m.mean_rank, position: i + 1 }));
+  const others = entries
+    .filter((m) => m.mean_rank == null)
+    .sort((a, b) => name(a.model).localeCompare(name(b.model), "cs"))
+    .map((m) => ({ model: m.model, name: name(m.model), rank: null, position: null }));
+  return [...ranked, ...others];
+}
+
+/**
+ * One model's file for all okresy → an outlook-like view for the map (tv.js reads it as
+ * it reads outlook.json): {single: true, model, generated, lastHour (ms or null), days,
+ * okresy, rows: Map "okres|day|part" → row}. The days and okresy are those of our
+ * `outlook` (parseOutlook), so the tabs stay the same. A row has the model's values,
+ * rain_probability null, `single: true`, and the day's sunrise and sunset from the
+ * outlook (night symbols); a period the model does not cover (beyond its horizon) is a
+ * row with `beyond: true` and no values, so the map greys it with "–".
+ */
+export function parseModelParts(doc, outlook) {
+  if (!doc?.okresy || !Array.isArray(doc.days) || !Array.isArray(doc.parts)) return null;
+  const columns = doc.columns ?? [];
+  const symbols = doc.symbols ?? [];
+  const dayIndex = new Map(doc.days.map((d, i) => [d, i]));
+  const rows = new Map();
+  const empty = { tmin: null, tmax: null, precipitation: null, wind: null, cloud: null, sunshine: null, symbol: null };
+  for (const o of outlook.okresy) {
+    const values = doc.okresy[o.code];
+    for (const day of outlook.days) {
+      const sun = PARTS.concat("day").map((p) => outlook.rows.get(`${o.code}|${day}|${p}`)).find((r) => r?.sunrise);
+      const sunTimes = sun ? { sunrise: sun.sunrise, sunset: sun.sunset } : {};
+      for (const part of [...PARTS, "day"]) {
+        const d = dayIndex.get(day);
+        const p = doc.parts.indexOf(part);
+        const at = d == null || p < 0 ? null : d * doc.parts.length + p;
+        const row = { ...empty, rain_probability: null, gust: null, gust_warning: null, single: true, ...sunTimes };
+        let any = false;
+        for (const column of columns) {
+          const v = at == null ? null : values?.[column]?.[at] ?? null;
+          if (v == null) continue;
+          any = true;
+          row[column] = column === "symbol" ? (typeof v === "number" ? symbols[v] ?? null : v) : v;
+        }
+        // a model without values here: beyond its horizon (tmax is always there otherwise)
+        if (!any || row.tmax == null) {
+          rows.set(`${o.code}|${day}|${part}`, { ...empty, rain_probability: null, single: true, beyond: true, ...sunTimes });
+        } else {
+          rows.set(`${o.code}|${day}|${part}`, row);
+        }
+      }
+    }
+  }
+  const last = doc.last_hour ? Date.parse(doc.last_hour) : Number.NaN;
+  return {
+    single: true,
+    model: doc.model ?? null,
+    generated: doc.generated ?? null,
+    lastHour: Number.isNaN(last) ? null : last,
+    days: outlook.days,
+    okresy: outlook.okresy,
+    rows,
+  };
+}

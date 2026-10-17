@@ -66,6 +66,16 @@ part of the versioned `api/v1`: its layout may change with the pages. Our own mo
 archive of every run's full answer is in the releases `outlook-models-YYYY-MM`
 (`outlook-models-YYYY-MM-DD.parquet`, one file per UTC day).
 
+The forecast map's model switch reads `data/scores/forecast/models-parts/{model}.json`
+(e.g. `https://jerrywoof.github.io/MeteoVerdict/data/scores/forecast/models-parts/ecmwf_ifs.json`)
+and `data/scores/forecast/models-parts/index.json`, also written by `mvd outlook` with
+each run: one model's parts of day and whole days for all 77 okresy by the outlook's
+rules (tmin, tmax, precipitation in mm, wind, cloud, sunshine and a simplified symbol;
+null beyond the model's horizon, `last_hour`; no probability of precipitation), and the
+models in order of their mean rank over Czechia
+([data-sources.md](data-sources.md#outlook-mvd-outlook-roadmap-66)). Raw model output,
+without our correction. Public, but not part of `api/v1` either.
+
 ## On an e-ink display
 
 [MeteoVerdict for TRMNL](https://github.com/JerryWoof/MeteoVerdict-TRMNL) is built on

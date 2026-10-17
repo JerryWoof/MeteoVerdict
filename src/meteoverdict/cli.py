@@ -1367,10 +1367,21 @@ def outlook_cmd(
         typer.echo(
             f"{len(model_paths)} per-model files → {models_folder} (largest {largest:,} bytes)"
         )
+        # every model's parts of day for all okresy, one file per model (the model
+        # switch of the forecast map)
+        parts_folder = out.parent / outlook.MODEL_PARTS_FOLDER
+        days = table["day"].unique().sort().to_list()
+        part_paths = outlook.write_model_parts(fc, weights, days, parts_folder, now)
+        largest = max((p.stat().st_size for p in part_paths), default=0)
+        typer.echo(
+            f"{len(part_paths) - 1} per-model part-of-day files → {parts_folder} "
+            f"(largest {largest:,} bytes)"
+        )
         if releases:
             releases.put(store.LATEST_TAG, "outlook.json", path)
             releases.put(store.LATEST_TAG, "outlook-hourly.json", hourly_path)
             store.publish_folder(releases, models_folder, outlook.MODELS_ZIP)
+            store.publish_folder(releases, parts_folder, outlook.MODEL_PARTS_ZIP)
         try:  # training data for the corrections; must not fail the outlook
             _archive_outlook(client, hourly, now, archive_dir, github_release)
         except Exception as exc:

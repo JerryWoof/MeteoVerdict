@@ -16,3 +16,4 @@ Real data, downloaded, not typed:
 | `radar-motion.json` | `motion/202610152110.json` of the same folder |
 | `radar-cells.json` | **synthetic** `cells/<stamp>.json` in the same format (the real folder had no storm cells that night): four cells moving north-east, one with hail |
 | `models-CZ0201.json` | `forecast/models/CZ0201.json` as `outlook.models_doc` writes it from the saved Open-Meteo answer of 12 Oct 2026 08:25 UTC (`tests/fixtures/open-meteo/forecast-2-okresy.json`, 11 models, no sunshine asked then) and the combination of `outlook.combine_hourly` (without the sunshine/cloud correction) |
+| `models-parts-dwd_icon_d2.json`, `models-parts-ecmwf_ifs025.json`, `models-parts-index.json` | `forecast/models-parts/<model>.json` and `index.json` as `outlook.write_model_parts` writes them from the same saved Open-Meteo answer (12 Oct 2026 08:25 UTC, Praha CZ0100 and Benešov CZ0201 only; ICON-D2 ends on 14 Oct) and the test weights |
