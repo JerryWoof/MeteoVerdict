@@ -6,7 +6,7 @@
     <title>MeteoVerdict: forecast</title>
     <meta name="description" content="The weather of the next days for every okres, combined from all models by how well each did there." />
   </head>
-  <body class="page tv map-page">
+  <body class="page tv map-page theme-forecast">
     <header>
       <h1><a href="./">MeteoVerdict</a></h1>
       <p id="status">Loading…</p>
@@ -43,23 +43,26 @@
         </div>
       </nav>
       <div class="map-wrap">
-        <aside id="headline" class="map-box info" aria-live="polite"></aside>
+        <!-- the boxes: beside the map on wide screens, above and below it on narrow ones -->
+        <div class="map-side">
+          <aside id="headline" class="map-box info" aria-live="polite"></aside>
+          <aside id="okres-panel" class="map-box panel" aria-live="polite"></aside>
+          <aside id="show-box" class="map-box legend">
+            <details id="show" open>
+              <summary data-i18n="tv.onMap">On the map</summary>
+              <fieldset>
+                <legend data-i18n="tv.values">Values at each okres</legend>
+                <div id="values"></div>
+              </fieldset>
+              <fieldset>
+                <legend data-i18n="tv.colour">Colour of the okresy</legend>
+                <div id="colours"></div>
+                <div id="scale"></div>
+              </fieldset>
+            </details>
+          </aside>
+        </div>
         <div id="map" class="map-frame" role="region" aria-label="Weather map of Czechia"></div>
-        <aside id="show-box" class="map-box legend">
-          <details id="show" open>
-            <summary data-i18n="tv.onMap">On the map</summary>
-            <fieldset>
-              <legend data-i18n="tv.values">Values at each okres</legend>
-              <div id="values"></div>
-            </fieldset>
-            <fieldset>
-              <legend data-i18n="tv.colour">Colour of the okresy</legend>
-              <div id="colours"></div>
-              <div id="scale"></div>
-            </fieldset>
-          </details>
-        </aside>
-        <aside id="okres-panel" class="map-box panel" aria-live="polite"></aside>
       </div>
     </main>
     <footer data-footer="tv" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/methodology.md#our-own-forecast-roadmap-62-63">
