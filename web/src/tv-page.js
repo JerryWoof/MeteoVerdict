@@ -15,6 +15,7 @@ import {
   placeMarkers, playSteps, rampKey, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary,
   today, viewHash, measuredRedirect,
 } from "./tv.js";
+import { keepRoomForPanels } from "./panel-room.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -44,6 +45,7 @@ const map = new MapLibreMap({
 });
 // the map grows with a long okres panel (it shares a grid cell with it): keep it drawn
 new ResizeObserver(() => map.resize()).observe(map.getContainer());
+keepRoomForPanels(map.getContainer().parentElement, map.getContainer(), [document.getElementById("okres-panel")]);
 map.addControl(new NavigationControl({ showCompass: false }));
 // registered at once: the map may finish loading while the forecast is still on its way
 const mapLoaded = new Promise((resolve) => map.on("load", resolve));
