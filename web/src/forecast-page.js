@@ -25,6 +25,23 @@ async function getJson(path) {
   }
 }
 
+// Open-Meteo answers a large multi-model request with 503 now and then (busy server);
+// a second try a moment later usually works
+const RETRY_WAITS_MS = [1500, 4000, 8000];
+async function getForecast(url) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return await response.json();
+      if (![429, 500, 502, 503, 504].includes(response.status)) return null;
+    } catch {
+      // network error: try again like a busy server
+    }
+    if (attempt >= RETRY_WAITS_MS.length) return null;
+    await new Promise((resolve) => setTimeout(resolve, RETRY_WAITS_MS[attempt]));
+  }
+}
+
 function cell(tag, text, className) {
   const element = document.createElement(tag);
   element.textContent = text;
@@ -294,7 +311,7 @@ async function pick(model, names, colors) {
   const has = () => VARIABLES.some((v) => current.forecast.values[v][model]);
   if (model !== COMBINED && !has() && !current.fetched.has(model)) {
     message.textContent = t("forecast.pickLoading", { model: names[model] ?? model });
-    const doc = await getJson(forecastUrl(current.point, [model]));
+    const doc = await getForecast(forecastUrl(current.point, [model]));
     current.fetched.add(model);
     if (doc?.hourly) mergeForecast(current.forecast, parseForecast(doc, [model]));
     if (state !== current || selected !== model) return;
@@ -326,7 +343,7 @@ async function show(point, names, colors, outlook) {
     return;
   }
   renderPicker(table, names);
-  const doc = await getJson(forecastUrl(point, models));
+  const doc = await getForecast(forecastUrl(point, models));
   if (token !== showToken) return;
   if (!doc?.hourly) {
     message.textContent = t("forecast.unavailable");
