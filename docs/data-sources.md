@@ -1595,7 +1595,7 @@ the same reading as `meteoverdict.bucket`) and added to the releases with
 `mvd import-runs runs-2026-07.parquet … --github-release` (2026-10-17). The import:
 
 - converts to the stored format (leads 1–120, `source` = `bucket`, precipitation below
-  0 as 0);
+  0 as 0, values to 2 decimals as the live reader stores them);
 - **corrects the harvest's precipitation**, which it had put one native step early for
   every model but ALADIN (both) and AROME AT (their files keep the first step; the
   others' start at the second valid time, `bucket.file_times`; found when checking the
@@ -1604,10 +1604,13 @@ the same reading as `meteoverdict.bucket`) and added to the releases with
 - reads again from the bucket the stations whose cell the harvest chose differently
   from `bucket-cells.csv` (DMI at Rozkoš, a water cell: the harvest's temperature was
   8 °C off there; dropped where the bucket no longer has the run);
-- leaves out the model-runs that are not complete by the rule above (11, e.g. the
-  partly written runs of 2026-09-02/03) and records them, and every model-run of the
-  harvested runs it lacks (GEM Global before 2026-08-18, the bucket's missing runs), as
-  missing in the bucket, so the API is asked for them;
+- leaves out the 8 model-runs that are not complete by the rule above (CMA GRAPES 4×
+  with leads missing, ICON-D2 2026-08-22 00 UTC without v wind, ICON 08-14 12 UTC
+  without gusts, ARPEGE Europe 09-17 12 UTC one lead short, IFS 10-16 12 UTC still being
+  written) and records them, and every model-run of the harvested runs it lacks, as
+  missing in the bucket (128: GEM Global before 2026-08-18 72, the bucket's missing and
+  partly written runs 56), so the API is asked for them (runs younger than 24 h are
+  left to the bucket);
 - **prefers the bucket for all models**: a model-run of the harvest replaces every
   stored row of that model-run (the API's runs of 2026-10-13 to 10-16, stored hourly),
   so a run's rows always come from one source. The API's runs stored after the harvest

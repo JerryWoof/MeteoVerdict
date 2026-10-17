@@ -76,6 +76,9 @@ PLAUSIBLE = {
     "wind_speed_10m": (0.0, 150.0),
     "wind_gusts_10m": (0.0, 200.0),
 }
+#: Values are stored to this many decimals (the API rounds to 1; the elevation correction
+#: and u/v → speed would otherwise leave noise digits that compress badly)
+DECIMALS = 2
 #: Model-runs failing in a row (after the retries) before a collection gives up
 MAX_ERRORS = 20
 CELLS_FILE = "bucket-cells.csv"
@@ -607,7 +610,7 @@ def _assemble(model, source, run, stations, cells, times, axes, values, need):
         return None, reason
     table = table.with_columns(
         pl.col("precipitation").clip(lower_bound=0.0), pl.lit("bucket").alias("source")
-    )
+    ).with_columns(pl.col(v).round(DECIMALS) for v in runs.VARIABLES)
     return table.select(list(runs.SCHEMA)), ""
 
 
@@ -781,6 +784,7 @@ def from_harvest(frame: pl.DataFrame | pl.LazyFrame) -> pl.LazyFrame:
         .with_columns(
             pl.col("precipitation").clip(lower_bound=0.0), pl.lit("bucket").alias("source")
         )
+        .with_columns(pl.col(v).round(DECIMALS) for v in runs.VARIABLES)
         .select(list(runs.SCHEMA))
         .cast(runs.SCHEMA)
     )
