@@ -12,8 +12,8 @@ import { CAPITALS, TIME_ZONE, displayName, labelFor, parseView, placeMarkers, va
 
 /** The kinds-of-station map (the station page's map before the measured weather). */
 export const KINDS_HASH = "#kinds";
-/** Day tabs: the days with parts of day (the last 30); older days through the date field. */
-export const MAX_TABS = 30;
+/** Day tabs: the last three measured days (yesterday first); any other day through the date field. */
+export const MAX_TABS = 3;
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
