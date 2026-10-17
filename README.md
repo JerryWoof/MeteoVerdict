@@ -55,8 +55,9 @@ model are in [data sources](docs/data-sources.md#models).
 ## Status
 
 Early days. The first results (October 2026) cover late September, and the history
-fills in as the backfill runs (back to 2024, about two months in total) and ČHMÚ
-publishes its checked monthly observations. ALADIN has forecast history only from
+fills in from today into the past as the backfill runs (back to 2025-10-01 around
+January 2027, to 2024 around April 2027) and ČHMÚ publishes its checked monthly
+observations. ALADIN has forecast history only from
 June 2026. Our combined forecast is now tested out of sample every day against the
 model our ranking would have picked: on the first 24 test days (September 2026) it was
 better for daily precipitation and mostly better or equal for temperature and wind,

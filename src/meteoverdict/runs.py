@@ -7,15 +7,19 @@ UTC run of every enabled model is stored at the ~100 stations of ``data/run-stat
 temperature, precipitation, wind and wind gusts, lead 1 to 120 hours, at the station's
 elevation, **at the model's native output steps** (``native``).
 
-**Sources** (``source`` column), in this order (``mvd fetch-runs``):
+**Sources** (``source`` column), in this order:
 
-1. **the bucket** (``bucket.collect``, no API calls): every run within the bucket's
-   window (``BUCKET_DAYS``: it keeps per-run files for about three months), so each
-   execution also catches up any run not stored yet before it ages out;
-2. **the Single Runs API** (``collect``), within a call budget, newest first: a
-   model-run the bucket does not have complete once it is ``BUCKET_FINAL_H`` old
-   (``State.bucket_missing``: the fallback), and the history older than the bucket's
-   window back to ``HISTORY_FROM``.
+1. **the bucket** (``bucket.collect``, no API calls; ``mvd fetch-runs``): every run within
+   the bucket's window (``BUCKET_DAYS``: it keeps per-run files for about three months),
+   so each execution also catches up any run not stored yet before it ages out;
+2. **the Single Runs API** (``collect``), within a call budget, newest first:
+
+   - ``mvd fetch-runs``: a model-run the bucket does not have complete once it is
+     ``BUCKET_FINAL_H`` old (``State.bucket_missing``: the fallback), and the runs older
+     than the bucket's window but in the month it starts in (``history_edge``);
+   - ``mvd backfill`` (``backfill.RunsHistory``): every older run, back to each model's
+     start in the Single Runs archive (``Model.has_single_run``), together with the D+N
+     window of the same days, newest first. The two never write the same month file.
 
 The API asks ``run=YYYY-MM-DDTHH:00`` (the run's start) for all models still to fetch in
 one request. Cost (Open-Meteo's weighted calls, ``forecasts.call_weight``): per station
@@ -34,12 +38,9 @@ as a gap.
 
 Progress is kept in ``runs-state.json`` (per run: models fetched, models missing for
 good, models missing in the bucket), so a model-run is stored once and a collection
-stopped by the call budget or the time limit continues next time.
-
-The API's call budget of a scheduled run can grow by what the D+N backfill leaves of the
-daily shared budget (``shared_budget``, ``backfill.share_left``) once its current and
-priority windows are done; the backfill in turn fetches its older windows only once the
-API's work here is done (``history_pending``).
+stopped by the call budget or the time limit continues next time. Both workflows that
+write it (``runs.yml`` and ``backfill.yml``) merge it with the released one before they
+upload it (``RunsSync.push``), so neither loses what the other recorded meanwhile.
 
 See docs/data-sources.md#single-runs-mvd-fetch-runs.
 """
@@ -48,6 +49,7 @@ from __future__ import annotations
 
 import json
 import math
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -57,9 +59,9 @@ from pathlib import Path
 import httpx
 import polars as pl
 
-from meteoverdict import backfill, forecasts, partitions, store
+from meteoverdict import forecasts, partitions, store
+from meteoverdict.models import RUNS_FROM, Model
 from meteoverdict.models import VARIABLES as VERIFIED
-from meteoverdict.models import Model
 
 URL = "https://single-runs-api.open-meteo.com/v1/forecast"
 RUN_HOURS = (0, 6, 12, 18)
@@ -83,15 +85,11 @@ BATCH = 100  # stations per request at most
 #: Weighted calls per request at most: below Open-Meteo's 600 a minute and the pace of
 #: ``forecasts.Budget`` (550 a minute)
 MAX_REQUEST = 500
-#: The history counts as complete with at most this many runs left (a run that keeps
-#: failing must not hold back the D+N backfill's older windows for good)
-HISTORY_SLACK = 4
-#: Oldest run the history goes back to by default: the first run with ALADIN (both
-#: domains) in Open-Meteo's Single Runs archive (models.yaml ``runs_from``). The archive
-#: itself starts on ``models.RUNS_FROM`` (2026-04-02), but earlier runs lack the two
-#: ALADIN models, so they barely enter the fair comparison (all models on a common set)
-#: and would cost about 330 more runs (~89,000 calls). ``mvd fetch-runs --history-from``.
-HISTORY_FROM = date(2026, 6, 23)
+#: The first run with ALADIN (both domains) in Open-Meteo's Single Runs archive
+#: (models.yaml ``runs_from``): the default start of the lead-band ranking's "all"
+#: window (``mvd leads``). Older runs lack ALADIN, which the 80 % coverage rule would
+#: then leave out of that window.
+ALADIN_FROM = date(2026, 6, 23)
 
 #: Model names in Open-Meteo's "run is not available" errors that differ from our id
 #: (checked live 2026-10-13).
@@ -338,18 +336,37 @@ def bucket_runs(now: datetime) -> list[datetime]:
     return _runs_between(_latest_run(now - timedelta(hours=BUCKET_MIN_AGE_H)), bucket_start(now))
 
 
-def api_runs(now: datetime, first: date = HISTORY_FROM) -> list[datetime]:
-    """Runs the Single Runs API may be asked for, newest first: at least
-    ``BUCKET_FINAL_H`` old (younger ones may still reach the bucket), back to ``first``
-    00 UTC. Within the bucket's window only for the models missing there
+def history_edge(now: datetime) -> datetime:
+    """The first run of the month the bucket's window starts in. ``mvd fetch-runs`` asks
+    the API for runs from here on (the bucket's gaps and the few runs between here and
+    the bucket's window); every older run is the D+N backfill's (``backfill.RunsHistory``).
+    So the two workflows never write the same month file."""
+    start = bucket_start(now)
+    return start.replace(day=1, hour=0)
+
+
+def history_start(models: list[Model]) -> date:
+    """The oldest day of any model's runs in the Single Runs archive."""
+    return min((m.single_runs_from for m in models), default=RUNS_FROM)
+
+
+def api_runs(now: datetime) -> list[datetime]:
+    """Runs ``mvd fetch-runs`` may ask the Single Runs API for, newest first: at least
+    ``BUCKET_FINAL_H`` old (younger ones may still reach the bucket), back to
+    ``history_edge``. Within the bucket's window only for the models missing there
     (``State.api_todo``)."""
-    start = datetime.combine(first, datetime.min.time(), UTC)
-    return _runs_between(_latest_run(now - timedelta(hours=BUCKET_FINAL_H)), start)
+    return _runs_between(_latest_run(now - timedelta(hours=BUCKET_FINAL_H)), history_edge(now))
+
+
+def day_runs(start: date, end: date) -> list[datetime]:
+    """Every 00, 06, 12 and 18 UTC run of the days ``start`` … ``end``, newest first."""
+    first = datetime.combine(start, datetime.min.time(), UTC)
+    return _runs_between(datetime.combine(end, datetime.min.time(), UTC).replace(hour=18), first)
 
 
 def wanted(models: list[Model], run: datetime) -> list[Model]:
-    """Models whose Single Runs archive covers ``run`` (``runs_from``, ``run_hours``)."""
-    return [m for m in models if m.single_runs_from <= run.date() and run.hour in m.run_hours]
+    """Models whose Single Runs archive covers ``run`` (``Model.has_single_run``)."""
+    return [m for m in models if m.has_single_run(run.date(), run.hour)]
 
 
 # --- progress ------------------------------------------------------------------------
@@ -386,6 +403,17 @@ class State:
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(doc, indent=0) + "\n", encoding="utf-8")
+
+    def merge(self, other: State) -> None:
+        """Add what ``other`` recorded (another workflow's progress): nothing recorded
+        is ever taken back, so the union is right."""
+        for mine, theirs in (
+            (self.fetched, other.fetched),
+            (self.missing, other.missing),
+            (self.bucket_missing, other.bucket_missing),
+        ):
+            for k, ids in theirs.items():
+                mine.setdefault(k, set()).update(ids)
 
     def todo(self, run: datetime, models: list[Model]) -> list[Model]:
         """Models of ``run`` not stored and not a gap for good."""
@@ -569,7 +597,9 @@ def asset_name(month: str) -> str:
 class RunsSync:
     """Month files ``runs/YYYY-MM.parquet`` as ``runs-YYYY-MM.parquet`` in the releases
     ``runs-YYYY-MM``, the state as ``runs-state.json`` in ``runs-state``; each asset's
-    label is the file's SHA-256, so unchanged files are skipped both ways."""
+    label is the file's SHA-256, so unchanged files are skipped both ways. Two workflows
+    write the state (``mvd fetch-runs`` and ``mvd backfill``, in different month files),
+    so ``push`` first merges the released state into the local one (``State.merge``)."""
 
     def __init__(self, releases, data_dir: Path, log=lambda _: None) -> None:
         self.store, self.data_dir, self.log = releases, data_dir, log
@@ -602,7 +632,21 @@ class RunsSync:
                 self.log(f"uploaded {name} ({path.stat().st_size // 1024} KB)")
         state = self.data_dir / STATE_NAME
         if state.exists():
+            self.merge_released(state)
             self.store.put(STATE_TAG, STATE_NAME, state, label=store.sha256(state))
+
+    def merge_released(self, path: Path) -> None:
+        """Merge the released state into ``path`` where they differ."""
+        asset = self.store.assets(STATE_TAG).get(STATE_NAME)
+        if asset is None or asset.get("label") == store.sha256(path):
+            return
+        with tempfile.TemporaryDirectory() as tmp:
+            released = Path(tmp) / STATE_NAME
+            self.store.download(STATE_TAG, STATE_NAME, released)
+            theirs = State.load(released)
+        mine = State.load(path)
+        mine.merge(theirs)
+        mine.save()
 
 
 # --- native steps ----------------------------------------------------------------------
@@ -698,20 +742,20 @@ def collect(
     modes: tuple[str, ...] = ("recent", "history"),
     sync: RunsSync | None = None,
     log: Callable[[str], None] = lambda _: None,
-    first: date = HISTORY_FROM,
 ) -> Result:
     """Ask the Single Runs API, newest first, until done or the call budget is used up:
     ``runs`` if given (every model not stored yet), else ``api_runs``: "recent" (within
     the bucket's window: only the model-runs missing there, the fallback) and "history"
-    (older runs back to ``first``). When the budget left does not cover all models of a
-    run, as many as it covers are asked (the rest wait for the next run)."""
+    (older runs back to ``history_edge``; the older ones are the D+N backfill's). When
+    the budget left does not cover all models of a run, as many as it covers are asked
+    (the rest wait for the next run)."""
     state = State.load(data_dir / STATE_NAME)
     explicit = runs is not None
     if runs is None:
         edge = bucket_start(now)
         runs = [
             r
-            for r in api_runs(now, first)
+            for r in api_runs(now)
             if ("recent" in modes and r >= edge) or ("history" in modes and r < edge)
         ]
     result, pulled = Result(), set()
@@ -764,17 +808,17 @@ def collect(
     return result
 
 
-def all_runs(now: datetime, first: date = HISTORY_FROM) -> list[datetime]:
+def all_runs(now: datetime, first: date) -> list[datetime]:
     """Every run from the newest one in the bucket's reach back to ``first``."""
     start = datetime.combine(first, datetime.min.time(), UTC)
     return _runs_between(_latest_run(now - timedelta(hours=BUCKET_MIN_AGE_H)), start)
 
 
-def progress(data_dir: Path, models: list[Model], now: datetime, first: date = HISTORY_FROM):
-    """``(complete, all)`` runs from ``first`` to the newest one (every model stored or
-    a gap for good)."""
+def progress(data_dir: Path, models: list[Model], now: datetime) -> tuple[int, int]:
+    """``(complete, all)`` runs from the oldest in the archive (``history_start``) to the
+    newest one (every model it has stored or a gap for good)."""
     state = State.load(data_dir / STATE_NAME)
-    every = all_runs(now, first)
+    every = [r for r in all_runs(now, history_start(models)) if wanted(models, r)]
     done = sum(not state.todo(r, wanted(models, r)) for r in every)
     return done, len(every)
 
@@ -785,21 +829,23 @@ def summary(
     data_dir: Path,
     models,
     now: datetime,
-    first: date = HISTORY_FROM,
     budget_note: str = "",
     bucket_lines: str = "",
 ) -> str:
     """Markdown for the workflow's job summary."""
-    done, every = progress(data_dir, models, now, first)
+    done, every = progress(data_dir, models, now)
     state = State.load(data_dir / STATE_NAME)
-    left = history_pending(state, models, now, first)
+    left = api_pending(state, models, now)
+    older = backfill_pending(state, models, now)
+    edge = history_edge(now)
     lines = [
         "## Single runs",
         "",
         *([bucket_lines.rstrip("\n")] if bucket_lines else []),
         f"- API: {len(result.runs)} runs asked, {calls:g} Open-Meteo calls; "
-        f"{left} runs still to ask (bucket gaps and history since {first})",
-        f"- Progress: {done} of {every} runs complete since {first}",
+        f"{left} runs still to ask here (the bucket's gaps and the history since "
+        f"{edge:%Y-%m-%d}); {older} older runs are left to the D+N backfill",
+        f"- Progress: {done} of {every} runs complete since {history_start(models)}",
     ]
     if budget_note:
         lines.append(f"- Budget: {budget_note}")
@@ -813,63 +859,17 @@ def summary(
     return "\n".join(lines) + "\n"
 
 
-# --- the budget ----------------------------------------------------------------------
+# --- what is left ------------------------------------------------------------------------
 
 
-def history_pending(
-    state: State, models: list[Model], now: datetime, first: date = HISTORY_FROM
-) -> int:
-    """Runs the API still has to be asked for (``api_runs``, ``State.api_todo``): the
-    bucket's gaps and the history older than its window, back to ``first``."""
-    return sum(bool(state.api_todo(r, wanted(models, r), now)) for r in api_runs(now, first))
+def api_pending(state: State, models: list[Model], now: datetime) -> int:
+    """Runs ``mvd fetch-runs`` still has to ask the API for (``api_runs``,
+    ``State.api_todo``): the bucket's gaps and the history back to ``history_edge``."""
+    return sum(bool(state.api_todo(r, wanted(models, r), now)) for r in api_runs(now))
 
 
-def history_done(
-    read_state: Callable[[], State], models: list[Model], now: datetime
-) -> tuple[bool, str]:
-    """Whether the single runs' API work back to ``HISTORY_FROM`` is done (at most
-    ``HISTORY_SLACK`` runs left: ``history_pending``), and why; not complete when the
-    state cannot be read (the safe answer: the D+N backfill then keeps to its current and
-    priority windows)."""
-    try:
-        left = history_pending(read_state(), models, now)
-    except Exception as exc:  # anything: holding back is always safe
-        return False, f"single-runs state not readable: {exc}"
-    if left > HISTORY_SLACK:
-        return False, f"single-runs history first: {left} runs since {HISTORY_FROM} pending"
-    return True, f"single-runs history complete ({left} runs pending)"
-
-
-def shared_budget(
-    base: float,
-    share: float,
-    part: tuple[float, float],
-    read_state: Callable[[], backfill.State],
-    models: list[Model],
-    backfill_from: date,
-    today: date,
-    priority_from: date | None = None,
-) -> tuple[float, str]:
-    """``(calls, why)``: ``base`` plus this run's ``part`` (from, to) of what the D+N
-    backfill leaves today of the daily shared budget ``share`` (``backfill.share_left``):
-    ``max(0, min(left, to) - from)``. Two runs with parts (0, a) and (a, share) never
-    take more than ``left`` together. Only ``base`` when the backfill's state cannot be
-    read. ``read_state`` gives the backfill's state (from the release ``data-state``);
-    ``priority_from`` is the backfill's ``--priority-from`` (its priority windows come
-    before this history too)."""
-    if share <= 0 or part[1] <= part[0]:
-        return base, f"{base:g} calls (normal)"
-    normal = f"{base:g} calls (normal; no shared calls"
-    try:
-        left, why = backfill.share_left(
-            models, backfill_from, today, read_state(), share, priority_from
-        )
-    except Exception as exc:  # anything: the normal budget is always safe
-        return base, f"{normal}: backfill state not readable: {exc})"
-    extra = max(0.0, min(left, part[1]) - part[0])
-    span = f"{left:g} of {share:g} left, this run takes {part[0]:g}-{part[1]:g}"
-    if extra <= 0:
-        return base, f"{normal}: {span}; {why})"
-    return base + extra, (
-        f"{base + extra:g} calls ({base:g} normal + {extra:g} shared; {span}: {why})"
-    )
+def backfill_pending(state: State, models: list[Model], now: datetime) -> int:
+    """Runs older than ``history_edge`` still to fetch (the D+N backfill's part)."""
+    start = datetime.combine(history_start(models), datetime.min.time(), UTC)
+    older = _runs_between(history_edge(now) - timedelta(hours=6), start)
+    return sum(bool(state.todo(r, wanted(models, r))) for r in older)

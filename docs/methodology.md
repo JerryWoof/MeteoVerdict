@@ -111,8 +111,9 @@ is fair across all models but blurs the first hours of a forecast: D+1 for a
 temperature at 12 UTC is a run from 24 to 30 hours earlier, never a run from this
 morning. Meteorologists verify run by run instead, and so do we:
 
-- **Every model**, Open-Meteo's single runs: each 00, 06, 12 and 18 UTC run since
-  2026-06-23 (the first run with ALADIN), up to 120 hours ahead, at about **100
+- **Every model**, Open-Meteo's single runs: each 00, 06, 12 and 18 UTC run (scored
+  from 2026-06-23, the first run with ALADIN; stored back to each model's start in
+  Open-Meteo's archive), up to 120 hours ahead, at about **100
   stations** (at least one in every okres, plus the mountain stations;
   [the rule](data-sources.md#the-station-subset)), at the station's elevation like the
   D+N scores. Read from **Open-Meteo's open-data bucket on AWS** (the files the
@@ -214,8 +215,10 @@ What it is not:
   newest run published before the time of use) needs the publication time, which our
   ALADIN archive records from 2026-10-13 on; it is not computed yet.
 - **History.** Runs from 2026-07-15 on come from Open-Meteo's open-data bucket (its
-  three months were harvested once on 2026-10-16); 2026-06-23 to 07-14, from the API,
-  follows in November 2026 ([budget](data-sources.md#open-meteo-budget)). Long leads
+  three months were harvested once on 2026-10-16); older ones from the API, together
+  with the D+N history of the same days, from today into the past: back to 2026-07-01
+  around early November 2026, back to 2026-04-02 (the archive's start for most models)
+  around late December 2026 ([budget](data-sources.md#open-meteo-budget)). Long leads
   rest on fewer runs than short ones (a run's H+120 is verified five days later), and
   pooled run hours mix the time of day into the lead hour (H+6 is 06, 12, 18 or 00
   UTC). GEM Global's runs before 2026-08-18 are not in the bucket and come from the API
