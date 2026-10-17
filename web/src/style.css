@@ -35,9 +35,9 @@
   --fs-ui: 0.85rem;
   --fs-small: 0.75rem;
   --fs-title: 1.2rem;
-  /* one width for every page, centred; large screens get a wider page and a taller map */
-  --content-max: 100rem;
-  --gutter: max(1rem, calc((100vw - var(--content-max)) / 2));
+  /* every page uses the full width with the same margin as the menu, so the title, the
+     controls and the map line up with it on any screen */
+  --gutter: 1rem;
   --map-height: clamp(460px, calc(100vh - 230px), 1100px);
   --map-height-phone: clamp(250px, 66vw, 520px);
 }
@@ -265,10 +265,30 @@ input[type="text"] {
   right: 3.2rem;
   top: 0.75rem;
   width: 21rem;
-  /* ends above the map attribution in the bottom right corner (it scrolls when longer) */
-  max-height: calc(100% - 3.2rem);
-  overflow-y: auto;
   padding: 0.6rem 0.9rem 0.8rem;
+}
+/* wide screens: a clicked okres's panel is never a scroll box. It shares one grid cell
+   with the map, so a panel longer than the map makes the map taller instead */
+@media (min-width: 1024px) {
+  .map-wrap {
+    display: grid;
+  }
+  .map-wrap > .map-frame,
+  .map-wrap > .map-box.panel:not(#point-panel) {
+    grid-area: 1 / 1;
+  }
+  .map-wrap > .map-frame {
+    height: auto;
+    min-height: var(--map-height);
+  }
+  .map-wrap > .map-box.panel:not(#point-panel) {
+    position: relative;
+    top: auto;
+    right: auto;
+    align-self: start;
+    justify-self: end;
+    margin: 0.75rem 3.2rem 2rem 0;
+  }
 }
 .map-box:empty {
   display: none;
@@ -401,7 +421,6 @@ header p {
   color: var(--muted);
 }
 #map {
-  min-height: 300px;
   position: relative;
 }
 #legend {
@@ -431,9 +450,7 @@ header h1 a {
 .content {
   box-sizing: border-box;
   width: 100%;
-  max-width: calc(var(--content-max) + 2rem);
-  margin-inline: auto;
-  padding: 0 1rem 1rem;
+  padding: 0 var(--gutter) 1rem;
   min-width: 0;
 }
 .content h2 {
@@ -1219,9 +1236,7 @@ body.tv.past #ribbon {
 }
 
 /* model comparison (compare.html) */
-.content.wide {
-  max-width: calc(var(--content-max) + 2rem);
-}
+
 .overview {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
@@ -1483,9 +1498,7 @@ img.eink {
   font-size: 0.9rem;
 }
 /* the station page: one chart per resolution, then all elements */
-.content.station-page {
-  max-width: calc(var(--content-max) + 2rem);
-}
+
 #controls input[type="search"] {
   margin-left: 0.3rem;
   min-width: 14rem;
