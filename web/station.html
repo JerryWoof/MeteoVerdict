@@ -6,7 +6,7 @@
     <title>MeteoVerdict: measured weather</title>
     <meta name="description" content="What ČHMÚ's stations measured, on a map by day and part of day, and what the weather was like at each station, day by day back to the start of its records, and every element it measures: the last days every 10 minutes, the last month hourly, recent years daily and decades monthly." />
   </head>
-  <body class="page station theme-measured">
+  <body class="page station">
     <header>
       <h1><a href="./">MeteoVerdict</a></h1>
       <p id="status"></p>
@@ -52,26 +52,23 @@
             </div>
           </nav>
           <div class="map-wrap measured-map-wrap">
-            <!-- the boxes: beside the map on wide screens, above and below it on narrow ones -->
-            <div class="map-side">
-              <aside id="headline" class="map-box info past" aria-live="polite"></aside>
-              <aside id="okres-panel" class="map-box panel" aria-live="polite"></aside>
-              <aside id="show-box" class="map-box legend">
-                <details id="show" open>
-                  <summary data-i18n="tv.onMap">On the map</summary>
-                  <fieldset>
-                    <legend id="values-legend" data-i18n="measured.values">Values at the stations</legend>
-                    <div id="values"></div>
-                  </fieldset>
-                  <fieldset>
-                    <legend id="colours-legend" data-i18n="measured.colour">Colour of the dots</legend>
-                    <div id="colours"></div>
-                    <div id="scale"></div>
-                  </fieldset>
-                </details>
-              </aside>
-            </div>
+            <aside id="headline" class="map-box info past" aria-live="polite"></aside>
             <div id="measured-map" class="map-frame measured-map"></div>
+            <aside id="show-box" class="map-box legend">
+              <details id="show" open>
+                <summary data-i18n="tv.onMap">On the map</summary>
+                <fieldset>
+                  <legend id="values-legend" data-i18n="measured.values">Values at the stations</legend>
+                  <div id="values"></div>
+                </fieldset>
+                <fieldset>
+                  <legend id="colours-legend" data-i18n="measured.colour">Colour of the dots</legend>
+                  <div id="colours"></div>
+                  <div id="scale"></div>
+                </fieldset>
+              </details>
+            </aside>
+            <aside id="okres-panel" class="map-box panel" aria-live="polite"></aside>
           </div>
           <p id="measured-hint" class="muted small map-hint measured-hint" data-i18n="measured.hint">Zoom in for the values of more stations.</p>
         </div>
