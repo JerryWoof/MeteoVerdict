@@ -3,8 +3,11 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
+import { COMBINED, weightTable } from "./forecast.js";
 import { drawIcon, glyph, iconCanvas } from "./icons.js";
 import { setUpLanguage } from "./i18n.js";
+import { modelHorizon, modelPeriods, parseModels } from "./models.js";
+import { fillPicker, issuedText } from "./picker.js";
 import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, colorFor, currentPart, dayLabel, displayName, ease,
   iconName, labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView,
@@ -296,15 +299,104 @@ function renderHeadline(outlook) {
 }
 
 // --- okres panel ------------------------------------------------------------------
-function partCell(row, part) {
+// Which forecast the panel shows: our combination (outlook.json), or one model's raw
+// forecast (forecast/models/<okres>.json, parts and days by the outlook's rules, models.js).
+// Not remembered: every page load and every opening of an okres starts on the combination.
+// The map itself always shows the combination.
+let panelModel = COMBINED;
+// okres → {status: "loading" | "ready" | "missing", table, parsed, periods: Map model → rows}
+const okresFiles = new Map();
+let metaJson = null;
+
+/** The okres's weights and models' forecasts (static files, loaded when it is opened). */
+function okresData(code) {
+  if (!okresFiles.has(code)) {
+    const entry = { status: "loading", table: new Map(), parsed: null, periods: new Map(), names: {} };
+    okresFiles.set(code, entry);
+    metaJson ??= getJson("data/scores/meta.json");
+    Promise.all([
+      getJson(`data/scores/forecast/${code}.json`),
+      getJson(`data/scores/forecast/models/${code}.json`),
+      metaJson,
+    ]).then(([weights, models, meta]) => {
+      entry.table = weightTable(weights);
+      entry.parsed = parseModels(models);
+      entry.names = { ...meta?.models };
+      entry.status = entry.parsed ? "ready" : "missing";
+      if (state.okres === code) renderPanel(outlook);
+    });
+  }
+  return okresFiles.get(code);
+}
+
+/** The panel's rows: (day, part) → row of the combination or of the chosen model. */
+function panelRows(data) {
+  const single = panelModel !== COMBINED && data.status === "ready" && data.parsed.models[panelModel];
+  if (!single) return { single: false, rowOf: (day, part) => rowFor(outlook, state.okres, day, part) };
+  if (!data.periods.has(panelModel)) data.periods.set(panelModel, modelPeriods(data.parsed, panelModel));
+  const periods = data.periods.get(panelModel);
+  return {
+    single: true,
+    periods,
+    // with the day's sunrise and sunset, for the night symbols
+    rowOf: (day, part) => {
+      const row = periods.get(`${day}|${part}`);
+      return row ? { ...row, ...sunFor(outlook, state.okres, day) } : undefined;
+    },
+  };
+}
+
+const rainText = (row, single) => (single ? `${fmt(row.precipitation, 1)} mm` : percent(row.rain_probability));
+
+function partCell(row, part, single) {
   const cell = element("div", null, "part");
   cell.append(
     element("span", t(`part.${part}`), "part-name"),
     iconCanvas(row ? iconName(row.symbol, part, row) : "", 34, symbolText(row?.symbol)),
     element("strong", row ? labelFor(row, "temperature", part) : "–"),
-    element("span", row ? percent(row.rain_probability) : "", "rain"),
+    element("span", row ? rainText(row, single) : "", "rain"),
   );
   return cell;
+}
+
+// the "Forecast" selector and, for a single model, what it is and where it ends
+function modelPicker(data, single, periods) {
+  const label = element("label", null, "model-pick");
+  const select = document.createElement("select");
+  const ready = data.status === "ready";
+  panelModel = fillPicker(select, {
+    table: data.table,
+    names: data.names,
+    available: new Set(ready ? Object.keys(data.parsed.models) : []),
+    selected: panelModel,
+    t,
+  });
+  select.disabled = !ready;
+  select.addEventListener("change", () => {
+    panelModel = select.value;
+    renderPanel(outlook);
+    document.querySelector("#okres-panel .model-pick select")?.focus();
+  });
+  label.append(element("span", t("forecast.pick")), select);
+  const notes = [];
+  if (data.status === "loading") notes.push(element("p", t("tv.modelLoading"), "model-note"));
+  if (data.status === "missing") notes.push(element("p", t("tv.modelUnavailable"), "model-note"));
+  if (single) {
+    let text = t("tv.modelNote", { time: issuedText(data.parsed.generated) ?? "–" });
+    // days of our forecast the model does not cover whole
+    const cut = outlook.days.some((day) => rowFor(outlook, state.okres, day, "day") && !periods.get(`${day}|day`));
+    const end = modelHorizon(data.parsed, panelModel);
+    if (cut && end != null) {
+      const when = new Intl.DateTimeFormat(language, {
+        weekday: "short", day: "numeric", month: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Europe/Prague",
+      }).format(end);
+      text += ` ${t("tv.modelHorizon", { end: when })}`;
+    }
+    const note = element("p", text, "model-note");
+    note.title = t("tv.modelNoteMore");
+    notes.push(note);
+  }
+  return [label, ...notes];
 }
 
 // the day's strongest wind and, where the single runs reach, its strongest gust
@@ -323,7 +415,10 @@ function renderPanel(outlook) {
     return;
   }
   const info = outlook.okresy.find((o) => o.code === state.okres);
-  const now = rowFor(outlook, state.okres, state.day, state.part);
+  const data = okresData(state.okres);
+  const { single, periods, rowOf } = panelRows(data);
+  panel.classList.toggle("single", single);
+  const now = rowOf(state.day, state.part);
   const close = element("button", "×", "close");
   close.type = "button";
   close.setAttribute("aria-label", t("chart.close"));
@@ -338,7 +433,9 @@ function renderPanel(outlook) {
     for (const text of [
       symbolText(now.symbol),
       t("tv.range", { low: fmt(now.tmin), high: fmt(now.tmax) }),
-      t("tv.rain", { chance: percent(now.rain_probability), amount: fmt(now.precipitation, 1) }),
+      single
+        ? t("tv.rainModel", { amount: fmt(now.precipitation, 1) })
+        : t("tv.rain", { chance: percent(now.rain_probability), amount: fmt(now.precipitation, 1) }),
       // gusts from the single runs: null beyond the newest run and in older files
       now.gust != null ? t("tv.windGust", { value: fmt(now.wind), gust: fmt(now.gust) }) : t("tv.wind", { value: fmt(now.wind) }),
       t("tv.cloud", { value: fmt(now.cloud) }),
@@ -355,10 +452,10 @@ function renderPanel(outlook) {
     facts.append(li);
   }
   const strip = element("div", null, "strip");
-  strip.append(...PARTS.slice(0, 4).map((p) => partCell(rowFor(outlook, state.okres, state.day, p), p)));
+  strip.append(...PARTS.slice(0, 4).map((p) => partCell(rowOf(state.day, p), p, single)));
   const week = element("table", null, "week");
   for (const day of outlook.days) {
-    const row = rowFor(outlook, state.okres, day, "day");
+    const row = rowOf(day, "day");
     const tr = element("tr");
     if (day === state.day) tr.className = "current";
     tr.addEventListener("click", () => update({ day }));
@@ -368,7 +465,7 @@ function renderPanel(outlook) {
       element("td", dayText(day)),
       iconCell,
       element("td", row ? `${fmt(row.tmax)}° / ${fmt(row.tmin)}°` : "–", "num"),
-      element("td", row ? percent(row.rain_probability) : "", "num rain"),
+      element("td", row ? rainText(row, single) : "", "num rain"),
       windCell(row),
     );
     week.append(tr);
@@ -379,6 +476,7 @@ function renderPanel(outlook) {
     close,
     element("h2", displayName(info?.name ?? state.okres)),
     element("p", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`, "when"),
+    ...modelPicker(data, single, periods),
     big,
     facts,
     strip,
@@ -408,6 +506,8 @@ function paintFill(colours) {
 /** Draw the current state at once (after a click, or at the end of a transition). */
 function update(change = {}, fromPlay = false) {
   if (!fromPlay) stopPlay();
+  // another okres (or none) starts on our combination again
+  if ("okres" in change && change.okres !== state.okres) panelModel = COMBINED;
   state = { ...state, ...change };
   window.history.replaceState(null, "", viewHash(state));
   renderWhen(outlook);

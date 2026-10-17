@@ -737,3 +737,67 @@ def test_outlook_meter_counts_open_meteo_calls_with_retries():
     assert meter.requests == 2
     assert meter.calls == pytest.approx(2 * one)
     assert meter.line() == f"Open-Meteo: {2 * one:g} calls in 2 requests"
+
+
+OUTLOOK_FIXTURES = Path(__file__).parent / "fixtures"
+OUTLOOK_PAYLOAD = json.loads(
+    (OUTLOOK_FIXTURES / "open-meteo" / "forecast-2-okresy.json").read_text("utf-8")
+)
+
+
+def _outlook_args(tmp_path):
+    frames = []
+    for code in ("CZ0100", "CZ0201"):
+        doc = json.loads((OUTLOOK_FIXTURES / "weights" / f"{code}.json").read_text("utf-8"))
+        frames.append(
+            pl.DataFrame(doc["rows"], schema=doc["columns"], orient="row").with_columns(
+                pl.lit(code).alias("region"), pl.col("lead_day").cast(pl.Int8)
+            )
+        )
+    weights = pl.concat(frames)
+    pl.DataFrame({"x": [1]}).write_parquet(tmp_path / "aggregates.parquet")
+    weights.write_parquet(tmp_path / "forecast-weights.parquet")
+    return [
+        "outlook",
+        "--aggregates",
+        str(tmp_path / "aggregates.parquet"),
+        "--out",
+        str(tmp_path / "site" / "outlook.json"),
+        "--rain-calibration",
+        str(tmp_path / "none.json"),
+        "--frost",
+        str(tmp_path / "frost.json"),
+        "--data-dir",
+        str(tmp_path / "data"),
+        "--corrections",
+        str(tmp_path / "none-scg.json"),
+        "--archive-dir",
+        str(tmp_path / "archive"),
+    ]
+
+
+def test_outlook_writes_the_per_model_files_and_archives_them(tmp_path, monkeypatch):
+    monkeypatch.setattr(cli.outlook, "fetch", lambda client, points, models, sleep: OUTLOOK_PAYLOAD)
+    result = runner.invoke(app, _outlook_args(tmp_path))
+    assert result.exit_code == 0, result.output
+    models = tmp_path / "site" / "forecast" / "models"
+    assert sorted(p.name for p in models.glob("*.json")) == ["CZ0100.json", "CZ0201.json"]
+    doc = json.loads((models / "CZ0100.json").read_text("utf-8"))
+    assert doc["okres"] == "CZ0100" and doc["models"]
+    assert (tmp_path / "site" / "outlook-hourly.json").exists()
+    day = json.loads((tmp_path / "site" / "outlook.json").read_text("utf-8"))["generated"][:10]
+    archived = pl.read_parquet(tmp_path / "archive" / f"outlook-models-{day}.parquet")
+    assert archived["okres"].unique().sort().to_list() == ["CZ0100", "CZ0201"]
+    assert archived["issued"].n_unique() == 1
+
+
+def test_a_failing_model_archive_does_not_fail_the_outlook(tmp_path, monkeypatch):
+    def broken(*args):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(cli.outlook, "fetch", lambda client, points, models, sleep: OUTLOOK_PAYLOAD)
+    monkeypatch.setattr(cli, "_archive_outlook_models", broken)
+    result = runner.invoke(app, _outlook_args(tmp_path))
+    assert result.exit_code == 0, result.output
+    assert "model archive not updated: disk full" in plain(result.output)
+    assert (tmp_path / "site" / "outlook.json").exists()
