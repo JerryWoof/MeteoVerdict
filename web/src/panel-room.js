@@ -20,3 +20,19 @@ export function keepRoomForPanels(wrap, frame, panels) {
   fit();
   return fit;
 }
+
+/** The room a map leaves on the right for an open okres panel (its CSS width, 21rem, plus
+ * the zoom buttons): fixed, so choosing another okres never moves the map. */
+export function panelRoom() {
+  const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  return Math.round(21 * rem + 70);
+}
+
+/** Whether someone has moved or zoomed `map` themselves: after that the page never moves it. */
+export function userMoved(map) {
+  let moved = false;
+  map.on("movestart", (event) => {
+    if (event.originalEvent) moved = true;
+  });
+  return () => moved;
+}
