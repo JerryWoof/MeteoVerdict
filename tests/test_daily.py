@@ -91,7 +91,7 @@ def test_recent_days_are_scored_from_the_single_runs(tmp_path, monkeypatch):
         for lead in range(1, 121)
         for s in "abc"
     ]  # fmt: skip
-    table = pl.DataFrame(single, schema=runs.SCHEMA, orient="row")
+    table = pl.DataFrame(single, schema=runs.HOURLY_SCHEMA, orient="row")
     partitions.write_monthly(table, tmp_path / "runs", runs.KEYS, "run")
     logged = []
     daily.run(None, pl.DataFrame({"id": list("abc")}), [eu], day, tmp_path, logged.append)
