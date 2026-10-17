@@ -8,8 +8,10 @@ export const PARTS = ["night", "morning", "afternoon", "evening", "day"];
 // colours the map
 export const LAYERS = ["temperature", "precipitation", "wind", "cloud"];
 export const COLOURS = LAYERS;
+// a past day (measured, observed.js) also shows the strongest gust and the sunshine
+export const ALL_LAYERS = ["temperature", "precipitation", "wind", "gust", "sunshine", "cloud"];
 export const DEFAULT_SHOWN = ["temperature", "precipitation"];
-const SHORT = { temperature: "t", precipitation: "p", wind: "w", cloud: "c" };
+const SHORT = { temperature: "t", precipitation: "p", wind: "w", cloud: "c", gust: "g", sunshine: "s" };
 export const TIME_ZONE = "Europe/Prague";
 
 // okresy whose seat is a kraj capital (and Praha): their labels win when markers collide
@@ -54,16 +56,21 @@ export function parseOutlook(doc) {
 
 export const rowFor = (outlook, okres, day, part) => outlook.rows.get(`${okres}|${day}|${part}`);
 
+/** Rain in mm rather than as a probability: a single model's row and a measured one. */
+const inMm = (row) => Boolean(row?.single || row?.measured);
+
 /**
  * The number a layer shows: the night's low, otherwise the high; rain as probability
  * (our combination) or as the total in mm (a single model's row, `row.single`, which
- * has no probability).
+ * has no probability, and a measured row, `row.measured`).
  */
 export function valueFor(row, layer, part) {
   if (!row) return null;
   if (layer === "temperature") return part === "night" ? row.tmin : row.tmax;
-  if (layer === "precipitation") return row.single ? row.precipitation : row.rain_probability;
+  if (layer === "precipitation") return inMm(row) ? row.precipitation : row.rain_probability;
   if (layer === "wind") return row.wind;
+  if (layer === "gust") return row.gust ?? null;
+  if (layer === "sunshine") return row.sunshine ?? null;
   return row.cloud;
 }
 
@@ -74,9 +81,11 @@ export function valueFor(row, layer, part) {
 export function labelFor(row, layer, part) {
   if (row?.beyond) return "–";
   const v = valueFor(row, layer, part);
-  if (v == null) return "";
+  // measured: "–" where no station of the okres measures it
+  if (v == null) return row?.measured ? "–" : "";
   if (layer === "temperature") return `${Math.round(v)}°`;
-  if (layer === "precipitation" && row.single) return `${v.toFixed(1)} mm`;
+  if (layer === "precipitation" && inMm(row)) return `${v.toFixed(1)} mm`;
+  if (layer === "sunshine") return `${v.toFixed(1)} h`;
   if (layer === "precipitation" || layer === "cloud") {
     return `${Math.round(layer === "precipitation" ? v * 100 : v)} %`;
   }
@@ -93,12 +102,18 @@ export const RAMPS = {
   precipitation: [[0, [244, 241, 234]], [0.3, [198, 219, 239]], [0.6, [107, 174, 214]], [1, [8, 81, 156]]],
   wind: [[0, [244, 241, 234]], [4, [199, 233, 192]], [8, [116, 196, 118]], [14, [35, 139, 69]], [20, [0, 68, 27]]],
   cloud: [[0, [254, 240, 180]], [50, [220, 220, 215]], [100, [150, 150, 150]]],
-  // a single model's rain total (mm): no probability from one model
+  // a single model's rain total (mm): no probability from one model; also what was measured
   precipitationMm: [[0, [244, 241, 234]], [0.3, [198, 219, 239]], [2, [107, 174, 214]], [10, [8, 81, 156]]],
+  // measured only (past days): the strongest gust (m/s) and hours of sunshine
+  gust: [[0, [244, 241, 234]], [8, [199, 233, 192]], [14, [116, 196, 118]], [20, [35, 139, 69]], [28, [0, 68, 27]]],
+  sunshine: [[0, [205, 205, 200]], [1, [250, 240, 200]], [4, [253, 216, 118]], [8, [245, 166, 35]], [12, [214, 110, 0]]],
 };
 
 /** The colour ramp of a layer: rain in mm for a single model's view. */
 export const rampKey = (layer, single) => (layer === "precipitation" && single ? "precipitationMm" : layer);
+
+/** A view whose rain is in mm: a single model's, or a measured day's. */
+export const mmView = (view) => Boolean(view?.single || view?.observed);
 
 /** Fill of an okres a single model does not cover at that time (beyond its horizon). */
 export const BEYOND = "#c9c9c9";
@@ -157,7 +172,8 @@ export function isNightPart(part, sun) {
  */
 export function iconName(symbol, part, sun) {
   if (!symbol) return "";
-  const dark = isNightPart(part, sun);
+  // a measured row knows whether it was dark (observed.js isDark)
+  const dark = sun?.dark ?? isNightPart(part, sun);
   if (dark && (symbol === "clear" || symbol === "partly" || symbol === "showers")) return `${symbol}-night`;
   return symbol;
 }
@@ -251,6 +267,8 @@ export function dayLabel(day, todayIso, language) {
   };
   if (offset === 0) label.key = "day.today";
   if (offset === 1) label.key = "day.tomorrow";
+  if (offset === -1) label.key = "day.yesterday";
+  if (offset === -2) label.key = "day.dayBefore";
   return label;
 }
 
@@ -262,6 +280,7 @@ export function dayLabel(day, todayIso, language) {
  * Unknown parts fall back to `fallback` ({day, part}).
  */
 export function parseView(hash, outlook, fallback) {
+  // outlook.days: every day offered (measured past days too)
   const parts = hash.replace(/^#/, "").split("/");
   const [day, part, colour] = parts;
   let [, , , values, okres] = parts;
@@ -271,14 +290,14 @@ export function parseView(hash, outlook, fallback) {
   return {
     day: outlook.days.includes(day) ? day : fallback.day,
     part: PARTS.includes(part) ? part : fallback.part,
-    colour: COLOURS.includes(colour) ? colour : "temperature",
-    shown: LAYERS.filter((l) => shown.includes(l)),
+    colour: ALL_LAYERS.includes(colour) ? colour : "temperature",
+    shown: ALL_LAYERS.filter((l) => shown.includes(l)),
     okres: outlook.okresy.some((o) => o.code === okres) ? okres : null,
   };
 }
 
 export function viewHash(view) {
-  const values = LAYERS.filter((l) => view.shown.includes(l)).map((l) => SHORT[l]).join("") || "-";
+  const values = ALL_LAYERS.filter((l) => view.shown.includes(l)).map((l) => SHORT[l]).join("") || "-";
   return `#${[view.day, view.part, view.colour, values, view.okres].filter(Boolean).join("/")}`;
 }
 
@@ -310,12 +329,12 @@ export function startIndex(steps, day, part) {
 }
 
 /** The next map colour after a round: temperature → rain → wind → cloud → temperature. */
-export function nextColour(colour) {
-  const i = LAYERS.indexOf(colour);
-  return LAYERS[(i + 1) % LAYERS.length];
+export function nextColour(colour, layers = LAYERS) {
+  const i = layers.indexOf(colour);
+  return layers[(i + 1) % layers.length];
 }
 
-const NUMERIC = ["tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud"];
+const NUMERIC = ["tmin", "tmax", "precipitation", "rain_probability", "wind", "gust", "sunshine", "cloud"];
 
 /** A row between `a` and `b` (f from 0 to 1): numbers interpolated, the symbol switching
  * half-way; a missing side keeps the other. */
@@ -343,11 +362,13 @@ export const ease = (f) => (f < 0.5 ? 2 * f * f : 1 - (-2 * f + 2) ** 2 / 2);
  * single model's view colours rain by mm and greys the okresy beyond its horizon.
  */
 export function okresColours(outlook, day, part, layer) {
-  const ramp = rampKey(layer, outlook.single);
+  const ramp = rampKey(layer, mmView(outlook));
   return new Map(
     outlook.okresy.map((o) => {
       const row = rowFor(outlook, o.code, day, part);
       if (row?.beyond) return [o.code, BEYOND];
+      // measured: grey where no station of the okres measures it
+      if (outlook.observed && RAMPS[layer] && valueFor(row, layer, part) == null) return [o.code, BEYOND];
       return [o.code, RAMPS[layer] ? colorFor(valueFor(row, layer, part), ramp) : NEUTRAL];
     }),
   );
