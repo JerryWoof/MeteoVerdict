@@ -726,13 +726,20 @@ def scan(root: Path, pattern: str) -> pl.LazyFrame | None:
     return pl.scan_parquet(files) if files else None
 
 
-def sync(releases, root: Path, wanted: Iterable[tuple[str, str]], log=print) -> int:
+#: parallel downloads from GitHub's storage host (not the API) in ``sync``
+SYNC_WORKERS = 8
+
+
+def sync(
+    releases, root: Path, wanted: Iterable[tuple[str, str]], log=print, workers: int = SYNC_WORKERS
+) -> int:
     """Download the wanted ``(tag, name)`` assets that exist and differ from the local
-    copy under ``root/<tag>/<name>`` (read only towards GitHub). Returns the count."""
+    copy under ``root/<tag>/<name>`` (read only towards GitHub). One asset listing per
+    release; the files themselves come in parallel. Returns the count."""
     by_tag: dict[str, list[str]] = defaultdict(list)
     for tag, name in wanted:
         by_tag[tag].append(name)
-    copied = 0
+    todo: list[tuple[str, str, Path, int]] = []
     for tag, names in sorted(by_tag.items()):
         assets = releases.assets(tag)
         for name in sorted(set(names)):
@@ -742,7 +749,13 @@ def sync(releases, root: Path, wanted: Iterable[tuple[str, str]], log=print) -> 
             path = root / tag / name
             if path.exists() and asset.get("label") and sha256(path) == asset["label"]:
                 continue
-            releases.download(tag, name, path)
-            copied += 1
-    log(f"downloaded {copied} archive files to {root}")
-    return copied
+            todo.append((tag, name, path, asset.get("size") or 0))
+    started = time.monotonic()
+    with ThreadPoolExecutor(max(workers, 1)) as pool:
+        list(pool.map(lambda job: releases.download(job[0], job[1], job[2]), todo))
+    size = sum(job[3] for job in todo)
+    log(
+        f"downloaded {len(todo)} archive files ({size / 1e6:.0f} MB) to {root} "
+        f"in {time.monotonic() - started:.0f} s"
+    )
+    return len(todo)
