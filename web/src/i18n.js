@@ -99,7 +99,7 @@ export const STRINGS = {
     "api.intro":
       "Naši kombinovanou předpověď a pořadí modelů si můžete stáhnout pro každý okres jako JSON nebo CSV, zdarma, bez registrace a bez klíče. Soubory jsou statické a dají se načíst i přímo z prohlížeče na jiném webu (CORS povolený).",
     "api.when":
-      "Předpověď se obnovuje dvakrát denně (kolem 6:00 a 18:00 UTC), pořadí modelů jednou denně ráno. Čas vytvoření je v každém souboru.",
+      "Předpověď se obnovuje čtyřikrát denně (kolem 5:00, 11:00, 17:00 a 23:00 UTC, po každém běhu modelů), pořadí modelů jednou denně ráno. Čas vytvoření je v každém souboru.",
     "api.try": "Váš okres",
     "api.none": "Otevřená data zatím nejsou k dispozici.",
     "api.files": "Soubory",
@@ -123,7 +123,7 @@ export const STRINGS = {
     "api.terms": "Podmínky",
     "api.licence":
       "Data jsou pod licencí CC BY-SA 4.0: smíte je používat, upravovat i šířit, když uvedete zdroj (MeteoVerdict, Open-Meteo.com a ČHMÚ – text je v poli attribution) a odvozená data sdílíte pod stejnou licencí.",
-    "api.fair": "Prosíme, stahujte nejvýš jednou za hodinu: data se stejně mění jen dvakrát denně.",
+    "api.fair": "Prosíme, stahujte nejvýš jednou za hodinu: předpověď se stejně mění jen čtyřikrát denně.",
     "api.caveats":
       "Předpověď je statistická kombinace modelů, ne oficiální předpověď ČHMÚ; zda je lepší než nejlepší jednotlivý model, zpětně ověřujeme každý den na stránce srovnání modelů (zatím na krátké historii). Za její použití neručíme.",
     "page.forecast": "Podrobná předpověď",
@@ -273,6 +273,12 @@ export const STRINGS = {
     "tv.gustWarning": "Pozor na silné nárazy větru",
     "tv.cloud": "oblačnost {value} %",
     "tv.detail": "Podrobná předpověď s grafy modelů →",
+    "tv.rainModel": "srážky {amount} mm (pravděpodobnost –)",
+    "tv.modelNote": "Surový výstup modelu, bez naší korekce (předpověď z {time}). Srážky v mm: pravděpodobnost z jednoho modelu určit nejde. Mapa ukazuje dál naši kombinaci.",
+    "tv.modelNoteMore": "Části dne a dny podle stejných pravidel jako naše předpověď, jen z hodnot tohoto modelu. Symbol jen podle jeho srážek (déšť od 0,3 mm) a oblačnosti, bez přeháněk (ty vycházejí z pravděpodobnosti). Bez nárazů větru.",
+    "tv.modelHorizon": "Model počítá jen do {end}; dál „–“.",
+    "tv.modelLoading": "Načítám předpovědi modelů…",
+    "tv.modelUnavailable": "Předpovědi jednotlivých modelů teď nejsou k dispozici.",
     "tv.sun": "Východ slunce v {rise}, západ v {set} (místní čas)",
     "tv.sunrise": "Východ slunce {time}",
     "tv.sunset": "Západ slunce {time}",
@@ -307,8 +313,7 @@ export const STRINGS = {
     "forecast.pickScored": "Modely podle průměrného pořadí v okrese (chyba MAE, všechny veličiny a dny)",
     "forecast.pickUnscored": "Modely bez skóre v okrese",
     "forecast.pickOption": "{position}. {model} (ø pořadí {rank})",
-    "forecast.pickLoading": "Načítám předpověď modelu {model}…",
-    "forecast.pickUnavailable": "Model {model} teď pro tento bod předpověď nemá.",
+    "forecast.issued": "Předpověď z {time}",
     "forecast.modelNote": "{model}: surový výstup modelu, bez naší korekce a bez vah.",
     "forecast.modelHorizon": "Model počítá jen do {end}; dny dál jsou „–“.",
     "forecast.legendModel": "Barevně {model}: jeho surová předpověď (bez naší korekce); tence černě naše kombinovaná předpověď; šedě ostatní modely; přerušovaná čára je teď.",
@@ -316,7 +321,7 @@ export const STRINGS = {
     "forecast.note":
       "Naše předpověď kombinuje aktuální předpovědi všech modelů: každý model má váhu podle toho, jak přesný byl v tomto okrese za posledních 90 dní, a teplotu a vítr opravujeme o jeho průměrnou chybu. S málo dny se váhy blíží prostému průměru. Zda kombinace poráží nejlepší model, zpětně ověřujeme na stránce srovnání modelů; historie je zatím krátká.",
     "forecast.loading": "Načítám předpovědi modelů…",
-    "forecast.unavailable": "Předpovědi z Open-Meteo se nepodařilo načíst; zkuste to později.",
+    "forecast.unavailable": "Předpovědi modelů se nepodařilo načíst; zkuste to později.",
     "forecast.noWeights": "Pro tento okres zatím nejsou skóre, ze kterých by šly spočítat váhy.",
     "forecast.col.day": "Den",
     "forecast.col.tmin": "Min. °C",
@@ -715,7 +720,7 @@ export const STRINGS = {
     "api.intro":
       "Our combined forecast and the ranking of the models can be downloaded for every okres as JSON or CSV, free, without registration or a key. The files are static and can be fetched straight from a browser on another site (CORS allowed).",
     "api.when":
-      "The forecast is refreshed twice a day (around 6:00 and 18:00 UTC), the ranking once a day in the morning. Every file says when it was made.",
+      "The forecast is refreshed four times a day (around 5:00, 11:00, 17:00 and 23:00 UTC, after each model run), the ranking once a day in the morning. Every file says when it was made.",
     "api.try": "Your okres",
     "api.none": "The open data files are not available yet.",
     "api.files": "Files",
@@ -739,7 +744,7 @@ export const STRINGS = {
     "api.terms": "Terms",
     "api.licence":
       "The data are licensed CC BY-SA 4.0: you may use, change and share them if you credit the sources (MeteoVerdict, Open-Meteo.com and ČHMÚ – the text is in the attribution field) and share derived data under the same licence.",
-    "api.fair": "Please fetch at most once an hour: the data change only twice a day anyway.",
+    "api.fair": "Please fetch at most once an hour: the forecast changes only four times a day anyway.",
     "api.caveats":
       "The forecast is a statistical combination of models, not an official ČHMÚ forecast; whether it beats the best single model is tested every day on the model comparison page (on a short history so far). Use it at your own risk.",
     "page.forecast": "Detailed forecast",
@@ -889,6 +894,12 @@ export const STRINGS = {
     "tv.gustWarning": "Watch for strong gusts",
     "tv.cloud": "cloud cover {value} %",
     "tv.detail": "Detailed forecast with the models' charts →",
+    "tv.rainModel": "rain {amount} mm (probability –)",
+    "tv.modelNote": "The model's raw output, without our correction (forecast issued {time}). Rain in mm: one model cannot give a probability. The map still shows our combination.",
+    "tv.modelNoteMore": "Parts of day and days by the same rules as our forecast, from this model's values alone. The symbol only from its rain (rain from 0.3 mm) and cloud cover, no showers (they come from a probability). No gusts.",
+    "tv.modelHorizon": "The model only runs until {end}; later “–”.",
+    "tv.modelLoading": "Loading the models' forecasts…",
+    "tv.modelUnavailable": "The single models' forecasts are not available right now.",
     "tv.sun": "Sunrise {rise}, sunset {set} (local time)",
     "tv.sunrise": "Sunrise {time}",
     "tv.sunset": "Sunset {time}",
@@ -923,8 +934,7 @@ export const STRINGS = {
     "forecast.pickScored": "Models by mean rank in this okres (MAE, all variables and days)",
     "forecast.pickUnscored": "Models without scores in this okres",
     "forecast.pickOption": "{position}. {model} (mean rank {rank})",
-    "forecast.pickLoading": "Loading the forecast of {model}…",
-    "forecast.pickUnavailable": "{model} has no forecast for this point right now.",
+    "forecast.issued": "Forecast issued {time}",
     "forecast.modelNote": "{model}: the model's raw output, without our correction or weights.",
     "forecast.modelHorizon": "The model only runs until {end}; later days show “–”.",
     "forecast.legendModel": "Colour: {model}, its raw forecast (without our correction); thin black: our combined forecast; grey: the other models; dashed line: now.",
@@ -932,7 +942,7 @@ export const STRINGS = {
     "forecast.note":
       "Our forecast combines the current forecasts of all models: each model is weighted by how accurate it was in this okres over the last 90 days, and temperature and wind are corrected by its mean error there. With few days the weights stay close to a plain mean. Whether the combination beats the best model is tested on past days on the model comparison page; the history is still short.",
     "forecast.loading": "Loading the model forecasts…",
-    "forecast.unavailable": "Could not load the forecasts from Open-Meteo; try again later.",
+    "forecast.unavailable": "Could not load the models' forecasts; try again later.",
     "forecast.noWeights": "No scores for this okres yet to weight the models with.",
     "forecast.col.day": "Day",
     "forecast.col.tmin": "Min °C",

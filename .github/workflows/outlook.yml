@@ -1,14 +1,20 @@
 name: Outlook
 
-# Twice a day, after the night and noon model runs reach Open-Meteo: the TV-style
-# forecast for every okres (`mvd outlook`), combined with the okres weights of the
-# latest aggregates, published as outlook.json in the release data-latest. The Pages
-# workflow then rebuilds the map. Only models with weights are asked: ~420 weighted calls
-# for 11 models, ~732 for all 19 (refused above 800), in requests of at most 500 a minute
-# apart; <= 1,600 a day (1,700 budgeted, with retries), priority (1) in the budget split
-# of runs.yml (docs/data-sources.md#open-meteo-budget). Each run also appends the plain model means of
-# cloud and sunshine to the release outlook-archive (no extra calls), the training data
-# of the nightly sun-cloud-gust.yml.
+# Four times a day, once each of the 00, 06, 12 and 18 UTC model runs is on Open-Meteo
+# (most models 3.5-6 h after the run starts: 04:50, 10:50, 16:50, 22:50 UTC): the
+# TV-style forecast for every okres (`mvd outlook`), combined with the okres weights of
+# the latest aggregates, published as outlook.json, outlook-hourly.json and
+# outlook-models.zip (every model's own hourly forecast per okres, for the forecast
+# pages) in the release data-latest. The Pages workflow then rebuilds the map. Only
+# models with weights are asked: ~420 weighted calls for 11 models, ~732 for all 19
+# (refused above 800), in requests of at most 500 a minute apart; <= 3,400 a day (4 runs,
+# 850 each with retries), priority (1) in the budget split of runs.yml
+# (docs/data-sources.md#open-meteo-budget). A scheduled 22:50 run that GitHub starts
+# only after midnight UTC is skipped, so a UTC day never sees more than four runs.
+# Each run also appends the plain model means of cloud and sunshine and the full answer
+# (every model, variable and hour at the 77 okres points) to the release outlook-archive
+# (outlook-archive-YYYY-MM and outlook-models-YYYY-MM.parquet; no extra calls): the
+# training data of the nightly sun-cloud-gust.yml and our own record of the forecasts.
 # The frost fields use frost.json (daily.yml, `mvd frost-fit`); the models' nights at
 # the okres points go into outlook-nights-YYYY-MM.parquet of data-YYYY-MM (no extra
 # calls) to refit the clear-calm term (docs/methodology.md#frost).
@@ -18,8 +24,10 @@ name: Outlook
 # sun-cloud-gust.json (docs/methodology.md#gusts-in-the-outlook).
 on:
   schedule:
-    - cron: "52 5 * * *"
-    - cron: "52 17 * * *"
+    - cron: "50 4 * * *"
+    - cron: "50 10 * * *"
+    - cron: "50 16 * * *"
+    - cron: "50 22 * * *"
   workflow_dispatch:
 
 permissions:
@@ -44,6 +52,16 @@ jobs:
       - name: Install project
         run: uv sync --frozen
       - name: Outlook
-        run: uv run --frozen mvd outlook --github-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          # GitHub starts scheduled runs up to ~5 h late: the 22:50 run after midnight
+          # (or so close to it that its calls would reach past it) would be a fifth run
+          # in that UTC day, and the budget counts four
+          now=$((10#$(date -u +%H%M)))
+          if [ "$SCHEDULE" = "50 22 * * *" ] && { [ "$now" -lt 1200 ] || [ "$now" -ge 2345 ]; }; then
+            echo "::notice::the 22:50 UTC outlook started at $(date -u +%H:%M) UTC, too close to or after midnight; skipped, the 04:50 run follows"
+            exit 0
+          fi
+          uv run --frozen mvd outlook --github-release

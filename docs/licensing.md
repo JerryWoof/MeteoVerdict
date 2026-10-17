@@ -58,19 +58,23 @@ below, and public data is the point of the project.
 3. **Respect rate limits:** batch locations, request 14-day windows (same cost as one
    day), back off on HTTP 429. The free tier allows 300,000 calls a month, so a full
    backfill of all stations takes months and must be spread out (roadmap 2.6). All
-   workflows together stay below the daily and the monthly limit: outlook ≤ 1,700, the
-   single runs' fallback ≤ 400 and 7,400 shared by the backfill and the histories a day,
+   workflows together stay below the daily and the monthly limit: outlook ≤ 3,400, the
+   single runs' fallback ≤ 400 and 5,700 shared by the backfill and the histories a day,
    ≤ 294,500 in a 31-day month ([budget](data-sources.md#open-meteo-budget)); the newest
    single runs come from Open-Meteo's open-data bucket on AWS (no API calls; same CC BY
    4.0 data and attribution, read with range requests of a few kB per station), the API
    asks about 100 stations, not all ~500, and no request weighs more than 500 (the limit
    is 600 a minute).
-4. **The forecast page** (`forecast.html`, roadmap 6.3) asks the Open-Meteo Forecast
-   API from each visitor's browser, one request per okres shown, so each visitor uses
-   their own free-tier allowance; the page credits Open-Meteo and the model providers
-   like the map. It stays non-commercial under rule 1. The TV-style map reads
-   `outlook.json`, made twice a day for all okresy (about 420 calls with 11 weighted
-   models, 732 with all 19, in at most two requests).
+4. **The forecast pages** do not ask Open-Meteo from the visitors' browsers (since
+   2026-10-17; before, the detailed forecast page `forecast.html` sent one request per
+   okres shown). `mvd outlook` makes the only requests, four times a day for all okresy
+   (about 420 calls with 11 weighted models, 732 with all 19, in at most two requests),
+   and publishes `outlook.json` and, per okres, every model's hourly forecast as Open-Meteo
+   gave it (`data/scores/forecast/models/<okres>.json`, rounded, with our combined
+   series). Redistributing these raw values is allowed by CC BY 4.0 (UK Met Office: CC
+   BY-SA 4.0) with attribution: every file carries `licence` and `attribution`, and the
+   pages credit Open-Meteo and the model providers. The run's whole answer is also kept
+   in the release `outlook-archive` (`outlook-models-YYYY-MM.parquet`, same terms).
 5. **Open data files** (`api/v1/`, roadmap 6.11) carry the licence (CC BY-SA 4.0) and
    the attribution text in every file; they are derived data (combined forecasts,
    scores), not a redistribution of the raw Open-Meteo API.

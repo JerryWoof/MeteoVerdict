@@ -428,3 +428,98 @@ def test_calibrated_probability_and_heavy_rain(tmp_path):
     table = outlook.with_sun(outlook.summarise(hourly, raw), points)
     doc = json.loads(outlook.write(table, points, tmp_path / "r.json", NOW).read_text("utf-8"))
     assert {tuple(r[at - 1 : at + 1]) for r in doc["rows"]} == {(None, None)}
+
+
+# --- every model's own forecast: the per-okres files and the archive -------------------
+def test_per_model_files(tmp_path):
+    hourly = outlook.combine_hourly(FC, WEIGHTS, NOW)
+    (tmp_path / "CZ9999.json").write_text("{}", "utf-8")  # an okres of an older run
+    paths = outlook.write_models(FC, hourly, tmp_path, NOW)
+    assert sorted(p.name for p in paths) == [f"{c}.json" for c in CODES]
+    assert not (tmp_path / "CZ9999.json").exists()
+    doc = json.loads((tmp_path / "CZ0201.json").read_text("utf-8"))
+    assert doc["generated"] == "2026-10-12T08:25+00:00"
+    assert doc["okres"] == "CZ0201"
+    assert "Open-Meteo.com" in doc["attribution"] and "CC BY-SA 4.0" in doc["licence"]
+    assert len(doc["time"]) == 144 and doc["time"][0] == "2026-10-12T00:00Z"
+    assert set(doc["variables"]) == set(outlook.VARIABLES)
+    # our combined series as in outlook-hourly.json, every hour
+    assert set(doc["combined"]) == set(outlook.HOURLY)
+    assert all(len(v) == 144 for v in doc["combined"].values())
+    # each model raw, as Open-Meteo gave it (no correction), rounded
+    assert set(doc["models"]) == set(FC.filter(pl.col("okres") == "CZ0201")["model"])
+    raw = PAYLOAD[1]["hourly"]
+    for model, series in doc["models"].items():
+        for variable, values in series.items():
+            given = raw[f"{variable}_{model}"]
+            half = 0.5 * 10 ** -outlook.MODEL_DIGITS[variable] + 1e-9
+            for ours, theirs in zip(values, given, strict=False):
+                assert (ours is None) == (theirs is None)
+                # Open-Meteo gives wind in m/s with 2 decimals (converted from km/h)
+                assert ours is None or abs(ours - theirs) <= half
+            # cut after the model's last hour, never before
+            assert all(v is None for v in given[len(values) :])
+            assert values[-1] is not None
+    # a model ending early (ICON-D2: 48 h) is shorter than a global one
+    assert len(doc["models"]["dwd_icon_d2"]["temperature_2m"]) < 144
+    assert len(doc["models"]["ecmwf_ifs025"]["temperature_2m"]) == 144
+    # variables the answer lacks (no sunshine asked in the fixture) are left out
+    assert all("sunshine_duration" not in s for s in doc["models"].values())
+
+
+def test_per_model_files_round_and_stay_small(tmp_path):
+    fc = FC.with_columns(
+        pl.lit(12.345).alias("temperature_2m"),
+        pl.lit(0.123).alias("precipitation"),
+        pl.lit(3.456).alias("wind_speed_10m"),
+        pl.lit(47.6).alias("cloud_cover"),
+        pl.lit(3599.6).alias("sunshine_duration"),
+    )
+    hourly = outlook.combine_hourly(fc, WEIGHTS, NOW)
+    outlook.write_models(fc, hourly, tmp_path, NOW)
+    text = (tmp_path / "CZ0100.json").read_text("utf-8")
+    model = json.loads(text)["models"]["ecmwf_ifs025"]
+    assert model["temperature_2m"][0] == 12.3
+    assert model["precipitation"][0] == 0.12
+    assert model["wind_speed_10m"][0] == 3.5
+    assert model["cloud_cover"][0] == 48 and model["sunshine_duration"][0] == 3600
+    assert '"cloud_cover":[48,' in text  # whole numbers without ".0"
+    # 11 models with every value filled in: well under the 100 kB a file may take with
+    # all 19 models (about 19/11 of this)
+    assert len(text.encode()) * 19 / 11 < 100_000
+
+
+def test_model_archive_merges_runs_without_duplicates(tmp_path):
+    path = tmp_path / "outlook-models-2026-10.parquet"
+    assert outlook.model_archive_asset("2026-10") == (
+        "outlook-archive",
+        "outlook-models-2026-10.parquet",
+    )
+    first = outlook.model_archive_rows(FC, NOW)
+    assert first.height == FC.height
+    assert first["issued"].unique().to_list() == [NOW]
+    outlook.append_model_archive(path, first)
+    later = NOW.replace(hour=14)
+    outlook.append_model_archive(path, outlook.model_archive_rows(FC, later))
+    # the same run again (a re-run, a retried upload) replaces itself
+    changed = FC.with_columns(pl.col("temperature_2m") + 1)
+    outlook.append_model_archive(path, outlook.model_archive_rows(changed, later))
+    stored = pl.read_parquet(path)
+    assert stored.schema == pl.Schema(outlook.MODEL_ARCHIVE_SCHEMA)
+    assert stored.height == 2 * FC.height
+    assert stored.select("issued", "okres", "model", "time").is_unique().all()
+    at = stored.filter(pl.col("issued") == later).sort("okres", "model", "time")
+    expected = changed.sort("okres", "model", "time")["temperature_2m"]
+    assert (at["temperature_2m"].cast(pl.Float64) - expected).abs().max() < 1e-5
+
+
+def test_outlook_hands_over_the_models_forecasts():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=PAYLOAD)
+
+    points = combine.okres_points().filter(pl.col("code").is_in(CODES)).sort("code")
+    forecasts = []
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        outlook.outlook(client, WEIGHTS, points, now=NOW, forecasts=forecasts)
+    assert len(forecasts) == 1
+    assert forecasts[0].equals(FC)

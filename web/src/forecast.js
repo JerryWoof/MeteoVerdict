@@ -1,29 +1,16 @@
-// Our own forecast for one okres (roadmap 6.3): today's forecasts of all models from
-// Open-Meteo, combined with the weights and bias corrections `mvd aggregate` publishes
-// per okres, variable and lead day (forecast/<okres>.json, roadmap 6.2).
+// Our own forecast for one okres (roadmap 6.3): the forecasts of all models, combined
+// with the weights and bias corrections `mvd aggregate` publishes per okres, variable and
+// lead day (forecast/<okres>.json, roadmap 6.2). The page reads the models' forecasts and
+// our combination from forecast/models/<okres>.json (`mvd outlook`, models.js); the
+// combination here (`combine`) is the same formula, kept as its reference and tested.
 
 import { records } from "./data.js";
 
 export const VARIABLES = ["temperature_2m", "precipitation", "wind_speed_10m"];
 export const MAX_LEAD_DAY = 5;
-export const FORECAST_DAYS = 6;
 // variables that cannot be negative after the bias correction
 const NON_NEGATIVE = new Set(["precipitation", "wind_speed_10m"]);
 const HOUR = 3600 * 1000;
-
-/** Open-Meteo Forecast API request for all `models` at an okres's point, in UTC. */
-export function forecastUrl(point, models) {
-  const params = new URLSearchParams({
-    latitude: point.lat,
-    longitude: point.lon,
-    hourly: VARIABLES.join(","),
-    wind_speed_unit: "ms",
-    timezone: "GMT",
-    forecast_days: FORECAST_DAYS,
-    models: models.join(","),
-  });
-  return `https://api.open-meteo.com/v1/forecast?${params}`;
-}
 
 /**
  * The API answer as {times: [ms], values: {variable: {model: [value|null]}}};
@@ -272,8 +259,10 @@ const mean = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / va
  * okres by their mean rank over all variables and lead days (ties: larger mean weight
  * first), then the other models of `names` (meta.json models, without "blend") by name.
  * [{model, position, rank, weight, scored}]; position 1.. for the scored models.
+ * `available` (models with a forecast, e.g. those of forecast/models/<okres>.json): only
+ * these are offered, the unscored ones among them also when `names` lacks them.
  */
-export function modelOptions(table, names) {
+export function modelOptions(table, names, available = null) {
   const stats = new Map();
   for (const r of [...table.values()].flat()) {
     if (!stats.has(r.model)) stats.set(r.model, { ranks: [], weights: [] });
@@ -281,13 +270,16 @@ export function modelOptions(table, names) {
     if (r.weight != null) stats.get(r.model).weights.push(r.weight);
   }
   const name = (model) => names?.[model] ?? model;
+  const offered = (model) => available == null || available.has(model);
   const scored = [...stats.entries()]
+    .filter(([model]) => offered(model))
     .map(([model, s]) => ({ model, rank: mean(s.ranks), weight: mean(s.weights), scored: true }))
     .sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || (b.weight ?? 0) - (a.weight ?? 0)
       || name(a.model).localeCompare(name(b.model), "cs"))
     .map((o, i) => ({ ...o, position: i + 1 }));
-  const unscored = Object.keys(names ?? {})
-    .filter((model) => model !== "blend" && model !== COMBINED && !stats.has(model))
+  const candidates = available == null ? Object.keys(names ?? {}) : [...available];
+  const unscored = [...new Set(candidates)]
+    .filter((model) => model !== "blend" && model !== COMBINED && !stats.has(model) && offered(model))
     .sort((a, b) => name(a).localeCompare(name(b), "cs"))
     .map((model) => ({ model, position: null, rank: null, weight: null, scored: false }));
   return [{ model: COMBINED, position: null, rank: null, weight: null, scored: false }, ...scored, ...unscored];
@@ -319,19 +311,4 @@ export function modelDays(forecast, model, days, timeZone = "Europe/Prague") {
   return days.map((day) => own.get(day) ?? {
     day, tmin: null, tmax: null, precipitation: null, wind: null, beyond: true,
   });
-}
-
-/** Adds another answer's model series to a forecast, matched by time. */
-export function mergeForecast(forecast, extra) {
-  const index = new Map(forecast.times.map((time, i) => [time, i]));
-  for (const variable of VARIABLES) {
-    for (const [model, values] of Object.entries(extra.values[variable] ?? {})) {
-      const column = forecast.times.map(() => null);
-      extra.times.forEach((time, i) => {
-        if (index.has(time)) column[index.get(time)] = values[i];
-      });
-      if (column.some((v) => v != null)) forecast.values[variable][model] = column;
-    }
-  }
-  return forecast;
 }
