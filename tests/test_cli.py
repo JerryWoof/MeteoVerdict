@@ -9,10 +9,8 @@ import pytest
 from typer.testing import CliRunner
 
 from meteoverdict import aladin, cli, stations
-from meteoverdict import backfill as backfill_mod
 from meteoverdict.chmi import parse_collection
 from meteoverdict.cli import app
-from meteoverdict.models import load_models
 
 runner = CliRunner()
 
@@ -264,7 +262,6 @@ def test_fetch_fc_dry_run_prints_the_estimate(monkeypatch, tmp_path):
 
 
 def test_fetch_fc_saves_partial_results_when_the_quota_ends(monkeypatch, tmp_path):
-    from datetime import UTC, datetime
 
     forecasts, args = fc_setup(monkeypatch, tmp_path)
     row = {
@@ -311,7 +308,6 @@ def test_score_needs_observations_and_forecasts(tmp_path):
 
 
 def test_score_writes_monthly_scores(tmp_path):
-    from datetime import UTC, datetime, timedelta
 
     from meteoverdict.forecasts import SCHEMA as FC_SCHEMA
     from meteoverdict.observations import SCHEMA as OBS_SCHEMA
@@ -457,7 +453,6 @@ def test_leads_without_archive_fails(tmp_path):
 
 
 def test_leads_writes_the_json(tmp_path):
-    from datetime import UTC, datetime, timedelta
 
     now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
     run = now.replace(hour=now.hour // 6 * 6) - timedelta(hours=12)
@@ -512,7 +507,6 @@ def test_leads_writes_the_json(tmp_path):
 
 
 def test_leads_scores_every_model_from_the_single_runs(tmp_path):
-    from datetime import UTC, datetime, timedelta
 
     now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
     run = now.replace(hour=now.hour // 6 * 6) - timedelta(hours=12)
@@ -588,48 +582,24 @@ def test_fetch_runs_dry_run_prints_the_cost(tmp_path):
     assert "(760 per run of all 19 models" in out
 
 
-def test_fetch_runs_shared_budget_needs_a_readable_backfill_state(tmp_path):
+def test_fetch_runs_has_no_shared_budget_any_more(tmp_path):
+    # since 2026-10-17 the backfill spends the shared budget on the older single runs
     args = ["fetch-runs", "--dry-run", "--data-dir", str(tmp_path), "--run", "2026-10-12T06"]
     result = runner.invoke(app, [*args, "--shared-calls", "4500"])
-    assert result.exit_code == 0, result.output
-    out = plain(result.output)
-    assert "API budget: 100 calls (normal; no shared calls: backfill state not readable" in out
-    assert "budget 100)" in out
-
-
-def test_fetch_runs_shared_budget_when_the_backfill_is_idle(tmp_path):
-    today = datetime.now(UTC).date()
-    first = today - timedelta(days=40)
-    models = [m for m in load_models() if m.enabled]
-    state = backfill_mod.State(tmp_path / "backfill-state.json")
-    for start, end in backfill_mod.complete_windows(first, today):
-        state.fc_done |= {backfill_mod.fc_key(m, start, end) for m in models}
-        span = backfill_mod.gauge_window(first, today, start)
-        if span:
-            state.fc_done |= {backfill_mod.gauge_key(m, *span) for m in models}
-    state.save()
-    args = ["fetch-runs", "--dry-run", "--data-dir", str(tmp_path), "--run", "2026-10-12T06"]
-    extra = ["--shared-calls", "4500", "--shared-to", "2500", "--backfill-from", f"{first}"]
-    result = runner.invoke(app, [*args, *extra])
-    assert result.exit_code == 0, result.output
-    assert (
-        "budget: 2600 calls (100 normal + 2500 shared; 4500 of 4500 left, this run takes "
-        "0-2500: the backfill's current windows (last 90 days) are done)"
-    ) in plain(result.output)
-    # the second part of the day, from 2500 on
-    result = runner.invoke(app, [*args, *extra[:2], "--shared-from", "2500", *extra[4:]])
-    assert "budget: 2100 calls (100 normal + 2000 shared; 4500 of 4500 left" in plain(result.output)
+    assert result.exit_code == 2
+    result = runner.invoke(app, args)
+    assert "API budget: 100 calls" in plain(result.output)
 
 
 def test_fetch_runs_without_budget_does_nothing(monkeypatch, tmp_path):
     summary = tmp_path / "summary.md"
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
     args = ["fetch-runs", "--data-dir", str(tmp_path), "--max-calls", "0", "--source", "api"]
-    result = runner.invoke(app, [*args, "--shared-calls", "4500"])
+    result = runner.invoke(app, args)
     assert result.exit_code == 0, result.output
     assert "API: 0 runs fetched, 0 calls used" in plain(result.output)
     text = summary.read_text()
-    assert "- Budget: 0 calls (normal; no shared calls: backfill state not readable" in text
+    assert "- Budget: 0 calls" in text and "left to the D+N backfill" in text
     assert not (tmp_path / "runs").exists()
 
 
@@ -691,7 +661,6 @@ def test_farm_without_runs_fails(tmp_path):
 
 
 def test_farm_writes_the_json(tmp_path):
-    from datetime import UTC, datetime, timedelta
 
     now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
     run = now.replace(hour=now.hour // 6 * 6) - timedelta(hours=12)

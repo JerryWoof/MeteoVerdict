@@ -1,4 +1,3 @@
-import dataclasses
 from datetime import UTC, date, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
@@ -6,7 +5,7 @@ import httpx
 import polars as pl
 import pytest
 
-from meteoverdict import backfill, forecasts, runs
+from meteoverdict import forecasts, runs
 from meteoverdict.models import RUNS_FROM, load_models
 
 MODELS = [m for m in load_models() if m.enabled]
@@ -183,19 +182,19 @@ def test_run_lists():
     bucket_runs = runs.bucket_runs(NOW)
     assert bucket_runs[0] == datetime(2026, 10, 13, 12, tzinfo=UTC)
     assert bucket_runs[-1] == runs.bucket_start(NOW) == datetime(2026, 7, 15, 18, tzinfo=UTC)
-    # the API only for runs at least 24 h old (younger ones may still reach the bucket)
+    # the API only for runs at least 24 h old (younger ones may still reach the bucket),
+    # back to the month the bucket's window starts in; older runs are the backfill's
     api = runs.api_runs(NOW)
     assert api[0] == datetime(2026, 10, 12, 12, tzinfo=UTC)
-    # back to the first run with ALADIN by default, to the archive start on request
-    assert (
-        api[-1]
-        == datetime(2026, 6, 23, 0, tzinfo=UTC)
-        == datetime.combine(runs.HISTORY_FROM, datetime.min.time(), UTC)
-    )
-    archive = runs.api_runs(NOW, RUNS_FROM)
-    assert archive[-1] == datetime.combine(RUNS_FROM, datetime.min.time(), UTC)
-    assert archive[: len(api)] == api
-    assert runs.all_runs(NOW)[0] == bucket_runs[0]
+    assert api[-1] == runs.history_edge(NOW) == datetime(2026, 7, 1, 0, tzinfo=UTC)
+    # the edge moves a month at a time, with the bucket's window
+    assert runs.history_edge(datetime(2026, 10, 29, 12, tzinfo=UTC)) == api[-1]
+    assert runs.history_edge(datetime(2026, 10, 30, 1, tzinfo=UTC)) == api[-1].replace(month=8)
+    assert runs.all_runs(NOW, RUNS_FROM)[0] == bucket_runs[0]
+    assert runs.all_runs(NOW, RUNS_FROM)[-1] == datetime(2026, 4, 2, 0, tzinfo=UTC)
+    days = runs.day_runs(date(2026, 8, 1), date(2026, 8, 14))
+    assert len(days) == 56 and days[0] == datetime(2026, 8, 14, 18, tzinfo=UTC)
+    assert days[-1] == datetime(2026, 8, 1, 0, tzinfo=UTC)
     assert runs.parse_run("2026-10-12T06") == RUN
     assert runs.parse_run("2026101206") == RUN
     with pytest.raises(ValueError):
@@ -219,9 +218,17 @@ def test_what_the_bucket_and_the_api_are_asked_for(tmp_path):
     assert again.bucket_missing == {"2026101206": {"ecmwf_ifs"}}
 
 
-def test_history_floor_is_the_first_aladin_run():
+def test_each_model_from_its_start_in_the_archive():
     aladin = [m for m in MODELS if m.id.startswith("chmi_aladin")]
-    assert aladin and {m.single_runs_from for m in aladin} == {runs.HISTORY_FROM}
+    assert aladin and {m.single_runs_from for m in aladin} == {runs.ALADIN_FROM}
+    # IFS HRES goes back furthest (checked live 2026-10-17): 2024-03-14 00 UTC, the 06
+    # and 18 UTC runs from 2024-08-10 on
+    assert runs.history_start(MODELS) == date(2024, 3, 14)
+    at = lambda *a: [m.id for m in runs.wanted(MODELS, datetime(*a, tzinfo=UTC))]  # noqa: E731
+    assert at(2024, 3, 14, 0) == ["ecmwf_ifs"] and at(2024, 3, 13, 12) == []
+    assert at(2024, 8, 9, 6) == [] and at(2024, 8, 10, 18) == ["ecmwf_ifs"]
+    assert len(at(2026, 4, 2, 0)) == 15  # without ALADIN (2), JMA GSM and GEM Global
+    assert len(at(2026, 4, 1, 12)) == 1
     assert all(
         runs.wanted(MODELS, r) == [m for m in MODELS if r.hour in m.run_hours]
         for r in runs.api_runs(NOW)
@@ -561,137 +568,44 @@ def test_runs_from_in_the_catalogue(tmp_path):
     assert BY_ID["dwd_icon_eu"].single_runs_from == RUNS_FROM
 
 
-# --- the budget --------------------------------------------------------------------------
-
-BACKFILL_FROM = date(2026, 8, 1)
+# --- two workflows, one state --------------------------------------------------------
 
 
-def backfill_state(tmp_path, last, models=MODELS):
-    """A backfill state with every complete window up to ``last`` fetched and scored."""
-    state = backfill.State(tmp_path / "backfill-state.json")
-    for start, end in backfill.complete_windows(BACKFILL_FROM, last):
-        state.fc_done |= {backfill.fc_key(m, start, end) for m in models}
-        state.scored.add(backfill.window_key(start, end))
-        span = backfill.gauge_window(BACKFILL_FROM, last, start)
-        if span:
-            state.fc_done |= {backfill.gauge_key(m, *span) for m in models}
-    return state
+def test_the_state_is_merged_before_it_goes_up(tmp_path):
+    releases = FakeStore()
+    two = [BY_ID["dwd_icon_eu"], BY_ID["ecmwf_ifs"]]
+    # the backfill (older months) and fetch-runs (the bucket's months) start from the
+    # same released state and each upload what they fetched
+    backfill_dir, runs_dir = tmp_path / "backfill", tmp_path / "runs"
+    old = datetime(2026, 6, 1, 0, tzinfo=UTC)
+    for folder, run in ((runs_dir, RUN), (backfill_dir, old)):
+        sync = runs.RunsSync(releases, folder)
+        sync.pull_state()
+        with client(FakeApi()) as c:
+            runs.collect(c, STATIONS, two, folder, budget(), NOW, runs=[run], sync=sync)
+    name = (runs.STATE_TAG, runs.STATE_NAME)
+    (tmp_path / "released.json").write_bytes(releases.files[name][0])
+    released = runs.State.load(tmp_path / "released.json")
+    assert set(released.fetched) == {runs.key(RUN), runs.key(old)}  # nothing lost
+    # unchanged: no download, nothing to merge
+    puts = len(releases.puts)
+    runs.RunsSync(releases, backfill_dir).push([])
+    assert len(releases.puts) == puts + 1
+    assert runs.State.load(backfill_dir / runs.STATE_NAME).fetched == released.fetched
 
 
-def shared(state, day, part=(0, 2500), share=4500.0):
-    return runs.shared_budget(850, share, part, lambda: state, MODELS, BACKFILL_FROM, day)
-
-
-def test_shared_budget_takes_what_the_backfill_leaves(tmp_path):
-    today = date(2026, 10, 14)  # windows from 1 Aug end 14 Aug … 9 Oct, next 23 Oct
-    done = backfill_state(tmp_path, today)
-    calls, why = shared(done, today)
-    assert calls == 3350
-    assert why == (
-        "3350 calls (850 normal + 2500 shared; 4500 of 4500 left, this run takes 0-2500: "
-        "the backfill's current windows (last 90 days) are done)"
-    )
-    assert shared(done, today, part=(2500, 4500))[0] == 850 + 2000
-    assert shared(done, today, share=0) == (850, "850 calls (normal)")
-    # the backfill finished its current windows this morning with 3000 calls: 1500 left
-    done.calls_on, done.calls_used = "2026-10-14", 3000.0
-    calls, why = shared(done, today)
-    assert calls == 850 + 1500
-    assert "1500 of 4500 left, this run takes 0-2500: the backfill used 3000 of the 4500" in why
-    calls, why = shared(done, today, part=(2500, 4500))
-    assert calls == 850 and "1500 of 4500 left, this run takes 2500-4500" in why
-    # ... without recording how much (an older version): nothing
-    done.calls_used = None
-    assert shared(done, today)[0] == 850
-    # yesterday's calls do not count today
-    done.calls_on, done.calls_used = "2026-10-13", 4500.0
-    assert shared(done, today)[0] == 3350
-    # the window 10..23 Oct is fetched tomorrow: today stays normal
-    calls, why = shared(done, date(2026, 10, 23))
-    assert calls == 850 and "2026-10-10..2026-10-23 becomes due tomorrow" in why
-    calls, why = shared(done, date(2026, 10, 24))
-    # with the 28-day gauge window 26 Sep..23 Oct, the window before it is pending too
-    assert calls == 850
-    assert "2 current backfill windows pending (newest 2026-10-10..2026-10-23)" in why
-
-
-def test_shared_budget_ignores_older_windows_but_not_new_models(tmp_path):
-    today, first = date(2026, 10, 14), date(2026, 5, 1)
-    done = backfill.State(tmp_path / "s.json")
-    windows = backfill.complete_windows(first, today)
-    for start, end in windows:
-        done.fc_done |= {backfill.fc_key(m, start, end) for m in MODELS}
-        span = backfill.gauge_window(first, today, start)
-        if span:
-            done.fc_done |= {backfill.gauge_key(m, *span) for m in MODELS}
-    # older windows pending (here: the oldest one, more than 90 days back) do not count
-    oldest = windows[0]
-    assert not backfill.is_current(oldest[1], today - timedelta(days=1))
-    done.fc_done -= {backfill.fc_key(m, *oldest) for m in MODELS}
-    assert backfill.pending_windows(MODELS, first, today, done) == [oldest]
-    assert backfill.share_left(MODELS, first, today, done, 4500)[0] == 4500
-    # ... unless it is a priority window (one year back): those come before this history
-    calls, why = runs.shared_budget(
-        850, 4500, (0, 2500), lambda: done, MODELS, first, today, priority_from=first
-    )
-    assert calls == 850 and "1 priority backfill window pending" in why
-    # fetched at the station subset is enough
-    done.fc_done |= {backfill.subset_key(m, *oldest) for m in MODELS}
-    calls, why = runs.shared_budget(
-        850, 4500, (0, 2500), lambda: done, MODELS, first, today, priority_from=first
-    )
-    assert calls == 3350 and "its priority windows (since 2026-05-01) are done" in why
-    # a model added later is pending in every current window: nothing until fetched
-    calls, why = shared(backfill_state(tmp_path, today, MODELS[:-1]), today)
-    assert calls == 850 and "5 current backfill windows pending" in why
-
-
-def test_shared_budget_falls_back_when_the_state_cannot_be_read(tmp_path):
-    def broken():
-        raise httpx.ConnectError("no route to GitHub")
-
-    calls, why = runs.shared_budget(
-        850, 4500, (0, 2500), broken, MODELS, BACKFILL_FROM, date(2026, 10, 14)
-    )
-    assert calls == 850
-    assert why == (
-        "850 calls (normal; no shared calls: backfill state not readable: no route to GitHub)"
-    )
-    # a missing state loads as empty: everything pending, so normal too
-    empty = backfill.State.load(tmp_path / "nothing.json")
-    assert shared(empty, date.today())[0] == 850
-
-
-def test_history_done_for_the_backfill(tmp_path):
-    state = runs.State(tmp_path / runs.STATE_NAME)
-    edge = runs.bucket_start(NOW)
-    history = [r for r in runs.api_runs(NOW) if r < edge]
-    ok, why = runs.history_done(lambda: state, MODELS, NOW)
-    assert (
-        not ok and why == f"single-runs history first: {len(history)} runs since 2026-06-23 pending"
-    )
-    for run in history[: -runs.HISTORY_SLACK]:
-        state.fetched[runs.key(run)] = {m.id for m in runs.wanted(MODELS, run)}
-    assert runs.history_pending(state, MODELS, NOW) == runs.HISTORY_SLACK
-    assert runs.history_done(lambda: state, MODELS, NOW) == (
-        True,
-        f"single-runs history complete ({runs.HISTORY_SLACK} runs pending)",
-    )
-    # a gap in the bucket counts too
-    state.bucket_missing[runs.key(RUN)] = {"ecmwf_ifs"}
-    assert runs.history_pending(state, MODELS, NOW) == runs.HISTORY_SLACK + 1
-    # a model added later makes the history pending again
-    newcomer = dataclasses.replace(BY_ID["dwd_icon"], id="new_model")
-    assert not runs.history_done(lambda: state, [*MODELS, newcomer], NOW)[0]
-    assert runs.history_pending(state, [*MODELS, newcomer], NOW) == len(history) + 1
-
-    def broken():
-        raise ValueError("bad json")
-
-    assert runs.history_done(broken, MODELS, NOW) == (
-        False,
-        "single-runs state not readable: bad json",
-    )
+def test_merge_is_a_union(tmp_path):
+    mine, theirs = runs.State(tmp_path / "a.json"), runs.State(tmp_path / "b.json")
+    mine.fetched = {"2026101200": {"a"}}
+    mine.bucket_missing = {"2026101200": {"b"}}
+    theirs.fetched = {"2026101200": {"b"}, "2026060100": {"a"}}
+    theirs.missing = {"2026060100": {"c"}}
+    mine.merge(theirs)
+    assert mine.fetched == {"2026101200": {"a", "b"}, "2026060100": {"a"}}
+    assert mine.missing == {"2026060100": {"c"}}
+    assert mine.bucket_missing == {"2026101200": {"b"}}
+    two = [BY_ID["dwd_icon_eu"], BY_ID["ecmwf_ifs"]]
+    assert runs.backfill_pending(mine, two, NOW) > 0
 
 
 def hourly_rows(model, last=120, precipitation=0.1, source=None):
@@ -723,6 +637,7 @@ def test_native_keeps_the_native_hours_with_their_totals():
 
 
 def test_summary_states_the_budget(tmp_path):
-    text = runs.summary(runs.Result(), 0, tmp_path, MODELS, NOW, budget_note="750 calls (normal)")
-    assert "- Budget: 750 calls (normal)" in text
-    assert "runs complete since 2026-06-23" in text
+    text = runs.summary(runs.Result(), 0, tmp_path, MODELS, NOW, budget_note="100 calls")
+    assert "- Budget: 100 calls" in text
+    assert "runs complete since 2024-03-14" in text
+    assert "the history since 2026-07-01)" in text and "left to the D+N backfill" in text
