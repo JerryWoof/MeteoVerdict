@@ -1,9 +1,10 @@
+import json
 from datetime import UTC, date, datetime, timedelta
 
 import polars as pl
 import pytest
 
-from meteoverdict import backfill, forecasts, observations
+from meteoverdict import backfill, forecasts, observations, runs
 from meteoverdict.models import load_models
 
 MODELS = [m for m in load_models() if m.id in ("dwd_icon_d2", "ecmwf_ifs025")]
@@ -14,6 +15,13 @@ WINDOWS = [
     (date(2026, 8, 1) + timedelta(days=14 * i), date(2026, 8, 14) + timedelta(days=14 * i))
     for i in range(4)
 ]
+
+
+runs_mod = runs
+RUN_CALLS = 5.0
+#: the bucket's window then starts in mid-October 2026: every run of Aug/Sep is the
+#: backfill's (runs.history_edge)
+LATER = datetime(2027, 1, 20, 12, tzinfo=UTC)
 
 
 def hourly(start: date, end: date) -> list[datetime]:
@@ -41,6 +49,9 @@ class Fake:
         self.gauge_obs_calls: list[tuple[date, date]] = []
         #: (model ids, station ids, start, end) of every forecast request
         self.requests: list[tuple[list[str], list[str], date, date]] = []
+        #: ("dn", window start) per station request and ("run", run) per single run, in
+        #: the order asked
+        self.events: list[tuple[str, object]] = []
         self.quota_after = quota_after
         self.now_month = now_month
         self.unreadable_month = unreadable_month
@@ -66,6 +77,7 @@ class Fake:
             rows = [("g", t, m.id, 1, None, 0.5, None) for t in hourly(start, end) for m in models]
             return pl.DataFrame(rows, schema=forecasts.SCHEMA, orient="row")
         self.fc_calls += [(m.id, start, end) for m in models]
+        self.events.append(("dn", start))
         rows = [
             (s, t, m.id, 1, 11.0, None, None)
             for t in hourly(start, end)
@@ -73,6 +85,26 @@ class Fake:
             for s in points["id"]
         ]
         return pl.DataFrame(rows, schema=forecasts.SCHEMA, orient="row")
+
+    def collect(
+        self, client, stations, models, data_dir, budget, now, runs=(), sync=None, log=None
+    ):
+        """Like ``runs.collect`` with the runs given: 5 calls a run, stops at the budget."""
+        state = runs_mod.State.load(data_dir / runs_mod.STATE_NAME)
+        result = runs_mod.Result()
+        for run in runs:
+            todo = state.todo(run, runs_mod.wanted(models, run))
+            if not todo:
+                continue
+            if budget.used + RUN_CALLS > budget.max_calls:
+                result.stopped = f"budget of {budget.max_calls:g} calls reached"
+                break
+            budget.spend(RUN_CALLS)
+            self.events.append(("run", run))
+            state.fetched.setdefault(runs_mod.key(run), set()).update(m.id for m in todo)
+            state.save()
+            result.runs.append(runs_mod.key(run))
+        return result
 
     def gauges(self, client, ids, start, end, historical=True):
         assert not historical  # the 2.5 MB historical files are imported once, not here
@@ -99,6 +131,7 @@ def fake(monkeypatch):
         monkeypatch.setattr(backfill.observations, "fetch_observations", f.observations)
         monkeypatch.setattr(backfill.forecasts, "fetch_forecasts", f.forecasts)
         monkeypatch.setattr(backfill.gauges, "fetch_gauge_precipitation", f.gauges)
+        monkeypatch.setattr(backfill.runs, "collect", f.collect)
         return f
 
     return install
@@ -353,34 +386,6 @@ def test_a_model_added_later_is_fetched_for_scored_windows_newest_first(tmp_path
     assert f.fc_calls == []
 
 
-def test_older_windows_only_when_allowed(tmp_path, fake):
-    f = fake()
-    first, last = date(2026, 5, 1), date(2026, 9, 30)
-    windows = backfill.complete_windows(first, last)
-    current = [(s, e) for s, e in windows if backfill.is_current(e, last)]
-    # the 90-day ranking reaches back to 3 Jul: the windows ending 9 Jul ... 17 Sep
-    assert current[0] == (date(2026, 6, 26), date(2026, 7, 9)) and len(current) == 6
-    assert current[-1] == (date(2026, 9, 4), date(2026, 9, 17))
-    budget = forecasts.Budget(max_calls=1e9)
-    result = backfill.run(
-        None, POINTS, MODELS, first, last, tmp_path, budget, older=False, held_back="runs first"
-    )
-    assert {(s, e) for _, s, e in f.fc_calls} == set(current)
-    assert result.windows_done == 6 and result.older_skipped == len(windows) - 6
-    text = backfill.summary(result, budget.used, tmp_path, first, last)
-    assert "- Priority: the 6 current windows (last 90 days) first; older windows held back" in text
-    assert "runs first" in text
-    state = backfill.State.load(tmp_path / "backfill-state.json")
-    pending = backfill.pending_windows(MODELS, first, last, state, gauges=False)
-    assert backfill.pending_windows(MODELS, first, last, state, False, current_only=True) == []
-    assert len(pending) == len(windows) - 6
-    # allowed: the older ones follow, newest first
-    f.fc_calls.clear()
-    result = backfill.run(None, POINTS, MODELS, first, last, tmp_path, budget)
-    assert [e for _, _, e in f.fc_calls][::2] == [e for _, e in windows[: len(windows) - 6]][::-1]
-    assert "older windows allowed" in backfill.summary(result, 0, tmp_path, first, last)
-
-
 def test_calls_of_the_day_are_recorded(tmp_path, fake):
     fake(quota_after=3)
     budget = forecasts.Budget(max_calls=1e9)
@@ -402,122 +407,125 @@ def test_calls_of_the_day_are_recorded(tmp_path, fake):
     )
 
 
-def test_share_left_after_the_backfill_ran_today(tmp_path, fake):
-    fake()
-    budget = forecasts.Budget(max_calls=1e9)
-    today = LAST + timedelta(days=1)
-    backfill.run(
-        None, POINTS, MODELS, FIRST, LAST, tmp_path, budget, gauge_points=GAUGES, today=today
-    )
-    state = backfill.State.load(tmp_path / "backfill-state.json")
-    left, why = backfill.share_left(MODELS, FIRST, today, state, 4500)
-    assert left == 4500 - budget.used and f"used {budget.used:g} of the 4500" in why
-    # not yet run today and a current window pending: nothing (it may still be running)
-    state.fc_done.discard(backfill.fc_key(MODELS[0], *WINDOWS[-1]))
-    state.calls_on = str(LAST)
-    left, why = backfill.share_left(MODELS, FIRST, today, state, 4500)
-    assert left == 0 and why == "1 current backfill window pending (newest 2026-09-12..2026-09-25)"
-    # run today but still pending (stopped early): nothing either
-    state.calls_on = str(today)
-    left, why = backfill.share_left(MODELS, FIRST, today, state, 4500)
-    assert left == 0 and why.endswith("(it used Open-Meteo today)")
-
-
-def test_old_state_files_load(tmp_path):
+def test_old_state_files_load(tmp_path, fake):
     path = tmp_path / "backfill-state.json"
-    path.write_text(
-        '{"obs_months": [], "fc_done": [], "scored": [], "calls_on": "2026-10-15"}', "utf-8"
-    )
+    window = WINDOWS[-1]
+    # keys of the priority windows at the station subset (2026-10-16 … 17) mean nothing
+    # now: the window is fetched at every station
+    subset = f"{MODELS[0].id}|{window[0]}|{window[1]}|subset"
+    doc = {"obs_months": [], "fc_done": [subset], "scored": [], "calls_on": "2026-10-15"}
+    path.write_text(json.dumps(doc), "utf-8")
     state = backfill.State.load(path)
     assert state.calls_on == "2026-10-15" and state.calls_used is None
-    left, why = backfill.share_left([], FIRST, date(2026, 10, 15), state, 4500)
-    assert left == 0 and "amount not recorded" in why
-
-
-# --- priority windows (one year back at the station subset) ---------------------------
-
-TWO = pl.DataFrame(
-    {"id": ["s", "t"], "lat": [50.0, 49.5], "lon": [14.4, 16.6], "elevation": [300.0, 250.0]}
-)
-#: with CURRENT_DAYS = 20 and the last day 30 Sep, the windows ending 11 and 25 Sep are
-#: current, the one ending 28 Aug a priority window (since 20 Aug), 14 Aug older
-PRIORITY_FROM = date(2026, 8, 20)
-
-
-@pytest.fixture
-def short_current(monkeypatch):
-    monkeypatch.setattr(backfill, "CURRENT_DAYS", 20)
-
-
-def run_priority(tmp_path, older, gauges=None):
-    return backfill.run(
-        None,
-        TWO,
-        MODELS,
-        FIRST,
-        LAST,
-        tmp_path,
-        forecasts.Budget(max_calls=1e9),
-        gauge_points=gauges,
-        older=older,
-        held_back="single-runs history first",
-        priority_from=PRIORITY_FROM,
-        subset={"s", "not-a-verified-station"},
-    )
-
-
-def test_priority_windows_come_before_older_ones_at_the_subset(tmp_path, fake, short_current):
+    assert backfill.pending_windows(MODELS, FIRST, LAST, state)[0] == window
     f = fake()
-    result = run_priority(tmp_path, older=False, gauges=GAUGES)
-    assert result.windows_done == 3 and result.older_skipped == 1
-    asked = {(tuple(ids), s): stations for ids, stations, s, _ in f.requests if stations != ["g"]}
-    # current windows at every station, the priority window at the subset only
-    assert asked[(("dwd_icon_d2",), date(2026, 9, 12))] == ["s", "t"]
-    assert asked[(("dwd_icon_d2",), date(2026, 8, 15))] == ["s"]
-    assert all(s >= date(2026, 8, 15) for _, s, _ in f.fc_calls)  # 1-14 Aug held back
-    # no rain-gauge forecasts for a priority window (only the current 29 Aug-25 Sep)
-    assert {s for _, s, _ in f.gauge_fc_calls} == {date(2026, 8, 29)}
-    state = backfill.State.load(tmp_path / "backfill-state.json")
-    assert backfill.subset_key(MODELS[0], date(2026, 8, 15), date(2026, 8, 28)) in state.fc_done
-    assert backfill.fc_key(MODELS[0], date(2026, 8, 15), date(2026, 8, 28)) not in state.fc_done
-    scores = pl.read_parquet(tmp_path / "scores" / "2026-08.parquet")
-    assert scores["date"].min() == date(2026, 8, 15)  # the priority window is scored
-    # nothing left until older windows are allowed
-    assert run_priority(tmp_path, older=False, gauges=GAUGES).windows_done == 0
-    text = backfill.summary(result, 0, tmp_path, FIRST, LAST, PRIORITY_FROM)
-    assert "then the 1 priority windows ending since 2026-08-20 at the station subset" in text
+    run(tmp_path)
+    assert [ids for ids, stations, s, _ in f.requests if s == window[0]] == [
+        ["dwd_icon_d2"],
+        ["ecmwf_ifs025"],
+    ]
 
 
-def test_older_windows_later_fetch_the_rest_of_the_stations(tmp_path, fake, short_current):
-    fake()
-    run_priority(tmp_path, older=False)
+# --- one sweep: each window whole (D+N, then its single runs), newest first ------------
+
+
+def history(now=LATER):
+    return backfill.RunsHistory(POINTS, now)
+
+
+def sweep(tmp_path, max_calls=1e9, now=LATER, first=FIRST, last=LAST, models=MODELS):
+    budget = forecasts.Budget(max_calls=max_calls, per_minute=1e9, per_hour=1e9)
+    result = backfill.run(
+        None, POINTS, models, first, last, tmp_path, budget, gauge_points=GAUGES,
+        history=history(now),
+    )  # fmt: skip
+    return result, budget
+
+
+def blocks(events):
+    """The events as (kind, window start) blocks, in order."""
+    found = []
+    for kind, what in events:
+        start = what if kind == "dn" else next(s for s, e in WINDOWS if s <= what.date() <= e)
+        if not found or found[-1] != (kind, start):
+            found.append((kind, start))
+    return found
+
+
+def test_each_window_whole_before_the_next_older_one(tmp_path, fake):
     f = fake()
-    assert run_priority(tmp_path, older=True).windows_done == 2
-    asked = {(tuple(ids), s): stations for ids, stations, s, _ in f.requests}
-    assert asked[(("dwd_icon_d2",), date(2026, 8, 15))] == ["t"]  # s was fetched before
-    assert asked[(("dwd_icon_d2",), date(2026, 8, 1))] == ["s", "t"]
-    state = backfill.State.load(tmp_path / "backfill-state.json")
-    assert backfill.fc_key(MODELS[0], date(2026, 8, 15), date(2026, 8, 28)) in state.fc_done
+    result, _ = sweep(tmp_path)
+    assert result.windows_done == 4 and result.stopped == ""
+    # newest window first; its D+N (both models), then its 56 single runs, then the next
+    assert blocks(f.events) == [
+        (kind, start) for start, _ in WINDOWS[::-1] for kind in ("dn", "run")
+    ]
+    asked = [what for kind, what in f.events if kind == "run"]
+    assert len(asked) == 4 * 56 and asked == sorted(asked, reverse=True)  # newest first
+    assert asked[0] == datetime(2026, 9, 25, 18, tzinfo=UTC)
+    assert len(result.runs) == 4 * 56
+    # the rain gauges' 28-day windows come with the window that completes them
+    assert {s for _, s, _ in f.gauge_fc_calls} == {date(2026, 8, 1), date(2026, 8, 29)}
+    # nothing is asked again
+    f = fake()
+    assert sweep(tmp_path)[0].windows_done == 0 and f.events == []
 
 
-def test_share_left_waits_for_the_priority_windows(tmp_path, fake, short_current):
+def test_a_window_spans_several_days_and_resumes_where_it_stopped(tmp_path, fake):
+    f = fake()
+    # the newest window's D+N (2 requests of 10, 2 for its rain gauges) and 6 of its 56
+    # runs (5 calls each)
+    result, budget = sweep(tmp_path, max_calls=70)
+    assert result.stopped == "budget of 70 calls reached" and budget.used == 70
+    first_day = list(f.events)
+    assert blocks(first_day) == [("dn", WINDOWS[-1][0]), ("run", WINDOWS[-1][0])]
+    f = fake()
+    result, _ = sweep(tmp_path)
+    # the next day: the rest of its runs, without its D+N again, then the older windows
+    assert blocks(f.events)[:3] == [
+        ("run", WINDOWS[-1][0]),
+        ("dn", WINDOWS[-2][0]),
+        ("run", WINDOWS[-2][0]),
+    ]
+    asked = [w for k, w in first_day + f.events if k == "run"]
+    assert len(asked) == len(set(asked)) == 4 * 56
+    assert asked == sorted(asked, reverse=True)
+
+
+def test_runs_of_the_month_the_bucket_starts_in_come_later_and_first(tmp_path, fake):
+    f = fake()
+    # mid-December: the bucket's window starts on 16 Sep, so September's runs are
+    # fetch-runs's for now (runs.history_edge)
+    december = datetime(2026, 12, 15, 12, tzinfo=UTC)
+    assert runs.history_edge(december) == datetime(2026, 9, 1, tzinfo=UTC)
+    sweep(tmp_path, now=december)
+    asked = [w for k, w in f.events if k == "run"]
+    assert asked[0] == datetime(2026, 8, 31, 18, tzinfo=UTC) and len(asked) == 3 * 56 - 11 * 4
+    # once the bucket's window has moved on, they are the backfill's: newest first, before
+    # anything older (here nothing older is left), without any D+N again
+    f = fake()
+    sweep(tmp_path, now=LATER)
+    assert [k for k, _ in f.events] == ["run"] * (56 + 11 * 4)
+    assert f.events[0][1] == datetime(2026, 9, 25, 18, tzinfo=UTC)
+
+
+def test_single_runs_only_from_each_models_archive_start(tmp_path, fake):
+    f = fake()
+    # windows 20 Mar-2 Apr, 3-16 Apr, 17-30 Apr; the Single Runs archive of these two
+    # models starts on 2 Apr
+    sweep(tmp_path, first=date(2026, 3, 20), last=date(2026, 4, 30))
+    asked = [w for k, w in f.events if k == "run"]
+    assert asked[-1] == datetime(2026, 4, 2, 0, tzinfo=UTC) and len(asked) == 2 * 56 + 4
+
+
+def test_summary_of_the_sweep(tmp_path, fake):
     fake()
-    today = LAST + timedelta(days=1)
-    budget = forecasts.Budget(max_calls=1e9)
-    backfill.run(None, TWO, MODELS, FIRST, LAST, tmp_path, budget, gauge_points=GAUGES, today=FIRST)
-    state = backfill.State.load(tmp_path / "backfill-state.json")
-    # everything fetched (at all stations): the share is free
-    assert backfill.share_left(MODELS, FIRST, today, state, 4500, PRIORITY_FROM)[0] == 4500
-    window = (date(2026, 8, 15), date(2026, 8, 28))
-    state.fc_done -= {backfill.fc_key(m, *window) for m in MODELS}
-    # a priority window still pending: nothing for the single-runs history
-    left, why = backfill.share_left(MODELS, FIRST, today, state, 4500, PRIORITY_FROM)
-    assert left == 0 and why == "1 priority backfill window pending (newest 2026-08-15..2026-08-28)"
-    # fetched at the subset is enough; without --priority-from it is an older window
-    state.fc_done |= {backfill.subset_key(m, *window) for m in MODELS}
-    assert backfill.share_left(MODELS, FIRST, today, state, 4500, PRIORITY_FROM)[0] == 4500
-    state.fc_done -= {backfill.subset_key(m, *window) for m in MODELS}
-    assert backfill.share_left(MODELS, FIRST, today, state, 4500)[0] == 4500
+    result, budget = sweep(tmp_path, max_calls=70)
+    text = backfill.summary(result, budget.used, tmp_path, FIRST, LAST, "5 runs left")
+    assert "- This run: 0 windows, 70 Open-Meteo calls, 6 single runs" in text
+    assert "- Order: newest first, each window whole" in text
+    assert "- Single runs: 5 runs left" in text
+    assert "- Stopped: budget of 70 calls reached (the next run continues)" in text
 
 
 def test_models_with_the_same_lead_days_share_a_request(tmp_path, fake):
