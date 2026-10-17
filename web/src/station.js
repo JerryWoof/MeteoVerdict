@@ -1,4 +1,4 @@
-// Pure helpers of the station page (station.html): the per-station JSON written by
+// Pure helpers of the station page (measured.html): the per-station JSON written by
 // `mvd station-pages` (site/data/station/<WSI>.json) turned into chart rows, labels
 // and search results. Format: docs/data-sources.md#station-pages.
 

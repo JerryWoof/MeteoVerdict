@@ -1,5 +1,5 @@
 """What the weather was like: measured values per okres and part of day, the past days of
-the forecast map (web/tv.html), from the ČHMÚ archive (docs/data-sources.md#observed-map).
+the forecast map (web/forecast.html), from the ČHMÚ archive (docs/data-sources.md#observed-map).
 
 For every past day the map offers, ``<out>/<YYYY-MM-DD>.json`` holds per okres the values
 measured at its ČHMÚ stations, aggregated by the outlook's parts of day in Prague time

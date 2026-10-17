@@ -3,7 +3,7 @@
 From ČHMÚ's daily climate records (``daily`` rows of the archive) and the days with
 weather phenomena, one small file per station and decade,
 ``<out>/diary/<WSI>/<decade>.json.gz`` (gzipped JSON, ten years each), read by the
-"Weather at the station" overview of web/station.html
+"Weather at the station" overview of web/measured.html
 (docs/data-sources.md#station-diary).
 
 A day is the date ČHMÚ gives the record; each value covers ČHMÚ's own window for its
