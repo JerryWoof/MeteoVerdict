@@ -1,5 +1,9 @@
-// The station page: every element one ČHMÚ station measures, with its history
-// (site/data/station/<WSI>.json from `mvd station-pages`).
+// The measured-weather page (station.html, "Naměřeno / Measured"): without a station
+// the map of what ČHMÚ's stations measured, by day and part of day, each station with
+// its own values or each okres with the mean of its stations (measured.js,
+// data/scores/observed/ from `mvd observed-map`); "Kinds of station" the map of the
+// network. With a station (#WSI): its weather day by day (the diary), then every element
+// it measures with its history (site/data/station/<WSI>.json from `mvd station-pages`).
 import * as Plot from "@observablehq/plot";
 
 import "./style.css";
@@ -15,11 +19,23 @@ import {
 } from "./station-map.js";
 import { createStationMap } from "./station-map-view.js";
 import { createDiary } from "./diary-view.js";
-import { displayName } from "./tv.js";
+import { parseDiaryQuery } from "./diary.js";
+import { glyph } from "./icons.js";
+import {
+  KINDS_HASH, dayTabs, defaultDay, landingHash, okresRows, pageMode, parseLanding, stationHref, stationRows,
+  stationSummary,
+} from "./measured.js";
+import { createMeasuredMap } from "./measured-map-view.js";
+import { createOkresPanel } from "./measured-okres.js";
+import { OBSERVED_LAYERS, nearestDay, observedSummary, parseObservedDay, parseObservedIndex } from "./observed.js";
+import {
+  DEFAULT_SHOWN, RAMPS, colorFor, dayLabel, displayName, labelFor, okresColours, rampKey, today, valueFor,
+} from "./tv.js";
 
 const t = setUpLanguage();
 const language = document.documentElement.lang;
 const DATA = "data/scores/station";
+const OBSERVED = "data/scores/observed";
 const $ = (id) => document.getElementById(id);
 
 async function getJson(path) {
@@ -65,7 +81,8 @@ function fillSearch() {
   const input = $("search");
   const go = () => {
     const [hit] = searchStations(index, input.value, 1);
-    if (hit) window.location.hash = hit.id;
+    // from the measured map: the diary opens on the day shown there
+    if (hit) openStation(hit.id, mode === "measured" ? landing?.day : null);
   };
   input.addEventListener("change", go);
   $("controls").addEventListener("submit", (event) => {
@@ -201,13 +218,32 @@ function fillElements(current) {
   $("pick").hidden = codes.length === 0;
 }
 
-// --- the station map ---------------------------------------------------------------------
+// --- the page's three views ---------------------------------------------------------------
+let mode = null; // "measured", "kinds" or "station"
 let placed = []; // stations of the index with coordinates
+let stationIndexDoc = null; // data/scores/station/index.json
 const top = $("station-top");
 const panel = $("map-panel");
 const toggle = $("map-toggle");
 let mapOpen = window.innerWidth > 700; // with a station shown; phones start with it folded
+let pendingDay = null; // the day the diary opens on, from a click on the measured map
+let lastLanding = null; // the measured map's view the station was opened from (the way back)
 
+/** Open a station; `day` (from the measured map) is the day its diary opens on. */
+function openStation(id, day = null, event = null) {
+  event?.preventDefault();
+  if (mode === "measured" && landing) lastLanding = { ...landing };
+  const url = new URL(window.location.href);
+  url.searchParams.delete("view");
+  if (day) url.searchParams.set("day", day);
+  else url.searchParams.delete("day");
+  url.hash = id;
+  window.history.pushState(null, "", url);
+  pendingDay = day;
+  show();
+}
+
+// --- the kinds-of-station map: "Kinds of station", and compact beside a station ----------
 function describe(station) {
   const { kind, automatic } = classifyStation(station);
   const parts = [];
@@ -218,16 +254,23 @@ function describe(station) {
   return parts.join(" · ");
 }
 
-const stationMap = createStationMap({
-  container: $("station-map"),
-  t,
-  describe,
-  onPick: (station) => {
-    const measure = $("map-measure").value;
-    const element = measure ? elementFor(station, measure) : null;
-    window.location.hash = element ? `${station.id}/${element}` : station.id;
-  },
-});
+let stationMap = null;
+/** The kinds map, made the first time it is shown (one map less on the landing). */
+function kindsMap() {
+  if (stationMap) return stationMap;
+  stationMap = createStationMap({
+    container: $("station-map"),
+    t,
+    describe,
+    onPick: (station) => {
+      const measure = $("map-measure").value;
+      const element = measure ? elementFor(station, measure) : null;
+      window.location.hash = element ? `${station.id}/${element}` : station.id;
+    },
+  });
+  fillMapTools();
+  return stationMap;
+}
 
 function legendItem(swatch, label) {
   const item = el("span", null, "station-map-legend-item");
@@ -300,66 +343,438 @@ function fillMapTools() {
   applyFilter();
 }
 
-/** Large map and no station (empty hash), or a station with the map compact beside it. */
-function setMode(browsing) {
-  top.classList.toggle("browse", browsing);
-  toggle.hidden = browsing;
-  $("map-all").hidden = browsing;
-  $("map-hint").hidden = !browsing;
-  $("note").hidden = browsing;
-  panel.hidden = !browsing && !mapOpen;
-  toggle.textContent = t(mapOpen ? "map.hide" : "map.show");
-  toggle.setAttribute("aria-expanded", String(!panel.hidden));
-}
-
 toggle.addEventListener("click", () => {
   mapOpen = !mapOpen;
-  setMode(false);
-  if (mapOpen) stationMap.select(doc?.station.id ?? null, { animate: false });
+  setMode("station");
+  if (mapOpen) kindsMap().select(doc?.station.id ?? null, { animate: false });
 });
 
-function browse() {
-  doc = null;
-  setMode(true);
-  $("title").textContent = t("map.heading");
+/** Show the parts of the page of a view: the measured map, the kinds map, or a station. */
+function setMode(next) {
+  mode = next;
+  const station = next === "station";
+  $("measured").hidden = station;
+  $("measured-panel").hidden = next !== "measured";
+  $("measured-intro").textContent = t(next === "kinds" ? "measured.introKinds" : "measured.intro");
+  for (const button of document.querySelectorAll("#mode [data-mode]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.mode === next));
+  }
+  $("station-head").hidden = !station;
+  top.hidden = next === "measured";
+  top.classList.toggle("browse", next === "kinds");
+  toggle.hidden = !station;
+  $("map-all").hidden = !station;
+  $("map-hint").hidden = true; // the intro says it
+  $("note").hidden = !station;
+  panel.hidden = station && !mapOpen;
+  toggle.textContent = t(mapOpen ? "map.hide" : "map.show");
+  toggle.setAttribute("aria-expanded", String(!panel.hidden));
+  if (!station) {
+    doc = null;
+    $("pick").hidden = true;
+    $("charts").replaceChildren();
+    $("elements").replaceChildren();
+    $("elements-title").hidden = true;
+    $("detail-title").hidden = true;
+    diary.hide();
+    $("search").value = "";
+  }
+}
+
+for (const button of document.querySelectorAll("#mode [data-mode]")) {
+  button.addEventListener("click", () => {
+    window.location.hash = button.dataset.mode === "kinds" ? KINDS_HASH : landingHash(landing ?? startView());
+  });
+}
+
+// --- the measured map (the landing) ---------------------------------------------------------
+const HOURS = { night: "0–6", morning: "6–12", afternoon: "12–18", evening: "18–24", day: "0–24" };
+const PARTS = ["night", "morning", "afternoon", "evening", "day"];
+let observedIndex = parseObservedIndex(null);
+let landing = null; // {day, part, colour, shown, layer, okres}
+let landingToken = 0;
+const loaded = new Map(); // "kind|day" → the loaded value (null: failed)
+const loading = new Map(); // "kind|day" → its promise
+let okresyList = null; // promise of the okresy (outlook.json: code, name, point)
+
+const todayIso = () => today(Date.now());
+const fmt = (v, digits = 0) => (v == null ? "–" : v.toFixed(digits));
+const fmt1 = (v) => (v == null ? "–" : v.toLocaleString(language, { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
+
+/** A file of a day, loaded once ("stations": the stations' values; "okresy": the parsed
+ * okres view). */
+function dayData(kind, day) {
+  const key = `${kind}|${day}`;
+  if (!loading.has(key)) {
+    let promise;
+    if (kind === "stations") promise = getJson(`${OBSERVED}/${day}-stations.json`);
+    else {
+      okresyList ??= getJson("data/scores/outlook.json").then((d) => d?.okresy ?? []);
+      promise = Promise.all([getJson(`${OBSERVED}/${day}.json`), okresyList]).then(([d, okresy]) => parseObservedDay(d, okresy));
+    }
+    loading.set(key, promise.then((value) => {
+      loaded.set(key, value ?? null);
+      return value ?? null;
+    }));
+  }
+  return loading.get(key);
+}
+
+/** The view a plain link opens: the newest measured day, the whole day, stations. */
+function startView() {
+  const day = defaultDay(observedIndex, todayIso());
+  return { day, part: "day", colour: "temperature", shown: DEFAULT_SHOWN, layer: "stations", okres: null };
+}
+
+const isDaily = (day) => observedIndex.byDay.get(day)?.source === "daily";
+
+function dayName(day) {
+  const label = dayLabel(day, todayIso(), language);
+  return label.key ? t(label.key) : label.name;
+}
+const dayText = (day) => `${dayName(day)} ${dayLabel(day, todayIso(), language).short}`;
+
+const okresPanel = createOkresPanel({
+  panel: $("okres-panel"),
+  t,
+  language,
+  dayText,
+  update: (change) => updateLanding(change),
+  stationHref: (id) => stationHref(id, landing?.day),
+  openStation: (id, event) => openStation(id, landing?.day, event),
+  stationIndex: async () => stationIndexDoc,
+});
+
+/** One line of a station's (or okres's) values, for its tooltip and its label's name. */
+function describeRow(row, part) {
+  const parts = [];
+  if (row.symbol) parts.push(t(`diary.symbol.${row.symbol}`));
+  if (row.tmax != null || row.tmin != null) {
+    parts.push(part === "night" ? `min ${fmt(row.tmin)} °C` : `max ${fmt(row.tmax)} °C, min ${fmt(row.tmin)} °C`);
+  }
+  for (const layer of ["precipitation", "wind", "gust", "sunshine", "cloud"]) {
+    if (valueFor(row, layer, part) != null) parts.push(`${t(`layer.${layer}`).toLowerCase()} ${labelFor(row, layer, part)}`);
+  }
+  return parts.join(" · ");
+}
+
+const measuredMap = createMeasuredMap({
+  container: $("measured-map"),
+  t,
+  describe: describeRow,
+  onPick: (row) => {
+    if (row.okresCode) openOkres(row.okresCode);
+    else openStation(row.id, landing.day);
+  },
+  onOkres: (code) => openOkres(code),
+});
+
+/** Open an okres's panel (okres layer); on phones it is under the map: bring it into view. */
+async function openOkres(code) {
+  await updateLanding({ okres: code });
+  if (window.innerWidth <= 700) $("okres-panel").scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
+function updateLanding(change) {
+  landing = { ...landing, ...change };
+  if (isDaily(landing.day)) landing.part = "day";
+  if (landing.layer !== "okresy") landing.okres = null;
+  window.history.replaceState(null, "", landingHash(landing));
+  return renderLanding();
+}
+
+// "older": a date field for any measured day (the tabs have the last 30)
+function olderControl(past) {
+  const box = el("label", null, "daytab past older");
+  const input = document.createElement("input");
+  input.type = "date";
+  input.min = past[0].day;
+  input.max = past.at(-1).day;
+  input.value = landing.day;
+  input.setAttribute("aria-label", t("obs.pickDate"));
+  input.addEventListener("change", () => {
+    const day = nearestDay({ days: past }, input.value);
+    if (day) updateLanding({ day });
+  });
+  const short = (day) => dayLabel(day, todayIso(), language).short;
+  box.title = t("obs.pickHint", { first: short(past[0].day), last: short(past.at(-1).day) });
+  box.append(el("strong", t("obs.older")), input);
+  return box;
+}
+
+let scrolledTo = null;
+function renderWhen() {
+  const now = todayIso();
+  const days = $("days");
+  days.setAttribute("aria-label", t("tv.day"));
+  const past = observedIndex.days.filter((d) => d.day < now);
+  const tabs = dayTabs(observedIndex, now, landing.day).map((day) => {
+    const button = el("button", null, "daytab past");
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(day === landing.day));
+    button.append(el("strong", dayName(day)), el("small", t("obs.tabDate", { date: dayLabel(day, now, language).date })));
+    button.addEventListener("click", () => updateLanding({ day }));
+    return button;
+  });
+  days.replaceChildren(...tabs, olderControl(past));
+  const pressed = days.querySelector('.daytab[aria-pressed="true"]');
+  if (pressed && scrolledTo !== landing.day) {
+    scrolledTo = landing.day;
+    // the tab in view with the newer day before it whole (the newest are on the left)
+    const start = (pressed.previousElementSibling ?? pressed).offsetLeft - days.offsetLeft;
+    const fits = pressed.offsetLeft - days.offsetLeft + pressed.offsetWidth <= days.clientWidth;
+    days.scrollLeft = fits ? 0 : Math.max(0, start);
+  }
+  const daily = isDaily(landing.day);
+  const parts = $("parts");
+  parts.setAttribute("aria-label", t("tv.part"));
+  parts.replaceChildren(
+    ...PARTS.map((part) => {
+      const button = el("button", null);
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(part === landing.part));
+      // an older day has the whole day only (ČHMÚ's daily values)
+      button.disabled = daily && part !== "day";
+      if (button.disabled) button.title = t("obs.dayOnly");
+      button.append(el("span", t(`part.${part}`)), el("small", HOURS[part]));
+      button.addEventListener("click", () => updateLanding({ part }));
+      return button;
+    }),
+  );
+  // phones: "on the map" starts folded so the map stays in view
+if (window.innerWidth <= 700) $("show").open = false;
+
+for (const button of document.querySelectorAll("#layer [data-layer]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.layer === landing.layer));
+  }
+}
+
+function renderShow() {
+  const okresy = landing.layer === "okresy";
+  $("values-legend").textContent = t(okresy ? "tv.values" : "measured.values");
+  $("colours-legend").textContent = t(okresy ? "tv.colour" : "measured.colour");
+  $("measured-hint").textContent = t(okresy ? "measured.hintOkresy" : "measured.hint");
+  $("values").replaceChildren(
+    ...OBSERVED_LAYERS.map((layer) => {
+      const label = el("label", null, "check");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = landing.shown.includes(layer);
+      box.addEventListener("change", () => {
+        const shown = box.checked ? [...landing.shown, layer] : landing.shown.filter((l) => l !== layer);
+        updateLanding({ shown: OBSERVED_LAYERS.filter((l) => shown.includes(l)) });
+      });
+      label.append(box, glyph(layer), el("span", t(`layer.${layer}`)));
+      return label;
+    }),
+  );
+  $("colours").replaceChildren(
+    ...OBSERVED_LAYERS.map((colour) => {
+      const label = el("label", null, "check");
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = "colour";
+      radio.checked = colour === landing.colour;
+      radio.addEventListener("change", () => updateLanding({ colour }));
+      label.append(radio, el("span", t(`layer.${colour}`)));
+      return label;
+    }),
+  );
+  const key = rampKey(landing.colour, true);
+  const ramp = RAMPS[key];
+  const [low, high] = [ramp[0][0], ramp.at(-1)[0]];
+  const bar = el("div", null, "bar");
+  bar.style.background = `linear-gradient(to right, ${ramp.map(([v]) => `${colorFor(v, key)} ${((v - low) / (high - low)) * 100}%`).join(", ")})`;
+  const unit = { temperature: "°", precipitationMm: " mm", wind: " m/s", gust: " m/s", sunshine: " h", cloud: " %" }[key];
+  $("scale").replaceChildren(
+    el("div", t(`${okresy ? "obs" : "measured"}.scale.${key}`), "scale-title"),
+    bar,
+    el("div", `${low}${unit} … ${high}${unit}`, "scale-ends"),
+  );
+}
+
+function headlineStart() {
+  const box = $("headline");
+  const banner = el("p", null, "past-banner");
+  banner.append(el("strong", t("obs.badge")), el("span", t(isDaily(landing.day) ? "obs.bannerDaily" : "obs.bannerHourly")));
+  return [box, [banner, el("h2", `${dayText(landing.day)}, ${t(`part.${landing.part}`).toLowerCase()}`)]];
+}
+
+const line = (layer, ...content) => {
+  const p = el("p", null, "line");
+  p.append(glyph(layer), el("span", null));
+  p.lastChild.append(...content);
+  return p;
+};
+
+/** A station's name in the headline, linked to its page on that day. */
+function stationName(hit) {
+  const a = el("a", hit.name);
+  a.href = stationHref(hit.id, landing.day);
+  a.addEventListener("click", (event) => openStation(hit.id, landing.day, event));
+  return a;
+}
+
+/** "Nejtepleji: {okres} 17 °C": the text around a name, with the name as a link. */
+function withName(key, hit, params) {
+  const marker = "\u0000";
+  const [before, after = ""] = t(key, { ...params, okres: marker, station: marker }).split(marker);
+  return [before, stationName(hit), after];
+}
+
+function renderStationHeadline(rows, failed) {
+  const [box, children] = headlineStart();
+  if (failed || !rows.length) {
+    children.push(el("p", t(failed ? "obs.failed" : "obs.noPart")));
+    box.replaceChildren(...children);
+    return;
+  }
+  const s = stationSummary(rows, landing.part);
+  const shown = (l) => landing.shown.includes(l) || landing.colour === l;
+  if (shown("temperature") || !OBSERVED_LAYERS.some(shown)) {
+    const warm = s.warmest && line("temperature", ...withName(landing.part === "night" ? "obs.warmestNight" : "obs.warmest", s.warmest, { value: fmt(s.warmest.value) }));
+    const cold = s.coldest && line("temperature", ...withName("obs.coldest", s.coldest, { value: fmt(s.coldest.value) }));
+    children.push(...(landing.part === "night" ? [cold, warm] : [warm, cold]).filter(Boolean));
+  }
+  if (shown("precipitation") && s.wettest) {
+    if (s.wettest.value >= 0.1) {
+      children.push(line("precipitation", ...withName("measured.wettest", s.wettest, { value: fmt1(s.wettest.value) })));
+      children.push(line("precipitation", t("measured.wet", { n: formatNumber(s.wet), of: formatNumber(s.rainStations) })));
+    } else children.push(line("precipitation", t("measured.dry")));
+  }
+  if ((shown("wind") || shown("gust")) && s.gust) children.push(line("gust", ...withName("obs.gust", s.gust, { value: fmt(s.gust.value) })));
+  if (shown("sunshine") && s.sunniest) children.push(line("sunshine", ...withName("obs.sunniest", s.sunniest, { value: fmt1(s.sunniest.value) })));
+  children.push(el("p", t("measured.from", { n: formatNumber(s.stations) }), "source"));
+  box.replaceChildren(...children);
+}
+
+function renderOkresHeadline(view) {
+  const [box, children] = headlineStart();
+  const s = view ? observedSummary(view, landing.part) : null;
+  if (!s?.okresy) {
+    children.push(el("p", t(view ? "obs.noPart" : "obs.failed")));
+    box.replaceChildren(...children);
+    return;
+  }
+  const shown = (l) => landing.shown.includes(l) || landing.colour === l;
+  const name = (hit) => displayName(hit.name);
+  if (shown("temperature") || !OBSERVED_LAYERS.some(shown)) {
+    const warm = s.warmest && line("temperature", t(landing.part === "night" ? "obs.warmestNight" : "obs.warmest", { okres: name(s.warmest), value: fmt(s.warmest.value) }));
+    const cold = s.coldest && line("temperature", t("obs.coldest", { okres: name(s.coldest), value: fmt(s.coldest.value) }));
+    children.push(...(landing.part === "night" ? [cold, warm] : [warm, cold]).filter(Boolean));
+  }
+  if (shown("precipitation") && s.wettest) {
+    const rained = s.wettest.value >= 0.1;
+    children.push(line("precipitation", rained
+      ? t("obs.wettest", { okres: name(s.wettest), value: fmt1(s.wettest.value), station: fmt1(s.wettestStation?.value) })
+      : t("obs.dry")));
+    if (rained) children.push(line("precipitation", t("obs.wetOkresy", { n: s.wet, of: s.rainOkresy })));
+  }
+  if ((shown("wind") || shown("gust")) && s.gust) children.push(line("gust", t("obs.gust", { okres: name(s.gust), value: fmt(s.gust.value) })));
+  if (shown("sunshine") && s.sunniest) children.push(line("sunshine", t("obs.sunniest", { okres: name(s.sunniest), value: fmt1(s.sunniest.value) })));
+  children.push(el("p", t("obs.from", { n: s.stations }), "source"));
+  box.replaceChildren(...children);
+}
+
+async function renderLanding() {
+  const token = ++landingToken;
+  renderWhen();
+  renderShow();
+  const { day, part, layer } = landing;
+  const key = `${layer}|${day}`;
+  if (!loaded.has(key)) {
+    const [box, children] = headlineStart();
+    box.replaceChildren(...children, el("p", t("obs.loading")));
+  }
+  const data = await dayData(layer, day);
+  if (token !== landingToken || mode !== "measured") return;
+  const view = { part, shown: landing.shown, colour: landing.colour, layer, okres: landing.okres, fill: null };
+  if (layer === "stations") {
+    const rows = stationRows(data, stationIndexDoc, part);
+    measuredMap.set(rows, view);
+    renderStationHeadline(rows, !data);
+    okresPanel.render(null, landing);
+  } else {
+    const rows = okresRows(data, part);
+    view.fill = data ? okresColours(data, day, part, landing.colour) : null;
+    measuredMap.set(rows, view);
+    renderOkresHeadline(data);
+    okresPanel.render(data, landing);
+  }
+  $("measured-panel").classList.toggle("with-panel", Boolean(landing.okres));
+}
+
+for (const button of document.querySelectorAll("#layer [data-layer]")) {
+  button.addEventListener("click", () => updateLanding({ layer: button.dataset.layer, okres: null }));
+}
+
+function browseMeasured() {
+  setMode("measured");
+  document.title = `MeteoVerdict: ${t("measured.heading")}`;
+  const start = startView();
+  if (!start.day) {
+    $("measured-panel").hidden = true;
+    $("measured-intro").textContent = t("measured.noDays");
+    return;
+  }
+  const past = observedIndex.days.map((d) => d.day).filter((d) => d < todayIso());
+  landing = parseLanding(window.location.hash, past, start);
+  if (isDaily(landing.day)) landing.part = "day";
+  measuredMap.resize();
+  renderLanding();
+}
+
+function browseKinds() {
+  setMode("kinds");
   document.title = `MeteoVerdict: ${t("map.heading")}`;
-  $("facts").textContent = index.length ? t("map.browse", { n: formatNumber(index.length) }) : "";
-  $("message").textContent = index.length ? "" : t("station.pick");
-  $("pick").hidden = true;
-  $("charts").replaceChildren();
-  $("elements").replaceChildren();
-  $("elements-title").hidden = true;
-  $("detail-title").hidden = true;
-  diary.hide();
-  $("search").value = "";
-  stationMap.select(null);
-  stationMap.fitAll();
+  const map = kindsMap();
+  map.select(null);
+  map.fitAll();
+}
+
+// --- one station ----------------------------------------------------------------------------
+function backLink() {
+  const query = parseDiaryQuery(window.location.search);
+  const view = lastLanding ?? { ...startView(), ...(query.day && observedIndex.byDay.has(query.day) ? { day: query.day } : {}) };
+  const link = $("back-link");
+  link.href = view.day ? landingHash(view) : "#";
+  link.textContent = view.day ? t("measured.back", { day: dayText(view.day) }) : t("measured.backPlain");
+  $("back").hidden = false;
 }
 
 // only the latest navigation renders: a slow station file must not overwrite a newer one
 let showToken = 0;
 async function show() {
   const token = ++showToken;
-  const hash = parseStationHash(window.location.hash);
-  const id = hash.id;
-  if (!id) {
-    browse();
+  const next = pageMode(window.location.hash);
+  if (next === "measured") {
+    browseMeasured();
     return;
   }
-  const wasBrowsing = top.classList.contains("browse");
-  setMode(false);
+  if (next === "kinds") {
+    browseKinds();
+    return;
+  }
+  const hash = parseStationHash(window.location.hash);
+  const id = hash.id;
+  const was = mode;
+  setMode("station");
+  backLink();
+  window.scrollTo({ top: 0 });
+  const day = pendingDay;
+  pendingDay = null;
+  if (day) diary.setDay(day);
   if (doc?.station.id !== id) {
-    stationMap.select(id, { animate: !wasBrowsing });
+    if (!panel.hidden) kindsMap().select(id, { animate: was === "station" });
     $("search").value = index.find((s) => s.id === id)?.name ?? "";
     $("message").textContent = t("station.loading");
-    const loaded = await getJson(`${DATA}/${id}.json`);
+    const loadedDoc = await getJson(`${DATA}/${id}.json`);
     if (token !== showToken) return;
-    doc = loaded?.station ? { ...loaded, elements: loaded.elements ?? {} } : null;
+    doc = loadedDoc?.station ? { ...loadedDoc, elements: loadedDoc.elements ?? {} } : null;
     if (!doc) {
       $("title").textContent = id;
       document.title = "MeteoVerdict";
       $("facts").textContent = "";
-      $("status").textContent = "";
       $("message").textContent = t("station.notFound", { id });
       $("charts").replaceChildren();
       $("elements").replaceChildren();
@@ -377,6 +792,8 @@ async function show() {
     $("detail-title").hidden = false;
     diary.show(doc);
     renderElements();
+  } else if (day) {
+    diary.show(doc);
   }
   const element = hash.element && doc.elements[hash.element] ? hash.element : defaultElement(doc);
   $("message").textContent = element ? "" : t("station.noData");
@@ -388,14 +805,17 @@ $("element").addEventListener("change", (event) => {
   if (doc) window.location.hash = `${doc.station.id}/${event.target.value}`;
 });
 window.addEventListener("hashchange", show);
+window.addEventListener("popstate", show);
 
-getJson(`${DATA}/index.json`).then(async (loaded) => {
-  index = loaded?.stations ?? [];
-  if (loaded?.generated) $("status").textContent = updated(loaded.generated);
+Promise.all([getJson(`${DATA}/index.json`), getJson(`${OBSERVED}/index.json`)]).then(async ([loadedIndex, observedDoc]) => {
+  stationIndexDoc = loadedIndex;
+  observedIndex = parseObservedIndex(observedDoc);
+  index = loadedIndex?.stations ?? [];
+  if (loadedIndex?.generated) $("status").textContent = updated(loadedIndex.generated);
   // an index from before it carried coordinates: take them from the score map's table
   const table = index.some((s) => s.lat == null) ? await getJson("data/scores/stations.json") : null;
   placed = withCoordinates(index, table);
+  if (table) stationIndexDoc = { ...loadedIndex, stations: placed };
   fillSearch();
-  fillMapTools();
   show();
 });

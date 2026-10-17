@@ -464,6 +464,13 @@ export function createDiary({ dataPath, t, language }) {
       if (!sameStation && selected && (selected < first || selected > last)) selected = null;
       render();
     },
+    /** Open on `next` (the day chosen on the measured map): the days up to it, with its
+     * course open; takes effect with the next show(). */
+    setDay(next) {
+      day = next;
+      selected = next;
+      pinned = true;
+    },
     hide() {
       doc = null;
       section.hidden = true;
