@@ -1450,14 +1450,15 @@ def _archive_outlook_models(
     client: httpx.Client, fc: pl.DataFrame, now: datetime, folder: Path, github: bool
 ) -> None:
     """Merge this run's answer (every model, variable and hour at the okres points) into
-    ``outlook-models-YYYY-MM.parquet`` (and the release outlook-archive): our own copy of
-    what the outlook fetched, one run per ``issued``, no duplicates."""
-    tag, name = outlook.model_archive_asset(f"{now:%Y-%m}")
+    the day's ``outlook-models-YYYY-MM-DD.parquet`` (and the release
+    ``outlook-models-YYYY-MM``): our own copy of what the outlook fetched, one run per
+    ``issued``, no duplicates; a run moves only its day's file (a few MB)."""
+    tag, name = outlook.model_archive_asset(now)
     path = folder / name
     archive = None
     if github:
         archive = GitHubReleaseStore(
-            client, *_github_credentials(), notes=sun_cloud_gust.ARCHIVE_NOTES
+            client, *_github_credentials(), notes=outlook.MODEL_ARCHIVE_NOTES
         )
         if name in archive.assets(tag):
             archive.download(tag, name, path)
