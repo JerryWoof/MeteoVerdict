@@ -9,11 +9,17 @@ import polars as pl
 
 
 def write_monthly(
-    rows: pl.DataFrame, out_dir: Path, keys: list[str], time_column: str = "time"
+    rows: pl.DataFrame,
+    out_dir: Path,
+    keys: list[str],
+    time_column: str = "time",
+    replace: list[str] | None = None,
 ) -> list[Path]:
     """Merge ``rows`` into ``out_dir/YYYY-MM.parquet`` by the month of ``time_column``.
 
     New rows replace stored rows with the same ``keys``; other stored rows are kept.
+    With ``replace`` (a coarser key, e.g. run and model), every stored row whose
+    ``replace`` values occur in the new rows goes, so a whole unit is replaced at once.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
@@ -23,7 +29,8 @@ def write_monthly(
         part = part.drop("_month")
         if path.exists():
             old = pl.read_parquet(path)
-            kept = old.join(part.select(keys), on=keys, how="anti")
+            on = replace or keys
+            kept = old.join(part.select(on).unique(), on=on, how="anti")
             part = pl.concat([kept, part], how="diagonal_relaxed")
         part.sort(keys).write_parquet(path, compression="zstd")
         written.append(path)

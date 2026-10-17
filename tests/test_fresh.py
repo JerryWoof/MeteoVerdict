@@ -24,14 +24,15 @@ def code(run: datetime, lead: int) -> float:
 
 
 def single_runs(model, starts, station="s", last_lead=120, short=None):
-    """Single-runs rows of ``model`` (``runs.SCHEMA``); ``short``: run -> last lead."""
+    """Single-runs rows of ``model`` as the API stored them before 2026-10-17 (every hour,
+    no ``source``); ``short``: run -> last lead."""
     rows = []
     for run in starts:
         for lead in range(1, (short or {}).get(run, last_lead) + 1):
             value = code(run, lead)
             rows.append((run, model.id, station, lead, run + timedelta(hours=lead), value,
                          0.1, 2.0, None))  # fmt: skip
-    return pl.DataFrame(rows, schema=runs.SCHEMA, orient="row")
+    return pl.DataFrame(rows, schema=runs.HOURLY_SCHEMA, orient="row")
 
 
 def every_run(first: datetime, last: datetime, hours=(0, 6, 12, 18)):
@@ -189,3 +190,48 @@ def test_sources_for_meta():
 
 def test_window_ends_with_the_hour_after_the_day():
     assert fresh.window(date(2026, 10, 15)) == (utc(15) - timedelta(days=29), utc(16))
+
+
+def bucket_runs(model, starts, station="s"):
+    """Single-runs rows as the bucket stores them: native steps only, each total over
+    the step before (``runs.native``)."""
+    rows = []
+    for run in starts:
+        for lead in range(1, 121):
+            if model.native_hour(lead):
+                step = model.step_at(lead)
+                rows.append((run, model.id, station, lead, run + timedelta(hours=lead),
+                             code(run, lead), 0.1 * step, 2.0, None, "bucket"))  # fmt: skip
+    return pl.DataFrame(rows, schema=runs.SCHEMA, orient="row")
+
+
+def test_native_steps_spread_the_totals_and_keep_instants_at_native_hours():
+    table = rebuilt(bucket_runs(ICON_EU, every_run(utc(9), utc(14, 18))), [ICON_EU])
+    d4 = table.filter(pl.col("lead_day") == 4)  # leads 96-119: 3-hourly
+    assert d4.height == 24  # every hour has its share of the 3-hour total
+    assert d4["precipitation"].to_list() == pytest.approx([0.1] * 24)
+    # temperature only at native hours: 14 Oct 21 UTC is lead 99 of the 10 Oct 18 run
+    assert value_at(table, utc(14, 21), 4) == pytest.approx([code(utc(10, 18), 99)])
+    assert value_at(table, utc(14, 23), 4) == [None]  # lead 101: not native, not invented
+    # the hour is not taken from an older run either (its lead 107 is not native too)
+    d1 = table.filter(pl.col("lead_day") == 1)
+    assert d1["temperature_2m"].null_count() == 0  # hourly up to 78 h
+
+
+def test_an_hour_the_expected_run_lacks_is_left_out_not_taken_from_an_older_run():
+    rows = single_runs(ICON_EU, every_run(utc(9), utc(14, 18)))
+    # the 13 Oct 06 UTC run has no row at 14 Oct 07 UTC (lead 25) but runs on
+    rows = rows.filter(~((pl.col("run") == utc(13, 6)) & (pl.col("lead_h") == 25)))
+    table = rebuilt(rows, [ICON_EU])
+    assert value_at(table, utc(14, 7), 1) == []
+    assert value_at(table, utc(14, 8), 1) == pytest.approx([code(utc(13, 6), 26)])
+
+
+def test_spread_keeps_api_rows_from_before_as_they_are():
+    old = single_runs(ICON_EU, [utc(13)])
+    assert fresh.spread(old, [ICON_EU]).collect().height == old.height
+    new = bucket_runs(MODELS["ecmwf_aifs025_single"], [utc(13)])
+    spread = fresh.spread(new, [MODELS["ecmwf_aifs025_single"]]).collect().sort("lead_h")
+    assert spread["lead_h"].to_list() == list(range(1, 121))
+    assert spread["precipitation"].to_list() == pytest.approx([0.1] * 120)
+    assert spread["temperature_2m"].null_count() == 100  # only at the 20 native hours

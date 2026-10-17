@@ -19,6 +19,7 @@ from meteoverdict import (
     aladin,
     blend,
     blendtest,
+    bucket,
     chmi_archive,
     combine,
     farm,
@@ -863,11 +864,22 @@ def fetch_runs(
         list[str] | None,
         typer.Option(
             help="Run start, YYYY-MM-DDTHH (HH 00, 06, 12, 18); repeat for several. "
-            "Default: the recent runs, then the history."
+            "Default: every run of the bucket's window, then the API's work."
         ),
     ] = None,
+    source: Annotated[
+        str,
+        typer.Option(
+            help="bucket (Open-Meteo's open-data bucket, no API calls), api (the Single "
+            "Runs API: the bucket's gaps and the older history) or all (bucket first)."
+        ),
+    ] = "all",
     mode: Annotated[
-        str, typer.Option(help="Without --run: recent, history or all (recent first).")
+        str,
+        typer.Option(
+            help="The API's runs without --run: recent (the bucket's gaps within its "
+            "window), history (older runs) or all (newest first)."
+        ),
     ] = "all",
     data_dir: Annotated[
         Path, typer.Option(help="Folder for runs/YYYY-MM.parquet and runs-state.json.")
@@ -878,7 +890,10 @@ def fetch_runs(
     ] = None,
     max_calls: Annotated[
         float, typer.Option(help="Open-Meteo calls this run may use; it resumes next time.")
-    ] = 450,
+    ] = 100,
+    bucket_minutes: Annotated[
+        float, typer.Option(help="Time limit of the bucket's pass; it resumes next time.")
+    ] = 40,
     github_release: Annotated[
         bool,
         typer.Option(
@@ -894,8 +909,8 @@ def fetch_runs(
         datetime | None,
         typer.Option(
             formats=["%Y-%m-%d"],
-            help="Oldest day (00 UTC run) of the history. Default: the first run with "
-            "ALADIN (runs.HISTORY_FROM).",
+            help="Oldest day (00 UTC run) of the API's history. Default: the first run "
+            "with ALADIN (runs.HISTORY_FROM).",
         ),
     ] = None,
     shared_calls: Annotated[
@@ -922,14 +937,17 @@ def fetch_runs(
         typer.Option(
             formats=["%Y-%m-%d"],
             help="The backfill's --priority-from: its priority windows come before the "
-            "history too (for the shared budget).",
+            "API's history too (for the shared budget).",
         ),
     ] = None,
 ) -> None:
-    """Fetch single model runs (H+1 … H+120) at the station subset from Open-Meteo's
-    Single Runs API, resumable within a call budget."""
+    """Store single model runs (H+1 … H+120) at the station subset: from Open-Meteo's
+    open-data bucket (every run of its window not stored yet), then from the Single
+    Runs API within a call budget (the bucket's gaps, then the older history)."""
     if mode not in ("recent", "history", "all"):
         raise typer.BadParameter("use recent, history or all", param_hint="--mode")
+    if source not in ("bucket", "api", "all"):
+        raise typer.BadParameter("use bucket, api or all", param_hint="--source")
     try:
         chosen = [runs.parse_run(r) for r in run] if run else None
     except ValueError as exc:
@@ -939,6 +957,7 @@ def fetch_runs(
     now = datetime.now(UTC)
     first = history_from.date() if history_from else runs.HISTORY_FROM
     modes = ("recent", "history") if mode == "all" else (mode,)
+    bucket_result = bucket.Result()
     with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
         sync = None
         if github_release:
@@ -947,6 +966,34 @@ def fetch_runs(
             )
             sync = runs.RunsSync(notes_store, data_dir, log=typer.echo)
             sync.pull_state()
+        if dry_run:
+            state = runs.State.load(data_dir / runs.STATE_NAME)
+            in_bucket = [
+                (r, state.bucket_todo(r, runs.wanted(models, r)))
+                for r in (chosen or runs.bucket_runs(now))
+            ]
+            typer.echo(
+                f"bucket: {sum(len(m) for _, m in in_bucket)} model-runs to look for in "
+                f"{sum(bool(m) for _, m in in_bucket)} runs"
+            )
+        elif source in ("bucket", "all"):
+            limits = httpx.Limits(max_connections=128, max_keepalive_connections=128)
+            with httpx.Client(timeout=60, limits=limits) as s3:
+                bucket_result = bucket.collect(
+                    bucket.Bucket(s3),
+                    stations_table,
+                    models,
+                    data_dir,
+                    now,
+                    runs_=chosen,
+                    sync=sync,
+                    max_minutes=bucket_minutes,
+                    log=typer.echo,
+                )
+            stored = sum(len(v) for v in bucket_result.stored.values())
+            typer.echo(f"bucket: {stored} model-runs stored, {bucket_result.rows:,} rows")
+            for failed, why in sorted(bucket_result.failed.items()):
+                typer.echo(f"bucket error ({failed}): {why}", err=True)
         max_calls, budget_note = runs.shared_budget(
             max_calls,
             shared_calls,
@@ -957,25 +1004,33 @@ def fetch_runs(
             now.date(),
             backfill_priority_from.date() if backfill_priority_from else None,
         )
-        typer.echo(f"budget: {budget_note}")
+        typer.echo(f"API budget: {budget_note}")
         if dry_run:
             state = runs.State.load(data_dir / runs.STATE_NAME)
+            edge = runs.bucket_start(now)
             todo = chosen or [
-                *(runs.recent_runs(now) if "recent" in modes else []),
-                *(runs.history_runs(now, first) if "history" in modes else []),
+                r
+                for r in runs.api_runs(now, first)
+                if ("recent" in modes and r >= edge) or ("history" in modes and r < edge)
             ]
-            pending = [(r, state.todo(r, runs.wanted(models, r))) for r in todo]
+            pending = [
+                (r, state.todo(r, runs.wanted(models, r)))
+                if chosen
+                else (r, state.api_todo(r, runs.wanted(models, r), now))
+                for r in todo
+            ]
             pending = [(r, m) for r, m in pending if m]
             cost = sum(runs.run_cost(stations_table.height, len(m)) for _, m in pending)
             typer.echo(
-                f"{len(pending)} runs to fetch at {stations_table.height} stations, about "
+                f"API: {len(pending)} runs to fetch at {stations_table.height} stations, about "
                 f"{cost:g} Open-Meteo calls ({runs.run_cost(stations_table.height, len(models)):g}"
                 f" per run of all {len(models)} models; budget {max_calls:g})"
             )
             return
         budget = forecasts.Budget(max_calls=max_calls)
         result = runs.Result()
-        if max_calls > 0:  # a schedule with only shared calls: nothing when none are left
+        # a schedule with only shared calls: nothing when none are left
+        if source in ("api", "all") and max_calls > 0:
             result = runs.collect(
                 client,
                 stations_table,
@@ -990,15 +1045,186 @@ def fetch_runs(
                 first=first,
             )
     typer.echo(
-        f"{len(result.runs)} runs fetched, {budget.used:g} calls used"
+        f"API: {len(result.runs)} runs fetched, {budget.used:g} calls used"
         + (f"; stopped: {result.stopped} (run again to continue)" if result.stopped else "")
     )
-    job_summary = os.environ.get("GITHUB_STEP_SUMMARY")
-    if job_summary:  # shown on the workflow run page
-        with open(job_summary, "a", encoding="utf-8") as f:
-            f.write(runs.summary(result, budget.used, data_dir, models, now, first, budget_note))
+    _job_summary(
+        runs.summary(
+            result,
+            budget.used,
+            data_dir,
+            models,
+            now,
+            first,
+            budget_note,
+            bucket_lines=bucket.summary(bucket_result) if source != "api" else "",
+        )
+    )
     if result.failed:
         raise typer.Exit(code=1)
+
+
+@app.command("bucket-cells")
+def bucket_cells(
+    run: Annotated[
+        str | None,
+        typer.Option(
+            help="Run whose meta.json and files give the grids (YYYY-MM-DDTHH, "
+            "00 UTC: every model has it). Default: yesterday's 00 UTC run."
+        ),
+    ] = None,
+    out: Annotated[Path, typer.Option(help="The CSV.")] = Path("src/meteoverdict/data")
+    / bucket.CELLS_FILE,
+    stations_path: Annotated[
+        Path | None,
+        typer.Option("--stations", help="Station subset CSV. Default: the committed one."),
+    ] = None,
+) -> None:
+    """Rebuild the grid cell of every run station in every bucket model (nearest cell,
+    its model surface height) from Open-Meteo's open-data bucket. Needed after the
+    station subset or a model's grid changes (the bucket's reader then reports a grid
+    not in the cells file and the API is asked instead)."""
+    chosen = (
+        runs.parse_run(run)
+        if run
+        else datetime.combine(
+            datetime.now(UTC).date() - timedelta(days=1), datetime.min.time(), UTC
+        )
+    )
+    limits = httpx.Limits(max_connections=64, max_keepalive_connections=64)
+    with httpx.Client(timeout=60, limits=limits) as client:
+        cells = bucket.build_cells(
+            bucket.Bucket(client), runs.load_stations(stations_path), chosen, log=typer.echo
+        )
+    bucket.write_cells(cells, out)
+    typer.echo(f"{cells.height} cells of {cells['bucket_model'].n_unique()} models → {out}")
+
+
+@app.command("import-runs")
+def import_runs(
+    harvest: Annotated[
+        list[Path],
+        typer.Argument(help="Month files of a bucket harvest (runs-YYYY-MM.parquet)."),
+    ],
+    data_dir: Annotated[
+        Path, typer.Option(help="Folder for runs/YYYY-MM.parquet and runs-state.json.")
+    ] = Path("data"),
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Merge into and upload the releases runs-YYYY-MM and runs-state.",
+        ),
+    ] = False,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Merge locally, upload nothing.")
+    ] = False,
+    report: Annotated[
+        Path | None, typer.Option(help="Write the counts before and after as JSON here.")
+    ] = None,
+) -> None:
+    """One-off: add a harvest of the bucket's per-run files (the same reading as
+    ``mvd fetch-runs``, from before the bucket was used) to the month files. A model-run
+    of the harvest replaces every stored row of it (the bucket is preferred for all
+    models); model-runs the harvest has incomplete (``bucket.complete_runs``) are left out
+    and, with every model-run of the harvested runs it lacks, recorded as missing in the
+    bucket, so that the API is asked for them. Stations whose grid cell differs from
+    the committed cells are read again from the bucket (dropped where it no longer has
+    the run). Prints the counts before and after."""
+    models = [m for m in catalogue.load_models() if m.enabled]
+    stations_table = runs.load_stations()
+    cells = bucket.load_cells()
+    doc = {"months": {}, "excluded": [], "reread": {}}
+    with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
+        sync = None
+        if github_release:
+            notes_store = GitHubReleaseStore(
+                client, *_github_credentials(), notes=runs.RELEASE_NOTES
+            )
+            sync = runs.RunsSync(notes_store, data_dir, log=typer.echo)
+            sync.pull_state()
+        state = runs.State.load(data_dir / runs.STATE_NAME)
+        limits = httpx.Limits(max_connections=64, max_keepalive_connections=64)
+        with httpx.Client(timeout=60, limits=limits) as s3:
+            source = bucket.Bucket(s3)
+            months, harvested = [], set()
+            for path in sorted(harvest):
+                raw = pl.read_parquet(path)
+                rows = bucket.from_harvest(raw).collect()
+                rows, reread = bucket.refresh_moved_cells(
+                    raw, rows, cells, source, models, stations_table, log=typer.echo
+                )
+                for pair, n in reread.items():
+                    total = doc["reread"].setdefault(pair, {"reread": 0, "dropped": 0})
+                    total["reread"] += n["reread"]
+                    total["dropped"] += n["dropped"]
+                check = bucket.complete_runs(rows, models, stations_table.height)
+                bad = check.filter(~pl.col("complete"))
+                doc["excluded"] += [
+                    {"run": f"{r:%Y-%m-%d %H}", "model": m, "reason": why}
+                    for r, m, _, why in bad.rows()
+                ]
+                rows = rows.join(bad.select("run", "model"), on=["run", "model"], how="anti")
+                harvested |= {(r, m) for r, m, ok, _ in check.rows()}
+                for (month,), part in rows.group_by(
+                    pl.col("run").dt.strftime("%Y-%m"), maintain_order=True
+                ):
+                    if sync:
+                        sync.pull([month])
+                    target = data_dir / "runs" / f"{month}.parquet"
+                    stored = pl.read_parquet(target) if target.exists() else None
+                    merged = bucket.merge(stored, part)
+                    doc["months"][month] = {
+                        "before": _runs_counts(stored),
+                        "imported": _runs_counts(part),
+                        "after": _runs_counts(merged),
+                    }
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    merged.write_parquet(target, compression="zstd")
+                    months.append(month)
+                    for r, m in part.select("run", "model").unique().rows():
+                        state.fetched.setdefault(runs.key(r), set()).add(m)
+                    typer.echo(f"{month}: {json.dumps(doc['months'][month])}")
+        first_run = min(r for r, _ in harvested)
+        last_run = max(r for r, _ in harvested)
+        gaps, now = 0, datetime.now(UTC)
+        for r in runs._runs_between(last_run, first_run):
+            if now - r < timedelta(hours=runs.BUCKET_FINAL_H):
+                continue  # young: the bucket may still complete it (fetch-runs)
+            k = runs.key(r)
+            for m in state.todo(r, runs.wanted(models, r)):
+                state.bucket_missing.setdefault(k, set()).add(m.id)
+                gaps += 1
+        state.save()
+        doc["bucket_missing_added"] = gaps
+        doc["runs"] = {"first": f"{first_run:%Y-%m-%d %H}", "last": f"{last_run:%Y-%m-%d %H}"}
+        typer.echo(
+            f"{len(doc['excluded'])} incomplete model-runs left out; {gaps} model-runs of "
+            f"{first_run:%Y-%m-%d %H}..{last_run:%Y-%m-%d %H} UTC recorded as missing in the "
+            "bucket (the API is asked for them)"
+        )
+        if report:
+            report.write_text(json.dumps(doc, indent=1, default=str) + "\n", encoding="utf-8")
+        if sync and not dry_run:
+            sync.push(sorted(set(months)))
+            typer.echo(f"uploaded {len(set(months))} month files and the state")
+
+
+def _runs_counts(frame: pl.DataFrame | None) -> dict:
+    """Rows and model-runs of a month file, by source (null: API before 2026-10-17)."""
+    if frame is None or frame.height == 0:
+        return {"rows": 0, "model_runs": 0, "runs": 0}
+    if "source" not in frame.columns:
+        frame = frame.with_columns(pl.lit(None, pl.String).alias("source"))
+    by = frame.group_by(pl.col("source").fill_null("api (hourly, before 2026-10-17)")).agg(
+        pl.len().alias("rows"), pl.struct("run", "model").n_unique().alias("model_runs")
+    )
+    return {
+        "rows": frame.height,
+        "model_runs": frame.select("run", "model").unique().height,
+        "runs": frame["run"].n_unique(),
+        "by_source": {r["source"]: [r["rows"], r["model_runs"]] for r in by.iter_rows(named=True)},
+    }
 
 
 def _backfill_state(client: httpx.Client | None, data_dir: Path) -> backfill_mod.State:
