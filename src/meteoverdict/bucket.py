@@ -266,6 +266,14 @@ class Bucket:
 O1280_POINTS = 6_599_680
 
 
+class _Identity:
+    """``transform`` of a latitude/longitude grid: x is the longitude, y the latitude."""
+
+    @staticmethod
+    def transform(x: float, y: float) -> tuple[float, float]:
+        return x, y
+
+
 class Grid:
     """Maps a station to the array index of its nearest grid cell (``nearest``), from a
     run's ``meta.json`` (``crs_wkt`` with its ``BBOX``) and the file's shape. Regular
@@ -284,14 +292,19 @@ class Grid:
             self.npts = np.concatenate([rings, rings[::-1]])
             self.offsets = np.concatenate([[0], np.cumsum(self.npts)[:-1]])
             return
-        from pyproj import CRS, Transformer
-
         self.kind = "regular"
         self.ny, self.nx = shape[0], shape[1]
         box = [float(v) for v in re.search(r"BBOX\[([^\]]+)\]", wkt).group(1).split(",")]
-        crs = CRS.from_proj4(PROJ[bucket_model]) if bucket_model in PROJ else CRS.from_wkt(wkt)
-        self.fwd = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
-        self.inv = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+        if wkt.lstrip().startswith("GEOGCRS") and bucket_model not in PROJ:
+            # plain latitude/longitude: no projection (and no pyproj in the process:
+            # loaded next to eccodes or OpenCV it crashed the interpreter at exit)
+            self.fwd = self.inv = _Identity()
+        else:
+            from pyproj import CRS, Transformer
+
+            crs = CRS.from_proj4(PROJ[bucket_model]) if bucket_model in PROJ else CRS.from_wkt(wkt)
+            self.fwd = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
+            self.inv = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
         self.x0, self.y0 = self.fwd.transform(box[1], box[0])
         x1, y1 = self.fwd.transform(box[3], box[2])
         self.dx = (x1 - self.x0) / (self.nx - 1)
