@@ -12,6 +12,10 @@ four views (docs/data-sources.md#station-pages):
   statistics),
 * ``phenomena``: the whole history, days per year with each phenomenon.
 
+Beside them, ``station_diary`` writes the station's day-by-day diary (all of its daily
+history, one gzipped file per decade in ``<out>/diary/<WSI>/``), summarised under
+``diary`` in the station file.
+
 A series is ``{"start", "step", "values": {element: [...]}, "how": {element: label}}``:
 value ``i`` is at ``start + i * step`` (``step`` "10min", "1h", "1d", "1mo" or "1y"), null
 where there is none. Values are rounded to one decimal.
@@ -27,7 +31,7 @@ from pathlib import Path
 
 import polars as pl
 
-from meteoverdict import chmi_archive
+from meteoverdict import chmi_archive, station_diary
 from meteoverdict.stations import network as station_network
 
 TEN_MINUTE_DAYS = 3
@@ -350,6 +354,9 @@ def build(
             generated,
             phenomena,
         )
+        diary = station_diary.write(out, wsi, daily, phenomena)
+        if diary:
+            doc["diary"] = diary
         path = out / f"{wsi}.json"
         path.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), "utf-8")
         written.append(path)
@@ -359,7 +366,11 @@ def build(
         "utf-8",
     )
     total = sum(p.stat().st_size for p in written)
-    log(f"wrote {len(written)} station files, {total / 1e6:.1f} MB")
+    diaries = list((out / "diary").glob("*/*.json.gz"))
+    log(
+        f"wrote {len(written)} station files, {total / 1e6:.1f} MB, and {len(diaries)} diary "
+        f"files, {sum(p.stat().st_size for p in diaries) / 1e6:.1f} MB"
+    )
     return written
 
 
