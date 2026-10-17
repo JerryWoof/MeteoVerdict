@@ -9,52 +9,32 @@ name: Single runs
 #    it keeps ~3 months) not stored yet, newest first, so a missed schedule catches up and
 #    nothing ages out; a few minutes a run, at most --bucket-minutes. A model-run still
 #    incomplete there at 24 h is recorded as missing in the bucket.
-# 2. The Open-Meteo Single Runs API, newest first, within a call budget: those bucket
-#    gaps (fallback: 100 calls at 04:20, 10:20, 16:20 and 22:20, <= 400 a day; one or two
-#    models of a run cost 100 at 100 stations), then the history older than the bucket's
-#    window back to 2026-06-23 00 UTC (runs.HISTORY_FROM) with what the D+N backfill
-#    leaves of the shared budget. A model added to models.yaml comes from the bucket for
-#    the window, from the API for the older history. Month files and progress live in
-#    the releases runs-YYYY-MM and runs-state, so a stopped run continues next time.
+# 2. The Open-Meteo Single Runs API, newest first, 100 calls a schedule (<= 400 a day;
+#    one or two models of a run cost 100 at 100 stations): the bucket's gaps (a
+#    model-run still missing there at 24 h), then the runs older than the bucket's window
+#    but in the month it starts in (runs.history_edge). Every older run (back to each
+#    model's start in the Single Runs archive) comes with the D+N backfill, window by
+#    window (backfill.yml), so the two never write the same month file; both merge
+#    runs-state with the released one before uploading it. Month files and progress live
+#    in the releases runs-YYYY-MM and runs-state, so a stopped run continues next time.
 #    The daily workflow scores them (`mvd leads`, `mvd farm`).
 #
 # Open-Meteo budget (free tier, non-commercial: 10,000 weighted calls a day, 5,000 an hour
-# and 300,000 a month, shared by all workflows; docs/data-sources.md#open-meteo-budget).
-# Priorities: (1) outlook (outlook.yml, <= 2 x 850), (2) the bucket's gaps here (<= 400
-# a day), (3) the D+N backfill's current windows, (3b) its priority windows back to
-# 2025-10-01 at these ~100 stations, (4a) the single runs' API history here, (4b) the D+N
-# backfill's older windows. (3)-(4b) share 7,400 a day: the backfill (02:41) spends it
-# first on its current and priority windows; 10:20 takes the part 0-3,700 and 13:20 the
-# part 3,700-7,400 of what it left (`--shared-calls`, `--shared-from/--shared-to`, read
-# from its state in the release data-state):
-#   - a current or priority backfill window pending, or a current one due tomorrow:
-#     nothing (also keeps this history and the backfill's next big day 24 hours apart);
-#   - the backfill called Open-Meteo today: 7,400 minus what it used;
-#   - otherwise all 7,400; nothing when the state cannot be read.
-# The backfill takes its older windows only once this history is done, then with the
-# whole share, which leaves nothing here. Hours: 10:20 <= 100 + 3,700, 13:20 <= 3,700,
-# both under 5,000. Day: <= 1,700 + 400 + 7,400 = 9,500 (9,600 if a late 22:20 run
-# slips past midnight); 31 days <= 294,500.
-# API history (older than the bucket's window, back to 2026-06-23: 88 runs, plus GEM
-# Global before 2026-08-18 and the bucket's gaps): ~75,000 calls; done around
-# 2026-11-10 after the backfill's priority windows (~2026-10-30), simulated from the live
-# states of 2026-10-17 (docs/data-sources.md#open-meteo-budget).
+# and 300,000 a month, shared by all workflows; docs/data-sources.md#open-meteo-budget):
+# (1) outlook (outlook.yml, <= 2 x 850), (2) this workflow (<= 4 x 100), (3) the shared
+# 7,400 of the backfill (backfill.yml at 02:41: D+N and the single runs' history, one
+# 14-day window after the other from today into the past). Day: <= 1,700 + 400 + 7,400 =
+# 9,500 (9,600 if a late 22:20 run slips past midnight); 31 days <= 294,500. Until
+# 2026-10-17 this workflow also took what the backfill left of the share (10:20, 13:20)
+# for the history; now the backfill spends the share on it itself.
 on:
   schedule:
-    - cron: "20 4,16,22 * * *"
-    - cron: "20 10 * * *"
-    - cron: "20 13 * * *"
+    - cron: "20 4,10,16,22 * * *"
   workflow_dispatch:
     inputs:
       max_calls:
         description: "Open-Meteo calls this run may use"
         default: "100"
-      shared_from:
-        description: "Part of what the D+N backfill left of the shared 4,500: from"
-        default: "0"
-      shared_to:
-        description: "… to (0 = none of it)"
-        default: "0"
       mode:
         description: "API: recent (the bucket's gaps), history or all"
         default: "all"
@@ -66,21 +46,17 @@ permissions:
   contents: write # release assets
 
 concurrency:
-  # only this workflow writes runs-YYYY-MM and runs-state (the daily workflow reads
-  # them), so it does not share the data-pipeline group of backfill and daily
+  # this workflow writes the month files from the month the bucket's window starts in
+  # on, the backfill (group data-pipeline) only older ones, and both merge runs-state
+  # before uploading it (the daily workflow only reads them), so it does not share the
+  # data-pipeline group of backfill and daily
   group: single-runs
   cancel-in-progress: false
 
 env:
-  SCHEDULE: ${{ github.event.schedule }}
-  INPUT_MAX_CALLS: ${{ inputs.max_calls }}
-  INPUT_SHARED_FROM: ${{ inputs.shared_from }}
-  INPUT_SHARED_TO: ${{ inputs.shared_to }}
-  SHARED_CALLS: "7400" # MAX_CALLS of backfill.yml
+  MAX_CALLS: ${{ inputs.max_calls || '100' }}
   MODE: ${{ inputs.mode || 'all' }}
   SOURCE: ${{ inputs.source || 'all' }}
-  BACKFILL_FROM: "2024-01-01" # the --from of backfill.yml
-  BACKFILL_PRIORITY_FROM: "2025-10-01" # the --priority-from of backfill.yml
 
 jobs:
   runs:
@@ -98,17 +74,7 @@ jobs:
         run: uv sync --frozen
       - name: Fetch runs
         run: |
-          case "$SCHEDULE" in
-            "20 10 * * *") calls=100; from=0; to=3700 ;;   # after the backfill (02:41)
-            "20 13 * * *") calls=0; from=3700; to=7400 ;;  # the rest, in another hour
-            *) calls=100; from=0; to=0 ;;
-          esac
-          calls="${INPUT_MAX_CALLS:-$calls}"
-          from="${INPUT_SHARED_FROM:-$from}"
-          to="${INPUT_SHARED_TO:-$to}"
           uv run --frozen mvd fetch-runs --github-release --mode "$MODE" --source "$SOURCE" \
-            --max-calls "$calls" --shared-calls "$SHARED_CALLS" \
-            --shared-from "$from" --shared-to "$to" --backfill-from "$BACKFILL_FROM" \
-            --backfill-priority-from "$BACKFILL_PRIORITY_FROM"
+            --max-calls "$MAX_CALLS"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

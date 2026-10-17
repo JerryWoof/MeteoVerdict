@@ -45,6 +45,7 @@ _OPTIONAL = {
     "coarser_step_h",
     "runs_from",
     "run_hours",
+    "runs_06_18_from",
     "previous_runs_step_h",
     "previous_runs_max_lead_h",
 }
@@ -73,6 +74,9 @@ class Model:
     runs_from: date | None = None
     #: UTC hours of its runs in the Single Runs API (GEM Global: 00 and 12 only)
     run_hours: tuple[int, ...] = RUN_HOURS
+    #: first day with 06 and 18 UTC runs in the Single Runs archive when later than
+    #: ``runs_from`` (only 00 and 12 UTC before: IFS HRES until 2024-08-09)
+    runs_06_18_from: date | None = None
     #: hours between the runs in Open-Meteo's Previous Runs archive when below 6
     #: (ICON-D2, GeoSphere and DMI 3, KNMI 1): the runs in between are not in the Single
     #: Runs data, so D+N rebuilt from it (``fresh``) is exact only at some hours
@@ -113,6 +117,13 @@ class Model:
         """First day whose runs are in Open-Meteo's Single Runs archive."""
         return self.runs_from or RUNS_FROM
 
+    def has_single_run(self, day: date, hour: int) -> bool:
+        """The run of ``day`` at ``hour`` UTC is in Open-Meteo's Single Runs archive
+        (``runs_from``, ``run_hours``, ``runs_06_18_from``)."""
+        if day < self.single_runs_from or hour not in self.run_hours:
+            return False
+        return hour in (0, 12) or self.runs_06_18_from is None or day >= self.runs_06_18_from
+
     @property
     def lead_days(self) -> tuple[int, ...]:
         """Lead days (``_previous_dayN``) the archive fills for this model."""
@@ -133,8 +144,9 @@ def _parse(entry: Any, index: int) -> Model:
     numbers = (entry["step_hours"], entry["forecast_days"])
     if any(isinstance(n, bool) or not isinstance(n, int | float) for n in numbers):
         raise ModelCatalogError(f"models[{index}]: step_hours and forecast_days must be numbers")
-    if not isinstance(entry.get("runs_from", date.min), date):
-        raise ModelCatalogError(f"models[{index}]: runs_from must be a YYYY-MM-DD date")
+    for name in ("runs_from", "runs_06_18_from"):
+        if not isinstance(entry.get(name, date.min), date):
+            raise ModelCatalogError(f"models[{index}]: {name} must be a YYYY-MM-DD date")
     run_hours = entry.get("run_hours", list(RUN_HOURS))
     if (
         not isinstance(run_hours, list)
