@@ -986,6 +986,67 @@ def append_model_archive(path: Path, rows: pl.DataFrame) -> Path:
     return path
 
 
+# --- our own archive of what the forecast map showed (forecast vs. measured) -----------
+#: the release of the plain-means archive (``sun_cloud_gust.ARCHIVE_TAG``)
+PARTS_ARCHIVE_TAG = sun_cloud_gust.ARCHIVE_TAG
+#: what each run's parts of day said, as the forecast map showed them
+PARTS_ARCHIVE_COLUMNS = (
+    "tmin",
+    "tmax",
+    "precipitation",
+    "rain_probability",
+    "wind",
+    "gust",
+    "cloud",
+    "sunshine",
+    "symbol",
+)
+PARTS_ARCHIVE_SCHEMA = {
+    "issued": pl.Datetime("us", "UTC"),
+    "okres": pl.String,
+    "day": pl.Date,
+    "part": pl.String,
+    **{c: pl.Float32 for c in PARTS_ARCHIVE_COLUMNS if c != "symbol"},
+    "symbol": pl.String,
+}
+
+
+def parts_archive_asset(issued: datetime) -> tuple[str, str]:
+    """Release and asset of the parts archive: one file per UTC month of the run."""
+    return PARTS_ARCHIVE_TAG, f"outlook-parts-{issued.astimezone(UTC):%Y-%m}.parquet"
+
+
+def parts_archive_rows(table: pl.DataFrame, issued: datetime) -> pl.DataFrame:
+    """One run's parts-of-day table (``outlook``'s, as written to outlook.json) as
+    archive rows; columns it lacks are null."""
+    stamp = issued.astimezone(UTC).replace(second=0, microsecond=0)
+    return table.select(
+        pl.lit(stamp).dt.cast_time_unit("us").alias("issued"),
+        "okres",
+        "day",
+        "part",
+        *[
+            (pl.col(c) if c in table.columns else pl.lit(None)).alias(c)
+            for c in PARTS_ARCHIVE_COLUMNS
+        ],
+    ).cast(PARTS_ARCHIVE_SCHEMA)
+
+
+def append_parts_archive(path: Path, rows: pl.DataFrame) -> Path:
+    """Merge runs into the month file; a run (``issued``) already in it is replaced."""
+    rows = rows.cast(PARTS_ARCHIVE_SCHEMA)
+    if path.exists():
+        old = pl.read_parquet(path).cast(PARTS_ARCHIVE_SCHEMA)
+        rows = pl.concat(
+            [old.filter(~pl.col("issued").is_in(rows["issued"].unique().implode())), rows]
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows.sort("issued", "okres", "day", "part").write_parquet(
+        path, compression="zstd", compression_level=10
+    )
+    return path
+
+
 def outlook(
     client: httpx.Client,
     weights: pl.DataFrame,

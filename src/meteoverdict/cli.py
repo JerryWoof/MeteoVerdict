@@ -31,6 +31,7 @@ from meteoverdict import (
     leads,
     mos,
     observations,
+    observed_map,
     outlook,
     partitions,
     quality,
@@ -544,6 +545,83 @@ def station_pages_cmd(
         with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
             store.publish_folder(_release_store(client), out, "station-data.zip")
         typer.echo(f"published station-data.zip to the release {store.LATEST_TAG}")
+
+
+@app.command("observed-map")
+def observed_map_cmd(
+    archive: Annotated[
+        Path, typer.Option(help="Archive folder (<tag>/<name>), e.g. from chmi-archive.")
+    ] = Path("data/chmi"),
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    parts_dir: Annotated[
+        Path,
+        typer.Option(help="Folder of the outlook's parts-of-day archive (outlook-parts-*)."),
+    ] = Path("data/outlook-archive"),
+    out: Annotated[Path, typer.Option(help="Folder for the day files.")] = Path("site/data")
+    / observed_map.FOLDER,
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="First download the archive files and the outlook's parts archive needed "
+            "from GitHub Releases (read only).",
+        ),
+    ] = False,
+    publish: Annotated[
+        bool,
+        typer.Option(help=f"Upload the folder as {observed_map.ZIP} to the release data-latest."),
+    ] = False,
+) -> None:
+    """What the weather was like: measured values per okres and part of day for the past
+    days of the forecast map (web/tv.html), with our archived forecast beside them."""
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    if publish and not github_release:
+        raise typer.BadParameter("--publish needs --github-release")
+    now = datetime.now(UTC)
+    today = observed_map.prague_today(now)
+    if github_release:
+        with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
+            chmi_archive.sync(
+                _archive_releases(client), archive, observed_map.wanted_assets(today), typer.echo
+            )
+            # flat folder: the files go to <parts_dir>/<tag>/<name>, read from there
+            chmi_archive.sync(
+                _release_store(client),
+                parts_dir,
+                observed_map.parts_archive_names(today),
+                typer.echo,
+            )
+    parts = [
+        parts_dir / tag / name
+        for tag, name in observed_map.parts_archive_names(today)
+        if (parts_dir / tag / name).exists()
+    ] + [
+        parts_dir / name
+        for _, name in observed_map.parts_archive_names(today)
+        if (parts_dir / name).exists()
+    ]
+    archived = (
+        pl.concat([pl.read_parquet(p).cast(outlook.PARTS_ARCHIVE_SCHEMA) for p in parts])
+        if parts
+        else None
+    )
+    observed_map.build(
+        archive,
+        pl.read_parquet(stations_path),
+        combine.okres_points(),
+        out,
+        today,
+        parts_archive=archived,
+        generated=now,
+        log=typer.echo,
+    )
+    if publish:
+        with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
+            store.publish_folder(_release_store(client), out, observed_map.ZIP)
+        typer.echo(f"published {observed_map.ZIP} to the release {store.LATEST_TAG}")
 
 
 @app.command("leads")
@@ -1390,6 +1468,10 @@ def outlook_cmd(
             _archive_outlook_models(client, fc, now, archive_dir, github_release)
         except Exception as exc:
             typer.echo(f"mvd outlook: model archive not updated: {exc}", err=True)
+        try:  # what the map showed, for "forecast vs. measured"; must not fail the outlook
+            _archive_outlook_parts(client, table, now, archive_dir, github_release)
+        except Exception as exc:
+            typer.echo(f"mvd outlook: parts archive not updated: {exc}", err=True)
         try:  # training data for the frost clear-calm term; must not fail the outlook
             _archive_outlook_nights(releases, nights, data_dir / frost.ARCHIVE_FOLDER)
         except (httpx.HTTPError, OSError) as exc:
@@ -1477,6 +1559,25 @@ def _archive_outlook_models(
     if archive:
         archive.put(tag, name, path, label=store.sha256(path))
     typer.echo(f"archived the models' forecasts → {path} ({path.stat().st_size:,} bytes)")
+
+
+def _archive_outlook_parts(
+    client: httpx.Client, table: pl.DataFrame, now: datetime, folder: Path, github: bool
+) -> None:
+    """Merge this run's parts of day (outlook.json's values) into the month's
+    ``outlook-parts-YYYY-MM.parquet`` (and the release outlook-archive): the forecast
+    the observed map compares with what was measured (``mvd observed-map``)."""
+    tag, name = outlook.parts_archive_asset(now)
+    path = folder / name
+    archive = None
+    if github:
+        archive = GitHubReleaseStore(client, *_github_credentials())
+        if name in archive.assets(tag):
+            archive.download(tag, name, path)
+    outlook.append_parts_archive(path, outlook.parts_archive_rows(table, now))
+    if archive:
+        archive.put(tag, name, path, label=store.sha256(path))
+    typer.echo(f"archived the parts of day → {path} ({path.stat().st_size:,} bytes)")
 
 
 @app.command("frost-fit")
