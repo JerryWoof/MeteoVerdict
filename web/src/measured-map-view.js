@@ -1,4 +1,4 @@
-// The measured-weather map of station.html's landing: okres and kraj boundaries (no
+// The measured-weather map of measured.html's landing: okres and kraj boundaries (no
 // third-party tiles), every ČHMÚ station with a value as a dot coloured by the chosen
 // value, and the forecast map's markers (symbol, temperature, value chips) on the
 // stations that fit without overlapping (measured.js pickLabels: the main stations at

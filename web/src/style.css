@@ -536,7 +536,7 @@ table#days,
   cursor: pointer;
 }
 
-/* TV-style forecast map (tv.html) */
+/* TV-style forecast map (forecast.html) */
 /* grid items may shrink below their content (the day tabs scroll instead) */
 body.tv > * {
   min-width: 0;
@@ -1313,7 +1313,7 @@ body.tv.past #ribbon {
   }
 }
 
-/* open data page (api.html) */
+/* open data page (data.html) */
 pre.code {
   background: var(--ink);
   color: var(--paper);
@@ -2580,7 +2580,7 @@ body.radar #show-box {
   }
 }
 
-/* the measured-weather page (station.html without a station): the forecast map's look,
+/* the measured-weather page (measured.html without a station): the forecast map's look,
    marked as measured (teal, as the past days had on the forecast map) */
 body.station [hidden] {
   display: none !important;
@@ -2600,7 +2600,8 @@ body.station [hidden] {
   padding: 0.3rem 0.8rem;
 }
 .measured-ribbon .daytab.older {
-  order: 1;
+  /* the date picker for older days first, on the left (time runs left to right) */
+  order: -1;
 }
 .measured-map .station-label.selected .wx-top {
   text-decoration: underline;

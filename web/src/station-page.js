@@ -1,4 +1,4 @@
-// The measured-weather page (station.html, "Naměřeno / Measured"): without a station
+// The measured-weather page (measured.html, "Naměřeno / Measured"): without a station
 // the map of what ČHMÚ's stations measured, by day and part of day, each station with
 // its own values or each okres with the mean of its stations (measured.js,
 // data/scores/observed/ from `mvd observed-map`); "Kinds of station" the map of the
@@ -517,14 +517,14 @@ function renderWhen() {
     button.addEventListener("click", () => updateLanding({ day }));
     return button;
   });
-  days.replaceChildren(...tabs, olderControl(past));
+  // time runs left to right as on the forecast: the date picker for older days first, then
+  // the older days, yesterday last (next to where the forecast's "today" would be)
+  days.replaceChildren(olderControl(past), ...tabs.reverse());
   const pressed = days.querySelector('.daytab[aria-pressed="true"]');
   if (pressed && scrolledTo !== landing.day) {
     scrolledTo = landing.day;
-    // the tab in view with the newer day before it whole (the newest are on the left)
-    const start = (pressed.previousElementSibling ?? pressed).offsetLeft - days.offsetLeft;
-    const fits = pressed.offsetLeft - days.offsetLeft + pressed.offsetWidth <= days.clientWidth;
-    days.scrollLeft = fits ? 0 : Math.max(0, start);
+    // the chosen tab in view (the newest are on the right)
+    pressed.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
   const daily = isDaily(landing.day);
   const parts = $("parts");

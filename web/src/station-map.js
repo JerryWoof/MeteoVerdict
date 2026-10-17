@@ -1,4 +1,4 @@
-// Pure helpers of the station map on station.html: the stations of
+// Pure helpers of the station map on measured.html: the stations of
 // data/scores/station/index.json as map points, their kind, the "only stations
 // measuring …" filter and the station nearest a point. No MapLibre here, so the node
 // tests can run them.

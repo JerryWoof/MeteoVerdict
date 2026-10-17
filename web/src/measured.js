@@ -1,4 +1,4 @@
-// "Measured weather": the landing of the station page (station.html), the forecast
+// "Measured weather": the landing of the station page (measured.html), the forecast
 // map's look for what ČHMÚ's stations measured. Each station with its own values of a
 // day and part of day, from data/scores/observed/<day>-stations.json (`mvd
 // observed-map`, docs/data-sources.md#observed-map), its position and kind from

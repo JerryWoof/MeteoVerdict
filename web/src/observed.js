@@ -1,9 +1,9 @@
-// "What the weather was like": the measured days of the measured page (station.html), from the
+// "What the weather was like": the measured days of the measured page (measured.html), from the
 // files of `mvd observed-map` (src/meteoverdict/observed_map.py,
 // docs/data-sources.md#observed-map): data/scores/observed/index.json and one file per
 // day with the values measured per okres and part of day, the number of stations behind
 // each, and the forecast we archived for that day. Pure helpers; the page is the measured
-// page (station.html: station-page.js, measured-okres.js).
+// page (measured.html: station-page.js, measured-okres.js).
 
 import { daySymbol } from "./diary.js";
 

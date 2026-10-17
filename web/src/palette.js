@@ -1,5 +1,5 @@
 // The colour scales of the maps and their legend: one palette for the forecast map
-// (tv.html, tv-page.js) and the measured page (station.html: okres fills and station
+// (forecast.html, tv-page.js) and the measured page (measured.html: okres fills and station
 // dots, measured-map-view.js, station-page.js), so a value has the same colour on both.
 
 // colour ramps: [value, [r, g, b]] in ascending order
