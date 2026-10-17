@@ -382,6 +382,14 @@ header {
   font-weight: 600;
   text-decoration: none;
 }
+/* the menu always right after the title, in the same place on every page; the page's
+   status line ("Scores up to …", "Forecast of …") after it, so its length never moves it */
+header h1 {
+  order: -2;
+}
+.site-nav {
+  order: -1;
+}
 #language {
   order: 1;
   margin-left: auto;
