@@ -450,14 +450,9 @@ export function createDiary({ dataPath, t, language }) {
     show(next) {
       const sameStation = doc?.station?.id === next?.station?.id;
       doc = next;
+      // no daily values (or a station file from before the diary): no overview
       if (!doc?.diary) {
-        section.hidden = !doc;
-        if (doc) {
-          for (const id of ["diary-table", "diary-summary", "diary-day"]) $(id).replaceChildren();
-          $("diary-controls").hidden = true;
-          $("diary-period").textContent = "";
-          $("diary-message").textContent = t("diary.none");
-        }
+        section.hidden = true;
         return;
       }
       section.hidden = false;
