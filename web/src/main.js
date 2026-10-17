@@ -13,6 +13,7 @@ import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
 import { availableLeadDays, availableVariables, availableWindows, parseHash, pickWindow, windowLabel } from "./view.js";
+import { keepRoomForPanels } from "./panel-room.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -40,6 +41,7 @@ const map = new MapLibreMap({
 });
 // the map grows with a long okres panel (it shares a grid cell with it): keep it drawn
 new ResizeObserver(() => map.resize()).observe(map.getContainer());
+keepRoomForPanels(map.getContainer().parentElement, map.getContainer(), [document.getElementById("detail")]);
 map.addControl(new NavigationControl({ showCompass: false }));
 
 async function getJson(path) {
