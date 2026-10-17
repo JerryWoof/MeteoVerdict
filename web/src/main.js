@@ -13,7 +13,7 @@ import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
 import { availableLeadDays, availableVariables, availableWindows, parseHash, pickWindow, windowLabel } from "./view.js";
-import { keepRoomForPanels } from "./panel-room.js";
+import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -366,12 +366,15 @@ async function showStation(code, title, backTo) {
 }
 
 let padding = null;
+const movedByUser = userMoved(map);
 
-/** Fit Czechia beside the detail panel on wide screens, and back when it closes. */
+/** Fit Czechia beside the detail panel on wide screens, and back when it closes; never
+ * once someone has moved the map themselves. */
 function fitView() {
   const open = Boolean(panel().childElementCount) && window.innerWidth > 900;
-  const right = open ? panel().offsetWidth + 70 : 20;
+  const right = open ? panelRoom() : 20;
   if (padding && padding.right === right) return;
+  if (padding && movedByUser()) return;
   const first = padding === null;
   padding = { top: 20, bottom: 20, left: 20, right };
   map.fitBounds(BOUNDS, { padding, duration: first ? 0 : 400 });

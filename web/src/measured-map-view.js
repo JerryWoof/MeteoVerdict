@@ -13,6 +13,7 @@ import { drawIcon, glyph, iconCanvas } from "./icons.js";
 import { pickLabels } from "./measured.js";
 import { NEUTRAL, RAMPS, colorFor, rampKey } from "./palette.js";
 import { ALL_LAYERS, iconName, labelFor, valueFor } from "./tv.js";
+import { panelRoom } from "./panel-room.js";
 
 setWorkerUrl(workerUrl);
 
@@ -289,8 +290,10 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
     /** Fit Czechia beside an open okres panel on wide screens, and back when it closes
      * (as the forecast map does). */
     fitBeside(panel) {
-      const right = window.innerWidth > 900 && panel && !panel.hidden ? panel.offsetWidth + 70 : 10;
+      const right = window.innerWidth > 900 && panel && !panel.hidden ? panelRoom() : 10;
       if (right === lastRight) return;
+      // someone moved the map themselves: leave it where they put it
+      if (lastRight !== null && !keepFit) return;
       const first = lastRight === null;
       lastRight = right;
       keepFit = true;
