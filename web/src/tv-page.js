@@ -6,13 +6,13 @@ import "./style.css";
 import { COMBINED, weightTable } from "./forecast.js";
 import { drawIcon, glyph, iconCanvas } from "./icons.js";
 import { setUpLanguage } from "./i18n.js";
-import { modelHorizon, modelPeriods, parseModels } from "./models.js";
+import { mapModelOptions, modelHorizon, modelPeriods, parseModelParts, parseModels } from "./models.js";
 import { fillPicker, issuedText } from "./picker.js";
 import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, colorFor, currentPart, dayLabel, displayName, ease,
   iconName, labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView,
-  placeMarkers, playSteps, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary, today,
-  viewHash,
+  placeMarkers, playSteps, rampKey, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary,
+  today, viewHash,
 } from "./tv.js";
 
 setWorkerUrl(workerUrl);
@@ -64,6 +64,29 @@ const symbolText = (symbol) => (symbol ? t(`symbol.${symbol}`) : "");
 // --- state, kept in the URL (tv.js parseView / viewHash) ----------------------------
 let state = { day: null, part: null, colour: "temperature", shown: [], okres: null };
 let playing = null; // "day" or "week" while playing
+
+// --- which forecast the whole map shows: our combination (outlook.json) or one model's
+// raw forecast (forecast/models-parts/<model>.json, all okresy). Not remembered: no
+// storage and nothing in the URL, every page load starts on the combination.
+let mapModel = COMBINED;
+let mapView = null; // parseModelParts of mapModel while it is shown
+let mapStatus = null; // null, {loading: model} or {failed: model}
+let mapToken = 0;
+let modelIndex = null; // forecast/models-parts/index.json
+let modelNames = {}; // meta.json models
+const modelViews = new Map(); // model → parsed file (loaded once)
+let mapReady = false; // the selector works once the map has its layers
+
+/** What the map draws: the chosen model's view, or our combination. */
+const shownView = () => (mapModel !== COMBINED && mapView ? mapView : outlook);
+const modelName = (model) => (model === COMBINED ? t("forecast.pickCombined") : modelNames[model] ?? model);
+
+/** "Sat 10/19, 12:00": the end of a model's run, Prague time. */
+function endText(ms) {
+  return new Intl.DateTimeFormat(language, {
+    weekday: "short", day: "numeric", month: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Europe/Prague",
+  }).format(ms);
+}
 
 // the first line of a day tab: "Today", "Tomorrow", "Wednesday"
 function dayName(day) {
@@ -155,19 +178,23 @@ function renderShow() {
 
 function renderScale() {
   const box = document.getElementById("scale");
-  const ramp = RAMPS[state.colour];
+  // a single model: rain in mm (no probability), its raw cloud cover
+  const single = Boolean(shownView()?.single);
+  const key = rampKey(state.colour, single);
+  const ramp = RAMPS[key];
   if (!ramp) {
     box.replaceChildren();
     return;
   }
   const [low, high] = [ramp[0][0], ramp.at(-1)[0]];
-  const stops = ramp.map(([v]) => `${colorFor(v, state.colour)} ${((v - low) / (high - low)) * 100}%`);
+  const stops = ramp.map(([v]) => `${colorFor(v, key)} ${((v - low) / (high - low)) * 100}%`);
   const bar = element("div", null, "bar");
   bar.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
   const show = (v) =>
-    ({ temperature: `${v}°`, precipitation: `${v * 100} %`, wind: `${v} m/s`, cloud: `${v} %` })[state.colour];
+    ({ temperature: `${v}°`, precipitation: `${v * 100} %`, precipitationMm: `${v} mm`, wind: `${v} m/s`, cloud: `${v} %` })[key];
+  const title = single && state.colour === "cloud" ? "scale.cloudModel" : `scale.${key}`;
   box.replaceChildren(
-    element("div", t(`scale.${state.colour}`), "scale-title"),
+    element("div", t(title), "scale-title"),
     bar,
     element("div", `${show(low)} … ${show(high)}`, "scale-ends"),
   );
@@ -254,11 +281,32 @@ function declutter() {
 }
 
 // --- headline: follows the values shown --------------------------------------------
+// the note on the map while a single model is shown (or loading), with the way back
+function modelBanner(view) {
+  if (mapStatus?.failed) return element("p", t("tv.bannerFailed", { model: modelName(mapStatus.failed) }), "model-banner failed");
+  if (mapStatus?.loading) return element("p", t("tv.bannerLoading", { model: modelName(mapStatus.loading) }), "model-banner");
+  if (!view.single) return null;
+  const banner = element("div", null, "model-banner");
+  banner.append(element("p", t("tv.banner", { model: modelName(mapModel), time: issuedText(view.generated) ?? "–" })));
+  const cut = view.days.some((day) => view.okresy.some((o) => rowFor(view, o.code, day, "day")?.beyond));
+  if (cut && view.lastHour != null) banner.append(element("p", t("tv.bannerHorizon", { end: endText(view.lastHour) }), "horizon"));
+  const back = element("button", t("tv.bannerBack"), "back");
+  back.type = "button";
+  back.addEventListener("click", () => setMapModel(COMBINED));
+  banner.append(back);
+  return banner;
+}
+
 function renderHeadline(outlook) {
   const s = summary(outlook, state.day, state.part);
   const box = document.getElementById("headline");
+  const banner = modelBanner(outlook);
+  box.classList.toggle("single", Boolean(outlook.single));
   if (!s) {
-    box.replaceChildren(element("p", t("tv.noPart")));
+    const note = outlook.single && outlook.lastHour != null
+      ? t("tv.beyondPart", { end: endText(outlook.lastHour) })
+      : t("tv.noPart");
+    box.replaceChildren(...(banner ? [banner] : []), element("h2", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`), element("p", note));
     return;
   }
   const line = (layer, text) => {
@@ -275,7 +323,9 @@ function renderHeadline(outlook) {
     // at night the coldest place comes first
     lines.push(...(state.part === "night" ? [cold, warm] : [warm, cold]));
   }
-  if (shown("precipitation")) lines.push(line("precipitation", t("tv.rainy", { n: s.rainy, of: s.okresy })));
+  if (shown("precipitation")) {
+    lines.push(line("precipitation", t(s.single ? "tv.rainyModel" : "tv.rainy", { n: s.rainy, of: s.okresy })));
+  }
   if (shown("wind")) lines.push(line("wind", t("tv.windiest", { okres: displayName(s.windiest.name), value: fmt(s.windiest.value) })));
   if (shown("cloud")) lines.push(line("cloud", t("tv.clearIn", { n: s.clear, of: s.okresy })));
   // the day's sunrise and sunset, earliest to latest over the okresy (about 25 minutes apart)
@@ -288,12 +338,12 @@ function renderHeadline(outlook) {
     }
   }
   const heading = element("h2", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`);
-  const children = [heading, ...lines];
+  const children = [...(banner ? [banner] : []), heading, ...lines];
   if (playing && RAMPS[state.colour]) {
     // while playing the map colour changes every round: say which one it is
     const badge = element("p", null, "playing");
     badge.append(glyph(state.colour), element("span", t("tv.mapShows", { layer: t(`layer.${state.colour}`) })));
-    children.splice(1, 0, badge);
+    children.splice(children.indexOf(heading) + 1, 0, badge);
   }
   box.replaceChildren(...children);
 }
@@ -301,8 +351,8 @@ function renderHeadline(outlook) {
 // --- okres panel ------------------------------------------------------------------
 // Which forecast the panel shows: our combination (outlook.json), or one model's raw
 // forecast (forecast/models/<okres>.json, parts and days by the outlook's rules, models.js).
-// Not remembered: every page load and every opening of an okres starts on the combination.
-// The map itself always shows the combination.
+// Not remembered. Every opening of an okres starts on the forecast the map shows (the map's
+// selector); the panel's own selector changes only the panel, never the map.
 let panelModel = COMBINED;
 // okres → {status: "loading" | "ready" | "missing", table, parsed, periods: Map model → rows}
 const okresFiles = new Map();
@@ -329,15 +379,36 @@ function okresData(code) {
   return okresFiles.get(code);
 }
 
-/** The panel's rows: (day, part) → row of the combination or of the chosen model. */
+/**
+ * The panel's rows: (day, part) → row of the combination or of the chosen model (from
+ * the okres's own per-model file; while that loads, the map's model from the map's file).
+ */
 function panelRows(data) {
-  const single = panelModel !== COMBINED && data.status === "ready" && data.parsed.models[panelModel];
-  if (!single) return { single: false, rowOf: (day, part) => rowFor(outlook, state.okres, day, part) };
+  const combined = { single: false, rowOf: (day, part) => rowFor(outlook, state.okres, day, part) };
+  if (panelModel === COMBINED) return combined;
+  if (!(data.status === "ready" && data.parsed.models[panelModel])) {
+    if (panelModel !== mapModel || !mapView) return combined;
+    const periods = {
+      get: (key) => {
+        const row = mapView.rows.get(`${state.okres}|${key}`);
+        return row && !row.beyond ? row : undefined;
+      },
+    };
+    return {
+      single: true,
+      periods,
+      generated: mapView.generated,
+      end: mapView.lastHour,
+      rowOf: (day, part) => periods.get(`${day}|${part}`),
+    };
+  }
   if (!data.periods.has(panelModel)) data.periods.set(panelModel, modelPeriods(data.parsed, panelModel));
   const periods = data.periods.get(panelModel);
   return {
     single: true,
     periods,
+    generated: data.parsed.generated,
+    end: modelHorizon(data.parsed, panelModel),
     // with the day's sunrise and sunset, for the night symbols
     rowOf: (day, part) => {
       const row = periods.get(`${day}|${part}`);
@@ -360,18 +431,27 @@ function partCell(row, part, single) {
 }
 
 // the "Forecast" selector and, for a single model, what it is and where it ends
-function modelPicker(data, single, periods) {
+function modelPicker(data, rows) {
+  const { single, periods } = rows;
   const label = element("label", null, "model-pick");
   const select = document.createElement("select");
+  select.autocomplete = "off";
   const ready = data.status === "ready";
-  panelModel = fillPicker(select, {
+  // the map's model is offered also while the okres's file loads (the map has its values)
+  const available = new Set([
+    ...(ready ? Object.keys(data.parsed.models) : []),
+    ...(mapView && mapModel !== COMBINED ? [mapModel] : []),
+  ]);
+  const chosen = fillPicker(select, {
     table: data.table,
-    names: data.names,
-    available: new Set(ready ? Object.keys(data.parsed.models) : []),
+    names: { ...modelNames, ...data.names },
+    available,
     selected: panelModel,
     t,
   });
-  select.disabled = !ready;
+  if (ready || available.has(panelModel)) panelModel = chosen;
+  select.disabled = available.size === 0;
+  // the panel's own choice: only the panel changes, never the map
   select.addEventListener("change", () => {
     panelModel = select.value;
     renderPanel(outlook);
@@ -382,20 +462,15 @@ function modelPicker(data, single, periods) {
   if (data.status === "loading") notes.push(element("p", t("tv.modelLoading"), "model-note"));
   if (data.status === "missing") notes.push(element("p", t("tv.modelUnavailable"), "model-note"));
   if (single) {
-    let text = t("tv.modelNote", { time: issuedText(data.parsed.generated) ?? "–" });
+    let text = t("tv.modelNote", { time: issuedText(rows.generated) ?? "–" });
     // days of our forecast the model does not cover whole
     const cut = outlook.days.some((day) => rowFor(outlook, state.okres, day, "day") && !periods.get(`${day}|day`));
-    const end = modelHorizon(data.parsed, panelModel);
-    if (cut && end != null) {
-      const when = new Intl.DateTimeFormat(language, {
-        weekday: "short", day: "numeric", month: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Europe/Prague",
-      }).format(end);
-      text += ` ${t("tv.modelHorizon", { end: when })}`;
-    }
+    if (cut && rows.end != null) text += ` ${t("tv.modelHorizon", { end: endText(rows.end) })}`;
     const note = element("p", text, "model-note");
     note.title = t("tv.modelNoteMore");
     notes.push(note);
   }
+  if (panelModel !== mapModel) notes.push(element("p", t("tv.panelOnly", { map: modelName(mapModel) }), "model-note"));
   return [label, ...notes];
 }
 
@@ -416,7 +491,8 @@ function renderPanel(outlook) {
   }
   const info = outlook.okresy.find((o) => o.code === state.okres);
   const data = okresData(state.okres);
-  const { single, periods, rowOf } = panelRows(data);
+  const rows = panelRows(data);
+  const { single, rowOf } = rows;
   panel.classList.toggle("single", single);
   const now = rowOf(state.day, state.part);
   const close = element("button", "×", "close");
@@ -476,7 +552,7 @@ function renderPanel(outlook) {
     close,
     element("h2", displayName(info?.name ?? state.okres)),
     element("p", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`, "when"),
-    ...modelPicker(data, single, periods),
+    ...modelPicker(data, rows),
     big,
     facts,
     strip,
@@ -506,16 +582,17 @@ function paintFill(colours) {
 /** Draw the current state at once (after a click, or at the end of a transition). */
 function update(change = {}, fromPlay = false) {
   if (!fromPlay) stopPlay();
-  // another okres (or none) starts on our combination again
-  if ("okres" in change && change.okres !== state.okres) panelModel = COMBINED;
+  // another okres (or none) starts on the forecast the map shows
+  if ("okres" in change && change.okres !== state.okres) panelModel = mapModel;
   state = { ...state, ...change };
   window.history.replaceState(null, "", viewHash(state));
+  const view = shownView();
   renderWhen(outlook);
   renderShow();
-  paintFill(okresColours(outlook, state.day, state.part, state.colour));
+  paintFill(okresColours(view, state.day, state.part, state.colour));
   map.setFilter("okres-selected", ["==", ["get", "code"], state.okres ?? ""]);
-  paintMarkers(outlook);
-  renderHeadline(outlook);
+  paintMarkers(view);
+  renderHeadline(view);
   renderPanel(outlook);
   fitView();
 }
@@ -535,20 +612,21 @@ function stopPlay() {
   playing = null;
   playToken += 1;
   renderWhen(outlook);
-  renderHeadline(outlook);
+  renderHeadline(shownView());
 }
 
 /** Move to `target` (a part of state), interpolating colours and values; false if stopped. */
 async function transition(target, token) {
   const from = { ...state };
   const to = { ...state, ...target };
-  const coloursFrom = okresColours(outlook, from.day, from.part, from.colour);
-  const coloursTo = okresColours(outlook, to.day, to.part, to.colour);
+  const view = shownView();
+  const coloursFrom = okresColours(view, from.day, from.part, from.colour);
+  const coloursTo = okresColours(view, to.day, to.part, to.colour);
   // the labels and boxes already show where we are going
   state = to;
   renderWhen(outlook);
   renderShow();
-  renderHeadline(outlook);
+  renderHeadline(view);
   const start = performance.now();
   for (;;) {
     await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -563,7 +641,7 @@ async function transition(target, token) {
         : switchColours(coloursFrom, coloursTo, Math.min(1, elapsed / SWITCH_MS)),
     );
     for (const [code, entry] of markers) {
-      const row = lerpRow(rowFor(outlook, code, from.day, from.part), rowFor(outlook, code, to.day, to.part), f);
+      const row = lerpRow(rowFor(view, code, from.day, from.part), rowFor(view, code, to.day, to.part), f);
       setMarker(entry, row, f < 0.5 ? from.part : to.part, to.shown);
     }
     if (f >= 1) break;
@@ -582,7 +660,8 @@ async function play(scope) {
   playing = scope;
   const token = ++playToken;
   const chosen = state.shown;
-  const steps = playSteps(outlook, scope, state.day);
+  // a single model: only the parts it covers
+  const steps = playSteps(shownView(), scope, state.day);
   if (steps.length === 0) return stopPlay();
   let i = startIndex(steps, state.day, state.part);
   renderWhen(outlook);
@@ -603,6 +682,73 @@ async function play(scope) {
 function togglePlay(scope) {
   if (playing === scope) stopPlay();
   else play(scope);
+}
+
+// --- the map's forecast selector ------------------------------------------------------
+function renderMapPicker() {
+  const select = document.getElementById("map-model-select");
+  const options = mapModelOptions(modelIndex, modelNames);
+  const option = (model, text) => {
+    const o = document.createElement("option");
+    o.value = model;
+    o.textContent = text;
+    return o;
+  };
+  const rank = (r) => r.toLocaleString(language, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const group = (key, list) => {
+    const g = document.createElement("optgroup");
+    g.label = t(key);
+    g.append(...list);
+    return g;
+  };
+  const ranked = options.filter((o) => o.rank != null)
+    .map((o) => option(o.model, t("forecast.pickOption", { position: o.position, model: o.name, rank: rank(o.rank) })));
+  const others = options.filter((o) => o.rank == null).map((o) => option(o.model, o.name));
+  select.replaceChildren(
+    option(COMBINED, t("forecast.pickCombined")),
+    ...(ranked.length ? [group("tv.mapModelRanked", ranked)] : []),
+    ...(others.length ? [group("tv.mapModelOthers", others)] : []),
+  );
+  select.value = mapModel;
+  select.disabled = !mapReady || options.length === 0;
+  document.getElementById("map-model").title = t(options.length ? "tv.mapModelHint" : "tv.mapModelsMissing");
+}
+
+/** Switch the whole map (and the okres panel) to `model`, or back to our combination. */
+async function setMapModel(model) {
+  const token = ++mapToken;
+  stopPlay();
+  document.getElementById("map-model-select").value = model;
+  if (model === COMBINED) {
+    mapModel = COMBINED;
+    mapView = null;
+    mapStatus = null;
+    panelModel = COMBINED;
+    update();
+    return;
+  }
+  if (!modelViews.has(model)) {
+    mapStatus = { loading: model };
+    renderHeadline(shownView());
+    const doc = await getJson(`data/scores/forecast/models-parts/${model}.json`);
+    const view = parseModelParts(doc, outlook);
+    if (view) modelViews.set(model, view);
+  }
+  if (token !== mapToken) return;
+  const view = modelViews.get(model);
+  if (!view) {
+    mapModel = COMBINED;
+    mapView = null;
+    mapStatus = { failed: model };
+    document.getElementById("map-model-select").value = COMBINED;
+  } else {
+    mapModel = model;
+    mapView = view;
+    mapStatus = null;
+  }
+  // the open okres follows the map
+  panelModel = mapModel;
+  update();
 }
 
 function addLayers() {
@@ -648,10 +794,25 @@ async function main() {
   if (window.innerWidth <= 700) show.open = false;
   document.getElementById("play-day").addEventListener("click", () => togglePlay("day"));
   document.getElementById("play-week").addEventListener("click", () => togglePlay("week"));
+  const picker = document.getElementById("map-model-select");
+  picker.setAttribute("autocomplete", "off");
+  renderMapPicker();
+  picker.disabled = true; // until the map is there
+  // the models offered for the whole map, by their mean rank over Czechia
+  metaJson ??= getJson("data/scores/meta.json");
+  Promise.all([getJson("data/scores/forecast/models-parts/index.json"), metaJson]).then(([index, meta]) => {
+    modelIndex = index;
+    modelNames = { ...meta?.models };
+    renderMapPicker();
+    if (state.okres) renderPanel(outlook);
+  });
   await mapLoaded;
   addLayers();
   buildMarkers(outlook);
   update();
+  picker.addEventListener("change", () => setMapModel(picker.value));
+  mapReady = true;
+  renderMapPicker();
 }
 
 main();
