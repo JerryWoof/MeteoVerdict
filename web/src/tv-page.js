@@ -15,7 +15,7 @@ import {
   placeMarkers, playSteps, rampKey, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary,
   today, viewHash, measuredRedirect,
 } from "./tv.js";
-import { keepRoomForPanels } from "./panel-room.js";
+import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -561,9 +561,12 @@ let outlook = null;
 let padding = null;
 
 /** Fit Czechia beside the okres panel on wide screens, and back when it closes. */
+const movedByUser = userMoved(map);
 function fitView() {
-  const right = window.innerWidth > 900 && state.okres ? document.getElementById("okres-panel").offsetWidth + 70 : 20;
+  const right = window.innerWidth > 900 && state.okres ? panelRoom() : 20;
   if (padding && padding.right === right) return;
+  // someone moved the map themselves: leave it where they put it
+  if (padding && movedByUser()) return;
   const first = padding === null;
   padding = { top: 20, bottom: 20, left: 20, right };
   map.fitBounds(BOUNDS, { padding, duration: first ? 0 : 400 });
