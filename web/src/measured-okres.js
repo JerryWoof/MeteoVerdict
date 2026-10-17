@@ -101,12 +101,21 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
     return t("obs.kind.stored", { time: issuedText(f.issued) ?? "–" });
   }
 
-  /** One value cell: the value, and below it the difference to the measured one. */
-  function valueCell(value, delta, deltaText) {
+  /** How big a difference is: small / medium / large (temperature °C, rain mm, wind m/s). */
+  const SIZE = { temperature: [1, 3], precipitation: [1, 5], wind: [1, 3] };
+  const size = (delta, variable) => {
+    const a = Math.abs(delta);
+    const [small, medium] = SIZE[variable];
+    return a <= small ? "small" : a <= medium ? "medium" : "large";
+  };
+
+  /** One value cell: the value, and below it the difference to the measured one, coloured
+   * by its size. */
+  function valueCell(value, delta, deltaText, variable) {
     const td = element("td", null, "num");
     td.append(element("span", value));
     if (delta != null) {
-      const d = element("small", deltaText, "delta");
+      const d = element("small", deltaText, `delta ${size(delta, variable)}`);
       d.title = t("obs.deltaHint");
       td.append(d);
     }
@@ -133,9 +142,9 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
     const dR = isMeasured ? null : difference(row, measured, "precipitation", part);
     const dW = isMeasured ? null : difference(row, measured, "wind", part);
     tr.append(
-      valueCell(temp == null ? "–" : `${Math.round(temp)}°`, dT, signed(dT, 0, "°")),
-      valueCell(row?.precipitation == null ? "–" : `${fmt1(row.precipitation)} mm`, dR, signed(dR, 1, "")),
-      valueCell(row?.wind == null ? "–" : `${fmt(row.wind)} m/s`, dW, signed(dW, 0, "")),
+      valueCell(temp == null ? "–" : `${Math.round(temp)}°`, dT, signed(dT, 0, "°"), "temperature"),
+      valueCell(row?.precipitation == null ? "–" : `${fmt1(row.precipitation)} mm`, dR, signed(dR, 1, " mm"), "precipitation"),
+      valueCell(row?.wind == null ? "–" : `${fmt(row.wind)} m/s`, dW, signed(dW, 0, " m/s"), "wind"),
     );
     return tr;
   }
