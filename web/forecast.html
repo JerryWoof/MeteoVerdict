@@ -6,7 +6,7 @@
     <title>MeteoVerdict: forecast by okres</title>
     <meta name="description" content="A forecast per okres that combines the weather models by how well each did there." />
   </head>
-  <body class="page">
+  <body class="page forecast-page">
     <header>
       <h1><a href="./">MeteoVerdict</a></h1>
       <p id="status">Loading…</p>
@@ -18,23 +18,28 @@
         <a href="compare.html" data-i18n="page.compare">Compare</a>
         <a href="api.html" data-i18n="page.api">Data</a>
       </nav>
-      <form id="controls">
-        <label><span data-i18n="control.okres">Okres</span> <select id="okres"></select></label>
-      </form>
       <button type="button" id="language">Česky</button>
     </header>
     <main class="content">
-      <h2 id="title" data-i18n="forecast.title">Forecast</h2>
-      <label id="model-pick"><span data-i18n="forecast.pick">Forecast</span> <select id="model"></select></label>
+      <div class="page-head">
+        <h2 id="title" class="page-title" data-i18n="forecast.title">Forecast</h2>
+      </div>
+      <!-- which okres and which forecast the table and charts below show -->
+      <form id="controls" class="strip standalone">
+        <div class="strip-row">
+          <label class="field"><span data-i18n="control.okres">Okres</span> <select id="okres"></select></label>
+          <label id="model-pick" class="field"><span data-i18n="forecast.pick">Forecast</span> <select id="model"></select></label>
+        </div>
+      </form>
       <p id="issued" class="note"></p>
       <p id="model-note" class="note" hidden></p>
       <p id="combined-note" class="note" data-i18n="forecast.note"></p>
       <p id="message" class="note"></p>
-      <div class="table-scroll"><table id="days"></table></div>
+      <div class="table-scroll"><table id="days" class="data-table"></table></div>
       <div id="charts"></div>
       <h2 data-i18n="forecast.weights">Which models count most here</h2>
       <p class="note" data-i18n="forecast.weightsNote"></p>
-      <div class="table-scroll"><table id="weights"></table></div>
+      <div class="table-scroll"><table id="weights" class="data-table"></table></div>
     </main>
     <footer data-footer="models" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/methodology.md">
       <!-- filled in by src/footer.js (the credits and licences of every page) -->
