@@ -4,11 +4,12 @@ import "./style.css";
 
 import { modelColors, records } from "./data.js";
 import {
-  COMBINED, MAX_LEAD_DAY, VARIABLES, bestPerLeadDay, combine, dailySummary, forecastUrl, mergeForecast, modelDays,
-  modelEnd, modelOptions, nightBands, parseForecast, weightTable, weightedModels, winnersByLeadDay,
+  COMBINED, MAX_LEAD_DAY, VARIABLES, bestPerLeadDay, dailySummary, nightBands, weightTable, winnersByLeadDay,
 } from "./forecast.js";
 import { setUpLanguage } from "./i18n.js";
 import { glyph } from "./icons.js";
+import { asForecast, modelHorizon, modelPeriods, parseModels } from "./models.js";
+import { fillPicker, issuedText } from "./picker.js";
 import { statusText } from "./status.js";
 import { dayLabel, parseOutlook, rowFor, sunFor, today } from "./tv.js";
 
@@ -22,23 +23,6 @@ async function getJson(path) {
     return response.ok ? await response.json() : null;
   } catch {
     return null;
-  }
-}
-
-// Open-Meteo answers a large multi-model request with 503 now and then (busy server);
-// a second try a moment later usually works
-const RETRY_WAITS_MS = [1500, 4000, 8000];
-async function getForecast(url) {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return await response.json();
-      if (![429, 500, 502, 503, 504].includes(response.status)) return null;
-    } catch {
-      // network error: try again like a busy server
-    }
-    if (attempt >= RETRY_WAITS_MS.length) return null;
-    await new Promise((resolve) => setTimeout(resolve, RETRY_WAITS_MS[attempt]));
   }
 }
 
@@ -119,8 +103,8 @@ function renderDays(days, sunOf, gustOf) {
 
 // `selected`: COMBINED (our forecast highlighted, with the best model per lead day) or a
 // model id (that model's raw forecast highlighted, ours thin for reference)
-function chart(forecast, combined, table, variable, colors, names, nights, selected) {
-  const now = Date.now();
+// `issued`: when the forecast was made (ms): the lead days count from it, as in the outlook
+function chart(forecast, combined, table, variable, colors, names, nights, selected, issued) {
   const single = selected !== COMBINED;
   const points = (values) => values
     .map((v, i) => ({ time: new Date(forecast.times[i]), value: v }))
@@ -138,7 +122,7 @@ function chart(forecast, combined, table, variable, colors, names, nights, selec
   let segment = 0;
   let previous = null;
   const best = [];
-  bestPerLeadDay(forecast, table, variable, now).forEach(({ value, model }, i) => {
+  bestPerLeadDay(forecast, table, variable, issued).forEach(({ value, model }, i) => {
     if (value == null) return;
     if (model !== previous) {
       // repeat the boundary point so the segments join
@@ -230,59 +214,30 @@ function renderWeights(table, names) {
 // which forecast is shown: our combination on every page load (not remembered, not in
 // the link, so a shared link always opens on the combination); kept while the okres changes
 let selected = COMBINED;
-// the okres on screen: {point, table, forecast, combined, sunOf, gustOf, fetched}
+// the okres on screen: {point, table, parsed, forecast, combined, periods, days, sunOf, gustOf}
 let state = null;
 
-function optionText(o, names) {
-  if (o.model === COMBINED) return t("forecast.pickCombined");
-  const model = names[o.model] ?? o.model;
-  if (!o.scored) return model;
-  const rank = o.rank == null
-    ? "–"
-    : o.rank.toLocaleString(document.documentElement.lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  return t("forecast.pickOption", { position: o.position, model, rank });
-}
-
-function renderPicker(table, names) {
-  const select = document.getElementById("model");
-  const options = modelOptions(table, names);
-  if (!options.some((o) => o.model === selected)) selected = COMBINED;
-  const option = (o) => {
-    const element = document.createElement("option");
-    element.value = o.model;
-    element.textContent = optionText(o, names);
-    element.selected = o.model === selected;
-    return element;
-  };
-  const group = (key, list) => {
-    const element = document.createElement("optgroup");
-    element.label = t(key);
-    element.append(...list.map(option));
-    return element;
-  };
-  const scored = options.filter((o) => o.scored);
-  const unscored = options.filter((o) => !o.scored && o.model !== COMBINED);
-  select.replaceChildren(
-    option(options[0]),
-    ...(scored.length ? [group("forecast.pickScored", scored)] : []),
-    ...(unscored.length ? [group("forecast.pickUnscored", unscored)] : []),
-  );
-}
+const dayRow = (d) => ({ day: d.day, tmin: d.tmin, tmax: d.tmax, precipitation: d.precipitation, wind: d.wind });
 
 // the day table, the charts and the notes for the selected forecast
 function render(names, colors) {
-  const { forecast, combined, table, sunOf, gustOf } = state;
+  const { parsed, forecast, combined, table, days, sunOf, gustOf } = state;
   const single = selected !== COMBINED;
-  const ourDays = dailySummary(forecast.times, combined, TIME_ZONE);
   const modelNote = document.getElementById("model-note");
   document.getElementById("combined-note").hidden = single;
   modelNote.hidden = !single;
   if (single) {
     const name = names[selected] ?? selected;
-    const days = modelDays(forecast, selected, ourDays.map((d) => d.day), TIME_ZONE);
-    const end = modelEnd(forecast, selected);
+    // the outlook's rules on the model's own hours (models.js): a day it does not cover
+    // whole is "–"
+    const periods = modelPeriods(parsed, selected);
+    const rows = days.map((d) => {
+      const own = periods.get(`${d.day}|day`);
+      return own ? { day: d.day, ...own } : { day: d.day, tmin: null, tmax: null, precipitation: null, wind: null, beyond: true };
+    });
+    const end = modelHorizon(parsed, selected);
     let note = t("forecast.modelNote", { model: name });
-    if (end != null && days.some((d) => d.beyond)) {
+    if (end != null && rows.some((d) => d.beyond)) {
       const when = new Intl.DateTimeFormat(document.documentElement.lang, {
         weekday: "short", day: "numeric", month: "numeric", hour: "numeric", minute: "2-digit", timeZone: TIME_ZONE,
       }).format(end);
@@ -290,74 +245,76 @@ function render(names, colors) {
     }
     modelNote.textContent = note;
     // the gusts come from our corrected outlook: not shown for a single model
-    renderDays(days, sunOf, () => null);
+    renderDays(rows.map(dayRow), sunOf, () => null);
   } else {
     modelNote.textContent = "";
-    renderDays(ourDays, sunOf, gustOf);
+    renderDays(days.map(dayRow), sunOf, gustOf);
   }
   const nights = nightBands(sunOf, forecast.times[0], forecast.times.at(-1), TIME_ZONE);
+  const issued = Date.parse(parsed.generated ?? "") || Date.now();
   document.getElementById("charts").replaceChildren(
-    ...VARIABLES.map((v) => chart(forecast, combined[v], table, v, colors, names, nights, selected)),
+    ...VARIABLES.map((v) => chart(forecast, combined[v], table, v, colors, names, nights, selected, issued)),
   );
 }
 
-// a model outside the okres weights is fetched when it is first picked (the visitor's
-// own Open-Meteo call, one model)
-async function pick(model, names, colors) {
+function pick(model, names, colors) {
   selected = model;
-  if (!state) return;
-  const message = document.getElementById("message");
-  const current = state;
-  const has = () => VARIABLES.some((v) => current.forecast.values[v][model]);
-  if (model !== COMBINED && !has() && !current.fetched.has(model)) {
-    message.textContent = t("forecast.pickLoading", { model: names[model] ?? model });
-    const doc = await getForecast(forecastUrl(current.point, [model]));
-    current.fetched.add(model);
-    if (doc?.hourly) mergeForecast(current.forecast, parseForecast(doc, [model]));
-    if (state !== current || selected !== model) return;
-  }
-  message.textContent = model !== COMBINED && !has() ? t("forecast.pickUnavailable", { model: names[model] ?? model }) : "";
-  render(names, colors);
+  if (state) render(names, colors);
 }
 
-// only the latest okres renders: a slow fetch must not overwrite a newer choice
+// only the latest okres renders: a slow download must not overwrite a newer choice
 let showToken = 0;
 async function show(point, names, colors, outlook) {
   const token = ++showToken;
   const message = document.getElementById("message");
+  const issued = document.getElementById("issued");
   document.getElementById("title").textContent = t("forecast.titleFor", { okres: point.name });
   state = null;
   for (const id of ["days", "charts", "weights"]) document.getElementById(id).replaceChildren();
   document.getElementById("model-note").hidden = true;
   document.getElementById("combined-note").hidden = false;
+  issued.textContent = "";
   if (!point.weights) {
     message.textContent = t("forecast.noWeights");
     return;
   }
   message.textContent = t("forecast.loading");
-  const table = weightTable(await getJson(`data/scores/forecast/${point.code}.json`));
+  // the weights (mvd aggregate) and every model's forecast with our combination (mvd
+  // outlook): static files, no request to Open-Meteo
+  const [weightsDoc, modelsDoc] = await Promise.all([
+    getJson(`data/scores/forecast/${point.code}.json`),
+    getJson(`data/scores/forecast/models/${point.code}.json`),
+  ]);
   if (token !== showToken) return;
-  const models = weightedModels(table);
-  if (models.length === 0) {
+  const table = weightTable(weightsDoc);
+  if (table.size === 0) {
     message.textContent = t("forecast.noWeights");
     return;
   }
-  renderPicker(table, names);
-  const doc = await getForecast(forecastUrl(point, models));
-  if (token !== showToken) return;
-  if (!doc?.hourly) {
+  const parsed = parseModels(modelsDoc);
+  if (!parsed) {
     message.textContent = t("forecast.unavailable");
     return;
   }
-  const forecast = parseForecast(doc, models);
-  const now = Date.now();
-  const combined = Object.fromEntries(VARIABLES.map((v) => [v, combine(forecast, table, v, now)]));
+  const forecast = asForecast(parsed, VARIABLES);
+  const combined = Object.fromEntries(VARIABLES.map((v) => [v, parsed.combined[v] ?? parsed.times.map(() => null)]));
   const sunOf = (day) => sunFor(outlook, point.code, day);
   const gustOf = (day) => rowFor(outlook, point.code, day, "day");
-  state = { point, table, forecast, combined, sunOf, gustOf, fetched: new Set(models) };
+  // the days of our forecast as on the forecast map (outlook.json); without them (an
+  // older or missing file) from the combined hours
+  const fromOutlook = outlook.days
+    .map((day) => ({ ...rowFor(outlook, point.code, day, "day"), day }))
+    .filter((d) => d.tmin != null);
+  const days = fromOutlook.length ? fromOutlook : dailySummary(parsed.times, combined, TIME_ZONE);
+  state = { point, table, parsed, forecast, combined, days, sunOf, gustOf };
+  const when = issuedText(parsed.generated);
+  issued.textContent = when ? t("forecast.issued", { time: when }) : "";
+  selected = fillPicker(document.getElementById("model"), {
+    table, names, available: new Set(Object.keys(parsed.models)), selected, t,
+  });
   renderWeights(table, names);
   message.textContent = "";
-  await pick(selected, names, colors);
+  render(names, colors);
 }
 
 async function main() {

@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  COMBINED, mergeForecast, modelDays, modelEnd, modelOptions,
-  bestModel, bestPerLeadDay, combine, correctionAt, taper, winnersByLeadDay, dailySummary, forecastUrl, leadDay, localDay, localTime,
+  COMBINED, modelDays, modelEnd, modelOptions,
+  bestModel, bestPerLeadDay, combine, correctionAt, taper, winnersByLeadDay, dailySummary, leadDay, localDay, localTime,
   nightBands, parseForecast, weightTable, weightedModels, weightsAt,
 } from "./forecast.js";
 import { parseOutlook, sunFor } from "./tv.js";
@@ -17,15 +17,6 @@ const TABLE = weightTable(WEIGHTS);
 const MODELS = weightedModels(TABLE);
 const FORECAST = parseForecast(API, MODELS);
 const NOW = Date.parse("2026-10-12T06:00Z");
-
-test("request: all models, three variables, UTC, m/s", () => {
-  const url = new URL(forecastUrl({ lat: 49.717, lon: 14.7767 }, ["a", "b"]));
-  assert.equal(url.origin + url.pathname, "https://api.open-meteo.com/v1/forecast");
-  assert.equal(url.searchParams.get("models"), "a,b");
-  assert.equal(url.searchParams.get("hourly"), "temperature_2m,precipitation,wind_speed_10m");
-  assert.equal(url.searchParams.get("timezone"), "GMT");
-  assert.equal(url.searchParams.get("wind_speed_unit"), "ms");
-});
 
 test("parsing the API answer per variable and model", () => {
   assert.equal(FORECAST.times.length, 144);
@@ -246,10 +237,20 @@ test("a single model's days: raw values, days beyond its horizon empty", () => {
   assert.deepEqual(modelDays(FORECAST, model, raw.map((d) => d.day)), raw);
 });
 
-test("a lazily fetched model is merged by time", () => {
-  const base = { times: [1, 2, 3], values: { temperature_2m: { a: [1, 2, 3] }, precipitation: {}, wind_speed_10m: {} } };
-  const extra = { times: [2, 3, 4], values: { temperature_2m: { x: [20, 30, 40] }, precipitation: { x: [null, null, null] }, wind_speed_10m: {} } };
-  mergeForecast(base, extra);
-  assert.deepEqual(base.values.temperature_2m.x, [null, 20, 30]);
-  assert.equal(base.values.precipitation.x, undefined);
+test("selector options limited to the models with a forecast file", () => {
+  const table = weightTable({
+    columns: ["variable", "lead_day", "model", "weight", "rank"],
+    rows: [
+      ["temperature_2m", 1, "b", 0.5, 1],
+      ["temperature_2m", 1, "a", 0.3, 2],
+      ["temperature_2m", 1, "c", 0.2, 3],
+    ],
+  });
+  const names = { a: "Alpha", b: "Beta", c: "Gamma", z: "Zulu" };
+  // c has no forecast this run, x has one but no scores here (and no name in meta.json)
+  const options = modelOptions(table, names, new Set(["a", "b", "x"]));
+  assert.deepEqual(options.map((o) => o.model), [COMBINED, "b", "a", "x"]);
+  // positions stay 1, 2, … without a gap
+  assert.deepEqual(options.map((o) => o.position), [null, 1, 2, null]);
+  assert.deepEqual(options.map((o) => o.scored), [false, true, true, false]);
 });
