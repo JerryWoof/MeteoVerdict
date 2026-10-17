@@ -548,6 +548,16 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
   month in ~31 files (estimated from the saved 11-model answer, not yet measured). The
   project thus keeps its own history of what the models forecast at the okres points.
   A failure there does not fail the outlook.
+- **What the map showed (no extra calls):** every run also merges its parts-of-day
+  table (the values of `outlook.json`) into `outlook-parts-YYYY-MM.parquet` (the run's
+  UTC month) in the release `outlook-archive` (`outlook.parts_archive_rows`,
+  `append_parts_archive`; columns `issued`, `okres`, `day`, `part`, `tmin`, `tmax`,
+  `precipitation`, `rain_probability`, `wind`, `gust`, `cloud`, `sunshine` (Float32) and
+  `symbol`; a re-run of the same `issued` replaces itself). About 2,300 rows a run,
+  ~1 MB a month. The observed map compares these with what was measured
+  ([observed map](#observed-map)); the archive starts with the first run after it was
+  added (October 2026), so older days have no comparison. A failure there does not fail
+  the outlook.
 - **Periods** in Prague time: night 0–6, morning 6–12, afternoon 12–18, evening 18–24,
   and the whole day; a part needs at least 4 hours and a day 18 (the answer starts at
   00 UTC, 02:00 in Prague in summer time).
@@ -1216,6 +1226,88 @@ old climate record) 12 files, 0.11 MB (0.54 MB unpacked). On a sample of 29 hist
 ~710 stations with a history (733 MB of Parquet) about **73 MB in ~5,000 files**,
 growing by about 1 MB a year. Each page view loads one or two decade files of
 10–40 kB.
+
+<a id="observed-map"></a>
+
+## Observed map (`mvd observed-map`)
+
+The forecast map (`web/tv.html`) also shows the **past days**: what ČHMÚ's stations
+measured, per okres and part of day, next to what our forecast had said. Module
+`meteoverdict.observed_map`, page logic `web/src/observed.js`.
+
+**Days.** The last `PART_DAYS` = 30 Prague days before today have the four parts of day
+and the whole day (Prague time, as the outlook: night 0–6, morning 6–12, afternoon
+12–18, evening 18–24, day 0–24), from the 10-minute and hourly data of the
+[archive](#chmi-archive) (checked month files, then the captured `chmi-now-…` days). A
+day is offered once the archive has data up to its end and at least 50 stations have a
+temperature for it, so yesterday appears after the 01:41 UTC run of the CHMI archive
+workflow. Days 31–60 back have the **whole day only**, from ČHMÚ's daily climate values
+with ČHMÚ's own windows (the [station diary](#station-diary)'s fields: maximum and
+minimum 21–21 h CET, precipitation 07–07 h CET including the manual rain gauges,
+sunshine, strongest gust; no wind, no cloud). Older days are not offered: the picker
+offers exactly the days in `observed/index.json`. Today is the forecast only (the
+archive captures complete UTC days, so there is no "so far today").
+
+**A station's value of a period:**
+
+| Field | From | Rule |
+|---|---|---|
+| `tmax`, `tmin` | `TMA`, `TMI` (10 min), `T` at the full hour | highest / lowest; values in at least 80 % of the period's hours |
+| `r` | `SRA1H` | total; every hour of the period |
+| `wind` | `F` at the full hour (m/s) | highest (the forecast's "highest hourly wind"); 80 % of the hours |
+| `gust` | `Fmax` (10 min, m/s) | strongest; 80 % of the hours |
+| `ssv` | `SSV1H` (0.1 h) | hours of sunshine; only periods with at least 0.5 h of daylight, values in 80 % of the daylight hours |
+| `cloud` | `N` (octas, 9 = sky obscured left out) | mean in %; half of the hours (synoptic stations only, ~36) |
+
+A 10-minute value belongs to the period its 10 minutes fall in, an hourly total to the
+period of its hour, a value at the full hour to that time's period (as the outlook's
+instantaneous values). Quality 1, 2 and 4 are left out, as everywhere. Checked on
+2026-10-15 at Praha-Ruzyně: the whole day's maximum 15.5 °C, minimum 4.2 °C, sunshine
+1.9 h and gust 3.8 m/s equal ČHMÚ's own daily values.
+
+**An okres's value** is the mean over its stations with a value (`tmax`, `tmin`, `r`,
+`wind`, `ssv`, `cloud`), with the extremes beside it (`tmax_hi`, `tmin_lo`, `r_hi`) and the
+strongest gust in the okres; `n_t`, `n_r`, `n_w`, `n_g`, `n_s`, `n_c` count the stations
+behind each value. An okres without a station for a variable has null and 0: grey "–" on
+the map. `light` is the hours of daylight of each period at the okres point (for the
+symbol), `ph` the phenomena recorded that day at any of its stations, `sno` the most new
+snow, `st` the stations with any value.
+
+**The symbol** is computed in the browser with the station diary's rules
+(`daySymbol` in `web/src/diary.js`) from the okres values: at least 0.5 mm of
+precipitation gives rain, sleet or snow (phenomena, new snow, temperature), "rain and
+sun" with sunshine in at least 30 % of the daylight; otherwise the sky from the sunshine
+as a share of the period's daylight (`light`), or at night (no daylight) from the cloud
+cover; none when there is neither.
+
+**Forecast vs. measured.** From the [parts archive](#outlook-mvd-outlook-roadmap-66)
+(`outlook-parts-YYYY-MM.parquet` in `outlook-archive`), for each measured day the newest
+run issued 1, 2 and 3 Prague days before it (lead 1 = the day before); without any of
+them the day's first run (lead 0). The okres panel shows the chosen lead's parts beside
+the measured ones, with the temperature difference. The forecast is for the okres's
+point, the measurement the mean of its stations.
+
+**Files** (`--out`, default `site/data/observed/`, published as `observed-data.zip` in
+`data-latest` and unpacked by the Pages workflow to `data/scores/observed/`):
+
+- `index.json`: `{"generated", "time_zone", "part_days", "days": [{"day", "source":
+  "hourly" | "daily", "leads": [...]}], "notes", "source_credit"}`;
+- `<YYYY-MM-DD>.json`: `{"day", "source", "parts", "columns", "counts", "okresy": {code:
+  {column: [value per period], n_*: [...], "light", "st", "ph"?, "sno"?}}, "forecasts":
+  [{"lead", "issued", "columns", "okresy": {code: {column: [per period]}}}]}`;
+- `<YYYY-MM-DD>-stations.json`: the stations' own values (the map's "stations" dots):
+  `{"parts", "columns": ["tmax", "tmin", "r", "wind", "gust", "ssv", "cloud"],
+  "stations": {WSI: [value of each column, period by period]}}`; positions and names
+  come from `station/index.json`.
+
+**Sizes** (measured 2026-10-17 from the real archive, read only): a day with parts of
+day 45 kB plus 81 kB of stations (~470 stations), a whole-day day 35 + 40 kB; all 60
+days 5.8 MB (about 1.0 MB gzipped as GitHub Pages serves it), well inside the Pages
+budget. Building them took 2 s and 1.5 GB of memory. `mvd observed-map
+--github-release --publish` runs in the CHMI archive workflow after the station pages
+(twice a day; allowed to fail without failing the archive), reading the archive files
+the station pages already downloaded (`observed_map.wanted_assets`) and the parts
+archive.
 
 ## Radar archive
 

@@ -212,3 +212,13 @@ test("view and day from the query", () => {
   assert.deepEqual(parseDiaryQuery("?view=year&day=14.7.2010"), { view: null, day: null });
   assert.deepEqual(parseDiaryQuery(""), { view: null, day: null });
 });
+
+test("the symbol of a part of the day uses that part's daylight", () => {
+  const row = { day: "2026-10-16", r: 0, ssv: 3.8, cloud: null, phenomena: [], sno: null, tx: 13, tn: 9, t: null };
+  // 3.8 h of a 6-hour daylit afternoon: clear; of the whole day's ~10.7 h: partly cloudy
+  assert.equal(daySymbol(row, null, 6), "clear");
+  assert.equal(daySymbol(row, 50.5), "partly");
+  // no daylight (night): the sky from the cloud cover, or nothing
+  assert.equal(daySymbol({ ...row, ssv: null, cloud: 7 }, null, 0), "cloudy");
+  assert.equal(daySymbol({ ...row, ssv: null }, null, 0), null);
+});
