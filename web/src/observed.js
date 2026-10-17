@@ -1,8 +1,9 @@
-// "What the weather was like": the past days of the forecast map (tv.html), from the
+// "What the weather was like": the measured days of the measured page (station.html), from the
 // files of `mvd observed-map` (src/meteoverdict/observed_map.py,
 // docs/data-sources.md#observed-map): data/scores/observed/index.json and one file per
 // day with the values measured per okres and part of day, the number of stations behind
-// each, and the forecast we archived for that day. Pure helpers; the page is tv-page.js.
+// each, and the forecast we archived for that day. Pure helpers; the page is the measured
+// page (station.html: station-page.js, measured-okres.js).
 
 import { daySymbol } from "./diary.js";
 
@@ -11,8 +12,6 @@ export const PARTS = ["night", "morning", "afternoon", "evening", "day"];
 export const OBSERVED_LAYERS = ["temperature", "precipitation", "wind", "gust", "sunshine", "cloud"];
 /** Hours of each part (a whole day 24): a part is dark with less than half of it in daylight. */
 const PART_HOURS = { night: 6, morning: 6, afternoon: 6, evening: 6, day: 24 };
-/** Past days shown as tabs before today; older ones through the date field. */
-export const PAST_TABS = 2;
 /** Octas → % (the files have cloud cover in %, the diary's symbol takes octas). */
 const OCTAS = 12.5;
 
@@ -36,20 +35,6 @@ export function parseObservedIndex(doc) {
   };
 }
 
-/**
- * The day tabs: the last `count` measured days before today (only days before `todayIso`
- * the index has), plus `selected` when it is an older measured day; oldest first.
- */
-export function pastTabs(index, todayIso, selected = null, count = PAST_TABS) {
-  const past = index.days.map((d) => d.day).filter((d) => d < todayIso);
-  const tabs = past.slice(-count);
-  if (selected && selected < todayIso && index.byDay.has(selected) && !tabs.includes(selected)) tabs.unshift(selected);
-  return tabs;
-}
-
-/** "past" before today, else "forecast". */
-export const dayKind = (day, todayIso) => (day < todayIso ? "past" : "forecast");
-
 /** The measured day nearest to `iso` (a date picked in the field, which may have no file). */
 export function nearestDay(index, iso) {
   if (!index.days.length || !/^\d{4}-\d{2}-\d{2}$/.test(iso ?? "")) return null;
@@ -58,13 +43,6 @@ export function nearestDay(index, iso) {
     if (best == null || Math.abs(daysBetween(iso, day)) < Math.abs(daysBetween(iso, best))) best = day;
   }
   return best;
-}
-
-/** The day `step` measured days before (-1) or after (+1) `day`; null past the ends. */
-export function stepDay(index, day, step) {
-  const i = index.days.findIndex((d) => d.day === day);
-  if (i < 0) return null;
-  return index.days[i + step]?.day ?? null;
 }
 
 /** Is a part of day dark (less than half of it in daylight)? Never the whole day. */
@@ -223,31 +201,4 @@ export function difference(forecast, measured, layer, part) {
   const f = pick(forecast);
   const m = pick(measured);
   return f == null || m == null ? null : Math.round((f - m) * 10) / 10;
-}
-
-/** The station page with its diary on that day. */
-export const stationLink = (id, day) => `station.html?day=${day}#${encodeURIComponent(id)}`;
-
-/**
- * Station dots for the map: [{id, name, lat, lon, value}] of the stations with a value of
- * `layer` in `part` (a day's stations file, the station index for the positions).
- */
-export function stationValues(doc, index, part, layer) {
-  if (!doc?.stations || !index) return [];
-  const parts = doc.parts ?? PARTS;
-  const p = parts.indexOf(part);
-  if (p < 0) return [];
-  const columns = doc.columns;
-  const column = { temperature: part === "night" ? "tmin" : "tmax", precipitation: "r", sunshine: "ssv" }[layer] ?? layer;
-  const c = columns.indexOf(column);
-  if (c < 0) return [];
-  const where = new Map((index.stations ?? index).map((s) => [s.id, s]));
-  const out = [];
-  for (const [id, values] of Object.entries(doc.stations)) {
-    const value = values[p * columns.length + c];
-    const s = where.get(id);
-    if (value == null || !s || s.lat == null || s.lon == null) continue;
-    out.push({ id, name: s.name ?? id, lat: s.lat, lon: s.lon, value });
-  }
-  return out;
 }

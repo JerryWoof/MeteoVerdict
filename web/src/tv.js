@@ -8,7 +8,7 @@ export const PARTS = ["night", "morning", "afternoon", "evening", "day"];
 // colours the map
 export const LAYERS = ["temperature", "precipitation", "wind", "cloud"];
 export const COLOURS = LAYERS;
-// a past day (measured, observed.js) also shows the strongest gust and the sunshine
+// the measured page (observed.js, measured.js) also shows the strongest gust and the sunshine
 export const ALL_LAYERS = ["temperature", "precipitation", "wind", "gust", "sunshine", "cloud"];
 export const DEFAULT_SHOWN = ["temperature", "precipitation"];
 const SHORT = { temperature: "t", precipitation: "p", wind: "w", cloud: "c", gust: "g", sunshine: "s" };
@@ -28,10 +28,11 @@ export function displayName(name) {
 /**
  * Which markers to show without overlaps: `first` (the selected okres), then the kraj
  * capitals, then the rest in the given order. `boxes` are {code, x, y, w, h}: screen
- * centre and size of each marker.
+ * centre and size of each marker; a box's own `priority` (smaller first) replaces that
+ * order (the station labels of the measured map, measured.js).
  */
 export function placeMarkers(boxes, gap = 4, first = null) {
-  const priority = (box) => (box.code === first ? 0 : CAPITALS.includes(box.code) ? 1 : 2);
+  const priority = (box) => box.priority ?? (box.code === first ? 0 : CAPITALS.includes(box.code) ? 1 : 2);
   const order = [...boxes].sort((a, b) => priority(a) - priority(b));
   const placed = [];
   const overlaps = (a, b) =>
@@ -104,7 +105,7 @@ export const RAMPS = {
   cloud: [[0, [254, 240, 180]], [50, [220, 220, 215]], [100, [150, 150, 150]]],
   // a single model's rain total (mm): no probability from one model; also what was measured
   precipitationMm: [[0, [244, 241, 234]], [0.3, [198, 219, 239]], [2, [107, 174, 214]], [10, [8, 81, 156]]],
-  // measured only (past days): the strongest gust (m/s) and hours of sunshine
+  // measured only (the measured page): the strongest gust (m/s) and hours of sunshine
   gust: [[0, [244, 241, 234]], [8, [199, 233, 192]], [14, [116, 196, 118]], [20, [35, 139, 69]], [28, [0, 68, 27]]],
   sunshine: [[0, [205, 205, 200]], [1, [250, 240, 200]], [4, [253, 216, 118]], [8, [245, 166, 35]], [12, [214, 110, 0]]],
 };
@@ -280,7 +281,7 @@ export function dayLabel(day, todayIso, language) {
  * Unknown parts fall back to `fallback` ({day, part}).
  */
 export function parseView(hash, outlook, fallback) {
-  // outlook.days: every day offered (measured past days too)
+  // outlook.days: every day offered (the measured page passes its measured days)
   const parts = hash.replace(/^#/, "").split("/");
   const [day, part, colour] = parts;
   let [, , , values, okres] = parts;
@@ -294,6 +295,21 @@ export function parseView(hash, outlook, fallback) {
     shown: ALL_LAYERS.filter((l) => shown.includes(l)),
     okres: outlook.okresy.some((o) => o.code === okres) ? okres : null,
   };
+}
+
+/**
+ * An old forecast-map link to a past day ("#2026-10-16/afternoon/…", from when the map
+ * showed what was measured): the measured page's hash for it (station.html, measured.js),
+ * with the okres layer and the okres open as before; null for any other hash.
+ */
+export function measuredRedirect(hash, todayIso) {
+  const parts = (hash ?? "").replace(/^#/, "").split("/");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(parts[0]) || parts[0] >= todayIso) return null;
+  const [day, part, colour, values, okres] = parts;
+  const layer = /^CZ/.test(values ?? "") ? values : /^CZ/.test(okres ?? "") ? okres : "okresy";
+  const rest = [part, colour, /^CZ/.test(values ?? "") ? undefined : values].filter(Boolean);
+  while (rest.length < 3) rest.push(["day", "temperature", "tp"][rest.length]);
+  return `#${[day, ...rest, layer].join("/")}`;
 }
 
 export function viewHash(view) {
