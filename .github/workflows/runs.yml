@@ -21,9 +21,9 @@ name: Single runs
 #
 # Open-Meteo budget (free tier, non-commercial: 10,000 weighted calls a day, 5,000 an hour
 # and 300,000 a month, shared by all workflows; docs/data-sources.md#open-meteo-budget):
-# (1) outlook (outlook.yml, <= 2 x 850), (2) this workflow (<= 4 x 100), (3) the shared
-# 7,400 of the backfill (backfill.yml at 02:41: D+N and the single runs' history, one
-# 14-day window after the other from today into the past). Day: <= 1,700 + 400 + 7,400 =
+# (1) outlook (outlook.yml, <= 4 x 850), (2) this workflow (<= 4 x 100), (3) the shared
+# 5,700 of the backfill (backfill.yml at 02:41: D+N and the single runs' history, one
+# 14-day window after the other from today into the past). Day: <= 3,400 + 400 + 5,700 =
 # 9,500 (9,600 if a late 22:20 run slips past midnight); 31 days <= 294,500. Until
 # 2026-10-17 this workflow also took what the backfill left of the share (10:20, 13:20)
 # for the history; now the backfill spends the share on it itself.
