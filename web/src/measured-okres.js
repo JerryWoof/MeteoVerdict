@@ -1,4 +1,4 @@
-// The okres panel of the measured-weather page (station.html, layer "Okresy"): what was
+// The okres panel of the measured-weather page (measured.html, layer "Okresy"): what was
 // measured in an okres on a day (the mean of its stations, observed.js), the parts of the
 // day, what our forecast had said ("forecast vs. measured") and the okres's stations.
 // Moved here from the forecast map, which shows the coming days only.

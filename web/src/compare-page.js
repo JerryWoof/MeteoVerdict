@@ -293,7 +293,7 @@ function renderSummary(rows, view, names, colors) {
     children.push(blend);
     summaryBlend(blend, view);
     const link = document.createElement("a");
-    link.href = `forecast.html#${view.region}`;
+    link.href = `forecast-detail.html#${view.region}`;
     link.textContent = t("forecast.link");
     children.push(link);
   }

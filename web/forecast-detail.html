@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MeteoVerdict: forecast by okres</title>
+    <meta name="description" content="A forecast per okres that combines the weather models by how well each did there." />
+  </head>
+  <body class="page forecast-page theme-forecast">
+    <header>
+      <h1><a href="./">MeteoVerdict</a></h1>
+      <p id="status">Loading…</p>
+      <nav class="site-nav" aria-label="MeteoVerdict">
+        <a href="./" data-i18n="page.map">Map</a>
+        <a href="forecast.html" data-i18n="page.tv" class="current-section">Forecast</a>
+        <a href="radar.html" data-i18n="page.radar">Radar</a>
+        <a href="measured.html" data-i18n="page.station">Measured</a>
+        <a href="compare.html" data-i18n="page.compare">Compare</a>
+        <a href="data.html" data-i18n="page.api">Data</a>
+      </nav>
+      <button type="button" id="language">Česky</button>
+    </header>
+    <main class="content">
+      <div class="page-head">
+        <h2 id="title" class="page-title" data-i18n="forecast.title">Forecast</h2>
+      </div>
+      <!-- which okres and which forecast the table and charts below show -->
+      <form id="controls" class="strip standalone">
+        <div class="strip-row">
+          <label class="field"><span data-i18n="control.okres">Okres</span> <select id="okres"></select></label>
+          <label id="model-pick" class="field"><span data-i18n="forecast.pick">Forecast</span> <select id="model"></select></label>
+        </div>
+      </form>
+      <p id="issued" class="note"></p>
+      <p id="model-note" class="note" hidden></p>
+      <p id="combined-note" class="note" data-i18n="forecast.note"></p>
+      <p id="message" class="note"></p>
+      <div class="table-scroll"><table id="days" class="data-table"></table></div>
+      <div id="charts"></div>
+      <h2 data-i18n="forecast.weights">Which models count most here</h2>
+      <p class="note" data-i18n="forecast.weightsNote"></p>
+      <div class="table-scroll"><table id="weights" class="data-table"></table></div>
+    </main>
+    <footer data-footer="models" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/methodology.md">
+      <!-- filled in by src/footer.js (the credits and licences of every page) -->
+      Data: ČHMÚ, Open-Meteo.com and the model providers (CC BY 4.0; UK Met Office CC BY-SA 4.0); scores CC BY-SA 4.0.
+    </footer>
+    <script type="module" src="/src/forecast-page.js"></script>
+  </body>
+</html>
