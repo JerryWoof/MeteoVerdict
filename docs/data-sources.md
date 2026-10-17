@@ -2399,6 +2399,45 @@ okres if the station is at most 2 km outside the national border, and takes the 
 from the okres code, so both levels always agree. On 2026-10-12 every okres had
 stations (2 to 25, median 9).
 
+## Municipalities (radar page place search)
+
+`web/src/data/obce.json` lists every Czech municipality (obec, 6,258 on 2026-09-30)
+with its okres and its definition point (definiční bod): `{"okresy": [name, …],
+"obce": [[name, okres index, lat, lon], …]}`, 211 kB (75 kB gzipped). The radar page
+loads it when the "Find a place" field gets focus (`web/src/places.js`: matching ignores
+case and diacritics; a result reads "Třeboň (Jindřichův Hradec)").
+
+Built by `scripts/build_municipalities.py` (`uv run scripts/build_municipalities.py
+[YYYYMMDD]`) from ČÚZK RÚIAN, the state-level exchange file `YYYYMMDD_ST_UZSZ.xml.zip`
+(stát, územní prvky, základní data; one per month, last day of the month) at
+`https://vdp.cuzk.gov.cz/vymenny_format/soucasna/`, CC BY 4.0. The script keeps each
+obec's name, okres and definition point, converts the point from S-JTSK (EPSG:5514) to
+WGS 84 with pyproj and rounds to 4 decimals (about 10 m). Praha belongs to no okres in
+RÚIAN; it is listed under "Hlavní město Praha". Rebuild after municipal changes (a few
+a year); the committed file is from 2026-09-30.
+
+## Radar base map
+
+The radar page draws its own light, muted base map (`web/src/radar-basemap.js`):
+
+- **OpenFreeMap** vector tiles (`https://tiles.openfreemap.org/planet`, OpenMapTiles
+  schema, OpenStreetMap data, ODbL; no API key): water, rivers (streams from zoom 10),
+  motorways and trunk roads (primary roads from zoom 8), the national border, and the
+  place labels: cities from zoom 5, towns from 7.5, villages from 10, in Czech or English
+  (`name:cs` / `name:en`, else `name`). Fonts from OpenFreeMap's glyphs
+  (`https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf`).
+- **AWS Terrain Tiles** (terrarium encoding,
+  `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`, up to
+  zoom 11) as a faint MapLibre hillshade.
+
+Order from the bottom: land, hillshade, water, rivers, roads; then the satellite, the
+radar, echo tops and 1-hour sums; then our okres and kraj lines, the national border,
+the labels, and the storm cells on top. Clicking a label sets the rain-at-a-place point
+on that town. The radar starts once the style is parsed (`style.load`), not after every
+base-map tile (`load`). Rendering the base map costs about 1 ms a frame (measured with
+`map.redraw()` at zoom 7 and 9.5); drawing a radar frame is unchanged. Credits: the map's
+attribution control and the radar page footer (see `docs/licensing.md`).
+
 ## Open-Meteo Previous Runs API (forecasts)
 
 Checked on **2026-10-11** against the Open-Meteo documentation, its source code
