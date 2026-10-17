@@ -1218,9 +1218,26 @@ body.tv.past #ribbon {
   display: block;
 }
 .compare-table.matrix .delta {
-  display: block;
-  font-size: 0.7rem;
-  color: var(--muted);
+  display: inline-block;
+  margin-top: 0.15rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* how far our forecast was off: small / medium / large */
+.compare-table.matrix .delta.small {
+  background: #dcefdc;
+  color: #1f5a24;
+}
+.compare-table.matrix .delta.medium {
+  background: #fbe6c4;
+  color: #7a4504;
+}
+.compare-table.matrix .delta.large {
+  background: #f8d3cf;
+  color: #8a1f17;
 }
 .obs-stations ul {
   margin: 0 0 0.4rem;
