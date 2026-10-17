@@ -1157,7 +1157,7 @@ and 2 GB of memory.
 
 ### Station diary
 
-The top of the station page, "Počasí na stanici / Weather at the station", shows what
+The top of a station's page, "Počasí na stanici / Weather at the station", shows what
 the station measured day by day, like the forecast but for the past: the last 14 days,
 or any week or month back to the station's first daily record (a date field and
 earlier/later buttons; `station.html?view=month&day=2010-07-15#<WSI>` links to one),
@@ -1241,9 +1241,13 @@ growing by about 1 MB a year. Each page view loads one or two decade files of
 
 ## Observed map (`mvd observed-map`)
 
-The forecast map (`web/tv.html`) also shows the **past days**: what ČHMÚ's stations
-measured, per okres and part of day, next to what our forecast had said. Module
-`meteoverdict.observed_map`, page logic `web/src/observed.js`.
+The measured page (`web/station.html`, "Naměřeno / Measured"; the forecast map shows
+the coming days only, and its old links to a past day open this page) shows what ČHMÚ's
+stations measured by day and part of day: each station with its own values
+("Stanice / Stations", `<day>-stations.json`, `web/src/measured.js`), or each okres with
+the mean of its stations next to what our forecast had said ("Okresy",
+`<day>.json`, `web/src/observed.js` and `measured-okres.js`). Module
+`meteoverdict.observed_map`.
 
 **Days.** The last `PART_DAYS` = 30 Prague days before today have the four parts of day
 and the whole day (Prague time, as the outlook: night 0–6, morning 6–12, afternoon
@@ -1305,7 +1309,7 @@ point, the measurement the mean of its stations.
 - `<YYYY-MM-DD>.json`: `{"day", "source", "parts", "columns", "counts", "okresy": {code:
   {column: [value per period], n_*: [...], "light", "st", "ph"?, "sno"?}}, "forecasts":
   [{"lead", "issued", "columns", "okresy": {code: {column: [per period]}}}]}`;
-- `<YYYY-MM-DD>-stations.json`: the stations' own values (the map's "stations" dots):
+- `<YYYY-MM-DD>-stations.json`: the stations' own values (the measured page's station layer):
   `{"parts", "columns": ["tmax", "tmin", "r", "wind", "gust", "ssv", "cloud"],
   "stations": {WSI: [value of each column, period by period]}}`; positions and names
   come from `station/index.json`.

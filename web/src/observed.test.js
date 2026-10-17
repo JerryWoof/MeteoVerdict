@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  OBSERVED_LAYERS, dayKind, defaultLead, difference, isDark, nearestDay, observedSummary, observedSymbol,
-  parseForecasts, parseObservedDay, parseObservedIndex, pastTabs, stationLink, stationValues, stepDay,
+  OBSERVED_LAYERS, defaultLead, difference, isDark, nearestDay, observedSummary, observedSymbol,
+  parseForecasts, parseObservedDay, parseObservedIndex,
 } from "./observed.js";
 import { BEYOND, dayLabel, labelFor, okresColours, parseView, rowFor, valueFor, viewHash } from "./tv.js";
 
@@ -79,26 +79,12 @@ test("the index of measured days, oldest first", () => {
   assert.equal(parseObservedIndex(null).last, null);
 });
 
-test("past day tabs: the last two before today, and an older chosen day", () => {
-  assert.deepEqual(pastTabs(INDEX, "2026-10-17"), ["2026-10-15", "2026-10-16"]);
-  assert.deepEqual(pastTabs(INDEX, "2026-10-17", "2026-09-01"), ["2026-09-01", "2026-10-15", "2026-10-16"]);
-  // a chosen forecast day or a day without a file adds nothing
-  assert.deepEqual(pastTabs(INDEX, "2026-10-17", "2026-10-18"), ["2026-10-15", "2026-10-16"]);
-  assert.deepEqual(pastTabs(INDEX, "2026-10-17", "2026-08-01"), ["2026-10-15", "2026-10-16"]);
-  // only days before today (the index may be a day behind or ahead)
-  assert.deepEqual(pastTabs(INDEX, "2026-10-16"), ["2026-10-14", "2026-10-15"]);
-  assert.equal(dayKind("2026-10-16", "2026-10-17"), "past");
-  assert.equal(dayKind("2026-10-17", "2026-10-17"), "forecast");
-});
-
-test("a picked date goes to the nearest measured day; stepping through the days", () => {
+test("a picked date goes to the nearest measured day", () => {
   assert.equal(nearestDay(INDEX, "2026-10-15"), "2026-10-15");
   assert.equal(nearestDay(INDEX, "2026-09-20"), "2026-09-01");
   assert.equal(nearestDay(INDEX, "2026-10-01"), "2026-10-14");
   assert.equal(nearestDay(INDEX, "2026-01-01"), "2026-09-01");
   assert.equal(nearestDay(INDEX, ""), null);
-  assert.equal(stepDay(INDEX, "2026-10-15", -1), "2026-10-14");
-  assert.equal(stepDay(INDEX, "2026-10-16", 1), null);
 });
 
 test("day labels for yesterday and the day before", () => {
@@ -204,23 +190,4 @@ test("forecast vs. measured: leads, rows and the difference", () => {
   assert.equal(difference(forecasts[0].rows.get("CZ0423|night"), rowFor(VIEW, "CZ0423", "2026-10-16", "night"), "temperature", "night"), -0.5);
   assert.equal(difference(f, measured, "precipitation", "afternoon"), -0.2);
   assert.equal(difference(undefined, measured, "temperature", "day"), null);
-});
-
-test("station dots and links", () => {
-  const doc = {
-    parts: ["night", "morning", "afternoon", "evening", "day"],
-    columns: ["tmax", "tmin", "r", "wind", "gust", "ssv", "cloud"],
-    stations: {
-      A: [1, 0, 0, 2, 3, null, 50, 2, 1, 0.4, 2, 3, 1, 50, 9, 8, 0, 2, 4, 3, 20, 5, 4, 0, 2, 3, null, 40, 9, 0, 0.4, 2, 4, 4, 40],
-      B: Array(35).fill(null),
-    },
-  };
-  const index = { stations: [{ id: "A", name: "Alpha", lat: 50, lon: 14 }, { id: "B", name: "Beta", lat: 49, lon: 15 }] };
-  assert.deepEqual(stationValues(doc, index, "afternoon", "temperature"), [{ id: "A", name: "Alpha", lat: 50, lon: 14, value: 9 }]);
-  assert.deepEqual(stationValues(doc, index, "night", "temperature")[0].value, 0); // the night's minimum
-  assert.equal(stationValues(doc, index, "morning", "precipitation")[0].value, 0.4);
-  assert.equal(stationValues(doc, index, "afternoon", "sunshine")[0].value, 3);
-  assert.deepEqual(stationValues(doc, index, "day", "nothing"), []);
-  assert.deepEqual(stationValues(null, index, "day", "temperature"), []);
-  assert.equal(stationLink("0-20000-0-11518", "2026-10-16"), "station.html?day=2026-10-16#0-20000-0-11518");
 });
