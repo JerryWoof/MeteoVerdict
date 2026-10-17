@@ -7,9 +7,10 @@ import { COMBINED, weightTable } from "./forecast.js";
 import { drawIcon, glyph, iconCanvas } from "./icons.js";
 import { setUpLanguage } from "./i18n.js";
 import { mapModelOptions, modelHorizon, modelPeriods, parseModelParts, parseModels } from "./models.js";
+import { renderScale } from "./palette.js";
 import { fillPicker, issuedText } from "./picker.js";
 import {
-  COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, colorFor, currentPart, dayLabel, displayName, ease,
+  COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, currentPart, dayLabel, displayName, ease,
   iconName, labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView,
   placeMarkers, playSteps, rampKey, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary,
   today, viewHash, measuredRedirect,
@@ -173,31 +174,14 @@ function renderShow() {
       return label;
     }),
   );
-  renderScale();
+  renderLegend();
 }
 
-function renderScale() {
-  const box = document.getElementById("scale");
+function renderLegend() {
   // a single model: rain in mm (no probability), its raw cloud cover
   const single = Boolean(shownView()?.single);
   const key = rampKey(state.colour, single);
-  const ramp = RAMPS[key];
-  if (!ramp) {
-    box.replaceChildren();
-    return;
-  }
-  const [low, high] = [ramp[0][0], ramp.at(-1)[0]];
-  const stops = ramp.map(([v]) => `${colorFor(v, key)} ${((v - low) / (high - low)) * 100}%`);
-  const bar = element("div", null, "bar");
-  bar.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
-  const show = (v) =>
-    ({ temperature: `${v}°`, precipitation: `${v * 100} %`, precipitationMm: `${v} mm`, wind: `${v} m/s`, cloud: `${v} %` })[key];
-  const title = single && state.colour === "cloud" ? "scale.cloudModel" : `scale.${key}`;
-  box.replaceChildren(
-    element("div", t(title), "scale-title"),
-    bar,
-    element("div", `${show(low)} … ${show(high)}`, "scale-ends"),
-  );
+  renderScale(document.getElementById("scale"), key, t(single && state.colour === "cloud" ? "scale.cloudModel" : `scale.${key}`));
 }
 
 // --- markers: built once, their content updated in place (also between two states) --
