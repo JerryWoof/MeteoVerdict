@@ -25,13 +25,15 @@
     </header>
     <main class="content">
       <h2 id="title" data-i18n="forecast.title">Forecast</h2>
-      <p class="note" data-i18n="forecast.note"></p>
+      <label id="model-pick"><span data-i18n="forecast.pick">Forecast</span> <select id="model"></select></label>
+      <p id="model-note" class="note" hidden></p>
+      <p id="combined-note" class="note" data-i18n="forecast.note"></p>
       <p id="message" class="note"></p>
-      <table id="days"></table>
+      <div class="table-scroll"><table id="days"></table></div>
       <div id="charts"></div>
       <h2 data-i18n="forecast.weights">Which models count most here</h2>
       <p class="note" data-i18n="forecast.weightsNote"></p>
-      <table id="weights"></table>
+      <div class="table-scroll"><table id="weights"></table></div>
     </main>
     <footer data-footer="models" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/methodology.md">
       <!-- filled in by src/footer.js (the credits and licences of every page) -->
