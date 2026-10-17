@@ -710,10 +710,22 @@ MODEL_ARCHIVE_SCHEMA = {
 }
 
 
-def model_archive_asset(month: str) -> tuple[str, str]:
-    """Release and asset of a month of the model archive (beside the plain means; the
-    release notes are ``sun_cloud_gust.ARCHIVE_NOTES``)."""
-    return sun_cloud_gust.ARCHIVE_TAG, f"outlook-models-{month}.parquet"
+MODEL_ARCHIVE_NOTES = (
+    "Every model's hourly forecast at the 77 okres points as the outlook (mvd outlook) "
+    "fetched it from the Open-Meteo Forecast API: one file per UTC day of the run "
+    "(outlook-models-YYYY-MM-DD.parquet: issued, okres, model, time, temperature_2m, "
+    "precipitation, wind_speed_10m, cloud_cover, sunshine_duration; issued = the run's "
+    "time, UTC; up to four runs a day), one release per month. Forecasts: "
+    "Open-Meteo.com, CC BY 4.0, from the weather services listed in docs/licensing.md "
+    "(UK Met Office CC BY-SA 4.0). Published under CC BY-SA 4.0."
+)
+
+
+def model_archive_asset(issued: datetime) -> tuple[str, str]:
+    """Release and asset of the model archive for a run: one file per UTC day (a few
+    MB, so a run moves little), one release per month (at most 31 assets)."""
+    day = issued.astimezone(UTC)
+    return f"outlook-models-{day:%Y-%m}", f"outlook-models-{day:%Y-%m-%d}.parquet"
 
 
 def model_archive_rows(fc: pl.DataFrame, issued: datetime) -> pl.DataFrame:
@@ -734,7 +746,7 @@ def model_archive_rows(fc: pl.DataFrame, issued: datetime) -> pl.DataFrame:
 
 
 def append_model_archive(path: Path, rows: pl.DataFrame) -> Path:
-    """Merge one or more runs into the month file: a run (``issued``) already in it is
+    """Merge one or more runs into the day's file: a run (``issued``) already in it is
     replaced, so a repeated run never duplicates rows."""
     rows = rows.cast(MODEL_ARCHIVE_SCHEMA)
     if path.exists():

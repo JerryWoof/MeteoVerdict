@@ -535,15 +535,17 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
   the outlook.
 - **Our own copy of the answer (no extra calls):** every run also merges the whole
   answer, every model, variable and hour at the 77 okres points as Open-Meteo gave it,
-  into `outlook-models-YYYY-MM.parquet` in the same release `outlook-archive` (columns
+  into `outlook-models-YYYY-MM-DD.parquet` (the run's UTC day) in the release
+  `outlook-models-YYYY-MM` (one per month, at most 31 assets; GitHub allows 1,000) (columns
   `issued` (the run's time, UTC, to the minute), `okres`, `model`, `time`,
   `temperature_2m`, `precipitation`, `wind_speed_10m`, `cloud_cover`,
   `sunshine_duration`, Float32; `outlook.model_archive_rows`, `append_model_archive`).
-  One month per file by the run's month; a run already in the file (the same `issued`,
-  e.g. a re-run) replaces itself, so there are no duplicates. With 19 models that is
-  about 210,000 rows a run; sorted by okres, model and hour so the runs of an hour sit
-  side by side, zstd: roughly 1 MB a run, ~100–150 MB at a month's end with 124 runs
-  (estimated from the saved 11-model answer, not yet measured on a full month). The
+  One file per UTC day, so a run downloads and uploads only that day's file (the
+  runs before it that day, at most three); a run already in the file (the same
+  `issued`, e.g. a re-run) replaces itself, so there are no duplicates. With 19 models
+  that is about 210,000 rows a run; sorted by okres, model and hour so the runs of an
+  hour sit side by side, zstd: roughly 1 MB a run, so up to ~4 MB a day and ~125 MB a
+  month in ~31 files (estimated from the saved 11-model answer, not yet measured). The
   project thus keeps its own history of what the models forecast at the okres points.
   A failure there does not fail the outlook.
 - **Periods** in Prague time: night 0–6, morning 6–12, afternoon 12–18, evening 18–24,

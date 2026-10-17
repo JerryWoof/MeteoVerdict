@@ -54,7 +54,7 @@ start later for one variable (ARPEGE wind); see `docs/data-sources.md#models`.
 | ALADIN archive | `mvd archive-aladin` every 3 h, one Parquet per run as Release assets (`aladin-YYYY-MM`) | GitHub Actions |
 | Backfill | `mvd backfill` daily within the shared 5,700 Open-Meteo calls: one sweep from today into the past, each 14-day window whole (D+N at all stations and the rain gauges, then the single runs' API history of its days) before the next older one; progress in Releases `data-state` and `runs-state` | GitHub Actions |
 | Single runs | `mvd fetch-runs` four times a day: every run from Open-Meteo's open-data bucket on AWS (~100 stations, no API calls, catching up the bucket's last 90 days), the Single Runs API only for the bucket's gaps (≤ 400 calls a day); older runs come with the backfill; progress in Release `runs-state` | GitHub Actions |
-| Outlook | `mvd outlook` four times a day: combined forecast for every okres (≈ 420–730 calls) → `outlook.json`, `outlook-hourly.json` and every model's forecast per okres (`outlook-models.zip`) in Release `data-latest`; the full answer archived in `outlook-archive` | GitHub Actions |
+| Outlook | `mvd outlook` four times a day: combined forecast for every okres (≈ 420–730 calls) → `outlook.json`, `outlook-hourly.json` and every model's forecast per okres (`outlook-models.zip`) in Release `data-latest`; the full answer archived per UTC day in `outlook-models-YYYY-MM` | GitHub Actions |
 | Development | Claude scheduled task, weekdays, works from this roadmap, opens PRs | Claude (Cowork) |
 
 Two separate loops:

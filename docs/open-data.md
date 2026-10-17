@@ -63,8 +63,8 @@ combined series, in columns: `generated`, `okres`, `time` (UTC hours), `variable
 its last hour), `licence`, `attribution`
 ([data-sources.md](data-sources.md#outlook-mvd-outlook-roadmap-66)). Public, but not
 part of the versioned `api/v1`: its layout may change with the pages. Our own monthly
-archive of every run's full answer is in the release `outlook-archive`
-(`outlook-models-YYYY-MM.parquet`).
+archive of every run's full answer is in the releases `outlook-models-YYYY-MM`
+(`outlook-models-YYYY-MM-DD.parquet`, one file per UTC day).
 
 ## On an e-ink display
 

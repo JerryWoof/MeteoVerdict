@@ -68,11 +68,7 @@ ARCHIVE_NOTES = (
     "ending at the time) for every okres point, one month per file "
     "(outlook-archive-YYYY-MM.parquet: okres, issued, time, cloud_cover, "
     "sunshine_duration), kept to fit the sunshine and cloud corrections "
-    "(meteoverdict.sun_cloud_gust, docs/methodology.md); and every model's hourly "
-    "forecast at the okres points as the outlook fetched it, one month per file "
-    "(outlook-models-YYYY-MM.parquet: issued, okres, model, time, temperature_2m, "
-    "precipitation, wind_speed_10m, cloud_cover, sunshine_duration; issued = the run's "
-    "time, UTC). Forecasts: Open-Meteo.com, "
+    "(meteoverdict.sun_cloud_gust, docs/methodology.md). Forecasts: Open-Meteo.com, "
     "CC BY 4.0, from the weather services listed in docs/licensing.md. Published under "
     "CC BY-SA 4.0."
 )

@@ -10,11 +10,13 @@ name: Outlook
 # (refused above 800), in requests of at most 500 a minute apart; <= 3,400 a day (4 runs,
 # 850 each with retries), priority (1) in the budget split of runs.yml
 # (docs/data-sources.md#open-meteo-budget). A scheduled 22:50 run that GitHub starts
-# only after midnight UTC is skipped, so a UTC day never sees more than four runs.
-# Each run also appends the plain model means of cloud and sunshine and the full answer
-# (every model, variable and hour at the 77 okres points) to the release outlook-archive
-# (outlook-archive-YYYY-MM and outlook-models-YYYY-MM.parquet; no extra calls): the
-# training data of the nightly sun-cloud-gust.yml and our own record of the forecasts.
+# at 23:45 UTC or later is skipped, so a UTC day never sees more than four runs.
+# Each run also appends the plain model means of cloud and sunshine to the release
+# outlook-archive (outlook-archive-YYYY-MM.parquet, the training data of the nightly
+# sun-cloud-gust.yml) and merges the full answer (every model, variable and hour at the
+# 77 okres points) into its UTC day's outlook-models-YYYY-MM-DD.parquet in the release
+# outlook-models-YYYY-MM (a few MB a day, so a run moves little; no extra calls): our
+# own record of what the models forecast.
 # The frost fields use frost.json (daily.yml, `mvd frost-fit`); the models' nights at
 # the okres points go into outlook-nights-YYYY-MM.parquet of data-YYYY-MM (no extra
 # calls) to refit the clear-calm term (docs/methodology.md#frost).

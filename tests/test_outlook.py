@@ -1,6 +1,7 @@
 import json
 from datetime import UTC, date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import httpx
 import polars as pl
@@ -490,11 +491,16 @@ def test_per_model_files_round_and_stay_small(tmp_path):
 
 
 def test_model_archive_merges_runs_without_duplicates(tmp_path):
-    path = tmp_path / "outlook-models-2026-10.parquet"
-    assert outlook.model_archive_asset("2026-10") == (
-        "outlook-archive",
-        "outlook-models-2026-10.parquet",
+    # one file per UTC day of the run, one release per month
+    assert outlook.model_archive_asset(NOW) == (
+        "outlook-models-2026-10",
+        "outlook-models-2026-10-12.parquet",
     )
+    late = datetime(2026, 10, 31, 23, 50, tzinfo=UTC)
+    assert outlook.model_archive_asset(late)[1] == "outlook-models-2026-10-31.parquet"
+    prague = late.astimezone(ZoneInfo("Europe/Prague"))  # already 1 November there
+    assert outlook.model_archive_asset(prague) == outlook.model_archive_asset(late)
+    path = tmp_path / outlook.model_archive_asset(NOW)[1]
     first = outlook.model_archive_rows(FC, NOW)
     assert first.height == FC.height
     assert first["issued"].unique().to_list() == [NOW]

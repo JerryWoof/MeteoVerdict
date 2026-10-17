@@ -74,7 +74,8 @@ below, and public data is the point of the project.
    series). Redistributing these raw values is allowed by CC BY 4.0 (UK Met Office: CC
    BY-SA 4.0) with attribution: every file carries `licence` and `attribution`, and the
    pages credit Open-Meteo and the model providers. The run's whole answer is also kept
-   in the release `outlook-archive` (`outlook-models-YYYY-MM.parquet`, same terms).
+   in the releases `outlook-models-YYYY-MM` (`outlook-models-YYYY-MM-DD.parquet`, one
+   file per UTC day, same terms).
 5. **Open data files** (`api/v1/`, roadmap 6.11) carry the licence (CC BY-SA 4.0) and
    the attribution text in every file; they are derived data (combined forecasts,
    scores), not a redistribution of the raw Open-Meteo API.
