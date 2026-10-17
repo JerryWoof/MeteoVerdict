@@ -1,4 +1,4 @@
-"""Per-station JSON for the station page (web/station.html), built from the ČHMÚ archive.
+"""Per-station JSON for the station page (web/measured.html), built from the ČHMÚ archive.
 
 One file per station, ``<out>/<WSI>.json``, plus ``<out>/index.json`` (all stations,
 for the search). Each file holds every element the archive has for the station, in

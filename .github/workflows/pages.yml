@@ -60,7 +60,7 @@ jobs:
             unzip -o -q /tmp/station-data.zip -d site/data/station
             echo "station pages from data-latest ($(ls site/data/station | wc -l) files)"
           else
-            echo "no station pages yet; station.html says so"
+            echo "no station pages yet; measured.html says so"
           fi
           # the past days of the forecast map: what was measured per okres (`mvd observed-map`)
           if gh release download data-latest --pattern observed-data.zip --dir /tmp 2>/dev/null; then

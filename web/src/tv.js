@@ -259,7 +259,7 @@ export function parseView(hash, outlook, fallback) {
 
 /**
  * An old forecast-map link to a past day ("#2026-10-16/afternoon/…", from when the map
- * showed what was measured): the measured page's hash for it (station.html, measured.js),
+ * showed what was measured): the measured page's hash for it (measured.html, measured.js),
  * with the okres layer and the okres open as before; null for any other hash.
  */
 export function measuredRedirect(hash, todayIso) {
