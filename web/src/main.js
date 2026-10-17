@@ -38,6 +38,8 @@ const map = new MapLibreMap({
   fitBoundsOptions: { padding: 20 },
   attributionControl: { customAttribution: "Boundaries: ČÚZK (CC BY 4.0)" },
 });
+// the map grows with a long okres panel (it shares a grid cell with it): keep it drawn
+new ResizeObserver(() => map.resize()).observe(map.getContainer());
 map.addControl(new NavigationControl({ showCompass: false }));
 
 async function getJson(path) {
