@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  OBSERVED_LAYERS, defaultLead, difference, isDark, nearestDay, observedSummary, observedSymbol,
+  GROUP_OF, OBSERVED_LAYERS, borrowedFor, difference, isDark, nearestDay, observedSummary, observedSymbol,
   parseForecasts, parseObservedDay, parseObservedIndex,
 } from "./observed.js";
+import { STRINGS } from "./i18n.js";
 import { BEYOND, dayLabel, labelFor, okresColours, parseView, rowFor, valueFor, viewHash } from "./tv.js";
 
 const OKRESY = [
@@ -55,8 +56,11 @@ const DOC = {
       tmax: [null, null, null, null, null], r: [null, null, null, null, null],
       n_t: [0, 0, 0, 0, 0], n_r: [0, 0, 0, 0, 0], light: [0, 4.6, 6, 0.2, 10.7], st: [],
     },
+
   },
   forecasts: [
+    // rebuilt out of sample (meteoverdict.hindcast): no issue time, trained up to a day
+    { lead: 0, kind: "rebuilt", trained_to: "2026-10-14", columns: ["tmax", "wind"], okresy: { CZ0423: { tmax: [7, 9, 12, 10, 12], wind: [3, 3, 3, 3, 3] } } },
     {
       lead: 2, issued: "2026-10-14T20:50Z", columns: ["tmin", "tmax", "precipitation", "rain_probability", "symbol"],
       okresy: { CZ0423: { tmin: [6, 6, 9, 8, 6], tmax: [9, 11, 15, 12, 15], precipitation: [0, 0.2, 0, 0, 0.2], rain_probability: [0.1, 0.3, 0.1, 0.1, 0.3], symbol: ["cloudy", "partly", "clear", "partly", "partly"] } },
@@ -87,10 +91,24 @@ test("a picked date goes to the nearest measured day", () => {
   assert.equal(nearestDay(INDEX, ""), null);
 });
 
-test("day labels for yesterday and the day before", () => {
+test("day labels: yesterday, then weekdays (as the forecast map's tabs), in both languages", () => {
   assert.equal(dayLabel("2026-10-16", "2026-10-17", "cs").key, "day.yesterday");
-  assert.equal(dayLabel("2026-10-15", "2026-10-17", "cs").key, "day.dayBefore");
-  assert.equal(dayLabel("2026-10-14", "2026-10-17", "cs").key, undefined);
+  assert.equal(STRINGS.en["day.yesterday"], "Yesterday");
+  assert.equal(STRINGS.cs["day.yesterday"], "Včera");
+  assert.equal(STRINGS.en["day.dayBefore"], undefined);
+  // no "the day before yesterday": the weekday, capitalised as the forecast map's tabs
+  for (const [day, en, cs] of [
+    ["2026-10-15", "Thursday", "Čtvrtek"],
+    ["2026-10-14", "Wednesday", "Středa"],
+    ["2026-10-10", "Saturday", "Sobota"],
+  ]) {
+    assert.equal(dayLabel(day, "2026-10-17", "en").key, undefined);
+    assert.equal(dayLabel(day, "2026-10-17", "en").name, en);
+    assert.equal(dayLabel(day, "2026-10-17", "cs").name, cs);
+  }
+  // the forecast map's own tabs: "Zítra", then "Pondělí"
+  assert.equal(dayLabel("2026-10-18", "2026-10-17", "cs").key, "day.tomorrow");
+  assert.equal(dayLabel("2026-10-19", "2026-10-17", "cs").name, "Pondělí");
 });
 
 test("parsing a day: rows per okres and part, counts, every okres present", () => {
@@ -178,10 +196,13 @@ test("summary of a measured day", () => {
 
 test("forecast vs. measured: leads, rows and the difference", () => {
   const forecasts = parseForecasts(DOC);
-  assert.deepEqual(forecasts.map((f) => f.lead), [1, 2]);
-  assert.equal(defaultLead(forecasts), 1);
-  assert.equal(defaultLead([{ lead: 0 }]), 0);
-  assert.equal(defaultLead([]), null);
+  assert.deepEqual(forecasts.map((f) => f.lead), [0, 1, 2]);
+  // older files have no kind: stored
+  assert.deepEqual(forecasts.map((f) => f.kind), ["rebuilt", "stored", "stored"]);
+  assert.equal(forecasts[0].trainedTo, "2026-10-14");
+  assert.equal(forecasts[0].issued, null);
+  assert.deepEqual(forecasts[0].rows.get("CZ0423|day"), { tmax: 12, wind: 3 });
+  forecasts.shift();
   const f = forecasts[0].rows.get("CZ0423|afternoon");
   assert.deepEqual(f, { tmin: 10, tmax: 14, precipitation: 0, rain_probability: 0.2, symbol: "partly" });
   assert.equal(forecasts[0].rows.get("CZ0642|afternoon"), undefined);
@@ -190,4 +211,28 @@ test("forecast vs. measured: leads, rows and the difference", () => {
   assert.equal(difference(forecasts[0].rows.get("CZ0423|night"), rowFor(VIEW, "CZ0423", "2026-10-16", "night"), "temperature", "night"), -0.5);
   assert.equal(difference(f, measured, "precipitation", "afternoon"), -0.2);
   assert.equal(difference(undefined, measured, "temperature", "day"), null);
+});
+
+test("borrowed stations: per period and value group, named with their okres", () => {
+  const doc = {
+    day: "2026-10-16",
+    parts: ["night", "morning", "afternoon", "evening", "day"],
+    okresy: {
+      CZ0641: {
+        tmax: [7, 14, 17, 12, 17], tmin: [4, 5, 12, 9, 4], r: [0, 0, 0, 0, 0], ssv: [null, 2, 5, null, 7],
+        n_t: [3, 3, 3, 3, 3], n_r: [3, 3, 3, 3, 3], n_s: [0, 3, 3, 0, 3],
+        light: [0, 4.6, 6, 0.2, 10.7], st: ["own1"],
+        borrowed: { t: [["a", "b"], ["a", "b"], ["a", "b"], ["a", "b"], ["a", "b"]], s: [null, ["b"], ["b"], null, ["b"]] },
+        bst: [{ id: "a", name: "Jevíčko", okres: "Svitavy", km: 0.9 }, { id: "b", name: "Protivanov", okres: "Prostějov", km: 2.4 }],
+      },
+    },
+  };
+  const view = parseObservedDay(doc, [{ code: "CZ0641", name: "Blansko", lat: 49.47, lon: 16.63 }]);
+  const row = rowFor(view, "CZ0641", "2026-10-16", "afternoon");
+  assert.deepEqual(row.borrowed, { t: ["a", "b"], s: ["b"] });
+  assert.deepEqual(borrowedFor(row, GROUP_OF.temperature).map((b) => `${b.name} (${b.okres})`), ["Jevíčko (Svitavy)", "Protivanov (Prostějov)"]);
+  assert.deepEqual(borrowedFor(row, GROUP_OF.precipitation), []); // its own rain gauges
+  // at night no sunshine was borrowed
+  assert.deepEqual(rowFor(view, "CZ0641", "2026-10-16", "night").borrowed, { t: ["a", "b"] });
+  assert.equal(row.tmax, 17);
 });

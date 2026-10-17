@@ -647,6 +647,11 @@ body.tv [hidden] {
   align-items: center;
   gap: 0.1rem;
 }
+/* the symbol with a white halo, as the text: readable on any fill (a sun on a warm
+   orange, a dot of the same colour beside it) */
+.wx-top canvas {
+  filter: drop-shadow(0 0 1px #ffffff) drop-shadow(0 0 1px #ffffff);
+}
 .wx-temp {
   font-weight: 700;
   font-size: 1rem;
@@ -679,6 +684,12 @@ body.tv [hidden] {
 }
 .wx-chip.cloud {
   color: #4f5961;
+}
+.wx-chip.gust {
+  color: #23703a;
+}
+.wx-chip.sunshine {
+  color: #8a5a00;
 }
 .wx-marker.selected .wx-temp,
 .wx-marker.selected .wx-top {
@@ -875,6 +886,21 @@ body.tv.past #ribbon {
   color: #7b8791;
   font-style: italic;
 }
+/* a value from the neighbours' stations (an okres without its own) */
+#okres-panel .facts .borrowed {
+  color: #134e4a;
+}
+#okres-panel .facts .borrowed::before {
+  content: "↔ ";
+  color: #0f766e;
+}
+.obs-stations ul.borrowed {
+  columns: 1;
+}
+.obs-stations .borrowed .where {
+  color: #5b6670;
+  font-size: 0.85em;
+}
 #okres-panel h3 {
   font-size: 0.95rem;
   margin: 0.6rem 0 0.3rem;
@@ -920,6 +946,50 @@ body.tv.past #ribbon {
 .compare-table tr.current {
   background: #f4f1ea;
   font-weight: 600;
+}
+/* the okres panel's forecast vs. measured: one row per forecast, Δ under each value */
+.compare-parts {
+  margin: 0 0 0.35rem;
+}
+.compare-parts button {
+  padding: 0.15rem 0.4rem;
+  font-size: 0.75rem;
+}
+.compare-table.matrix tr {
+  cursor: default;
+}
+.compare-table.matrix th.lead {
+  font-size: 0.8rem;
+  text-align: left;
+  color: #1d2329;
+  padding: 0.15rem 0.25rem;
+  border-bottom: 1px solid #ddd8cc;
+}
+.compare-table.matrix th.lead small {
+  display: block;
+  font-weight: 400;
+  color: #5b6670;
+  font-size: 0.68rem;
+  white-space: normal;
+}
+.compare-table.matrix tr.measured {
+  background: #e6f2f0;
+}
+.compare-table.matrix tr.rebuilt th.lead small {
+  color: #8a5a00;
+}
+.compare-table.matrix td.sym {
+  text-align: center;
+  font-size: 0.7rem;
+  color: #5b6670;
+}
+.compare-table.matrix td.num span {
+  display: block;
+}
+.compare-table.matrix .delta {
+  display: block;
+  font-size: 0.7rem;
+  color: #5b6670;
 }
 .obs-stations ul {
   margin: 0 0 0.4rem;
@@ -2385,9 +2455,6 @@ body.station [hidden] {
 }
 .measured-hint {
   margin: 0.3rem 0 0.8rem;
-}
-.station-label .wx-temp {
-  font-size: 0.95rem;
 }
 .measured-map .station-label.selected .wx-top {
   text-decoration: underline;

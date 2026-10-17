@@ -2,6 +2,7 @@
 // four times a day by `mvd outlook`): per okres, day and part of day the combined forecast.
 
 import { records } from "./data.js";
+import { BEYOND, NEUTRAL, RAMPS, colorFor, rampKey } from "./palette.js";
 
 export const PARTS = ["night", "morning", "afternoon", "evening", "day"];
 // the four forecast values; any of them can be shown at the okres markers, and one
@@ -93,54 +94,14 @@ export function labelFor(row, layer, part) {
   return `${Math.round(v)} m/s`;
 }
 
-// colour ramps: [value, [r, g, b]] in ascending order
-export const RAMPS = {
-  temperature: [
-    [-15, [49, 54, 149]], [-5, [69, 117, 180]], [0, [171, 217, 233]], [5, [224, 243, 248]],
-    [10, [254, 224, 144]], [15, [253, 174, 97]], [20, [244, 109, 67]], [25, [215, 48, 39]],
-    [32, [165, 0, 38]],
-  ],
-  precipitation: [[0, [244, 241, 234]], [0.3, [198, 219, 239]], [0.6, [107, 174, 214]], [1, [8, 81, 156]]],
-  wind: [[0, [244, 241, 234]], [4, [199, 233, 192]], [8, [116, 196, 118]], [14, [35, 139, 69]], [20, [0, 68, 27]]],
-  cloud: [[0, [254, 240, 180]], [50, [220, 220, 215]], [100, [150, 150, 150]]],
-  // a single model's rain total (mm): no probability from one model; also what was measured
-  precipitationMm: [[0, [244, 241, 234]], [0.3, [198, 219, 239]], [2, [107, 174, 214]], [10, [8, 81, 156]]],
-  // measured only (the measured page): the strongest gust (m/s) and hours of sunshine
-  gust: [[0, [244, 241, 234]], [8, [199, 233, 192]], [14, [116, 196, 118]], [20, [35, 139, 69]], [28, [0, 68, 27]]],
-  sunshine: [[0, [205, 205, 200]], [1, [250, 240, 200]], [4, [253, 216, 118]], [8, [245, 166, 35]], [12, [214, 110, 0]]],
-};
-
-/** The colour ramp of a layer: rain in mm for a single model's view. */
-export const rampKey = (layer, single) => (layer === "precipitation" && single ? "precipitationMm" : layer);
-
-/** A view whose rain is in mm: a single model's, or a measured day's. */
-export const mmView = (view) => Boolean(view?.single || view?.observed);
-
-/** Fill of an okres a single model does not cover at that time (beyond its horizon). */
-export const BEYOND = "#c9c9c9";
+// the colour scales and their legend live in palette.js, shared with the measured page
+export { BEYOND, NEUTRAL, RAMPS, colorFor, rampKey } from "./palette.js";
 
 /** A single model's rain threshold (mm), as its rain symbol (models.js RAIN_MM). */
 export const MODEL_RAIN_MM = 0.3;
 
-export const NEUTRAL = "#e9e5db";
-
-const hex = (rgb) => `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
-
-/** Linear interpolation in a ramp, clamped at its ends. */
-export function colorFor(value, layer) {
-  const ramp = RAMPS[layer];
-  if (value == null) return "#ececec";
-  if (value <= ramp[0][0]) return hex(ramp[0][1]);
-  for (let i = 1; i < ramp.length; i += 1) {
-    const [v1, c1] = ramp[i];
-    if (value <= v1) {
-      const [v0, c0] = ramp[i - 1];
-      const f = (value - v0) / (v1 - v0);
-      return hex(c0.map((c, k) => c + f * (c1[k] - c)));
-    }
-  }
-  return hex(ramp.at(-1)[1]);
-}
+/** A view whose rain is in mm: a single model's, or a measured day's. */
+export const mmView = (view) => Boolean(view?.single || view?.observed);
 
 // the hours of each part of the day, Prague time
 const PART_HOURS = { night: [0, 6], morning: [6, 12], afternoon: [12, 18], evening: [18, 24] };
@@ -269,7 +230,6 @@ export function dayLabel(day, todayIso, language) {
   if (offset === 0) label.key = "day.today";
   if (offset === 1) label.key = "day.tomorrow";
   if (offset === -1) label.key = "day.yesterday";
-  if (offset === -2) label.key = "day.dayBefore";
   return label;
 }
 
