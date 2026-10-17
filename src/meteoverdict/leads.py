@@ -574,7 +574,8 @@ def runs_document(
     }
     return {
         "generated": generated.strftime(stamp),
-        "source": "Open-Meteo Single Runs API (free, non-commercial use)",
+        "source": "Open-Meteo single runs: open-data bucket on AWS and Single Runs API "
+        "(free, non-commercial use)",
         "about": (
             "Every model verified run by run: each lead hour H+1…H+120 of the 00, 06, 12 "
             "and 18 UTC runs against the ČHMÚ observation at its valid time (run + lead), "

@@ -16,7 +16,14 @@ newest run that started at least 24·N hours before ``T`` (docs/data-sources.md,
 - only where the run that Open-Meteo would use first (the newest run of the model's
   ``run_hours`` at least 24·N hours before ``T``) is among the runs we have: if it is
   missing (not fetched yet, or a gap at Open-Meteo) the hour is left out instead of
-  silently taking an older run;
+  silently taking an older run; checked **per hour**: an older run stands in only where
+  that run ends before ``T`` (or the archive keeps it shorter), never where it has
+  no row at ``T`` for another reason;
+- the single runs are stored at native steps (``runs.native``; the bucket has no
+  interpolated hours): for a 3- or 6-hourly step the precipitation total is spread
+  evenly over the step's hours (``spread``, what Open-Meteo does in both APIs), so daily
+  totals add up as in the Previous Runs data; temperature and wind stay only at the
+  native hours (the hours in between are null, as ``align`` scores only native hours);
 - models whose archive also has runs in between (``Model.previous_runs_step_h``:
   ICON-D2, GeoSphere and DMI every 3 hours, KNMI every hour) only at the hours where a
   00/06/12/18 UTC run is the newest (for 3-hourly runs: 00-02, 06-08, … UTC; for KNMI
@@ -44,6 +51,7 @@ from datetime import UTC, date, datetime, timedelta
 import polars as pl
 
 from meteoverdict import blend
+from meteoverdict import runs as runs_mod
 from meteoverdict.forecasts import SCHEMA
 from meteoverdict.models import VARIABLES, Model
 from meteoverdict.scoring import PREVIOUS_RUNS, SINGLE_RUNS
@@ -68,6 +76,35 @@ def _expected_run_offsets(models: list[Model]) -> pl.LazyFrame:
     )
 
 
+def spread(single_runs: pl.LazyFrame | pl.DataFrame, models: list[Model]) -> pl.LazyFrame:
+    """Rows at native steps (with a ``source``) → one row per hour: the precipitation of
+    a step of ``s`` hours divided evenly over its ``s`` hours (Open-Meteo's convention),
+    the other variables only at the native hour. Rows without a ``source`` (the API,
+    stored before 2026-10-17 with every hour filled) are kept as they are."""
+    frame = single_runs.lazy()
+    if "source" not in frame.collect_schema().names():
+        frame = frame.with_columns(pl.lit(None, pl.String).alias("source"))
+    columns = frame.collect_schema().names()
+    instant = [v for v in runs_mod.VARIABLES if v != "precipitation"]
+    back = pl.col("_back")
+    hourly = (
+        frame.filter(pl.col("source").is_not_null())
+        .join(runs_mod.native_steps(models), on=["model", "lead_h"], how="left")
+        .with_columns(pl.col("_step").fill_null(1))
+        .with_columns(pl.int_ranges(0, pl.col("_step"), dtype=pl.Int16).alias("_back"))
+        .explode("_back")
+        .with_columns(
+            (pl.col("lead_h") - back).cast(pl.Int16).alias("lead_h"),
+            (pl.col("valid_time") - pl.duration(hours=back)).alias("valid_time"),
+            (pl.col("precipitation") / pl.col("_step")).cast(pl.Float32).alias("precipitation"),
+            *[pl.when(back == 0).then(pl.col(v)).otherwise(None).alias(v) for v in instant],
+        )
+        .filter(pl.col("lead_h") >= 1)
+        .select(columns)
+    )
+    return pl.concat([frame.filter(pl.col("source").is_null()), hourly])
+
+
 def previous_days(
     single_runs: pl.LazyFrame | pl.DataFrame,
     models: list[Model],
@@ -76,7 +113,7 @@ def previous_days(
 ) -> pl.LazyFrame:
     """D+N rows (``forecasts.SCHEMA``) for valid hours ``first`` to ``last`` (UTC) from
     the single runs (``runs.SCHEMA``), as the Previous Runs API defines them."""
-    runs = single_runs.lazy().filter(pl.col("model").is_in([m.id for m in models]))
+    runs = spread(single_runs.lazy().filter(pl.col("model").is_in([m.id for m in models])), models)
     lead_days = pl.LazyFrame(
         [(m.id, n) for m in models for n in m.lead_days],
         schema={"model": pl.String, "lead_day": pl.Int8},
@@ -93,31 +130,35 @@ def previous_days(
         orient="row",
     )
     present = runs.select("model", pl.col("run").alias("_expected")).unique()
-    candidates = (
-        runs.filter(
-            pl.col("valid_time").is_between(first, last),
-            pl.col("lead_h") >= 24,
-            pl.col("lead_h") <= MAX_LEAD_H,
-        )
-        .with_columns(
-            (pl.col("lead_h") // 24).cast(pl.Int8).alias("lead_day"),
-            pl.col("run").dt.hour().cast(pl.Int8).alias("_run_hour"),
-        )
-        .join(lead_days, on=["model", "lead_day"], how="inner")
-        # runs that the Previous Runs archive keeps for fewer hours (UKMO 06/18 UTC)
+    # runs that the Previous Runs archive keeps for fewer hours (UKMO 06/18 UTC)
+    capped = (
+        runs.filter(pl.col("lead_h") <= MAX_LEAD_H)
+        .with_columns(pl.col("run").dt.hour().cast(pl.Int8).alias("_run_hour"))
         .join(caps, on=["model", "_run_hour"], how="left")
         .filter(pl.col("_max_lead").is_null() | (pl.col("lead_h") <= pl.col("_max_lead")))
+    )
+    # how far each run reaches at each station: an older run stands in only beyond it
+    reach = capped.group_by("model", "station_id", pl.col("run").alias("_expected")).agg(
+        pl.col("lead_h").max().alias("_reach")
+    )
+    candidates = (
+        capped.filter(pl.col("valid_time").is_between(first, last), pl.col("lead_h") >= 24)
+        .with_columns((pl.col("lead_h") // 24).cast(pl.Int8).alias("lead_day"))
+        .join(lead_days, on=["model", "lead_day"], how="inner")
     )
     newest = candidates.filter(
         pl.col("run") == pl.col("run").max().over("model", "station_id", "valid_time", "lead_day")
     )
     target = pl.col("valid_time") - pl.duration(hours=24 * pl.col("lead_day"))
+    from_expected = (pl.col("valid_time") - pl.col("_expected")).dt.total_hours()
     return (
         newest.with_columns(target.alias("_target"), target.dt.truncate("6h").alias("_base"))
         .with_columns(pl.col("_base").dt.hour().cast(pl.Int8).alias("_base_hour"))
         .join(_expected_run_offsets(models), on=["model", "_base_hour"], how="inner")
         .with_columns((pl.col("_base") - pl.duration(hours=pl.col("_back"))).alias("_expected"))
         .join(present, on=["model", "_expected"], how="semi")
+        .join(reach, on=["model", "station_id", "_expected"], how="left")
+        .filter((pl.col("run") == pl.col("_expected")) | (from_expected > pl.col("_reach")))
         # models with runs in between in the archive: only where no such run is newer
         .join(steps, on="model", how="inner")
         .filter((pl.col("_target") - pl.col("_base")).dt.total_hours() < pl.col("_step"))
