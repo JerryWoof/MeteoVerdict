@@ -62,6 +62,15 @@ jobs:
           else
             echo "no station pages yet; station.html says so"
           fi
+          # the past days of the forecast map: what was measured per okres (`mvd observed-map`)
+          if gh release download data-latest --pattern observed-data.zip --dir /tmp 2>/dev/null; then
+            rm -rf site/data/observed
+            mkdir -p site/data/observed
+            unzip -o -q /tmp/observed-data.zip -d site/data/observed
+            echo "observed days from data-latest ($(ls site/data/observed | wc -l) files, $(du -sh site/data/observed | cut -f1))"
+          else
+            echo "no observed-data.zip yet; the forecast map offers no past days"
+          fi
           # every model's own hourly forecast per okres (`mvd outlook`): the forecast
           # pages read these instead of asking Open-Meteo from the visitor's browser
           if gh release download data-latest --pattern outlook-models.zip --dir /tmp 2>/dev/null; then
