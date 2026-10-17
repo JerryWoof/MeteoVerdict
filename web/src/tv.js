@@ -54,20 +54,29 @@ export function parseOutlook(doc) {
 
 export const rowFor = (outlook, okres, day, part) => outlook.rows.get(`${okres}|${day}|${part}`);
 
-/** The number a layer shows: the night's low, otherwise the high; rain as probability. */
+/**
+ * The number a layer shows: the night's low, otherwise the high; rain as probability
+ * (our combination) or as the total in mm (a single model's row, `row.single`, which
+ * has no probability).
+ */
 export function valueFor(row, layer, part) {
   if (!row) return null;
   if (layer === "temperature") return part === "night" ? row.tmin : row.tmax;
-  if (layer === "precipitation") return row.rain_probability;
+  if (layer === "precipitation") return row.single ? row.precipitation : row.rain_probability;
   if (layer === "wind") return row.wind;
   return row.cloud;
 }
 
-/** Text next to the symbol on the map: "12°", "60 %", "4 m/s". */
+/**
+ * Text next to the symbol on the map: "12°", "60 %", "4 m/s"; a single model's rain
+ * "1.2 mm"; "–" beyond a single model's horizon.
+ */
 export function labelFor(row, layer, part) {
+  if (row?.beyond) return "–";
   const v = valueFor(row, layer, part);
   if (v == null) return "";
   if (layer === "temperature") return `${Math.round(v)}°`;
+  if (layer === "precipitation" && row.single) return `${v.toFixed(1)} mm`;
   if (layer === "precipitation" || layer === "cloud") {
     return `${Math.round(layer === "precipitation" ? v * 100 : v)} %`;
   }
@@ -84,7 +93,18 @@ export const RAMPS = {
   precipitation: [[0, [244, 241, 234]], [0.3, [198, 219, 239]], [0.6, [107, 174, 214]], [1, [8, 81, 156]]],
   wind: [[0, [244, 241, 234]], [4, [199, 233, 192]], [8, [116, 196, 118]], [14, [35, 139, 69]], [20, [0, 68, 27]]],
   cloud: [[0, [254, 240, 180]], [50, [220, 220, 215]], [100, [150, 150, 150]]],
+  // a single model's rain total (mm): no probability from one model
+  precipitationMm: [[0, [244, 241, 234]], [0.3, [198, 219, 239]], [2, [107, 174, 214]], [10, [8, 81, 156]]],
 };
+
+/** The colour ramp of a layer: rain in mm for a single model's view. */
+export const rampKey = (layer, single) => (layer === "precipitation" && single ? "precipitationMm" : layer);
+
+/** Fill of an okres a single model does not cover at that time (beyond its horizon). */
+export const BEYOND = "#c9c9c9";
+
+/** A single model's rain threshold (mm), as its rain symbol (models.js RAIN_MM). */
+export const MODEL_RAIN_MM = 0.3;
 
 export const NEUTRAL = "#e9e5db";
 
@@ -142,19 +162,28 @@ export function iconName(symbol, part, sun) {
   return symbol;
 }
 
-/** Headline for a day and part: warmest and coldest okres, okresy where rain is likely. */
+/**
+ * Headline for a day and part: warmest and coldest okres, okresy where rain is likely
+ * (our combination: probability ≥ 50 %; a single model's view, `outlook.single`: its own
+ * total ≥ MODEL_RAIN_MM). Okresy beyond a single model's horizon do not count; null
+ * without any okres.
+ */
 export function summary(outlook, day, part) {
   const rows = outlook.okresy
     .map((o) => ({ o, row: rowFor(outlook, o.code, day, part) }))
-    .filter(({ row }) => row);
+    .filter(({ row }) => row && !row.beyond);
   if (rows.length === 0) return null;
+  const single = Boolean(outlook.single);
   const temp = (r) => valueFor(r.row, "temperature", part);
   const warmest = rows.reduce((a, b) => (temp(b) > temp(a) ? b : a));
   const coldest = rows.reduce((a, b) => (temp(b) < temp(a) ? b : a));
   return {
     warmest: { name: warmest.o.name, value: temp(warmest) },
     coldest: { name: coldest.o.name, value: temp(coldest) },
-    rainy: rows.filter(({ row }) => (row.rain_probability ?? 0) >= 0.5).length,
+    rainy: rows.filter(({ row }) => (single
+      ? (row.precipitation ?? 0) >= MODEL_RAIN_MM
+      : (row.rain_probability ?? 0) >= 0.5)).length,
+    single,
     windiest: (() => {
       const w = rows.reduce((a, b) => ((b.row.wind ?? -1) > (a.row.wind ?? -1) ? b : a));
       return { name: w.o.name, value: w.row.wind };
@@ -267,7 +296,9 @@ export function playSteps(outlook, scope, day) {
   const steps = [];
   for (const d of days) {
     for (const part of PLAY_PARTS) {
-      if (outlook.okresy.some((o) => rowFor(outlook, o.code, d, part))) steps.push({ day: d, part });
+      // with a single model only the parts it covers
+      const has = (o) => { const row = rowFor(outlook, o.code, d, part); return row && !row.beyond; };
+      if (outlook.okresy.some(has)) steps.push({ day: d, part });
     }
   }
   return steps;
@@ -307,13 +338,18 @@ export function mixColor(c1, c2, f) {
 /** Ease in and out, for transitions that start and end softly. */
 export const ease = (f) => (f < 0.5 ? 2 * f * f : 1 - (-2 * f + 2) ** 2 / 2);
 
-/** Okres → fill colour for a day, part and colour layer (what fillExpression draws). */
+/**
+ * Okres → fill colour for a day, part and colour layer (what fillExpression draws); a
+ * single model's view colours rain by mm and greys the okresy beyond its horizon.
+ */
 export function okresColours(outlook, day, part, layer) {
+  const ramp = rampKey(layer, outlook.single);
   return new Map(
-    outlook.okresy.map((o) => [
-      o.code,
-      RAMPS[layer] ? colorFor(valueFor(rowFor(outlook, o.code, day, part), layer, part), layer) : NEUTRAL,
-    ]),
+    outlook.okresy.map((o) => {
+      const row = rowFor(outlook, o.code, day, part);
+      if (row?.beyond) return [o.code, BEYOND];
+      return [o.code, RAMPS[layer] ? colorFor(valueFor(row, layer, part), ramp) : NEUTRAL];
+    }),
   );
 }
 
