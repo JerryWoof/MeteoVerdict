@@ -28,6 +28,7 @@ from meteoverdict import (
     frost,
     gauges,
     gusts,
+    hindcast,
     leads,
     mos,
     observations,
@@ -584,32 +585,34 @@ def observed_map_cmd(
         raise typer.BadParameter("--publish needs --github-release")
     now = datetime.now(UTC)
     today = observed_map.prague_today(now)
+    stored = [
+        *observed_map.parts_archive_names(today),
+        *observed_map.means_archive_names(today),
+        observed_map.HINDCAST_ASSET,
+    ]
     if github_release:
         with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
             chmi_archive.sync(
                 _archive_releases(client), archive, observed_map.wanted_assets(today), typer.echo
             )
             # flat folder: the files go to <parts_dir>/<tag>/<name>, read from there
-            chmi_archive.sync(
-                _release_store(client),
-                parts_dir,
-                observed_map.parts_archive_names(today),
-                typer.echo,
-            )
-    parts = [
-        parts_dir / tag / name
-        for tag, name in observed_map.parts_archive_names(today)
-        if (parts_dir / tag / name).exists()
-    ] + [
-        parts_dir / name
-        for _, name in observed_map.parts_archive_names(today)
-        if (parts_dir / name).exists()
-    ]
-    archived = (
-        pl.concat([pl.read_parquet(p).cast(outlook.PARTS_ARCHIVE_SCHEMA) for p in parts])
-        if parts
-        else None
-    )
+            chmi_archive.sync(_release_store(client), parts_dir, stored, typer.echo)
+
+    def found(names: list[tuple[str, str]]) -> list[Path]:
+        # each file once: as synced (<tag>/<name>) or put there flat
+        paths = [
+            next((p for p in (parts_dir / tag / name, parts_dir / name) if p.exists()), None)
+            for tag, name in names
+        ]
+        return [p for p in paths if p is not None]
+
+    def read(names: list[tuple[str, str]], schema: dict) -> pl.DataFrame | None:
+        paths = found(names)
+        return pl.concat([pl.read_parquet(p).cast(schema) for p in paths]) if paths else None
+
+    archived = read(observed_map.parts_archive_names(today), outlook.PARTS_ARCHIVE_SCHEMA)
+    means = read(observed_map.means_archive_names(today), sun_cloud_gust.ARCHIVE_SCHEMA)
+    hindcasts = read([observed_map.HINDCAST_ASSET], hindcast.SCHEMA)
     observed_map.build(
         archive,
         pl.read_parquet(stations_path),
@@ -617,6 +620,8 @@ def observed_map_cmd(
         out,
         today,
         parts_archive=archived,
+        hindcasts=hindcasts,
+        means=means,
         generated=now,
         log=typer.echo,
     )
@@ -624,6 +629,92 @@ def observed_map_cmd(
         with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
             store.publish_folder(_release_store(client), out, observed_map.ZIP)
         typer.echo(f"published {observed_map.ZIP} to the release {store.LATEST_TAG}")
+
+
+@app.command("hindcast")
+def hindcast_cmd(
+    data_dir: Annotated[Path, typer.Option(help="Folder with obs/, gauges/, fc/ and scores/.")] = (
+        Path("data")
+    ),
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    out: Annotated[Path, typer.Option(help="The rebuilt forecasts (Parquet).")] = Path(
+        "data/outlook-archive"
+    )
+    / hindcast.ASSET,
+    days: Annotated[
+        int, typer.Option(help="Rebuild the last N Prague days (the measured page's days).")
+    ] = observed_map.DAILY_DAYS,
+    redo: Annotated[
+        int,
+        typer.Option(help="Recompute only the newest N days of an existing file (0: all)."),
+    ] = 0,
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Download the months' observations, forecasts, scores and the existing "
+            "file from GitHub Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+        ),
+    ] = False,
+    publish: Annotated[
+        bool,
+        typer.Option(
+            "--publish", help=f"Put the file into the release {hindcast.TAG} ({hindcast.ASSET})."
+        ),
+    ] = False,
+) -> None:
+    """Our combined forecast for the measured page's past days, rebuilt out of sample from
+    the stored D+N forecasts (``meteoverdict.hindcast``): leads 1-3 days, parts of day."""
+    if publish and not github_release:
+        raise typer.BadParameter("--publish needs --github-release")
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    today = observed_map.prague_today(datetime.now(UTC))
+    last_day = today - timedelta(days=1)
+    first_day = today - timedelta(days=days)
+    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+        releases = _release_store(client) if github_release else None
+        if releases:
+            if hindcast.ASSET in releases.assets(hindcast.TAG):
+                releases.download(hindcast.TAG, hindcast.ASSET, out)
+            # the training window (90 days) before the first day
+            months = partitions.months(first_day - timedelta(days=100), last_day)
+            store.download(releases, data_dir, months, typer.echo, kinds=("scores",))
+            store.download(releases, data_dir, months, typer.echo, kinds=("obs", "gauges", "fc"))
+            oldest = last_day - timedelta(days=fresh.DAYS + catalogue.MAX_LEAD_DAY + 1)
+            runs.RunsSync(releases, data_dir, typer.echo).pull(partitions.months(oldest, last_day))
+        files = sorted((data_dir / "scores").glob("*.parquet"))
+        if not files:
+            typer.echo(f"mvd hindcast: no scores in {data_dir / 'scores'}", err=True)
+            raise typer.Exit(code=1)
+        variables = list(blendtest.SCORE_VARIABLES.values())
+        scores = (
+            pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
+            .filter(pl.col("variable").is_in(variables))
+            .collect()
+        )
+        wanted = [first_day + timedelta(days=k) for k in range((last_day - first_day).days + 1)]
+        if redo and out.exists():
+            done = set(pl.read_parquet(out)["day"].unique().to_list())
+            wanted = [d for d in wanted if d not in done or d > last_day - timedelta(days=redo)]
+        start = first_day - timedelta(days=100)
+        obs = observations.scan(data_dir, start, last_day + timedelta(days=1))
+        fc = partitions.scan_months(data_dir / "fc", start, last_day + timedelta(days=1))
+        enabled = [m for m in catalogue.load_models() if m.enabled]
+        fc, _ = daily_mod.add_fresh(data_dir, enabled, last_day, obs, fc, typer.echo)
+        if fc is None:
+            typer.echo("mvd hindcast: no forecasts", err=True)
+            raise typer.Exit(code=1)
+        rows = hindcast.rebuild(
+            scores, fc, obs, pl.read_parquet(stations_path), wanted, log=typer.echo
+        )
+        path = hindcast.merge(out, rows, first_day)
+        if publish:
+            releases.put(hindcast.TAG, hindcast.ASSET, path)
+            typer.echo(f"published {hindcast.ASSET} to the release {hindcast.TAG}")
+    typer.echo(f"wrote {path} ({rows['day'].n_unique()} days rebuilt)")
 
 
 @app.command("leads")

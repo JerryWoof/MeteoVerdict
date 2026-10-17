@@ -1282,8 +1282,19 @@ instantaneous values). Quality 1, 2 and 4 are left out, as everywhere. Checked o
 **An okres's value** is the mean over its stations with a value (`tmax`, `tmin`, `r`,
 `wind`, `ssv`, `cloud`), with the extremes beside it (`tmax_hi`, `tmin_lo`, `r_hi`) and the
 strongest gust in the okres; `n_t`, `n_r`, `n_w`, `n_g`, `n_s`, `n_c` count the stations
-behind each value. An okres without a station for a variable has null and 0: grey "–" on
-the map. `light` is the hours of daylight of each period at the okres point (for the
+behind each value. **Borrowed stations:** an okres without a station of its own with a
+value of a group (`t` temperature, `r` precipitation, `w` wind, `g` gust, `s` sunshine,
+`c` cloud) in a period takes that group from the nearest stations of other okresy that
+have one, at most 30 km from its border and at most 3 (`neighbours.MAX_KM` and
+`aggregate.MIN_STATIONS`, the scoring's rule; ties by station id); its `n_*` then count
+them, `borrowed` lists them (`{group: [station ids, or null where its own] per
+period]}`) and `bst` names them (`id`, `name`, their `okres`, `km` beyond the border,
+nearest first); `st` stays its own stations. The measured page says "z okolních stanic:
+Jevíčko (okres Svitavy), …" and lists them in the okres panel. Only an okres with nothing
+within 30 km has null and 0 (grey "–" on the map). On 2026-10-16 this fills temperature,
+wind and gusts of Blansko (its own stations are rain gauges only) and sunshine of 4
+okresy (12 part-of-day values); cloud cover (synoptic stations only) is borrowed for 64
+okresy and stays "–" in 50 okres-periods. `light` is the hours of daylight of each period at the okres point (for the
 symbol), `ph` the phenomena recorded that day at any of its stations, `sno` the most new
 snow, `st` the stations with any value.
 
@@ -1294,21 +1305,58 @@ sun" with sunshine in at least 30 % of the daylight; otherwise the sky from the 
 as a share of the period's daylight (`light`), or at night (no daylight) from the cloud
 cover; none when there is neither.
 
-**Forecast vs. measured.** From the [parts archive](#outlook-mvd-outlook-roadmap-66)
-(`outlook-parts-YYYY-MM.parquet` in `outlook-archive`), for each measured day the newest
-run issued 1, 2 and 3 Prague days before it (lead 1 = the day before); without any of
-them the day's first run (lead 0). The okres panel shows the chosen lead's parts beside
-the measured ones, with the temperature difference. The forecast is for the okres's
-point, the measurement the mean of its stations.
+**Forecast vs. measured.** Per measured day and lead (0 = the same day, 1-3 days
+ahead), the best we have, in this order (`observed_map.forecast_doc`, `kind`):
+
+1. `stored`: the forecast map's own parts of day from the
+   [parts archive](#outlook-mvd-outlook-roadmap-66) (`outlook-parts-YYYY-MM.parquet` in
+   `outlook-archive`, since 2026-10-17): the newest run issued 1, 2 and 3 Prague days
+   before, and the day's first run when issued before noon (lead 0, "issued on the day
+   at HH:MM");
+2. `stored_sky`: where only the plain means of a run were stored
+   (`outlook-archive-YYYY-MM.parquet`, since 2026-10-16: hourly cloud cover and sunshine
+   per okres), its cloud, sunshine and sky symbol;
+3. `rebuilt`: our forecast rebuilt out of sample (below, `outlook-hindcast.parquet`),
+   with the sky of a stored run of the same lead where there is one (`sky_issued`).
+
+The per-model archive (`outlook-models-YYYY-MM-DD.parquet`, since 2026-10-17 14:19 UTC)
+is not used: the weights valid at the time are not stored, so the map's values cannot
+be rebuilt exactly from it, and its runs are covered by the parts archive or issued in
+the afternoon of the day. The okres panel shows, for the part of day chosen, the
+measured values and each forecast (symbol, temperature, precipitation, wind) with the
+difference forecast minus measured; rebuilt forecasts are marked "zpětně spočítaná
+předpověď (stejnou metodou, jen z dat dostupných předem)". A stored forecast is for the
+okres's point, a rebuilt one for its stations, the measurement the mean of its
+stations.
+
+**Rebuilt forecasts** (`mvd hindcast`, `meteoverdict.hindcast`; daily workflow after the
+blend test, `outlook-hindcast.parquet` in `outlook-archive`, the last 60 days): the
+combination of the [blend test](#) for every offered day and leads 1-3: weights, bias
+corrections and the regression blend from the okres scores of the 90 days ending on
+day − lead − 1 (the D+N forecast for a day is made during day − lead, whose scores come
+out the next morning: one day stricter than the blend test), applied hour by hour to the
+models' stored D+N forecasts (`fc-YYYY-MM`, the newest days rebuilt from the single
+runs) at the okres's stations (borrowed ones included), averaged over them, then the
+outlook's parts of day (`outlook.summarise`): `tmin`, `tmax`, `precipitation`, `wind`,
+`rain_probability` (share of the weighted models with ≥ 0.2 mm, uncalibrated). The
+stored D+N have no cloud cover: the symbol is rain, sleet, snow or showers only.
+Columns `lead`, `trained_to`, `okres`, `day`, `part` and the parts archive's. An okres,
+variable and lead needs 14 scored training days (warm-up), so with scores from
+2026-08-10 the rebuilt days start on 2026-09-08 (2026-10-17: 39 of the 60 offered days,
+all 77 okresy; Blansko from 2026-10-05 on has none, its stations' D+N come only from the
+backfill, which has not reached those days, and are not among the ~100 single-run
+stations). About 2 minutes and 45,000 rows.
 
 **Files** (`--out`, default `site/data/observed/`, published as `observed-data.zip` in
 `data-latest` and unpacked by the Pages workflow to `data/scores/observed/`):
 
 - `index.json`: `{"generated", "time_zone", "part_days", "days": [{"day", "source":
-  "hourly" | "daily", "leads": [...]}], "notes", "source_credit"}`;
-- `<YYYY-MM-DD>.json`: `{"day", "source", "parts", "columns", "counts", "okresy": {code:
-  {column: [value per period], n_*: [...], "light", "st", "ph"?, "sno"?}}, "forecasts":
-  [{"lead", "issued", "columns", "okresy": {code: {column: [per period]}}}]}`;
+  "hourly" | "daily", "leads": [...], "kinds": [...]}], "notes", "source_credit"}`;
+- `<YYYY-MM-DD>.json`: `{"day", "source", "parts", "columns", "counts", "borrow":
+  {"max_km", "stations"}, "okresy": {code: {column: [value per period], n_*: [...],
+  "light", "st", "borrowed"?, "bst"?, "ph"?, "sno"?}}, "forecasts": [{"lead", "kind",
+  "issued"?, "trained_to"?, "sky_issued"?, "columns", "okresy": {code: {column: [per
+  period]}}}]}` (a forecast's columns without any value are left out);
 - `<YYYY-MM-DD>-stations.json`: the stations' own values (the measured page's station layer):
   `{"parts", "columns": ["tmax", "tmin", "r", "wind", "gust", "ssv", "cloud"],
   "stations": {WSI: [value of each column, period by period]}}`; positions and names
