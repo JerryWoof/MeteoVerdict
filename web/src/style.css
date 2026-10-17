@@ -365,6 +365,59 @@ body.tv > * {
   background: #1d2329;
   color: #ffffff;
 }
+/* which forecast the whole map shows (beside the parts of the day) */
+.map-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.map-model select {
+  min-width: 0;
+  max-width: 22rem;
+  font: inherit;
+  font-weight: 400;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid #2b7bd1;
+  border-radius: 6px;
+  background: #ffffff;
+}
+/* a single model on the map: marked so it is not taken for ours */
+#headline.single {
+  box-shadow:
+    inset 4px 0 0 #2b7bd1,
+    0 1px 4px rgba(29, 35, 41, 0.18);
+}
+#headline .model-banner {
+  margin: 0 0 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  background: #e3effb;
+  color: #123d6b;
+}
+#headline .model-banner.failed {
+  background: #fbe9e7;
+  color: #7a1f12;
+}
+#headline .model-banner p {
+  margin: 0 0 0.2rem;
+}
+#headline .model-banner .horizon {
+  font-weight: 600;
+}
+#headline .model-banner .back {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #2b7bd1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #1f5fa8;
+  cursor: pointer;
+}
 /* boxes on the map */
 #headline,
 #show-box,
@@ -480,7 +533,7 @@ body.tv > * {
   font-size: 1.3rem;
   cursor: pointer;
 }
-/* which forecast the okres panel shows (the map keeps our combination) */
+/* which forecast the okres panel shows (only the panel; the map has its own selector) */
 #okres-panel .model-pick {
   display: flex;
   flex-wrap: wrap;
@@ -686,6 +739,30 @@ body.tv [hidden] {
   }
   .play {
     order: 1;
+  }
+  /* phones: the single-model note in a few compact lines, the map stays visible */
+  #headline .model-banner {
+    font-size: 0.72rem;
+    line-height: 1.3;
+    padding: 0.25rem 0.4rem;
+    margin-bottom: 0.25rem;
+  }
+  #headline .model-banner p {
+    display: inline;
+    margin: 0 0.25rem 0 0;
+  }
+  #headline .model-banner .back {
+    padding: 0.05rem 0.5rem;
+    margin-top: 0.15rem;
+  }
+  /* the map's forecast selector: a full row of its own under the play buttons */
+  .map-model {
+    order: 2;
+    flex: 1 0 100%;
+  }
+  .map-model select {
+    flex: 1 1 auto;
+    max-width: none;
   }
   .daytab {
     min-width: 5rem;
