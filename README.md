@@ -12,14 +12,14 @@ and combines them into its own forecast.
 
 | Page | What you get |
 |---|---|
-| [Forecast map](https://jerrywoof.github.io/MeteoVerdict/tv.html) | TV-style weather map for the next six days: temperature, rain, wind and cloud in every okres, by night, morning, afternoon and evening, with sunrise and sunset and play buttons |
+| [Forecast](https://jerrywoof.github.io/MeteoVerdict/tv.html) | TV-style weather map for the next six days: temperature, rain, wind and cloud in every okres, by night, morning, afternoon and evening, with sunrise and sunset and play buttons |
 | [On an e-ink display](https://github.com/JerryWoof/MeteoVerdict-TRMNL) | today and tomorrow, the next 24 hours or five days for your okres on a TRMNL display, in Czech or English |
 | [Score map](https://jerrywoof.github.io/MeteoVerdict/) | the most accurate model in every okres; click an okres to see why it wins |
-| [Model comparison](https://jerrywoof.github.io/MeteoVerdict/compare.html) | all models ranked for Czechia, a kraj or an okres, with confidence intervals, and every model's error hour by hour after each run (H+1 to H+120) |
+| [Compare](https://jerrywoof.github.io/MeteoVerdict/compare.html) | all models ranked for Czechia, a kraj or an okres, with confidence intervals, and every model's error hour by hour after each run (H+1 to H+120) |
 | [Forecast per okres](https://jerrywoof.github.io/MeteoVerdict/forecast.html) | the hourly combined forecast for one okres next to the best single model, with sunrise, sunset and the nights shaded |
-| [Stations](https://jerrywoof.github.io/MeteoVerdict/station.html) | what the weather was like at a ČHMÚ station, day by day back to the start of its records (weather symbol, max/min, precipitation, snow, sunshine, gusts, phenomena; week and month views with a summary; the course of recent days), and every element it measures, with its history |
+| [Measured](https://jerrywoof.github.io/MeteoVerdict/station.html) | what ČHMÚ's stations measured, as a map like the forecast's: each station (or each okres, next to what our forecast had said) by day and part of day for the last 30 days, the whole day for 60; and for one station what the weather was like there, day by day back to the start of its records (weather symbol, max/min, precipitation, snow, sunshine, gusts, phenomena; week and month views with a summary; the course of recent days), and every element it measures, with its history |
 | [Radar](https://jerrywoof.github.io/MeteoVerdict/radar.html) | ČHMÚ weather radar over Czechia: the last hours with the nowcast for the next hour, hourly precipitation from radar and rain gauges, and archived days |
-| [Open data](https://jerrywoof.github.io/MeteoVerdict/api.html) | the forecast and the ranking of every okres as JSON or CSV, free, no key |
+| [Data](https://jerrywoof.github.io/MeteoVerdict/api.html) | the forecast and the ranking of every okres as JSON or CSV, free, no key |
 
 ## How it works
 
