@@ -76,7 +76,12 @@ matched, all found in this comparison:
   station-days; IFS 0.25°: 0.02 mm; all others 0).
 
 A run we have not fetched (yet) leaves its hours out rather than falling back to an
-older run, and D+5 has only the synoptic hours (single runs end at 120 hours). The daily
+older run (checked per hour: an older run stands in only beyond the end of the run
+Open-Meteo would use), and D+5 has only the synoptic hours (single runs end at 120
+hours). Since 2026-10-17 the single runs come from Open-Meteo's open-data bucket at the
+models' native steps, with no interpolated hours at all: temperature and wind are
+rebuilt at the native hours (the ones scored), and a 3- or 6-hour precipitation total is
+spread evenly over its hours as Open-Meteo does, so daily totals are the same. The daily
 run logs how both sources agree wherever they overlap (the last days of every backfill
 window), so the check repeats itself.
 
@@ -106,12 +111,20 @@ is fair across all models but blurs the first hours of a forecast: D+1 for a
 temperature at 12 UTC is a run from 24 to 30 hours earlier, never a run from this
 morning. Meteorologists verify run by run instead, and so do we:
 
-- **Every model**, from Open-Meteo's **Single Runs API** (free, non-commercial tier):
-  each 00, 06, 12 and 18 UTC run since 2026-06-23 (the first run with ALADIN), up to
-  120 hours ahead, at about **100 stations** (at least one in every okres, plus the
-  mountain stations; [the rule](data-sources.md#the-station-subset)), at the station's
-  elevation like the D+N scores. Collected four times a day; older runs are filled in
-  as the call budget allows ([budget](data-sources.md#open-meteo-budget)).
+- **Every model**, Open-Meteo's single runs: each 00, 06, 12 and 18 UTC run since
+  2026-06-23 (the first run with ALADIN), up to 120 hours ahead, at about **100
+  stations** (at least one in every okres, plus the mountain stations;
+  [the rule](data-sources.md#the-station-subset)), at the station's elevation like the
+  D+N scores. Read from **Open-Meteo's open-data bucket on AWS** (the files the
+  Single Runs API serves, kept there for three months; no API calls) at every model's
+  own output steps, at each grid cell nearest to the station and with Open-Meteo's
+  elevation correction, so the values equal the API's to rounding (except IFS HRES,
+  where the API sometimes takes a neighbouring cell: 0.23 °C apart on average;
+  [details](data-sources.md#single-runs-from-the-bucket)). The **Single Runs API**
+  (free, non-commercial tier) fills what the bucket lacks and the runs older than its
+  three months, as the call budget allows
+  ([budget](data-sources.md#open-meteo-budget)); each run comes from one source
+  (`source` in the files).
 - Each lead hour is compared with the ČHMÚ observation at its valid time (run start +
   lead): H+6 of the 06 UTC run is the forecast for 12 UTC. Temperature and wind are
   instant values; precipitation is the hourly amount (mm in the hour ending at the
@@ -119,7 +132,8 @@ morning. Meteorologists verify run by run instead, and so do we:
 - Only a model's **own output hours** count: AIFS every 6 hours, IFS 0.25° every 3, and
   ICON-EU, IFS HRES and UK Met Office every 3 hours late in their runs (hourly
   precipitation only where the output is hourly), for the same reason as at the D+N
-  scores: the hours in between are Open-Meteo's interpolation.
+  scores: the hours in between would be Open-Meteo's interpolation (the runs from the
+  bucket do not have them at all).
 - **Fair set:** at each lead hour, only the models that reach it are compared, and only
   on the runs and stations that every one of them has. The set of models therefore
   **shrinks with the lead hour**: ICON-D2 ends at 48 h, AROME at 60 h, ALADIN at 72 h,
@@ -199,11 +213,13 @@ What it is not:
   which we do not measure). A score of what a user could actually see (always the
   newest run published before the time of use) needs the publication time, which our
   ALADIN archive records from 2026-10-13 on; it is not computed yet.
-- **Short history.** The ongoing collection starts in October 2026, and older runs fill
-  in at about one a day until the backfill has finished and its budget moves here. For
-  weeks the numbers rest on few runs and few weather regimes; long leads rest on fewer
-  runs than short ones (a run's H+120 is verified five days later), and pooled run
-  hours mix the time of day into the lead hour (H+6 is 06, 12, 18 or 00 UTC).
+- **History.** Runs from 2026-07-15 on come from Open-Meteo's open-data bucket (its
+  three months were harvested once on 2026-10-16); 2026-06-23 to 07-14, from the API,
+  follows in November 2026 ([budget](data-sources.md#open-meteo-budget)). Long leads
+  rest on fewer runs than short ones (a run's H+120 is verified five days later), and
+  pooled run hours mix the time of day into the lead hour (H+6 is 06, 12, 18 or 00
+  UTC). GEM Global's runs before 2026-08-18 are not in the bucket and come from the API
+  too; until then it has fewer runs than the others in a 90-day window.
 - **100 stations**, not all ~500: enough for Czechia as a whole and, for the band
   ranking, for kraje (4 to 13 stations each, Praha 1: left out); too few for okresy.
 - The newest days use ČHMÚ's unchecked `now/` observations, like the D+N scores.
@@ -856,9 +872,9 @@ threshold, **13.5 m/s** on the corrected gust: the best ETS among 12–15 m/s in
 reaches the same CSI at 14 m/s, so the correction improves the size of the gusts, not
 the warnings; with 15 events this is a small sample.
 
-**On the single runs themselves** the check is still thin: `runs-2026-10` has gusts
-only since the runs of 2026-10-15 (earlier runs were fetched without them), so no
-training days exist yet. On 15 October (calm, no gust of 10 m/s), runs of 00, 06 and
+**On the single runs themselves** the check was thin at first: the API's runs had gusts
+only since the runs of 2026-10-15; since 2026-10-17 the runs from Open-Meteo's bucket
+have them from 2026-07-15 on (all models but AIFS, JMA GSM and AIGFS). On 15 October (calm, no gust of 10 m/s), runs of 00, 06 and
 12 UTC, 81 lowland stations, coefficients from the research sample: the plain mean
 had MAE 0.79 / 0.74 / 0.64 m/s (bias +0.38 / +0.25 / +0.21) and the corrected one
 0.96 / 0.88 / 0.81 (bias +0.75 / +0.62 / +0.65) — on a calm day the intercept

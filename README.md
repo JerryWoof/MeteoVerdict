@@ -90,7 +90,9 @@ Commands, data store, workflows and the web pages: [docs/development.md](docs/de
 ## Attribution & licence
 
 - Weather data by [Open-Meteo.com](https://open-meteo.com/), licensed under
-  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/): from its APIs and, for the
+  single model runs, from its open-data bucket on AWS
+  ([Registry of Open Data](https://registry.opendata.aws/open-meteo/), `s3://openmeteo`).
 - Observations and ALADIN forecasts: Czech Hydrometeorological Institute (ČHMÚ / CHMI),
   [opendata.chmi.cz](https://opendata.chmi.cz/), licensed under
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). We extract station values

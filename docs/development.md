@@ -138,23 +138,27 @@ The latest results are in the release `data-latest`: `aggregates.parquet`,
 `site-data.zip` (unzip it into `site/data` to run the pages locally with data),
 `outlook.json` and `outlook-hourly.json`.
 
-**Single runs.** `mvd fetch-runs` asks Open-Meteo's Single Runs API (free tier) for
-each 00, 06, 12 and 18 UTC run of all models at the ~100 stations of
-`src/meteoverdict/data/run-stations.csv` (about 570 weighted calls a run with 19 models
-and 3 variables): first the recent runs (10 to 48 hours old), then older ones newest
-first back to 2026-06-23 (the first run with ALADIN; `--history-from`), until
-`--max-calls` (default 450), plus a part (`--shared-from`, `--shared-to`) of what the D+N
-backfill leaves of the shared daily budget (`--shared-calls`). `--run 2026-10-12T06`
-fetches given runs, `--dry-run`
-prints what is left and its cost. Progress is in `data/runs-state.json`;
-`--github-release` keeps the month files and the state in the releases `runs-YYYY-MM`
-and `runs-state` ([details](data-sources.md#single-runs-mvd-fetch-runs)). The station
-subset is rebuilt only on purpose with `uv run scripts/build_run_stations.py`.
+**Single runs.** `mvd fetch-runs` stores each 00, 06, 12 and 18 UTC run of all models at
+the ~100 stations of `src/meteoverdict/data/run-stations.csv`: first from Open-Meteo's
+open-data bucket on AWS (every run of the last 90 days not stored yet, no API calls, at
+most `--bucket-minutes`), then from the Single Runs API (free tier) within `--max-calls`
+(default 100): the model-runs the bucket lacks once 24 h old, then the runs older than
+the bucket's window back to 2026-06-23 (the first run with ALADIN; `--history-from`),
+plus a part (`--shared-from`, `--shared-to`) of what the D+N backfill leaves of the
+shared daily budget (`--shared-calls`). `--source bucket|api` runs one of the two,
+`--run 2026-10-12T06` given runs, `--dry-run` prints what is left and its cost. Progress
+is in `data/runs-state.json`; `--github-release` keeps the month files and the state in
+the releases `runs-YYYY-MM` and `runs-state`
+([details](data-sources.md#single-runs-mvd-fetch-runs)). The station subset is rebuilt
+only on purpose with `uv run scripts/build_run_stations.py`, and then the grid cells of
+the bucket's models with `uv run mvd bucket-cells` (network, ~1 minute; commit
+`src/meteoverdict/data/bucket-cells.csv`).
 
 ```bash
-uv run mvd fetch-runs --dry-run                      # runs left and their cost
-uv run mvd fetch-runs --mode recent --max-calls 700  # the newest runs
-uv run mvd fetch-runs --run 2026-07-15T00            # one given run (330 calls)
+uv run mvd fetch-runs --dry-run                       # runs left and their cost
+uv run mvd fetch-runs --source bucket                 # the newest runs, no API calls
+uv run mvd fetch-runs --run 2026-10-16T00             # one given run (bucket, then API)
+uv run mvd fetch-runs --source api --run 2026-07-01T00 --max-calls 800  # API only
 ```
 
 **Error by lead hour.** `mvd leads` verifies every model's single runs of the last
@@ -211,8 +215,8 @@ uv run mvd archive-satellite --regions ce --out-dir data/radar  # satellite days
 |---|---|---|
 | ALADIN archive | every 3 hours | `mvd archive-aladin --github-release` |
 | Radar | a loop of 340 min that pushes every 5 minutes and starts the next loop itself (hourly schedule as safety net); archive every 6 hours | `scripts/radar_live_loop.sh`: `mvd radar-live` → branch `radar-live` (force-pushed) ([live loop](data-sources.md#live-loop)); `mvd archive-radar --github-release`, `mvd archive-satellite --github-release` |
-| Backfill | 02:41 | `mvd backfill`, the shared 4,500 Open-Meteo calls a day: current windows first, older ones after the single-runs history |
-| Single runs | 04:20, 10:20, (13:20,) 16:20, 22:20 | `mvd fetch-runs --github-release`, 850 calls each (3,400 a day), plus what the backfill leaves of the shared 4,500 at 10:20 and 13:20 ([budget](data-sources.md#open-meteo-budget)) |
+| Backfill | 02:41 | `mvd backfill`, the shared 7,400 Open-Meteo calls a day: current and priority windows first, older ones after the single runs' API history |
+| Single runs | 04:20, 10:20, (13:20,) 16:20, 22:20 | `mvd fetch-runs --github-release`: every run of the last 90 days not stored yet from Open-Meteo's open-data bucket (no API calls), then the API for the bucket's gaps (100 calls each, ≤ 400 a day), plus what the backfill leaves of the shared 7,400 at 10:20 and 13:20 for the older history ([budget](data-sources.md#open-meteo-budget)) |
 | Daily | 05:17 | `mvd daily --github-release`, commits the badge, then `mvd leads --github-release --publish` (allowed to fail) |
 | Outlook | 05:52 and 17:52 | `mvd outlook --github-release` |
 | CHMI archive | 01:41 and 13:41 | `mvd chmi-archive --part days --part recent --github-release` (the last days of `now/`, changed months of `recent/`), then `mvd station-pages --github-release --publish` |

@@ -506,7 +506,7 @@ export const STRINGS = {
     "compare.leadHoursFair":
       "Férové srovnání: v každé hodině předstihu porovnáváme jen modely, které do ní dosáhnou vlastním výstupem, a jen na bězích a stanicích, které mají všechny z nich. Se vzdáleností proto modely ubývají: ICON-D2 končí po 48 h, DMI a KNMI HARMONIE po 59–60 h, AROME po 60 h, ALADIN po 72 h, ARPEGE po 102 h, UK Met Office z běhů 06 a 18 UTC po 60 h; GEM Global má jen běhy 00 a 12 UTC. U „všech běhů“ musí model danou hodinu dosáhnout v každém běhu dne; delší výhled běhů 00 a 12 UTC ukáže volba běhu. Modely s výstupem po 3 nebo 6 hodinách (IFS 0.25°, AIFS, AIGFS, JMA GSM, CMA GRAPES, ARPEGE World po 48 h, UKMO po 54 h, ICON-EU a ICON global po 78 h, GEM Global po 84 h, IFS po 90 h) jsou jen ve svých hodinách, hodinové srážky jen tam, kde je výstup hodinový.",
     "compare.leadHoursSource":
-      "Předpovědi: Open-Meteo.com, Single Runs API, bezplatně pro nekomerční použití (CC BY 4.0; UK Met Office CC BY-SA 4.0), z modelů DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, ČHMÚ, KNMI, DMI, ECCC (Kanada), JMA (Japonsko), CMA (Čína) a UK Met Office. MeteoVerdict je nekomerční projekt.",
+      "Předpovědi: Open-Meteo.com (otevřená data na AWS a Single Runs API), bezplatně pro nekomerční použití (CC BY 4.0; UK Met Office CC BY-SA 4.0), z modelů DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, ČHMÚ, KNMI, DMI, ECCC (Kanada), JMA (Japonsko), CMA (Čína) a UK Met Office. MeteoVerdict je nekomerční projekt.",
     "compare.leadHoursAxis": "hodin od startu běhu →",
     "compare.leadHoursUnpublished": "ALADIN ještě nezveřejněn",
     "leadHours.temperature_2m": "Teplota (2 m), °C",
@@ -1112,7 +1112,7 @@ export const STRINGS = {
     "compare.leadHoursFair":
       "A fair comparison: at every lead hour only the models that reach it with their own output are compared, and only on the runs and stations that all of them have. So models drop out as the lead grows: ICON-D2 ends after 48 h, DMI and KNMI HARMONIE after 59–60 h, AROME after 60 h, ALADIN after 72 h, ARPEGE after 102 h, UK Met Office runs from 06 and 18 UTC after 60 h; GEM Global has only the 00 and 12 UTC runs. For “all runs” a model must reach the hour in every run of the day; pick a run hour to see the longer 00 and 12 UTC runs. Models with 3- or 6-hourly output (IFS 0.25°, AIFS, AIGFS, JMA GSM, CMA GRAPES, ARPEGE World after 48 h, UKMO after 54 h, ICON-EU and ICON global after 78 h, GEM Global after 84 h, IFS after 90 h) are shown at their own hours only, hourly precipitation only where the output is hourly.",
     "compare.leadHoursSource":
-      "Forecasts: Open-Meteo.com, Single Runs API, free for non-commercial use (CC BY 4.0; UK Met Office CC BY-SA 4.0), from models by DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, ČHMÚ, KNMI, DMI, ECCC (Canada), JMA (Japan), CMA (China) and the UK Met Office. MeteoVerdict is a non-commercial project.",
+      "Forecasts: Open-Meteo.com (open-data bucket on AWS and Single Runs API), free for non-commercial use (CC BY 4.0; UK Met Office CC BY-SA 4.0), from models by DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, ČHMÚ, KNMI, DMI, ECCC (Canada), JMA (Japan), CMA (China) and the UK Met Office. MeteoVerdict is a non-commercial project.",
     "compare.leadHoursAxis": "hours after the run started →",
     "compare.leadHoursUnpublished": "ALADIN not published yet",
     "leadHours.temperature_2m": "Temperature (2 m), °C",
