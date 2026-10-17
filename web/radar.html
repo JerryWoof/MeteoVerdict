@@ -6,7 +6,7 @@
     <title>MeteoVerdict: weather radar</title>
     <meta name="description" content="ČHMÚ weather radar over Czechia: the last hours played smoothly, the nowcast for the next hour, rain at your place, storm cells, satellite clouds, hourly precipitation and archived days." />
   </head>
-  <body class="page tv radar map-page theme-radar">
+  <body class="page tv radar map-page">
     <header>
       <h1><a href="./">MeteoVerdict</a></h1>
       <p id="status">Loading…</p>
@@ -59,20 +59,17 @@
         </div>
       </nav>
       <div class="map-wrap">
-        <!-- the boxes: beside the map on wide screens, above and below it on narrow ones -->
-        <div class="map-side">
-          <aside id="headline" class="map-box info" aria-live="polite"></aside>
-          <aside id="point-panel" class="map-box panel" hidden aria-live="polite"></aside>
-          <aside id="show-box" class="map-box legend">
-            <details id="show" open>
-              <summary data-i18n="radar.onMap">On the map</summary>
-              <div id="layers"></div>
-              <div id="radar-legend"></div>
-              <p id="point-hint"></p>
-            </details>
-          </aside>
-        </div>
+        <aside id="headline" class="map-box info" aria-live="polite"></aside>
         <div id="map" class="map-frame" role="region" aria-label="Radar map of Czechia"></div>
+        <aside id="show-box" class="map-box legend">
+          <details id="show" open>
+            <summary data-i18n="radar.onMap">On the map</summary>
+            <div id="layers"></div>
+            <div id="radar-legend"></div>
+            <p id="point-hint"></p>
+          </details>
+        </aside>
+        <aside id="point-panel" class="map-box panel" hidden aria-live="polite"></aside>
       </div>
     </main>
     <footer data-footer="radar" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/data-sources.md#radar-archive">
