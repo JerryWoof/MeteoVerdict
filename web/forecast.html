@@ -25,9 +25,11 @@
     </header>
     <main class="content">
       <h2 id="title" data-i18n="forecast.title">Forecast</h2>
-      <p class="note" data-i18n="forecast.note"></p>
+      <label id="model-pick"><span data-i18n="forecast.pick">Forecast</span> <select id="model"></select></label>
+      <p id="model-note" class="note" hidden></p>
+      <p id="combined-note" class="note" data-i18n="forecast.note"></p>
       <p id="message" class="note"></p>
-      <table id="days"></table>
+      <div class="table-scroll"><table id="days"></table></div>
       <div id="charts"></div>
       <h2 data-i18n="forecast.weights">Which models count most here</h2>
       <p class="note" data-i18n="forecast.weightsNote"></p>

@@ -4,8 +4,8 @@ import "./style.css";
 
 import { modelColors, records } from "./data.js";
 import {
-  MAX_LEAD_DAY, VARIABLES, bestPerLeadDay, combine, dailySummary, forecastUrl, nightBands, parseForecast,
-  weightTable, weightedModels, weightsAt, winnersByLeadDay,
+  COMBINED, MAX_LEAD_DAY, VARIABLES, bestPerLeadDay, combine, dailySummary, forecastUrl, mergeForecast, modelDays,
+  modelEnd, modelOptions, nightBands, parseForecast, weightTable, weightedModels, winnersByLeadDay,
 } from "./forecast.js";
 import { setUpLanguage } from "./i18n.js";
 import { glyph } from "./icons.js";
@@ -100,17 +100,23 @@ function renderDays(days, sunOf, gustOf) {
   table.replaceChildren(head, ...rows);
 }
 
-function chart(forecast, combined, table, variable, colors, names, nights) {
+// `selected`: COMBINED (our forecast highlighted, with the best model per lead day) or a
+// model id (that model's raw forecast highlighted, ours thin for reference)
+function chart(forecast, combined, table, variable, colors, names, nights, selected) {
   const now = Date.now();
+  const single = selected !== COMBINED;
+  const points = (values) => values
+    .map((v, i) => ({ time: new Date(forecast.times[i]), value: v }))
+    .filter((r) => r.value != null);
   const rows = [];
   for (const [model, values] of Object.entries(forecast.values[variable])) {
+    if (single && model === selected) continue;
     values.forEach((v, i) => {
       if (v != null) rows.push({ time: new Date(forecast.times[i]), value: v, model });
     });
   }
-  const ours = combined
-    .map((v, i) => ({ time: new Date(forecast.times[i]), value: v }))
-    .filter((r) => r.value != null);
+  const ours = points(combined);
+  const picked = single ? points(forecast.values[variable][selected] ?? []) : [];
   // the best model of each lead day, as segments coloured by model
   let segment = 0;
   let previous = null;
@@ -147,10 +153,19 @@ function chart(forecast, combined, table, variable, colors, names, nights) {
           x1: (n) => new Date(n.start), x2: (n) => new Date(n.end), fill: "#1d2329", fillOpacity: 0.06,
         }),
         Plot.lineY(rows, { x: "time", y: "value", z: "model", stroke: "#b7bec4", strokeWidth: 0.8, curve }),
-        Plot.lineY(best, {
-          x: "time", y: "value", z: "segment", stroke: (r) => colors[r.model] ?? "#1f78b4", strokeWidth: 1.6, curve,
-        }),
-        Plot.lineY(ours, { x: "time", y: "value", stroke: "#1d2329", strokeWidth: 2.5, curve, tip: true }),
+        ...(single
+          ? [
+            Plot.lineY(ours, { x: "time", y: "value", stroke: "#1d2329", strokeWidth: 1, curve }),
+            Plot.lineY(picked, {
+              x: "time", y: "value", stroke: colors[selected] ?? "#1f78b4", strokeWidth: 2.5, curve, tip: true,
+            }),
+          ]
+          : [
+            Plot.lineY(best, {
+              x: "time", y: "value", z: "segment", stroke: (r) => colors[r.model] ?? "#1f78b4", strokeWidth: 1.6, curve,
+            }),
+            Plot.lineY(ours, { x: "time", y: "value", stroke: "#1d2329", strokeWidth: 2.5, curve, tip: true }),
+          ]),
         Plot.ruleX([new Date()], { stroke: "#c0392b", strokeDasharray: "3,3" }),
       ],
     }),
@@ -160,7 +175,10 @@ function chart(forecast, combined, table, variable, colors, names, nights) {
     .join(" · ");
   const legend = document.createElement("p");
   legend.className = "note";
-  legend.textContent = t("forecast.legend", { best: winners || "–" }) + (nights.length ? ` ${t("forecast.night")}` : "");
+  const text = single
+    ? t("forecast.legendModel", { model: names[selected] ?? selected })
+    : t("forecast.legend", { best: winners || "–" });
+  legend.textContent = text + (nights.length ? ` ${t("forecast.night")}` : "");
   figure.append(legend);
   return figure;
 }
@@ -192,13 +210,109 @@ function renderWeights(table, names) {
   target.replaceChildren(head, ...rows);
 }
 
+// which forecast is shown: our combination on every page load (not remembered, not in
+// the link, so a shared link always opens on the combination); kept while the okres changes
+let selected = COMBINED;
+// the okres on screen: {point, table, forecast, combined, sunOf, gustOf, fetched}
+let state = null;
+
+function optionText(o, names) {
+  if (o.model === COMBINED) return t("forecast.pickCombined");
+  const model = names[o.model] ?? o.model;
+  if (!o.scored) return model;
+  const rank = o.rank == null
+    ? "–"
+    : o.rank.toLocaleString(document.documentElement.lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return t("forecast.pickOption", { position: o.position, model, rank });
+}
+
+function renderPicker(table, names) {
+  const select = document.getElementById("model");
+  const options = modelOptions(table, names);
+  if (!options.some((o) => o.model === selected)) selected = COMBINED;
+  const option = (o) => {
+    const element = document.createElement("option");
+    element.value = o.model;
+    element.textContent = optionText(o, names);
+    element.selected = o.model === selected;
+    return element;
+  };
+  const group = (key, list) => {
+    const element = document.createElement("optgroup");
+    element.label = t(key);
+    element.append(...list.map(option));
+    return element;
+  };
+  const scored = options.filter((o) => o.scored);
+  const unscored = options.filter((o) => !o.scored && o.model !== COMBINED);
+  select.replaceChildren(
+    option(options[0]),
+    ...(scored.length ? [group("forecast.pickScored", scored)] : []),
+    ...(unscored.length ? [group("forecast.pickUnscored", unscored)] : []),
+  );
+}
+
+// the day table, the charts and the notes for the selected forecast
+function render(names, colors) {
+  const { forecast, combined, table, sunOf, gustOf } = state;
+  const single = selected !== COMBINED;
+  const ourDays = dailySummary(forecast.times, combined, TIME_ZONE);
+  const modelNote = document.getElementById("model-note");
+  document.getElementById("combined-note").hidden = single;
+  modelNote.hidden = !single;
+  if (single) {
+    const name = names[selected] ?? selected;
+    const days = modelDays(forecast, selected, ourDays.map((d) => d.day), TIME_ZONE);
+    const end = modelEnd(forecast, selected);
+    let note = t("forecast.modelNote", { model: name });
+    if (end != null && days.some((d) => d.beyond)) {
+      const when = new Intl.DateTimeFormat(document.documentElement.lang, {
+        weekday: "short", day: "numeric", month: "numeric", hour: "numeric", minute: "2-digit", timeZone: TIME_ZONE,
+      }).format(end);
+      note += ` ${t("forecast.modelHorizon", { end: when })}`;
+    }
+    modelNote.textContent = note;
+    // the gusts come from our corrected outlook: not shown for a single model
+    renderDays(days, sunOf, () => null);
+  } else {
+    modelNote.textContent = "";
+    renderDays(ourDays, sunOf, gustOf);
+  }
+  const nights = nightBands(sunOf, forecast.times[0], forecast.times.at(-1), TIME_ZONE);
+  document.getElementById("charts").replaceChildren(
+    ...VARIABLES.map((v) => chart(forecast, combined[v], table, v, colors, names, nights, selected)),
+  );
+}
+
+// a model outside the okres weights is fetched when it is first picked (the visitor's
+// own Open-Meteo call, one model)
+async function pick(model, names, colors) {
+  selected = model;
+  if (!state) return;
+  const message = document.getElementById("message");
+  const current = state;
+  const has = () => VARIABLES.some((v) => current.forecast.values[v][model]);
+  if (model !== COMBINED && !has() && !current.fetched.has(model)) {
+    message.textContent = t("forecast.pickLoading", { model: names[model] ?? model });
+    const doc = await getJson(forecastUrl(current.point, [model]));
+    current.fetched.add(model);
+    if (doc?.hourly) mergeForecast(current.forecast, parseForecast(doc, [model]));
+    if (state !== current || selected !== model) return;
+  }
+  message.textContent = model !== COMBINED && !has() ? t("forecast.pickUnavailable", { model: names[model] ?? model }) : "";
+  render(names, colors);
+}
+
 // only the latest okres renders: a slow fetch must not overwrite a newer choice
 let showToken = 0;
 async function show(point, names, colors, outlook) {
   const token = ++showToken;
   const message = document.getElementById("message");
   document.getElementById("title").textContent = t("forecast.titleFor", { okres: point.name });
+  state = null;
   for (const id of ["days", "charts", "weights"]) document.getElementById(id).replaceChildren();
+  document.getElementById("model-note").hidden = true;
+  document.getElementById("combined-note").hidden = false;
   if (!point.weights) {
     message.textContent = t("forecast.noWeights");
     return;
@@ -211,6 +325,7 @@ async function show(point, names, colors, outlook) {
     message.textContent = t("forecast.noWeights");
     return;
   }
+  renderPicker(table, names);
   const doc = await getJson(forecastUrl(point, models));
   if (token !== showToken) return;
   if (!doc?.hourly) {
@@ -222,13 +337,10 @@ async function show(point, names, colors, outlook) {
   const combined = Object.fromEntries(VARIABLES.map((v) => [v, combine(forecast, table, v, now)]));
   const sunOf = (day) => sunFor(outlook, point.code, day);
   const gustOf = (day) => rowFor(outlook, point.code, day, "day");
-  renderDays(dailySummary(forecast.times, combined, TIME_ZONE), sunOf, gustOf);
-  const nights = nightBands(sunOf, forecast.times[0], forecast.times.at(-1), TIME_ZONE);
-  document.getElementById("charts").replaceChildren(
-    ...VARIABLES.map((v) => chart(forecast, combined[v], table, v, colors, names, nights)),
-  );
+  state = { point, table, forecast, combined, sunOf, gustOf, fetched: new Set(models) };
   renderWeights(table, names);
   message.textContent = "";
+  await pick(selected, names, colors);
 }
 
 async function main() {
@@ -260,6 +372,8 @@ async function main() {
       return option;
     }),
   );
+  const modelSelect = document.getElementById("model");
+  modelSelect.addEventListener("change", () => pick(modelSelect.value, names, colors));
   select.addEventListener("change", () => {
     const point = points.find((p) => p.code === select.value);
     window.history.replaceState(null, "", `#${point.code}`);
