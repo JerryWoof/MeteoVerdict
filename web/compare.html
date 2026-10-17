@@ -6,7 +6,7 @@
     <title>MeteoVerdict: compare</title>
     <meta name="description" content="Which weather model forecasts best in Czechia, each kraj and each okres, with confidence intervals." />
   </head>
-  <body class="page">
+  <body class="page theme-compare">
     <header>
       <h1><a href="./">MeteoVerdict</a></h1>
       <p id="status">Loading…</p>
@@ -21,7 +21,11 @@
       <button type="button" id="language">Česky</button>
     </header>
     <main class="content wide">
-      <section id="blend-test-section" class="blend-test" hidden aria-labelledby="blend-test-title">
+      <div class="page-head">
+        <h2 class="page-title" data-i18n="page.compareTitle">Model comparison</h2>
+      </div>
+      <p class="page-intro" data-i18n="page.compareIntro">Which model forecasts best in Czechia.</p>
+      <section id="blend-test-section" class="blend-test card" hidden aria-labelledby="blend-test-title">
         <h2 id="blend-test-title" data-i18n="blendTest.title">Is our forecast better than one model for all of Czechia?</h2>
         <p class="scope" id="blend-test-scope"></p>
         <p class="note" data-i18n="blendTest.intro"></p>
@@ -42,7 +46,7 @@
             <div class="scroll"><table id="blend-test-okres-table" class="blend-test-table"></table></div>
             <p class="note" id="blend-test-okres"></p>
           </div>
-          <div id="blend-test-chart"></div>
+          <div id="blend-test-chart" class="chart-card"></div>
         </div>
         <div id="blend-test-models-block" hidden>
           <h3 id="blend-test-models-title"></h3>
@@ -56,21 +60,21 @@
       <section id="ranking-section" class="ranking-section" aria-labelledby="ranking-section-title">
         <h2 id="ranking-section-title" class="section-title" data-i18n="compare.rankingSection">Model ranking</h2>
         <p class="note" data-i18n="compare.rankingSectionNote"></p>
-        <form id="controls" class="ranking-controls" aria-labelledby="ranking-section-title">
-          <label><span data-i18n="control.region">Region</span> <select id="region"></select></label>
-          <label><span data-i18n="control.variable">Variable</span> <select id="variable"></select></label>
-          <label><span data-i18n="control.lead">Lead time</span> <select id="lead"></select></label>
-          <label><span data-i18n="control.window">Period</span> <select id="window"></select>
+        <form id="controls" class="ranking-controls strip standalone" aria-labelledby="ranking-section-title">
+          <label class="field"><span data-i18n="control.region">Region</span> <select id="region"></select></label>
+          <label class="field"><span data-i18n="control.variable">Variable</span> <select id="variable"></select></label>
+          <label class="field"><span data-i18n="control.lead">Lead time</span> <select id="lead"></select></label>
+          <label class="field"><span data-i18n="control.window">Period</span> <select id="window"></select>
             <span class="help" tabindex="0" role="note" data-i18n-title="window.help">?</span></label>
         </form>
         <div class="overview">
           <div>
-            <div id="mini-map" aria-label="Map: best model per okres"></div>
+            <div id="mini-map" class="map-frame" aria-label="Map: best model per okres"></div>
             <p class="note" id="map-note" data-i18n="compare.mapNote"></p>
             <p class="note" id="map-band-note" hidden></p>
-            <div id="mini-legend" class="mini-legend"></div>
+            <div id="mini-legend" class="mini-legend legend-card"></div>
           </div>
-          <div id="summary" aria-live="polite"></div>
+          <div id="summary" class="card" aria-live="polite"></div>
         </div>
         <h3 id="ranking-title" data-i18n="compare.ranking">Ranking</h3>
         <p class="note" data-i18n="compare.rankingNote"></p>
@@ -92,28 +96,28 @@
           </div>
           <p class="note" id="rank-by-note" hidden></p>
         </div>
-        <div class="scroll"><table id="ranking"></table></div>
+        <div class="scroll"><table id="ranking" class="data-table"></table></div>
         <p class="note" id="bc-note" hidden></p>
         <p class="note" id="aladin-note" hidden></p>
         <h3 data-i18n="compare.intervals">How sure is the ranking?</h3>
         <p class="note" data-i18n="compare.intervalsNote"></p>
-        <div id="intervals"></div>
+        <div id="intervals" class="chart-card"></div>
         <h3 data-i18n="compare.byLead">Error by lead time</h3>
         <p class="note" id="by-lead-note" data-i18n="compare.byLeadNote"></p>
-        <div id="by-lead"></div>
+        <div id="by-lead" class="chart-card"></div>
         <div id="elevation-section">
           <h3 data-i18n="compare.bias">Bias by elevation</h3>
           <p class="note" data-i18n="compare.biasNote"></p>
-          <div id="bias"></div>
+          <div id="bias" class="chart-card"></div>
         </div>
         <div id="lead-hours-section" hidden>
           <h3 data-i18n="compare.leadHours">Error by hours ahead (run-based)</h3>
           <p class="scope" data-i18n="compare.leadHoursScope"></p>
           <p class="note" data-i18n="compare.leadHoursNote"></p>
           <p class="note" id="lead-hours-basis"></p>
-          <label class="lead-hours-runs"><span data-i18n="compare.leadHoursRuns">Runs</span>
+          <label class="lead-hours-runs field"><span data-i18n="compare.leadHoursRuns">Runs</span>
             <select id="lead-hours-run"></select></label>
-          <div id="lead-hours"></div>
+          <div id="lead-hours" class="chart-card"></div>
           <p class="note" data-i18n="compare.leadHoursFair"></p>
           <p class="note" data-i18n="compare.leadHoursSource"></p>
         </div>
@@ -123,10 +127,10 @@
         <p class="scope" data-i18n="farm.scope"></p>
         <p class="note" data-i18n="farm.intro"></p>
         <p class="note" id="farm-basis"></p>
-        <label class="lead-hours-runs"><span data-i18n="farm.event">Event</span>
+        <label class="lead-hours-runs field"><span data-i18n="farm.event">Event</span>
           <select id="farm-event"></select></label>
         <p id="farm-reading" class="farm-reading"></p>
-        <div class="scroll"><table id="farm-table" class="farm-table"></table></div>
+        <div class="scroll"><table id="farm-table" class="farm-table data-table"></table></div>
         <p class="note" id="farm-small"></p>
         <p class="note" data-i18n="farm.howToRead"></p>
         <p class="note" data-i18n="farm.definitions"></p>
