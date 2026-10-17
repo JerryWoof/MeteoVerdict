@@ -226,6 +226,16 @@ def test_build_station_files(tmp_path: Path):
     assert doc["elements"]["T"]["views"] == ["10min", "1hour", "daily", "monthly"]
     assert doc["elements"]["T"]["unit"] == "°C"
     assert "CC BY 4.0" in doc["source"]
+    # the diary: the daily means of the history and the recent month, in one decade file
+    assert doc["diary"] == {
+        "first": "2025-12-31",
+        "last": "2026-01-01",
+        "decade": 10,
+        "chunks": [2020],
+        "fields": ["t"],
+        "phenomena": [],
+    }
+    assert (tmp_path / "out" / "diary" / LIBUS / "2020.json.gz").exists()
     index = json.loads((tmp_path / "out" / "index.json").read_text())
     assert [s["id"] for s in index["stations"]] == [LIBUS]
     entry = index["stations"][0]

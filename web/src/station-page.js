@@ -14,6 +14,7 @@ import {
   kindCounts, measureCounts, withCoordinates,
 } from "./station-map.js";
 import { createStationMap } from "./station-map-view.js";
+import { createDiary } from "./diary-view.js";
 import { displayName } from "./tv.js";
 
 const t = setUpLanguage();
@@ -45,6 +46,8 @@ const updated = (generated) => {
   const time = generated ? new Date(generated) : null;
   return time && !Number.isNaN(time.getTime()) ? t("station.updated", { time: DATE_TIME.format(time) }) : "";
 };
+
+const diary = createDiary({ dataPath: DATA, t, language });
 
 // --- search: the index of all stations ------------------------------------------------
 let index = [];
@@ -326,6 +329,8 @@ function browse() {
   $("charts").replaceChildren();
   $("elements").replaceChildren();
   $("elements-title").hidden = true;
+  $("detail-title").hidden = true;
+  diary.hide();
   $("search").value = "";
   stationMap.select(null);
   stationMap.fitAll();
@@ -359,7 +364,9 @@ async function show() {
       $("charts").replaceChildren();
       $("elements").replaceChildren();
       $("elements-title").hidden = true;
+      $("detail-title").hidden = true;
       $("pick").hidden = true;
+      diary.hide();
       return;
     }
     const name = doc.station.name ?? id;
@@ -367,6 +374,8 @@ async function show() {
     document.title = `MeteoVerdict: ${name}`;
     $("facts").textContent = facts(doc.station);
     $("status").textContent = updated(doc.generated);
+    $("detail-title").hidden = false;
+    diary.show(doc);
     renderElements();
   }
   const element = hash.element && doc.elements[hash.element] ? hash.element : defaultElement(doc);
