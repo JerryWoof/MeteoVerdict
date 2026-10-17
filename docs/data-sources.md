@@ -1053,7 +1053,17 @@ Each file is an asset of a GitHub release of this repository (labels hold the SH
 Per-station history files (not per year) because that is how ČHMÚ publishes the
 closed years (one file of up to 100 MB per station), which makes the backfill
 resumable station by station and gives the station pages one file per station.
-Ten releases keep each under GitHub's 1,000 files. A year in both a station history
+Ten releases spread the stations, but the WSIs are not spread evenly (most rain
+gauges end in `…001`): `chmi-history-1` reached GitHub's limit of 1,000 assets per
+release in October 2026. The release client (`meteoverdict.releases`) then puts new
+files into overflow releases `chmi-history-1.2`, `chmi-history-1.3`, …, which it reads
+as part of `chmi-history-1` (a mirror keeps the file under `DIR/chmi-history-1/`); an
+existing file is replaced where it is. The client reads the asset list of a release
+once per run, downloads from the assets' `browser_download_url` (GitHub's storage, not
+the API) and waits out GitHub's rate limits (403/429 with `retry-after` or
+`x-ratelimit-reset`), so a station-pages run costs ~40 API requests of the
+`GITHUB_TOKEN`'s 1,000 an hour (it used to list the release again for every file,
+~6,000 requests, and failed with 403). A year in both a station history
 and `chmi-…-YYYY-MM` month files (after ČHMÚ's yearly update) is the same data; the
 history is the reference.
 
@@ -1614,11 +1624,12 @@ The Pages workflow unpacks the `web-YYYYMMDD.tar` of the last 60 days into
 Pages limit it keeps the satellite images only for the **last 7 days** and the echo tops
 for the **last 14** (deleting the files and emptying their lists in `index.json`), and
 if the site would still exceed 900 MB it leaves out the oldest days, with a warning.
-Budget: station pages and scores ~235 MB (`site-data.zip` 123 MB and `station-data.zip`
-31 MB unpacked, 2026-10-15, plus the [station diary](#station-diary), ~73 MB); 60 radar days of `maxz` and `merge1h` at 2–10 MB
+Budget: station pages and scores ~290 MB (`site-data.zip` 123 MB and `station-data.zip`
+99 MB unpacked plus the [station diary](#station-diary), 69 MB in 6,252 files — 92 MB
+zipped, measured 2026-10-17); 60 radar days of `maxz` and `merge1h` at 2–10 MB
 (the archived days so far: 2.2–9.6, mean 4.8) plus 0.65 MB of motion and cells:
 170–640 MB, typically ~330 MB; echo tops 14 × 1–4.5 MB = 15–65 MB; satellite
-7 × ~5.6 MB = 40 MB. Total typically **~0.63 GB**, up to ~0.9 GB in a very wet spell,
+7 × ~5.6 MB = 40 MB. Total typically **~0.69 GB**, up to ~0.9 GB in a very wet spell,
 where the guard trims the oldest days. A day appears there at the first Pages deployment
 after it was archived (usually the next morning); until then the live branch covers the
 last 24 hours. Older days stay in the releases.
