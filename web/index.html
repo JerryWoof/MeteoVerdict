@@ -9,7 +9,7 @@
       content="Daily verification of weather models against ČHMÚ station observations, per region."
     />
   </head>
-  <body class="page map-page">
+  <body class="page map-page theme-map">
     <header>
       <h1><a href="./">MeteoVerdict</a></h1>
       <p id="status">Loading…</p>
@@ -39,11 +39,14 @@
         </div>
       </form>
       <div class="map-wrap">
+        <!-- the boxes: beside the map on wide screens, above and below it on narrow ones -->
+        <div class="map-side">
+          <aside id="detail" class="map-box panel" aria-live="polite"></aside>
+          <aside id="legend" class="map-box legend after" aria-label="Legend"></aside>
+        </div>
         <div id="map" class="map-frame" role="region" aria-label="Map of Czechia">
           <div id="hover" role="tooltip" hidden></div>
         </div>
-        <aside id="legend" class="map-box legend after" aria-label="Legend"></aside>
-        <aside id="detail" class="map-box panel" aria-live="polite"></aside>
       </div>
     </main>
     <footer data-footer="models" data-method="https://github.com/JerryWoof/MeteoVerdict">
