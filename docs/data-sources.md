@@ -1112,7 +1112,9 @@ needs into `--archive`, default `data/chmi`; `--publish` uploads the folder as
   id, elements and views for an older index without `network`;
 - `station/<WSI>.json`: `station` (from `mvd stations`), `elements` (from ČHMÚ's
   `meta2`: Czech name, unit, sensor height, kinds `10M`/`1H`/`DLY`/`PHENO`, first and
-  last day, and the `views` that have it), `series` and `source`.
+  last day, and the `views` that have it), `series`, `source` and `diary` (below);
+- `station/diary/<WSI>/<decade>.json.gz`: the station's [diary](#station-diary), its
+  whole daily history, one gzipped file per decade.
 
 Each series is `{"start", "step", "values": {element: [...]}, "how": {element: label}}`;
 value *i* is at `start + i × step`, null where there is none, rounded to 0.1:
@@ -1132,6 +1134,88 @@ part of all 476 automatic stations 28 MB. Estimated for all ~780 stations: about
 at ~0.2 MB, ~300 rain gauges at ~0.05 MB); at most 0.4 GB even if every station were
 as big as Lysá hora, well under GitHub Pages' 1 GB. Building all of them took 16 s
 and 2 GB of memory.
+
+### Station diary
+
+The top of the station page, "Počasí na stanici / Weather at the station", shows what
+the station measured day by day, like the forecast but for the past: the last 14 days,
+or any week or month back to the station's first daily record (a date field and
+earlier/later buttons; `station.html?view=month&day=2010-07-15#<WSI>` links to one),
+with a summary of the period and, for a clicked day, its course. Module
+`meteoverdict.station_diary`, written by `mvd station-pages` with the other station
+files; page logic in `web/src/diary.js`.
+
+**The day.** Every value is ČHMÚ's daily climate record (`daily` rows of the
+[archive](#chmi-archive), the history and then the recent months) on the date ČHMÚ
+gives it, and each element has ČHMÚ's own 24-hour window. Checked against the
+10-minute and hourly data of Praha-Ruzyně in September 2026 (all 26 days compared
+equal; ČHMÚ keeps CET = UTC+1 all year, so in summer the windows are an hour later on
+the clock):
+
+| Field | Element (VTYPE) | Window |
+|---|---|---|
+| `tx`, `tn` | `TMA`, `TMI` (`20:00`) | maximum and minimum from 21:00 CET the day before to 21:00 CET (20 UTC) |
+| `t` | `T` (`AVG`) | ČHMÚ's daily mean (T07 + T14 + 2 × T21) / 4 CET (checked: within 0.05 °C) |
+| `r` | `SRA` (`06:00`) | precipitation from 07:00 CET of the day to 07:00 CET the next day (measured the next morning; ČHMÚ stamps it 06 UTC of the day it starts) |
+| `sno` | `SNO` (`06:00`) | new snow, the same window (every day with new snow had precipitation the same day, 263 of 263 at Ruzyně 2000–2025) |
+| `sce` | `SCE` (`06:00`) | snow depth at 07:00 CET of the day |
+| `ssv` | `SSV` (`00:00`) | sunshine hours, the calendar day |
+| `g` | `Fmax` (`00:00`) | strongest gust from 00:00 to 24:00 CET (23 UTC to 23 UTC) |
+
+Phenomena (`BO` thunderstorm, `DE` rain, `SN` snow, `KR` hail, `ML` fog, `MS` freezing
+rain, `LE` glaze, `NA` rime, `JI` hoarfrost, `SV` strong wind; not `RO` dew) are the
+days the observer recorded them, only at stations with an observer. The course of a
+day on the page is the Prague local day (0–24 h) from the station file's `10min`
+series (the last 3 days) or `1hour` series (the last 30 days); older days have daily
+values only, and the page says so.
+
+**Quality.** As everywhere in the project, values of quality 1 (suspect), 2 (poor) and
+4 (missing) are left out; 0, 3 (estimated) and 5 (not checked yet) are kept, and days
+with an unchecked value are listed (`unchecked`) and starred on the page. Kept flags
+(`meta3`): `SRA` `T` (an unmeasurable trace: "stopy"), `SCE` `P`/`N` (dusting, patchy
+cover) and `SNO` `R`/`P` (fell and melted, dusting), shown as "trace" and "<1 cm".
+Manual stations' daily values arrive monthly (on 2026-10-17 Blatná's last day was
+31 August; September was all quality 4), so the page says when a station's newest day
+is more than three days old.
+
+**The weather symbol** (`daySymbol` in `web/src/diary.js`) comes only from what was
+measured, with the forecast's icons: at least 0.5 mm of precipitation gives rain, sleet
+or snow (from the recorded phenomena: rain and snow together sleet; else new snow
+≥ 1 cm; else the daily mean temperature ≤ 0.5 °C snow, ≤ 2 °C sleet, as the forecast's
+model symbols), shown as "rain and sun" when the sun also shone for at least 30 % of
+the day; a drier day gets its sky from the sunshine as a share of the astronomical day
+length (≥ 60 % sunny, ≥ 25 % partly cloudy, else overcast), or, where no sunshine is
+measured, from the daytime (8–17 h) mean cloud cover `N` of the hourly series (forecast
+thresholds: < 30 % clear, < 65 % partly cloudy). A station measuring neither (a rain
+gauge) has symbols only on wet days. The precipitation window (07–07 CET) and the
+sunshine day differ, so a symbol is a summary of the day, not an exact time.
+
+**Columns** are those with values in the period shown (`columnsFor`): a rain gauge gets
+day, symbol (wet days), precipitation and, in winter, snow; snow appears only when
+there was some. The **summary** of a period (`periodSummary`): mean of the daily means,
+highest maximum and lowest minimum (with the day), total precipitation, days with
+≥ 1 mm, frost days (min < 0 °C), ice days (max < 0 °C), summer days (max ≥ 25 °C),
+total sunshine, strongest gust, days with snow cover (≥ 1 cm), most snow and days with
+a thunderstorm; a value from fewer days than the period has says on how many.
+
+**Files.** `diary/<WSI>/<decade>.json.gz` (decade = the first year, e.g. `2020`), gzipped
+JSON `{"start": "2020-01-01", "days", "values": {field: [one value a day from start,
+null where none]}, "phenomena": {code: [day numbers, 0 = start]}, "flags": {field:
+{flag: [day numbers]}}, "unchecked": [day numbers]}`; fields without any value in the
+decade are left out, and `days` ends at the last day with anything. The station file
+summarises them: `"diary": {"first", "last", "decade": 10, "chunks": [decades],
+"fields", "phenomena"}`. The files are stored gzipped because GitHub Pages counts stored
+bytes towards its 1 GB: the page unpacks them with the browser's `DecompressionStream`
+(and also reads them when a server has already unpacked them, as Vite's dev server
+does). Gzip is written with mtime 0, so unchanged data give identical files.
+
+**Sizes** (measured 2026-10-17): Praha-Ruzyně 1946–2026 (all eight fields and
+phenomena) 9 files, 0.29 MB (1.1 MB unpacked); Blatná 1897–2026 (a rain gauge with an
+old climate record) 12 files, 0.11 MB (0.54 MB unpacked). On a sample of 29 histories the diary is 8.5 %
+(main and climate stations) to 14 % (rain gauges) of the history Parquet; for the
+~710 stations with a history (733 MB of Parquet) about **73 MB in ~5,000 files**,
+growing by about 1 MB a year. Each page view loads one or two decade files of
+10–40 kB.
 
 ## Radar archive
 
@@ -1438,11 +1522,11 @@ The Pages workflow unpacks the `web-YYYYMMDD.tar` of the last 60 days into
 Pages limit it keeps the satellite images only for the **last 7 days** and the echo tops
 for the **last 14** (deleting the files and emptying their lists in `index.json`), and
 if the site would still exceed 900 MB it leaves out the oldest days, with a warning.
-Budget: station pages and scores ~160 MB (`site-data.zip` 123 MB and `station-data.zip`
-31 MB unpacked, 2026-10-15); 60 radar days of `maxz` and `merge1h` at 2–10 MB
+Budget: station pages and scores ~235 MB (`site-data.zip` 123 MB and `station-data.zip`
+31 MB unpacked, 2026-10-15, plus the [station diary](#station-diary), ~73 MB); 60 radar days of `maxz` and `merge1h` at 2–10 MB
 (the archived days so far: 2.2–9.6, mean 4.8) plus 0.65 MB of motion and cells:
 170–640 MB, typically ~330 MB; echo tops 14 × 1–4.5 MB = 15–65 MB; satellite
-7 × ~5.6 MB = 40 MB. Total typically **~0.55 GB**, up to ~0.9 GB in a very wet spell,
+7 × ~5.6 MB = 40 MB. Total typically **~0.63 GB**, up to ~0.9 GB in a very wet spell,
 where the guard trims the oldest days. A day appears there at the first Pages deployment
 after it was archived (usually the next morning); until then the live branch covers the
 last 24 hours. Older days stay in the releases.
