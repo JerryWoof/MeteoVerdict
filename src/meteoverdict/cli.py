@@ -1154,7 +1154,10 @@ def import_runs(
                 rows, reread = bucket.refresh_moved_cells(
                     raw, rows, cells, source, models, stations_table, log=typer.echo
                 )
-                doc["reread"] |= reread
+                for pair, n in reread.items():
+                    total = doc["reread"].setdefault(pair, {"reread": 0, "dropped": 0})
+                    total["reread"] += n["reread"]
+                    total["dropped"] += n["dropped"]
                 check = bucket.complete_runs(rows, models, stations_table.height)
                 bad = check.filter(~pl.col("complete"))
                 doc["excluded"] += [
@@ -1184,8 +1187,10 @@ def import_runs(
                     typer.echo(f"{month}: {json.dumps(doc['months'][month])}")
         first_run = min(r for r, _ in harvested)
         last_run = max(r for r, _ in harvested)
-        gaps = 0
+        gaps, now = 0, datetime.now(UTC)
         for r in runs._runs_between(last_run, first_run):
+            if now - r < timedelta(hours=runs.BUCKET_FINAL_H):
+                continue  # young: the bucket may still complete it (fetch-runs)
             k = runs.key(r)
             for m in state.todo(r, runs.wanted(models, r)):
                 state.bucket_missing.setdefault(k, set()).add(m.id)
