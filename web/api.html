@@ -21,18 +21,24 @@
       <button type="button" id="language">Česky</button>
     </header>
     <main class="content">
-      <h2 data-i18n="api.title">Open data</h2>
+      <div class="page-head">
+        <h2 class="page-title" data-i18n="api.title">Open data</h2>
+      </div>
       <p data-i18n="api.intro"></p>
       <p data-i18n="api.when"></p>
 
       <h2 data-i18n="api.try">Your okres</h2>
-      <p><label><span data-i18n="control.okres">Okres</span> <select id="okres"></select></label></p>
+      <div class="strip standalone">
+        <div class="strip-row">
+          <label class="field"><span data-i18n="control.okres">Okres</span> <select id="okres"></select></label>
+        </div>
+      </div>
       <ul id="links"></ul>
       <pre id="preview" class="code"></pre>
 
       <h2 data-i18n="api.files">Files</h2>
       <div class="scroll">
-        <table id="files" class="doc-table">
+        <table id="files" class="doc-table data-table">
           <tr><th data-i18n="api.file">File</th><th data-i18n="api.contains">Contains</th></tr>
           <tr><td><code>api/v1/index.json</code></td><td data-i18n="api.fileIndex"></td></tr>
           <tr><td><code>api/v1/okresy/{code}.json</code></td><td data-i18n="api.fileJson"></td></tr>
@@ -42,7 +48,7 @@
 
       <h2 data-i18n="api.fields">What is in an okres file</h2>
       <div class="scroll">
-        <table class="doc-table">
+        <table class="doc-table data-table">
           <tr><th data-i18n="api.field">Field</th><th data-i18n="api.meaning">Meaning</th></tr>
           <tr><td><code>okres</code></td><td data-i18n="api.fOkres"></td></tr>
           <tr><td><code>forecast.hourly</code></td><td data-i18n="api.fHourly"></td></tr>
