@@ -271,7 +271,8 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
   });
   new ResizeObserver(() => {
     map.resize();
-    if (keepFit) map.fitBounds(BOUNDS, { padding: { top: 10, bottom: 10, left: 10, right: lastRight ?? 10 }, duration: 0 });
+    // not while the map is gliding beside a panel that just opened (that would cut it short)
+    if (keepFit && !map.isMoving()) map.fitBounds(BOUNDS, { padding: { top: 10, bottom: 10, left: 10, right: lastRight ?? 10 }, duration: 0 });
     declutter();
   }).observe(container);
 
@@ -293,7 +294,11 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
       const first = lastRight === null;
       lastRight = right;
       keepFit = true;
-      map.fitBounds(BOUNDS, { padding: { top: 10, bottom: 10, left: 10, right }, duration: first ? 0 : 400 });
+      // after the layout settles (the panel may make the map taller), then glide as on the forecast map
+      requestAnimationFrame(() => {
+        map.resize();
+        map.fitBounds(BOUNDS, { padding: { top: 10, bottom: 10, left: 10, right }, duration: first ? 0 : 400 });
+      });
     },
     /** Make it fit its box again (after being hidden). */
     resize() {
