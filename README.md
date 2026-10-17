@@ -37,8 +37,8 @@ and combines them into its own forecast.
    for their usual bias), as operational consensus forecasts such as NOAA's National
    Blend of Models do ([research](docs/forecast-research.md)).
 
-Everything runs on GitHub Actions: scores are updated every morning, the forecast at
-05:52 and 17:52 UTC. What the results mean and where they can mislead:
+Everything runs on GitHub Actions: scores are updated every morning, the forecast four
+times a day (04:50, 10:50, 16:50 and 22:50 UTC, after each model run). What the results mean and where they can mislead:
 [methodology](docs/methodology.md).
 
 ## Models

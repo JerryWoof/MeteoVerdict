@@ -62,6 +62,16 @@ jobs:
           else
             echo "no station pages yet; station.html says so"
           fi
+          # every model's own hourly forecast per okres (`mvd outlook`): the forecast
+          # pages read these instead of asking Open-Meteo from the visitor's browser
+          if gh release download data-latest --pattern outlook-models.zip --dir /tmp 2>/dev/null; then
+            rm -rf site/data/forecast/models
+            mkdir -p site/data/forecast/models
+            unzip -o -q /tmp/outlook-models.zip -d site/data/forecast/models
+            echo "per-model forecasts from data-latest ($(ls site/data/forecast/models | wc -l) files)"
+          else
+            echo "no outlook-models.zip yet; the detailed forecast says so"
+          fi
           for name in outlook.json outlook-hourly.json leads.json leads-aladin.json leads-aladin-kraj.json \
             leads-bands-90d.json leads-bands-90d-kraj.json leads-bands-all.json leads-bands-all-kraj.json \
             farm.json blend-test.json; do

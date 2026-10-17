@@ -1,7 +1,8 @@
 """TV-style forecast for every okres (roadmap 6.6).
 
-Twice a day, ask the Open-Meteo Forecast API for the next ``DAYS`` days of all models at
-the forecast point of every okres (one request, 77 locations), combine them with the
+Four times a day (after the 00, 06, 12 and 18 UTC model runs), ask the Open-Meteo
+Forecast API for the next ``DAYS`` days of all models at the forecast point of every
+okres (one request, 77 locations), combine them with the
 okres weights of ``meteoverdict.combine`` (the same rules as the forecast page: bias
 correction, weights per lead day, the next 24 h with D+1, models fading out over their
 last ``TAPER_HOURS`` hours) and summarise each day by part of day in Prague time:
@@ -85,7 +86,7 @@ CLEAR_BELOW = 30.0
 PARTLY_BELOW = 65.0
 SNOW_AT_OR_BELOW = 0.5
 SLEET_AT_OR_BELOW = 2.0
-#: refused above this (all 19 models with weights: ~732 a run, ~1,465 a day)
+#: refused above this (all 19 models with weights: ~732 a run, ~2,930 a day in four runs)
 MAX_CALLS = 800
 #: one request at most (Open-Meteo: 600 a minute); parts are ``PART_PAUSE`` s apart
 MAX_REQUEST = 500
@@ -597,6 +598,170 @@ def write_hourly(hourly: pl.DataFrame, path: Path, generated: datetime) -> Path:
     return path
 
 
+# --- every model's own hourly forecast (the detailed forecast page, the model picker) ---
+#: published under site/data (the web app: data/scores/forecast/models/<okres>.json)
+MODELS_FOLDER = Path("forecast") / "models"
+#: the folder zipped into the release data-latest (the Pages workflow unzips it)
+MODELS_ZIP = "outlook-models.zip"
+#: decimals per variable in the per-model files: Open-Meteo's own resolution (0.1 °C,
+#: whole % and seconds; wind to 0.1 m/s, which Open-Meteo gives with 2 decimals only as
+#: a conversion from km/h; precipitation to 0.01 mm so that no model's drizzle is lost)
+MODEL_DIGITS = {
+    "temperature_2m": 1,
+    "precipitation": 2,
+    "wind_speed_10m": 1,
+    "cloud_cover": 0,
+    "sunshine_duration": 0,
+}
+MODEL_UNITS = {
+    "temperature_2m": "°C",
+    "precipitation": "mm in the hour ending at the time",
+    "wind_speed_10m": "m/s, hourly mean",
+    "cloud_cover": "%",
+    "sunshine_duration": "s of sunshine in the hour ending at the time",
+}
+
+
+MODELS_LICENCE = "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)"
+MODELS_ATTRIBUTION = (
+    "Model forecasts: Open-Meteo.com (CC BY 4.0) from the models of the weather services "
+    "(DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, ČHMÚ, KNMI, DMI and others; UK "
+    "Met Office CC BY-SA 4.0), as Open-Meteo gave them, rounded; combined series: "
+    "MeteoVerdict (CC BY-SA 4.0), https://github.com/JerryWoof/MeteoVerdict"
+)
+
+
+def _values(series: pl.Series, digits: int, trim: bool = False) -> list:
+    """Rounded values (whole numbers as ints), NaN as null; ``trim``: without the
+    trailing nulls (a model that ends before the others)."""
+    series = series.cast(pl.Float64).fill_nan(None).round(digits)
+    if digits == 0:
+        series = series.cast(pl.Int64)
+    values = series.to_list()
+    if trim:
+        while values and values[-1] is None:
+            values.pop()
+    return values
+
+
+def models_doc(fc: pl.DataFrame, hourly: pl.DataFrame, code: str, generated: datetime) -> dict:
+    """One okres: ``{"generated", "okres", "time": [ISO UTC], "variables", "combined":
+    {variable: [...]}, "models": {model: {variable: [...]}}, "licence",
+    "attribution"}``. ``models``: each model's raw hourly forecast as Open-Meteo gave it
+    (no correction; a series ends at the model's last hour, a variable the model lacks is
+    left out); ``combined``: our combined series of ``outlook-hourly.json``, on the same
+    hours."""
+    own = fc.filter(pl.col("okres") == code)
+    ours = hourly.filter(pl.col("okres") == code)
+    times = pl.concat([own["time"], ours["time"]]).unique().sort()
+    grid = pl.DataFrame({"time": times})
+    combined_rows = grid.join(ours, on="time", how="left").sort("time")
+    combined = {
+        v: _values(combined_rows[v], MODEL_DIGITS[v]) for v in HOURLY if v in combined_rows.columns
+    }
+    models = {}
+    for (model,), part in sorted(own.partition_by("model", as_dict=True).items()):
+        rows = grid.join(part, on="time", how="left").sort("time")
+        series = {}
+        for v in VARIABLES:
+            values = _values(rows[v], MODEL_DIGITS[v], trim=True)
+            if values:
+                series[v] = values
+        if series:
+            models[model] = series
+    return {
+        "generated": generated.isoformat(timespec="minutes"),
+        "okres": code,
+        "time": [t.strftime("%Y-%m-%dT%H:%MZ") for t in times.to_list()],
+        "variables": MODEL_UNITS,
+        "combined": combined,
+        "models": models,
+        "licence": MODELS_LICENCE,
+        "attribution": MODELS_ATTRIBUTION,
+    }
+
+
+def write_models(
+    fc: pl.DataFrame, hourly: pl.DataFrame, folder: Path, generated: datetime
+) -> list[Path]:
+    """``folder/<okres>.json`` (``models_doc``) for every okres of ``fc``; files of okresy
+    no longer in it are removed, so the folder holds one run only."""
+    folder.mkdir(parents=True, exist_ok=True)
+    written = []
+    codes = sorted(fc["okres"].unique().to_list())
+    for code in codes:
+        path = folder / f"{code}.json"
+        doc = models_doc(fc, hourly, code, generated)
+        path.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), "utf-8")
+        written.append(path)
+    for old in folder.glob("*.json"):
+        if old.stem not in codes:
+            old.unlink()
+    return written
+
+
+# --- our own archive of every model's hourly forecast at the okres points --------------
+MODEL_ARCHIVE_SCHEMA = {
+    "issued": pl.Datetime("us", "UTC"),
+    "okres": pl.String,
+    "model": pl.String,
+    "time": pl.Datetime("us", "UTC"),
+    **{v: pl.Float32 for v in VARIABLES},
+}
+
+
+MODEL_ARCHIVE_NOTES = (
+    "Every model's hourly forecast at the 77 okres points as the outlook (mvd outlook) "
+    "fetched it from the Open-Meteo Forecast API: one file per UTC day of the run "
+    "(outlook-models-YYYY-MM-DD.parquet: issued, okres, model, time, temperature_2m, "
+    "precipitation, wind_speed_10m, cloud_cover, sunshine_duration; issued = the run's "
+    "time, UTC; up to four runs a day), one release per month. Forecasts: "
+    "Open-Meteo.com, CC BY 4.0, from the weather services listed in docs/licensing.md "
+    "(UK Met Office CC BY-SA 4.0). Published under CC BY-SA 4.0."
+)
+
+
+def model_archive_asset(issued: datetime) -> tuple[str, str]:
+    """Release and asset of the model archive for a run: one file per UTC day (a few
+    MB, so a run moves little), one release per month (at most 31 assets)."""
+    day = issued.astimezone(UTC)
+    return f"outlook-models-{day:%Y-%m}", f"outlook-models-{day:%Y-%m-%d}.parquet"
+
+
+def model_archive_rows(fc: pl.DataFrame, issued: datetime) -> pl.DataFrame:
+    """One outlook run's answer (``parse``) as archive rows."""
+    return (
+        fc.select(
+            pl.lit(issued.astimezone(UTC).replace(second=0, microsecond=0))
+            .dt.cast_time_unit("us")
+            .alias("issued"),
+            "okres",
+            "model",
+            "time",
+            *VARIABLES,
+        )
+        .with_columns(pl.col(v).fill_nan(None) for v in VARIABLES)
+        .cast(MODEL_ARCHIVE_SCHEMA)
+    )
+
+
+def append_model_archive(path: Path, rows: pl.DataFrame) -> Path:
+    """Merge one or more runs into the day's file: a run (``issued``) already in it is
+    replaced, so a repeated run never duplicates rows."""
+    rows = rows.cast(MODEL_ARCHIVE_SCHEMA)
+    if path.exists():
+        old = pl.read_parquet(path).cast(MODEL_ARCHIVE_SCHEMA)
+        rows = pl.concat(
+            [old.filter(~pl.col("issued").is_in(rows["issued"].unique().implode())), rows]
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # the runs of one hour side by side: they differ little, so the file stays small
+    rows.unique(["issued", "okres", "model", "time"], keep="last").sort(
+        "okres", "model", "time", "issued"
+    ).write_parquet(path, compression="zstd", compression_level=10)
+    return path
+
+
 def outlook(
     client: httpx.Client,
     weights: pl.DataFrame,
@@ -608,6 +773,7 @@ def outlook(
     frost_calibration: frost.Calibration | None = None,
     nights: list[pl.DataFrame] | None = None,
     single_runs: pl.LazyFrame | pl.DataFrame | None = None,
+    forecasts: list[pl.DataFrame] | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Fetch, combine and summarise for all ``points`` (code, name, lat, lon) that have
     weights: the parts-of-day table and the combined hourly series (with the plain
@@ -616,12 +782,16 @@ def outlook(
     ``corrections``: the coefficients of ``sun_cloud_gust`` (default: the bootstrap).
     The frost fields (``meteoverdict.frost``) come from ``frost_calibration``; the
     models' nights at the okres points are appended to ``nights`` for the archive. The
-    gusts come from the newest of ``single_runs`` (``runs``; none: null)."""
+    gusts come from the newest of ``single_runs`` (``runs``; none: null). Every model's
+    own hourly forecast (``parse``, as Open-Meteo gave it) is appended to ``forecasts``
+    (the per-model files and the archive; no extra calls)."""
     now = now or datetime.now(UTC)
     points = points.filter(pl.col("code").is_in(weights["region"].unique().to_list()))
     models = sorted(weights["model"].unique().to_list())
     payload = fetch(client, points, models, sleep)
     fc = parse(payload, points["code"].to_list(), models)
+    if forecasts is not None:
+        forecasts.append(fc)
     hourly = combine_hourly(fc, weights, now)
     hourly = sun_cloud_gust.correct_hourly(
         hourly, points, corrections or sun_cloud_gust.load(), now

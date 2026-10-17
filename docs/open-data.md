@@ -52,6 +52,20 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
   (`models.from`, `models.to`).
 - `licence`, `attribution`, `docs`.
 
+## Every model's own forecast (outside `api/v1`)
+
+The forecast pages read `data/scores/forecast/models/{code}.json` (e.g.
+`https://jerrywoof.github.io/MeteoVerdict/data/scores/forecast/models/CZ0201.json`),
+written by `mvd outlook` with each of its four runs a day: every model's hourly
+forecast at the okres point as Open-Meteo gave it (no correction, rounded), and our
+combined series, in columns: `generated`, `okres`, `time` (UTC hours), `variables`
+(units), `combined.<variable>` and `models.<model>.<variable>` (a model's series ends at
+its last hour), `licence`, `attribution`
+([data-sources.md](data-sources.md#outlook-mvd-outlook-roadmap-66)). Public, but not
+part of the versioned `api/v1`: its layout may change with the pages. Our own monthly
+archive of every run's full answer is in the releases `outlook-models-YYYY-MM`
+(`outlook-models-YYYY-MM-DD.parquet`, one file per UTC day).
+
 ## On an e-ink display
 
 [MeteoVerdict for TRMNL](https://github.com/JerryWoof/MeteoVerdict-TRMNL) is built on
@@ -63,7 +77,7 @@ e-ink display. It uses `forecast.hourly` and `forecast.parts`, including `sunris
 
 `web/scripts/build-api.mjs` (part of `npm run build`, logic in `web/src/api.js`) writes
 them from the data the pages use: `outlook.json` and `outlook-hourly.json` (`mvd
-outlook`, twice a day), `forecast/<okres>.json` and `90d/okres/<variable>.json` (`mvd
+outlook`, four times a day), `forecast/<okres>.json` and `90d/okres/<variable>.json` (`mvd
 aggregate`, daily). The Pages workflow runs after the Daily and the Outlook workflows,
 so the files follow both. About 3.4 MB in total, 25 kB per okres.
 

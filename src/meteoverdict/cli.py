@@ -1337,6 +1337,7 @@ def outlook_cmd(
         if frost_calibration is None:
             typer.echo(f"mvd outlook: no {frost_path}, the frost fields stay empty", err=True)
         nights: list[pl.DataFrame] = []
+        forecasts: list[pl.DataFrame] = []
         single_runs = _outlook_runs(releases, data_dir)
         try:
             table, hourly = outlook.outlook(
@@ -1349,6 +1350,7 @@ def outlook_cmd(
                 frost_calibration=frost_calibration,
                 nights=nights,
                 single_runs=single_runs,
+                forecasts=forecasts,
             )
         finally:  # also when it fails: the calls count against the daily budget
             typer.echo(meter.line())
@@ -1356,13 +1358,27 @@ def outlook_cmd(
         now = datetime.now(UTC)
         path = outlook.write(table, points, out, now)
         hourly_path = outlook.write_hourly(hourly, out.with_name("outlook-hourly.json"), now)
+        # every model's own hourly forecast per okres (the detailed forecast page and the
+        # model picker of the forecast map read these instead of asking Open-Meteo)
+        fc = pl.concat(forecasts)
+        models_folder = out.parent / outlook.MODELS_FOLDER
+        model_paths = outlook.write_models(fc, hourly, models_folder, now)
+        largest = max((p.stat().st_size for p in model_paths), default=0)
+        typer.echo(
+            f"{len(model_paths)} per-model files → {models_folder} (largest {largest:,} bytes)"
+        )
         if releases:
             releases.put(store.LATEST_TAG, "outlook.json", path)
             releases.put(store.LATEST_TAG, "outlook-hourly.json", hourly_path)
+            store.publish_folder(releases, models_folder, outlook.MODELS_ZIP)
         try:  # training data for the corrections; must not fail the outlook
             _archive_outlook(client, hourly, now, archive_dir, github_release)
         except Exception as exc:
             typer.echo(f"mvd outlook: archive not updated: {exc}", err=True)
+        try:  # our own copy of everything fetched; must not fail the outlook
+            _archive_outlook_models(client, fc, now, archive_dir, github_release)
+        except Exception as exc:
+            typer.echo(f"mvd outlook: model archive not updated: {exc}", err=True)
         try:  # training data for the frost clear-calm term; must not fail the outlook
             _archive_outlook_nights(releases, nights, data_dir / frost.ARCHIVE_FOLDER)
         except (httpx.HTTPError, OSError) as exc:
@@ -1428,6 +1444,28 @@ def _archive_outlook(
     if archive:
         archive.put(tag, name, path, label=store.sha256(path))
     typer.echo(f"archived the plain means → {path}")
+
+
+def _archive_outlook_models(
+    client: httpx.Client, fc: pl.DataFrame, now: datetime, folder: Path, github: bool
+) -> None:
+    """Merge this run's answer (every model, variable and hour at the okres points) into
+    the day's ``outlook-models-YYYY-MM-DD.parquet`` (and the release
+    ``outlook-models-YYYY-MM``): our own copy of what the outlook fetched, one run per
+    ``issued``, no duplicates; a run moves only its day's file (a few MB)."""
+    tag, name = outlook.model_archive_asset(now)
+    path = folder / name
+    archive = None
+    if github:
+        archive = GitHubReleaseStore(
+            client, *_github_credentials(), notes=outlook.MODEL_ARCHIVE_NOTES
+        )
+        if name in archive.assets(tag):
+            archive.download(tag, name, path)
+    outlook.append_model_archive(path, outlook.model_archive_rows(fc, now))
+    if archive:
+        archive.put(tag, name, path, label=store.sha256(path))
+    typer.echo(f"archived the models' forecasts → {path} ({path.stat().st_size:,} bytes)")
 
 
 @app.command("frost-fit")
