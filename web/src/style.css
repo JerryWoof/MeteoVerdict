@@ -177,8 +177,8 @@ header h1 a {
   font-size: 1rem;
   padding: 0.35rem 0.4rem;
 }
-/* the day table fits a phone: tighter cells, sunrise above sunset; scrolls on its own
-   rather than widening the page if it still does not fit */
+/* the day table fits a phone: tighter cells, sunrise above sunset; the tables scroll on their own
+   rather than widening the page if they still do not fit */
 .table-scroll {
   overflow-x: auto;
   max-width: 100%;
