@@ -510,7 +510,7 @@ How this compares with operational practice (Bureau of Meteorology OCF, NOAA's
 National Blend of Models, MeteoSwiss) and what still has to be tested:
 [forecast-research.md](forecast-research.md).
 
-The forecast map (`tv.html`) shows the same combination for every okres, made twice a
+The forecast map (`forecast.html`) shows the same combination for every okres, made twice a
 day by `mvd outlook`: by part of day, with the probability of precipitation (calibrated,
 below) and a symbol; cloud cover and sunshine there are the mean of the models
 corrected against ČHMÚ observations ([below](#sunshine-cloud-and-gusts)).

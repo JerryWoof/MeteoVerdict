@@ -1,4 +1,4 @@
-// The station map of station.html: okres and kraj boundaries (no third-party tiles)
+// The station map of measured.html: okres and kraj boundaries (no third-party tiles)
 // with every ČHMÚ station as a dot. Hover names it, a click (or Enter on the station in
 // the middle, from the keyboard) picks it.
 import { Map as MapLibreMap, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";

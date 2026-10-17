@@ -10,7 +10,7 @@ import { records } from "./data.js";
 
 export const VERSION = "v1";
 export const SITE = "https://jerrywoof.github.io/MeteoVerdict";
-export const DOCS = `${SITE}/api.html`;
+export const DOCS = `${SITE}/data.html`;
 export const LICENCE = "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)";
 // the scores published per okres, and which weights of the combination belong to them
 export const SCORE_VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitation_daily", "precipitation_24h"];
