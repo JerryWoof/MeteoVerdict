@@ -29,27 +29,32 @@ export function pageMode(hash) {
   return "station";
 }
 
+/** The layer the landing opens with: the okresy (the mean of each okres's stations). */
+export const DEFAULT_LAYER = "okresy";
+const LAYERS = ["okresy", "stations"];
+
 /**
- * The landing's view from the hash "#day/part/colour/values[/okresy|/CZxxxx]" (the
- * forecast map's format): {day, part, colour, shown, layer, okres}. `layer` is
- * "stations" (each station's own values) or "okresy" (the mean of each okres's stations,
- * with `okres` the open okres panel). `days` the measured days offered, `fallback`
- * {day, part}.
+ * The landing's view from the hash "#day/part/colour/values[/okresy|/stations|/CZxxxx]"
+ * (the forecast map's format): {day, part, colour, shown, layer, okres}. `layer` is
+ * "okresy" (the mean of each okres's stations, with `okres` the open okres panel; the
+ * default, DEFAULT_LAYER) or "stations" (each station's own values). `days` the
+ * measured days offered, `fallback` {day, part}.
  */
 export function parseLanding(hash, days, fallback) {
   const h = (pageMode(hash) === "measured" ? hash ?? "" : "").replace(/^#/, "");
   const segments = h.split("/");
-  const extra = segments[4] ?? (/^(CZ|okresy$)/.test(segments[3] ?? "") ? segments[3] : undefined);
-  const forView = /^okresy$/.test(segments[3] ?? "") ? segments.slice(0, 3).join("/") : h;
+  const isLayer = (s) => LAYERS.includes(s) || /^CZ/.test(s ?? "");
+  const extra = segments[4] ?? (isLayer(segments[3]) ? segments[3] : undefined);
+  const forView = isLayer(segments[3]) && !/^CZ/.test(segments[3]) ? segments.slice(0, 3).join("/") : h;
   const { day, part, colour, shown } = parseView(forView, { days, okresy: [] }, fallback);
-  const layer = extra === "okresy" || /^CZ\d{3,4}$/.test(extra ?? "") ? "okresy" : "stations";
-  return { day, part, colour, shown, layer, okres: layer === "okresy" && /^CZ/.test(extra) ? extra : null };
+  const layer = extra === "stations" ? "stations" : extra === "okresy" || /^CZ\d{3,4}$/.test(extra ?? "") ? "okresy" : DEFAULT_LAYER;
+  return { day, part, colour, shown, layer, okres: layer === "okresy" && /^CZ/.test(extra ?? "") ? extra : null };
 }
 
-/** The landing's hash (the forecast map's format, plus the layer). */
+/** The landing's hash (the forecast map's format, plus the layer unless the default). */
 export function landingHash(view) {
-  const okres = view.layer === "okresy" ? view.okres ?? "okresy" : null;
-  return viewHash({ ...view, okres });
+  const layer = view.layer === "stations" ? "stations" : view.okres ?? null; // okresy: the default
+  return viewHash({ ...view, okres: layer });
 }
 
 /** The newest measured day before today (the landing opens on it), or null. */
@@ -59,7 +64,7 @@ export function defaultDay(index, todayIso) {
 }
 
 /**
- * The day tabs, newest first ("Yesterday", "The day before", …): the measured days
+ * The day tabs, newest first ("Yesterday", "Thursday", "Wednesday", …): the measured days
  * before today with parts of day (at most `count`), then `selected` when it is an older
  * measured day (from the date field).
  */
