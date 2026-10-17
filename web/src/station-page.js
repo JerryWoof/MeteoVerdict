@@ -22,14 +22,15 @@ import { createDiary } from "./diary-view.js";
 import { parseDiaryQuery } from "./diary.js";
 import { glyph } from "./icons.js";
 import {
-  KINDS_HASH, dayTabs, defaultDay, landingHash, okresRows, pageMode, parseLanding, stationHref, stationRows,
+  DEFAULT_LAYER, KINDS_HASH, dayTabs, defaultDay, landingHash, okresRows, pageMode, parseLanding, stationHref, stationRows,
   stationSummary,
 } from "./measured.js";
 import { createMeasuredMap } from "./measured-map-view.js";
+import { renderScale } from "./palette.js";
 import { createOkresPanel } from "./measured-okres.js";
 import { OBSERVED_LAYERS, nearestDay, observedSummary, parseObservedDay, parseObservedIndex } from "./observed.js";
 import {
-  DEFAULT_SHOWN, RAMPS, colorFor, dayLabel, displayName, labelFor, okresColours, rampKey, today, valueFor,
+  DEFAULT_SHOWN, dayLabel, displayName, labelFor, okresColours, rampKey, today, valueFor,
 } from "./tv.js";
 
 const t = setUpLanguage();
@@ -423,7 +424,7 @@ function dayData(kind, day) {
 /** The view a plain link opens: the newest measured day, the whole day, stations. */
 function startView() {
   const day = defaultDay(observedIndex, todayIso());
-  return { day, part: "day", colour: "temperature", shown: DEFAULT_SHOWN, layer: "stations", okres: null };
+  return { day, part: "day", colour: "temperature", shown: DEFAULT_SHOWN, layer: DEFAULT_LAYER, okres: null };
 }
 
 const isDaily = (day) => observedIndex.byDay.get(day)?.source === "daily";
@@ -580,17 +581,9 @@ function renderShow() {
       return label;
     }),
   );
+  // the forecast map's scales and legend (palette.js); rain in mm
   const key = rampKey(landing.colour, true);
-  const ramp = RAMPS[key];
-  const [low, high] = [ramp[0][0], ramp.at(-1)[0]];
-  const bar = el("div", null, "bar");
-  bar.style.background = `linear-gradient(to right, ${ramp.map(([v]) => `${colorFor(v, key)} ${((v - low) / (high - low)) * 100}%`).join(", ")})`;
-  const unit = { temperature: "°", precipitationMm: " mm", wind: " m/s", gust: " m/s", sunshine: " h", cloud: " %" }[key];
-  $("scale").replaceChildren(
-    el("div", t(`${okresy ? "obs" : "measured"}.scale.${key}`), "scale-title"),
-    bar,
-    el("div", `${low}${unit} … ${high}${unit}`, "scale-ends"),
-  );
+  renderScale($("scale"), key, t(`${okresy ? "obs" : "measured"}.scale.${key}`));
 }
 
 function headlineStart() {

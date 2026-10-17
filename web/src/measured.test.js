@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  KINDS_HASH, dayTabs, defaultDay, hasLabel, labelPriority, labelSize, landingHash, okresRows, pageMode,
+  DEFAULT_LAYER, KINDS_HASH, dayTabs, defaultDay, hasLabel, labelPriority, labelSize, landingHash, okresRows, pageMode,
   parseLanding, partDaylight, pickLabels, pragueOffset, stationHref, stationRows, stationSummary, sunTimes,
 } from "./measured.js";
 import { parseObservedDay, parseObservedIndex } from "./observed.js";
@@ -17,7 +17,7 @@ const INDEX = parseObservedIndex({
     { day: "2026-10-16", source: "hourly" },
   ],
 });
-const FALLBACK = { day: "2026-10-16", part: "day", colour: "temperature", shown: ["temperature", "precipitation"], layer: "stations", okres: null };
+const FALLBACK = { day: "2026-10-16", part: "day", colour: "temperature", shown: ["temperature", "precipitation"], layer: "okresy", okres: null };
 
 test("which view a hash opens", () => {
   assert.equal(pageMode(""), "measured");
@@ -44,9 +44,15 @@ test("days: the newest measured day first, older ones only when chosen", () => {
 test("the landing's view in the hash, with the layer", () => {
   const days = INDEX.days.map((d) => d.day);
   assert.deepEqual(parseLanding("", days, FALLBACK), { ...FALLBACK });
+  // the okres layer is the default; the stations are second
+  assert.equal(DEFAULT_LAYER, "okresy");
   assert.deepEqual(parseLanding("#2026-10-15/night/gust/tg", days, FALLBACK), {
+    day: "2026-10-15", part: "night", colour: "gust", shown: ["temperature", "gust"], layer: "okresy", okres: null,
+  });
+  assert.deepEqual(parseLanding("#2026-10-15/night/gust/tg/stations", days, FALLBACK), {
     day: "2026-10-15", part: "night", colour: "gust", shown: ["temperature", "gust"], layer: "stations", okres: null,
   });
+  assert.equal(parseLanding("#2026-10-15/night/gust/stations", days, FALLBACK).layer, "stations");
   // unknown day and part fall back; a station hash is not a landing
   assert.equal(parseLanding("#2026-01-01/noon", days, FALLBACK).day, "2026-10-16");
   assert.equal(parseLanding("#2026-01-01/noon", days, FALLBACK).part, "day");
@@ -57,10 +63,11 @@ test("the landing's view in the hash, with the layer", () => {
   assert.equal(open.layer, "okresy");
   assert.equal(open.okres, "CZ0100");
   // round trip
-  for (const view of [open, { ...FALLBACK, layer: "okresy" }, { ...FALLBACK, shown: [] }]) {
+  for (const view of [open, { ...FALLBACK, layer: "stations" }, { ...FALLBACK, shown: [] }, { ...FALLBACK, layer: "stations", shown: [] }]) {
     assert.deepEqual(parseLanding(landingHash(view), days, FALLBACK), view);
   }
   assert.equal(landingHash(FALLBACK), "#2026-10-16/day/temperature/tp");
+  assert.equal(landingHash({ ...FALLBACK, layer: "stations" }), "#2026-10-16/day/temperature/tp/stations");
 });
 
 test("old forecast-map links to a past day go to the measured page", () => {
