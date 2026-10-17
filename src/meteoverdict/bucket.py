@@ -370,6 +370,7 @@ def build_cells(
             if reader is None:
                 raise FileNotFoundError(f"{bucket_model}: no {variable}.om")
             shape = tuple(reader.shape)
+            reader.close()
             grid = Grid(bucket_model, meta["crs_wkt"], shape)
             hsurf_model = HSURF_FROM.get(bucket_model, bucket_model)
             hsurf = bucket.open(f"data/{hsurf_model}/static/HSURF.om")
@@ -397,6 +398,8 @@ def build_cells(
                     if land:
                         best = min(land, key=lambda c: distance_km(lat, lon, *grid.latlon(c)))
                         points[i] = (sid, lat, lon, best)
+            if hsurf is not None:
+                hsurf.close()
             for sid, lat, lon, index in points:
                 glat, glon = grid.latlon(index)
                 elevation = elevations.get(index, math.nan)
@@ -472,6 +475,15 @@ def read_run(
 ) -> Fetched:
     """One model-run at ``stations`` (``id``, ``elevation``), complete or not at all
     (module docstring). Network errors other than missing files propagate."""
+    readers: dict = {}
+    try:
+        return _read_run(bucket, model, run, stations, cells, pool, readers)
+    finally:  # close the readers here, not at interpreter exit (omfiles holds callbacks)
+        for reader in readers.values():
+            reader.close()
+
+
+def _read_run(bucket, model, run, stations, cells, pool, readers) -> Fetched:
     source = SOURCES.get(model.id)
     if source is None:
         return Fetched(None, "not in the bucket")
@@ -491,12 +503,13 @@ def read_run(
     have = leads(times[source.bucket])
     if not set(need) <= have:
         return Fetched(None, f"{len(set(need) & have)} of {len(need)} lead hours written")
-    readers, axes, indices = {}, {}, {}
+    axes, indices = {}, {}
     for variable, parts in files_.items():
         for bucket_model, name in parts:
             reader = bucket.open(f"{run_path(bucket_model, run)}/{name}.om")
             if reader is None:
                 return Fetched(None, f"{name}.om missing ({bucket_model})")
+            readers[(bucket_model, name)] = reader
             shape = tuple(reader.shape)
             mine = cells.filter(pl.col("bucket_model") == bucket_model)
             if mine.height == 0 or (mine["ny"][0], mine["nx"][0]) != shape[:2]:
