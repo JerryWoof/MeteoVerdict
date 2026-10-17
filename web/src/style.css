@@ -161,6 +161,43 @@ header h1 a {
 #days .sun {
   font-size: inherit;
 }
+/* which forecast the forecast page shows: on a row of its own, as wide as the screen allows */
+#model-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+  margin: 0.3rem 0 0.6rem;
+  font-weight: 600;
+}
+#model-pick select {
+  flex: 1 1 14rem;
+  min-width: 0;
+  max-width: 28rem;
+  font-size: 1rem;
+  padding: 0.35rem 0.4rem;
+}
+/* the day table fits a phone: tighter cells, sunrise above sunset; scrolls on its own
+   rather than widening the page if it still does not fit */
+.table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+@media (max-width: 600px) {
+  #days th,
+  #days td {
+    padding: 0.25rem 0.25rem;
+  }
+  #days .sun {
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    column-gap: 0.15rem;
+  }
+  #days .sun .glyph + span + .glyph {
+    margin-left: 0;
+  }
+}
 #charts figure {
   margin: 1rem 0 0;
 }

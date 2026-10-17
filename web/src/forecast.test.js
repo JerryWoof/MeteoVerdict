@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
+  COMBINED, mergeForecast, modelDays, modelEnd, modelOptions,
   bestModel, bestPerLeadDay, combine, correctionAt, taper, winnersByLeadDay, dailySummary, forecastUrl, leadDay, localDay, localTime,
   nightBands, parseForecast, weightTable, weightedModels, weightsAt,
 } from "./forecast.js";
@@ -183,4 +184,72 @@ test("the regression weights are used only when all their models have a value", 
   const missing = { times: [t0], values: { temperature_2m: { a: [11], c: [20] } } };
   // b is missing: the inverse-error weights over a and c
   assert.deepEqual(combine(missing, table, "temperature_2m", now, 1), [15]);
+});
+
+// --- which forecast the page shows -----------------------------------------------------
+
+test("selector options: the combination, then scored models by mean rank, then the rest", () => {
+  const table = weightTable({
+    columns: ["variable", "lead_day", "model", "weight", "rank"],
+    rows: [
+      ["temperature_2m", 1, "b", 0.5, 1],
+      ["temperature_2m", 1, "a", 0.3, 2],
+      ["temperature_2m", 1, "c", 0.2, 3],
+      ["temperature_2m", 2, "b", 0.2, 3],
+      ["temperature_2m", 2, "a", 0.5, 1],
+      ["temperature_2m", 2, "c", 0.3, 2],
+    ],
+  });
+  const names = { a: "Alpha", b: "Beta", c: "Gamma", z: "Zulu", y: "Yankee", blend: "Mean of all models" };
+  const options = modelOptions(table, names);
+  // a and b both have mean rank 1.5: the larger mean weight (a 0.4, b 0.35) first
+  assert.deepEqual(options.map((o) => o.model), [COMBINED, "a", "b", "c", "y", "z"]);
+  assert.deepEqual(options.map((o) => o.position), [null, 1, 2, 3, null, null]);
+  assert.deepEqual(options.map((o) => o.scored), [false, true, true, true, false, false]);
+  assert.ok(Math.abs(options[1].weight - 0.4) < 1e-9);
+  assert.equal(options[3].rank, 2.5);
+});
+
+test("selector options with the real Benešov weights: every weighted model once", () => {
+  const options = modelOptions(TABLE, {});
+  assert.equal(options[0].model, COMBINED);
+  assert.deepEqual(options.slice(1).map((o) => o.model).sort(), [...MODELS].sort());
+  for (let i = 2; i < options.length; i += 1) assert.ok(options[i - 1].rank <= options[i].rank);
+});
+
+test("a single model's days: raw values, days beyond its horizon empty", () => {
+  const times = Array.from({ length: 72 }, (_, i) => Date.parse("2026-10-12T22:00Z") + i * 3600 * 1000);
+  const short = times.map((_, i) => (i < 30 ? 10 + (i % 5) : null)); // ends in the second day
+  const forecast = {
+    times,
+    values: {
+      temperature_2m: { m: short },
+      precipitation: { m: times.map((_, i) => (i < 30 ? 0.5 : null)) },
+      wind_speed_10m: { m: times.map((_, i) => (i < 30 ? 3 : null)) },
+    },
+  };
+  const days = modelDays(forecast, "m", ["2026-10-13", "2026-10-14", "2026-10-15"]);
+  assert.deepEqual(days[0], { day: "2026-10-13", tmin: 10, tmax: 14, precipitation: 12, wind: 3 });
+  for (const d of days.slice(1)) {
+    assert.equal(d.beyond, true);
+    assert.equal(d.tmin, null);
+    assert.equal(d.precipitation, null);
+  }
+  assert.equal(modelEnd(forecast, "m"), times[29]);
+  assert.equal(modelEnd(forecast, "nothing"), null);
+  // no correction: with the real answer, exactly the model's own daily summary
+  const model = MODELS[0];
+  const raw = dailySummary(FORECAST.times, Object.fromEntries(
+    ["temperature_2m", "precipitation", "wind_speed_10m"].map((v) => [v, FORECAST.values[v][model] ?? []]),
+  ));
+  assert.ok(raw.length > 0);
+  assert.deepEqual(modelDays(FORECAST, model, raw.map((d) => d.day)), raw);
+});
+
+test("a lazily fetched model is merged by time", () => {
+  const base = { times: [1, 2, 3], values: { temperature_2m: { a: [1, 2, 3] }, precipitation: {}, wind_speed_10m: {} } };
+  const extra = { times: [2, 3, 4], values: { temperature_2m: { x: [20, 30, 40] }, precipitation: { x: [null, null, null] }, wind_speed_10m: {} } };
+  mergeForecast(base, extra);
+  assert.deepEqual(base.values.temperature_2m.x, [null, 20, 30]);
+  assert.equal(base.values.precipitation.x, undefined);
 });
