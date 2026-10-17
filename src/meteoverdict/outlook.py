@@ -34,7 +34,7 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -698,6 +698,230 @@ def write_models(
         if old.stem not in codes:
             old.unlink()
     return written
+
+
+# --- every model's own parts of day for all okresy (the model switch of the map) -------
+#: published under site/data (the web app: data/scores/forecast/models-parts/<model>.json
+#: and index.json)
+MODEL_PARTS_FOLDER = Path("forecast") / "models-parts"
+#: the folder zipped into the release data-latest (the Pages workflow unzips it)
+MODEL_PARTS_ZIP = "outlook-models-parts.zip"
+MODEL_PARTS_INDEX = "index.json"
+#: the parts of one day in the files: the four parts, then the whole day
+PERIODS = (*PARTS, "day")
+MODEL_PART_COLUMNS = ("tmin", "tmax", "precipitation", "wind", "cloud", "sunshine", "symbol")
+MODEL_PART_DIGITS = {"tmin": 1, "tmax": 1, "precipitation": 2, "wind": 1, "cloud": 0, "sunshine": 1}
+MODEL_PARTS_NOTES = (
+    "One model's raw forecast (Open-Meteo, no correction) summarised by the outlook's "
+    "rules: Prague time, night 0-6, morning 6-12, afternoon 12-18, evening 18-24, day "
+    "0-24; precipitation and sunshine belong to the hour before their time; tmin/tmax, "
+    "precipitation total (mm), highest hourly wind (m/s), mean cloud cover (%, a whole "
+    "day: of 6-18), hours of sunshine. A period the model does not cover in full (beyond "
+    "its horizon) is null. Symbol: rain (sleet, snow at a mean of <= 2 / <= 0.5 °C) when "
+    "the model's own total is at least 0.3 mm, else the sky from its cloud cover (clear < "
+    "30 %, partly cloudy < 65 %, else cloudy); never showers. No probability of "
+    "precipitation from one model (rain_probability null). Values per okres: one list per "
+    "column, days x parts (index = day * 5 + part); symbol as its position in symbols."
+)
+
+
+def model_symbol(
+    cloud: float | None, precipitation: float | None, temperature: float | None
+) -> str | None:
+    """One model's symbol (as web/src/models.js modelSymbol): rain, sleet or snow from
+    its own total of at least ``RAIN_MM``, else the sky from its cloud cover; never
+    showers, which come from a probability one model does not have."""
+    if (precipitation or 0) >= RAIN_MM:
+        if temperature is not None and temperature <= SNOW_AT_OR_BELOW:
+            return "snow"
+        if temperature is not None and temperature <= SLEET_AT_OR_BELOW:
+            return "sleet"
+        return "rain"
+    if cloud is None:
+        return None
+    if cloud < CLEAR_BELOW:
+        return "clear"
+    return "partly" if cloud < PARTLY_BELOW else "cloudy"
+
+
+def model_periods(fc: pl.DataFrame) -> pl.DataFrame:
+    """Every model's own parts of day and whole days per okres (``parse``'s rows): one
+    row per okres, model, day and part (``part`` = "day" for whole days) with
+    ``MODEL_PART_COLUMNS``, by the outlook's rules (``summarise``) on the model's raw
+    values. Only periods the model covers in full: every hour of the period that the
+    forecast has (at least ``MIN_PART_HOURS`` / ``MIN_DAY_HOURS``) with a temperature and,
+    for a model with precipitation, every hour of its sums; so nothing beyond the model's
+    horizon or where it ends inside a period (its rain would be undercounted)."""
+    keys = ["okres", "model", "day", "part"]
+    grid = fc.select("okres", "time").unique()
+    full = grid.join(fc.select("model").unique(), how="cross").join(
+        fc, on=["okres", "time", "model"], how="left"
+    )
+    rainy = fc.group_by("okres", "model").agg(
+        pl.col("precipitation").is_not_null().any().alias("rainy")
+    )
+    inst = _local(full)
+    sums = _local(full, hour_ending=True)
+    stats = [
+        pl.len().alias("hours"),
+        pl.col("temperature_2m").count().alias("t_hours"),
+        pl.col("temperature_2m").min().alias("tmin"),
+        pl.col("temperature_2m").max().alias("tmax"),
+        pl.col("temperature_2m").mean().alias("tmean"),
+        pl.col("wind_speed_10m").max().alias("wind"),
+    ]
+    sum_stats = [
+        pl.len().alias("sum_hours"),
+        pl.col("precipitation").count().alias("p_hours"),
+        pl.col("precipitation").sum().alias("precipitation"),
+        pl.when(pl.col("sunshine_duration").count() > 0)
+        .then(pl.col("sunshine_duration").sum() / 3600)
+        .alias("sunshine"),
+    ]
+    daytime = pl.col("part").is_in(["morning", "afternoon"])
+    parts = inst.group_by(keys).agg(*stats, pl.col("cloud_cover").mean().alias("cloud"))
+    parts = parts.join(sums.group_by(keys).agg(sum_stats), on=keys, how="left")
+    day_keys = ["okres", "model", "day"]
+    days = (
+        inst.group_by(day_keys)
+        .agg(*stats, pl.col("cloud_cover").filter(daytime).mean().alias("cloud"))
+        .join(sums.group_by(day_keys).agg(sum_stats), on=day_keys, how="left")
+        .with_columns(pl.lit("day").alias("part"))
+    )
+    table = (
+        pl.concat([parts, days], how="diagonal_relaxed")
+        .join(rainy, on=["okres", "model"], how="left")
+        .with_columns(pl.col("sum_hours", "p_hours").fill_null(0))
+    )
+    least = pl.when(pl.col("part") == "day").then(MIN_DAY_HOURS).otherwise(MIN_PART_HOURS)
+    table = table.filter(
+        (pl.col("t_hours") >= least)
+        & (pl.col("t_hours") == pl.col("hours"))
+        & (~pl.col("rainy") | (pl.col("p_hours") == pl.col("sum_hours")))
+    ).with_columns(pl.when(pl.col("rainy")).then(pl.col("precipitation")).alias("precipitation"))
+    symbols = [
+        model_symbol(c, p, t)
+        for c, p, t in table.select("cloud", "precipitation", "tmean").iter_rows()
+    ]
+    return table.with_columns(pl.Series("symbol", symbols, pl.String)).select(
+        *keys, *MODEL_PART_COLUMNS
+    )
+
+
+#: symbols in the files as their position in this list (small files)
+MODEL_SYMBOLS = ("clear", "partly", "cloudy", "rain", "sleet", "snow")
+
+
+def _part_value(value, column: str):
+    """Rounded (whole numbers as ints, to keep the files small), NaN as null; the
+    symbol as its position in ``MODEL_SYMBOLS``."""
+    if value is None:
+        return None
+    if column == "symbol":
+        return MODEL_SYMBOLS.index(value)
+    if isinstance(value, float) and value != value:  # NaN
+        return None
+    value = round(value, MODEL_PART_DIGITS[column])
+    return int(value) if value == int(value) else value
+
+
+def mean_ranks(weights: pl.DataFrame) -> dict[str, float]:
+    """Each model's mean rank over all okresy, variables and lead days of the forecast
+    weights (1 = best): the order of the map's model switch."""
+    if "rank" not in weights.columns or weights.is_empty():
+        return {}
+    ranks = weights.drop_nulls("rank").group_by("model").agg(pl.col("rank").mean())
+    return {m: round(r, 2) for m, r in ranks.iter_rows()}
+
+
+def model_parts_doc(
+    periods: pl.DataFrame,
+    fc: pl.DataFrame,
+    model: str,
+    codes: list[str],
+    days: list[date],
+    generated: datetime,
+) -> dict:
+    """One model for all okresy: ``{"generated", "model", "last_hour", "time_zone",
+    "days", "parts", "columns", "symbols", "rain_probability": null, "okresy": {code:
+    {column: [value per day and part]}}, "notes", "licence", "attribution"}``. The index
+    of a value is ``day * len(parts) + part``; ``symbol`` is a position in ``symbols``;
+    null where the model has no full period (beyond ``last_hour``, its last hour with a
+    temperature at any okres)."""
+    own = periods.filter(pl.col("model") == model)
+    at = {
+        (o, d, p): row
+        for o, d, p, *row in own.select("okres", "day", "part", *MODEL_PART_COLUMNS).iter_rows()
+    }
+    hours = fc.filter(pl.col("model") == model).drop_nulls("temperature_2m")["time"]
+    last = hours.max() if hours.len() else None
+    okresy = {}
+    for code in codes:
+        columns: dict[str, list] = {c: [] for c in MODEL_PART_COLUMNS}
+        for day in days:
+            for part in PERIODS:
+                row = at.get((code, day, part))
+                for i, column in enumerate(MODEL_PART_COLUMNS):
+                    columns[column].append(_part_value(row[i], column) if row else None)
+        okresy[code] = columns
+    return {
+        "generated": generated.isoformat(timespec="minutes"),
+        "model": model,
+        "last_hour": last.strftime("%Y-%m-%dT%H:%MZ") if last is not None else None,
+        "time_zone": TIME_ZONE,
+        "days": [d.isoformat() for d in days],
+        "parts": list(PERIODS),
+        "columns": list(MODEL_PART_COLUMNS),
+        "symbols": list(MODEL_SYMBOLS),
+        "rain_probability": None,
+        "okresy": okresy,
+        "notes": MODEL_PARTS_NOTES,
+        "licence": MODELS_LICENCE,
+        "attribution": MODELS_ATTRIBUTION,
+    }
+
+
+def write_model_parts(
+    fc: pl.DataFrame,
+    weights: pl.DataFrame,
+    days: list[date],
+    folder: Path,
+    generated: datetime,
+) -> list[Path]:
+    """``folder/<model>.json`` (``model_parts_doc``) for every model of ``fc``, all okresy
+    in each, and ``folder/index.json``: ``{"generated", "days", "models": [{"model",
+    "mean_rank", "last_hour"}]}``, the models by their mean rank over Czechia
+    (``mean_ranks``; unranked ones last, by name). Files of models no longer in ``fc`` are
+    removed, so the folder holds one run only."""
+    folder.mkdir(parents=True, exist_ok=True)
+    periods = model_periods(fc)
+    codes = sorted(fc["okres"].unique().to_list())
+    ranks = mean_ranks(weights)
+    models = sorted(
+        fc["model"].unique().to_list(),
+        key=lambda m: (ranks.get(m) is None, ranks.get(m) or 0.0, m),
+    )
+    written, entries = [], []
+    for model in models:
+        doc = model_parts_doc(periods, fc, model, codes, days, generated)
+        path = folder / f"{model}.json"
+        path.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), "utf-8")
+        written.append(path)
+        entries.append(
+            {"model": model, "mean_rank": ranks.get(model), "last_hour": doc["last_hour"]}
+        )
+    for old in folder.glob("*.json"):
+        if old.name != MODEL_PARTS_INDEX and old.stem not in models:
+            old.unlink()
+    index = {
+        "generated": generated.isoformat(timespec="minutes"),
+        "days": [d.isoformat() for d in days],
+        "order": "mean rank over all okresy, variables and lead days of the forecast weights",
+        "models": entries,
+    }
+    path = folder / MODEL_PARTS_INDEX
+    path.write_text(json.dumps(index, ensure_ascii=False, separators=(",", ":")), "utf-8")
+    return [*written, path]
 
 
 # --- our own archive of every model's hourly forecast at the okres points --------------

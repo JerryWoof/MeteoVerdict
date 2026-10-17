@@ -529,3 +529,131 @@ def test_outlook_hands_over_the_models_forecasts():
         outlook.outlook(client, WEIGHTS, points, now=NOW, forecasts=forecasts)
     assert len(forecasts) == 1
     assert forecasts[0].equals(FC)
+
+
+# --- every model's parts of day for all okresy (the model switch of the forecast map) ----
+def _parts_days():
+    hourly = outlook.combine_hourly(FC, WEIGHTS, NOW)
+    table = outlook.summarise(hourly, outlook.probability(FC, WEIGHTS, NOW))
+    return table["day"].unique().sort().to_list()
+
+
+def test_model_symbol_rule():
+    # rain from the model's own total of at least 0.3 mm, never showers
+    assert outlook.model_symbol(10, 0.3, 8) == "rain"
+    assert outlook.model_symbol(10, 0.29, 8) == "clear"
+    assert outlook.model_symbol(50, 1.0, 1.5) == "sleet"
+    assert outlook.model_symbol(50, 1.0, 0.5) == "snow"
+    assert outlook.model_symbol(29.9, 0, 8) == "clear"
+    assert outlook.model_symbol(30, None, 8) == "partly"
+    assert outlook.model_symbol(65, 0.1, 8) == "cloudy"
+    assert outlook.model_symbol(None, None, 8) is None
+
+
+def test_model_periods_follow_the_outlook_rules():
+    fc = FC.filter(pl.col("okres") == "CZ0201", pl.col("model") == "ecmwf_ifs025")
+    periods = outlook.model_periods(fc)
+    local = fc.with_columns(
+        pl.col("time").dt.convert_time_zone("Europe/Prague").alias("at"),
+        (pl.col("time") - pl.duration(hours=1))
+        .dt.convert_time_zone("Europe/Prague")
+        .alias("before"),
+    )
+    day = date(2026, 10, 13)
+    afternoon = local.filter(
+        pl.col("at").dt.date() == day, pl.col("at").dt.hour().is_between(12, 17)
+    )
+    sums = local.filter(
+        pl.col("before").dt.date() == day, pl.col("before").dt.hour().is_between(12, 17)
+    )
+    row = periods.filter(pl.col("day") == day, pl.col("part") == "afternoon").row(0, named=True)
+    assert row["tmin"] == afternoon["temperature_2m"].min()
+    assert row["tmax"] == afternoon["temperature_2m"].max()
+    assert row["wind"] == afternoon["wind_speed_10m"].max()
+    assert row["cloud"] == pytest.approx(afternoon["cloud_cover"].mean())
+    # precipitation in the hour before its time
+    assert row["precipitation"] == pytest.approx(sums["precipitation"].sum())
+    whole = periods.filter(pl.col("day") == day, pl.col("part") == "day").row(0, named=True)
+    daytime = local.filter(pl.col("at").dt.date() == day, pl.col("at").dt.hour().is_between(6, 17))
+    assert whole["cloud"] == pytest.approx(daytime["cloud_cover"].mean())
+    assert whole["tmax"] == local.filter(pl.col("at").dt.date() == day)["temperature_2m"].max()
+
+
+def test_model_periods_null_beyond_the_horizon():
+    d2 = FC.filter(pl.col("model") == "dwd_icon_d2")
+    last = d2.drop_nulls("temperature_2m")["time"].max()
+    periods = outlook.model_periods(FC).filter(pl.col("model") == "dwd_icon_d2")
+    # every period ends at or before the model's last hour (+1 for the hour-ending sums)
+    ends = periods.with_columns(
+        pl.col("day").cast(pl.Datetime("us")).dt.replace_time_zone("Europe/Prague").alias("start")
+    )
+    assert ends["start"].max() <= last
+    end_day = last.astimezone(ZoneInfo("Europe/Prague")).date()
+    # the model ends inside the day: no whole day, no parts after its end
+    assert periods.filter(pl.col("day") == end_day, pl.col("part") == "day").is_empty()
+    assert periods.filter(pl.col("day") > end_day).is_empty()
+    # a global model has every whole day of the outlook
+    ifs = outlook.model_periods(FC).filter(
+        pl.col("model") == "ecmwf_ifs025", pl.col("part") == "day"
+    )
+    assert ifs.filter(pl.col("okres") == "CZ0201").height >= 5
+
+
+def test_model_parts_files(tmp_path):
+    days = _parts_days()
+    (tmp_path / "old_model.json").write_text("{}", "utf-8")
+    paths = outlook.write_model_parts(FC, WEIGHTS, days, tmp_path, NOW)
+    assert not (tmp_path / "old_model.json").exists()
+    assert len(paths) == 12 and paths[-1].name == "index.json"
+    index = json.loads((tmp_path / "index.json").read_text("utf-8"))
+    ranks = [m["mean_rank"] for m in index["models"]]
+    assert ranks == sorted(ranks) and None not in ranks
+    expected = WEIGHTS.group_by("model").agg(pl.col("rank").mean()).sort("rank")["model"]
+    assert [m["model"] for m in index["models"]] == expected.to_list()
+    doc = json.loads((tmp_path / "dwd_icon_d2.json").read_text("utf-8"))
+    assert doc["model"] == "dwd_icon_d2" and doc["generated"] == "2026-10-12T08:25+00:00"
+    assert doc["rain_probability"] is None
+    assert doc["parts"] == ["night", "morning", "afternoon", "evening", "day"]
+    assert doc["days"] == [d.isoformat() for d in days]
+    assert doc["columns"] == list(outlook.MODEL_PART_COLUMNS)
+    assert "Open-Meteo.com" in doc["attribution"]
+    last = FC.filter(pl.col("model") == "dwd_icon_d2").drop_nulls("temperature_2m")["time"].max()
+    assert doc["last_hour"] == last.strftime("%Y-%m-%dT%H:%MZ")
+    n = len(days) * 5
+    for code in CODES:
+        columns = doc["okresy"][code]
+        assert all(len(v) == n for v in columns.values())
+        # nothing after the model's horizon: the last days are null throughout
+        assert all(v is None for v in columns["tmax"][3 * 5 :])
+        assert any(v is not None for v in columns["tmax"][:5])
+        for i, s in enumerate(columns["symbol"]):
+            if s is None:
+                continue
+            name = doc["symbols"][s]
+            assert name != "showers"
+            wet = (columns["precipitation"][i] or 0) >= outlook.RAIN_MM
+            assert (name in ("rain", "sleet", "snow")) == wet or columns["precipitation"][i] == 0.3
+    # the same values as model_periods, rounded
+    periods = outlook.model_periods(FC).filter(
+        pl.col("model") == "dwd_icon_d2", pl.col("okres") == "CZ0100"
+    )
+    first = periods.filter(pl.col("day") == days[1], pl.col("part") == "afternoon").row(
+        0, named=True
+    )
+    i = 1 * 5 + 2
+    assert doc["okresy"]["CZ0100"]["tmax"][i] == round(first["tmax"], 1)
+    assert doc["symbols"][doc["okresy"]["CZ0100"]["symbol"][i]] == first["symbol"]
+
+
+def test_model_parts_files_stay_small(tmp_path):
+    # 77 okresy with every value filled in (a global model, sunshine too): under 100 kB
+    codes = [f"CZ{i:04d}" for i in range(77)]
+    one = FC.filter(pl.col("okres") == "CZ0100", pl.col("model") == "ecmwf_ifs025")
+    fc = pl.concat([one.with_columns(pl.lit(c).alias("okres")) for c in codes]).with_columns(
+        pl.col("temperature_2m") + 0.123,
+        (pl.col("precipitation") + 0.137),
+        pl.lit(2345.0).alias("sunshine_duration"),
+    )
+    outlook.write_model_parts(fc, WEIGHTS, _parts_days(), tmp_path, NOW)
+    size = (tmp_path / "ecmwf_ifs025.json").stat().st_size
+    assert 50_000 < size < 100_000
