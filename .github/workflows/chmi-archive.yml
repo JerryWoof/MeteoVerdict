@@ -45,6 +45,8 @@ jobs:
       - name: Station table
         run: uv run --frozen mvd stations --out data/stations.parquet
       - name: Station pages
+        # ~5 minutes: one asset listing per release, the files from GitHub's storage host
+        timeout-minutes: 45
         run: uv run --frozen mvd station-pages --github-release --publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -52,7 +54,9 @@ jobs:
         # what the stations measured per okres and part of day, the last 30 days (60 whole
         # days), with our archived forecast beside it (outlook-parts-* of outlook-archive);
         # reads the archive files the station pages downloaded; observed-data.zip in
-        # data-latest. Optional: must not fail the archive (the map then keeps the last one)
+        # data-latest. Optional: must not fail the archive (the map then keeps the last one).
+        # Runs even when the station pages failed (it downloads what it needs itself).
+        if: ${{ !cancelled() }}
         continue-on-error: true
         timeout-minutes: 20
         run: uv run --frozen mvd observed-map --github-release --publish

@@ -539,7 +539,9 @@ def station_pages_cmd(
             closed = chmi_archive.last_closed_year(client)
             years = list(range(closed + 1, today.year + 1))
             wanted = station_pages.wanted_assets(table["id"].to_list(), today, years)
-            chmi_archive.sync(_archive_releases(client), archive, wanted, log=typer.echo)
+            releases = _archive_releases(client)
+            chmi_archive.sync(releases, archive, wanted, log=typer.echo)
+            typer.echo(f"{releases.api_calls} GitHub API requests")
     station_pages.build(archive, table, meta2, out, today, log=typer.echo)
     if publish:
         with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
