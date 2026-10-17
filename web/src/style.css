@@ -1959,3 +1959,225 @@ body.radar #show-box {
     height: 15rem;
   }
 }
+
+/* the station page's diary ("Weather at the station"): the forecast table's look, for the past */
+.diary {
+  margin: 0.5rem 0 1.5rem;
+}
+.diary h2 {
+  margin-bottom: 0.2rem;
+}
+.diary-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin: 0.4rem 0 0.2rem;
+}
+.diary-controls[hidden] {
+  display: none;
+}
+.diary-controls p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.diary-when {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+.diary-when input[type="date"] {
+  font: inherit;
+  font-size: 1rem;
+  padding: 0.25rem 0.3rem;
+  min-width: 9.5rem;
+}
+.diary-when button {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #9aa7b1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1d2329;
+  cursor: pointer;
+}
+.diary-when .diary-step {
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.3rem 0.7rem;
+}
+.diary-when button:disabled {
+  color: #9aa7b1;
+  cursor: default;
+}
+.diary-period {
+  font-size: 1rem;
+  margin: 0.6rem 0 0.2rem;
+}
+.diary-table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.diary-table th {
+  font-weight: 600;
+  color: #3d4a55;
+}
+.diary-table th,
+.diary-table td {
+  text-align: left;
+  padding: 0.2rem 0.45rem;
+  border-bottom: 1px solid #ddd8cc;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.diary-table .num,
+.diary-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.diary-table tbody tr {
+  cursor: pointer;
+}
+.diary-table tbody tr:hover {
+  background: #f8f6f1;
+}
+.diary-table tr.current {
+  background: #f4f1ea;
+  font-weight: 600;
+}
+.diary-table .muted {
+  color: #8a949c;
+}
+.diary-table .tmax {
+  color: #a3341f;
+}
+.diary-table .tmin {
+  color: #1f5f9e;
+}
+.diary-symbol {
+  width: 30px;
+  height: 30px;
+  line-height: 0;
+}
+.diary-daylink {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted #9aa7b1;
+  text-underline-offset: 3px;
+}
+.diary-unchecked {
+  color: #b35c00;
+  margin-left: 0.1rem;
+}
+.diary-badges {
+  white-space: normal;
+  min-width: 6rem;
+}
+.diary-badges .badge {
+  display: inline-block;
+  margin: 0.05rem 0.2rem 0.05rem 0;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: #e9eef2;
+  color: #1d2329;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.diary-badges .badge-BO,
+.diary-badges .badge-KR {
+  background: #f6e3b4;
+}
+.diary-badges .badge-MS,
+.diary-badges .badge-LE,
+.diary-badges .badge-NA {
+  background: #dbe8f6;
+}
+.diary-summary h4,
+.diary-day h4 {
+  font-size: 0.95rem;
+  margin: 0.8rem 0 0.3rem;
+}
+.diary-summary dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.15rem 1.2rem;
+  margin: 0;
+  font-size: 0.85rem;
+}
+.diary-summary dl > dt {
+  color: #5b6670;
+}
+.diary-summary dl > dd {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.diary-day {
+  position: relative;
+}
+.diary-day:not(:empty) {
+  margin-top: 0.8rem;
+  padding: 0.2rem 0.8rem 0.6rem;
+  border: 1px solid #ddd8cc;
+  border-radius: 6px;
+  background: #fffdf8;
+}
+.diary-day .close {
+  float: right;
+  border: none;
+  background: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+.diary-facts {
+  margin: 0.2rem 0 0.5rem;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+.diary-day svg {
+  display: block;
+  max-width: 100%;
+  background: #ffffff;
+}
+.diary-defs {
+  margin-top: 0.8rem;
+  font-size: 0.85rem;
+}
+.diary-defs summary {
+  cursor: pointer;
+  color: #3d4a55;
+}
+.diary-defs ul {
+  padding-left: 1.1rem;
+  color: #3d4a55;
+}
+.diary-table .head-unit {
+  display: none;
+}
+@media (max-width: 600px) {
+  .diary-table th,
+  .diary-table td {
+    padding: 0.2rem 0.25rem;
+  }
+  .diary-table .unit {
+    display: none;
+  }
+  .diary-table .head-unit {
+    display: inline;
+    font-weight: normal;
+    font-size: 0.75rem;
+  }
+  .diary-summary dl {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 0.6rem;
+  }
+  .diary-day:not(:empty) {
+    padding: 0.2rem 0.4rem 0.5rem;
+  }
+}

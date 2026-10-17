@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MeteoVerdict: ČHMÚ station</title>
-    <meta name="description" content="Every element a ČHMÚ station measures, with its history: the last days every 10 minutes, the last month hourly, recent years daily and decades monthly." />
+    <meta name="description" content="What the weather was like at a ČHMÚ station, day by day back to the start of its records, and every element it measures: the last days every 10 minutes, the last month hourly, recent years daily and decades monthly." />
   </head>
   <body class="page station">
     <header>
@@ -31,10 +31,6 @@
           <h2 id="title" data-i18n="station.title">ČHMÚ station</h2>
           <p id="facts" class="note"></p>
           <p id="message" class="note"></p>
-          <form id="pick" hidden>
-            <label><span data-i18n="station.element">Element</span> <select id="element"></select></label>
-            <span id="how" class="muted small"></span>
-          </form>
           <p class="station-map-actions">
             <button type="button" id="map-toggle" aria-controls="map-panel" aria-expanded="true" hidden></button>
             <a id="map-all" href="#" data-i18n="map.all" hidden>All stations on a large map</a>
@@ -59,6 +55,38 @@
           <p class="muted small station-map-keys" data-i18n="map.keys">Keyboard: focus the map, move it with the arrow keys, zoom with + and −; Enter opens the station in the middle.</p>
         </section>
       </div>
+      <section id="diary" class="diary" aria-labelledby="diary-title" hidden>
+        <h2 id="diary-title" data-i18n="diary.title">Weather at the station</h2>
+        <p class="note" data-i18n="diary.intro">What the station measured, day by day: like the forecast, but for the past.</p>
+        <form id="diary-controls" class="diary-controls" autocomplete="off">
+          <div class="diary-views segmented" role="group" data-i18n-aria="diary.views">
+            <button type="button" data-view="days" data-i18n="diary.view.days">14 days</button>
+            <button type="button" data-view="week" data-i18n="diary.view.week">Week</button>
+            <button type="button" data-view="month" data-i18n="diary.view.month">Month</button>
+          </div>
+          <div class="diary-when">
+            <button type="button" id="diary-prev" class="diary-step" data-i18n-aria="diary.prev" aria-label="Earlier">‹</button>
+            <label><span class="sr-only" data-i18n="diary.date">Day</span><input type="date" id="diary-date" required /></label>
+            <button type="button" id="diary-next" class="diary-step" data-i18n-aria="diary.next" aria-label="Later">›</button>
+            <button type="button" id="diary-latest" data-i18n="diary.latest">Latest</button>
+          </div>
+          <p id="diary-range" class="muted small"></p>
+        </form>
+        <h3 id="diary-period" class="diary-period"></h3>
+        <p id="diary-message" class="note" aria-live="polite"></p>
+        <div class="table-scroll"><table id="diary-table" class="diary-table"></table></div>
+        <div id="diary-summary" class="diary-summary"></div>
+        <div id="diary-day" class="diary-day" aria-live="polite"></div>
+        <details class="diary-defs">
+          <summary data-i18n="diary.defs.title">How the daily values are defined</summary>
+          <ul id="diary-defs"></ul>
+        </details>
+      </section>
+      <h2 id="detail-title" data-i18n="station.detail" hidden>Detailed data</h2>
+      <form id="pick" hidden>
+        <label><span data-i18n="station.element">Element</span> <select id="element"></select></label>
+        <span id="how" class="muted small"></span>
+      </form>
       <div id="charts"></div>
       <h2 id="elements-title" data-i18n="station.elements" hidden>All elements of this station</h2>
       <table id="elements" class="doc-table station-elements"></table>
