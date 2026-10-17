@@ -480,6 +480,33 @@ body.tv > * {
   font-size: 1.3rem;
   cursor: pointer;
 }
+/* which forecast the okres panel shows (the map keeps our combination) */
+#okres-panel .model-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.4rem;
+  margin: 0.2rem 0 0.3rem;
+  font-weight: 600;
+}
+#okres-panel .model-pick select {
+  flex: 1 1 10rem;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.3rem;
+}
+#okres-panel .model-note {
+  margin: 0 0 0.3rem;
+  font-size: 0.75rem;
+  color: #5b6670;
+}
+/* a single model's raw forecast: marked so it is not taken for ours */
+#okres-panel.single {
+  box-shadow:
+    inset 4px 0 0 #2b7bd1,
+    0 1px 4px rgba(29, 35, 41, 0.18);
+}
 #okres-panel .now {
   display: flex;
   align-items: center;
