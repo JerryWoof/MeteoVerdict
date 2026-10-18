@@ -40,9 +40,12 @@
       <p id="message" class="note"></p>
       <div class="table-scroll"><table id="days" class="data-table"></table></div>
       <div id="charts"></div>
-      <h2 data-i18n="forecast.weights">Which models count most here</h2>
-      <p class="note" data-i18n="forecast.weightsNote"></p>
-      <div class="table-scroll"><table id="weights" class="data-table"></table></div>
+      <!-- the weights of our combination (hidden for MeteoVerdict AI, ?source=ai) -->
+      <section id="weights-section">
+        <h2 data-i18n="forecast.weights">Which models count most here</h2>
+        <p class="note" data-i18n="forecast.weightsNote"></p>
+        <div class="table-scroll"><table id="weights" class="data-table"></table></div>
+      </section>
     </main>
     <footer data-footer="models" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/methodology.md">
       <!-- filled in by src/footer.js (the credits and licences of every page) -->

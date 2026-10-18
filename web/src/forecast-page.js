@@ -13,18 +13,34 @@ import { fillObce, obceFor, obecSeries, obecTimes, placeOf } from "./obce-test.j
 import { fillPicker, issuedText } from "./picker.js";
 import { statusText } from "./status.js";
 import { dayLabel, parseOutlook, rowFor, sunFor, today } from "./tv.js";
+import { AI_FILES, aiPath, aiText } from "./ai-source.js";
 
-const t = setUpLanguage();
+// ?source=ai: MeteoVerdict AI's forecast (the AI forecast tab's detail, ai-source.js): its
+// own outlook.json and obce files, "MeteoVerdict AI" wherever ours is named, no weights
+const AI = new URLSearchParams(window.location.search).get("source") === "ai";
+const t = AI ? aiText(setUpLanguage()) : setUpLanguage();
 const TIME_ZONE = "Europe/Prague";
 const UNITS = { temperature_2m: "°C", precipitation: "mm", wind_speed_10m: "m/s" };
 
-async function getJson(path) {
+async function fetchJson(path) {
   try {
     const response = await fetch(path);
     return response.ok ? await response.json() : null;
   } catch {
     return null;
   }
+}
+
+const getJson = AI ? (path) => fetchJson(AI_FILES.test(path) ? aiPath(path) : path) : fetchJson;
+
+if (AI) {
+  // the AI tab's colours and menu entry; the texts the page sets once
+  document.body.classList.replace("theme-forecast", "theme-ai");
+  document.querySelector('.site-nav a[href="forecast.html"]')?.classList.remove("current-section");
+  document.querySelector('.site-nav a[href="ai.html"]')?.classList.add("current-section");
+  document.getElementById("combined-note").textContent = t("forecast.note");
+  document.getElementById("weights-section").hidden = true;
+  document.title = "MeteoVerdict: AI forecast by okres";
 }
 
 function cell(tag, text, className) {
@@ -123,7 +139,8 @@ function chart(forecast, combined, table, variable, colors, names, nights, selec
   let segment = 0;
   let previous = null;
   const best = [];
-  bestPerLeadDay(forecast, table, variable, issued).forEach(({ value, model }, i) => {
+  // MeteoVerdict AI: only its own line over the public models
+  (AI ? [] : bestPerLeadDay(forecast, table, variable, issued)).forEach(({ value, model }, i) => {
     if (value == null) return;
     if (model !== previous) {
       // repeat the boundary point so the segments join
@@ -179,7 +196,7 @@ function chart(forecast, combined, table, variable, colors, names, nights, selec
   legend.className = "note";
   const text = single
     ? t("forecast.legendModel", { model: names[selected] ?? selected })
-    : t("forecast.legend", { best: winners || "–" });
+    : t(AI && ours.length === 0 ? "ai.legendOkres" : "forecast.legend", { best: winners || "–" });
   legend.textContent = text + (nights.length ? ` ${t("forecast.night")}` : "");
   figure.append(legend);
   return figure;
@@ -300,7 +317,10 @@ async function show(point, names, colors, outlook) {
     return;
   }
   const forecast = asForecast(parsed, VARIABLES);
-  const combined = Object.fromEntries(VARIABLES.map((v) => [v, parsed.combined[v] ?? parsed.times.map(() => null)]));
+  // MeteoVerdict AI: no hourly series per okres (only per obec, below), so no black line
+  const combined = Object.fromEntries(
+    VARIABLES.map((v) => [v, (AI ? null : parsed.combined[v]) ?? parsed.times.map(() => null)]),
+  );
   const sunOf = (day) => sunFor(outlook, point.code, day);
   const gustOf = (day) => rowFor(outlook, point.code, day, "day");
   // the days of our forecast as on the forecast map (outlook.json); without them (an
@@ -337,7 +357,7 @@ async function show(point, names, colors, outlook) {
       table, names, available: new Set(Object.keys(parsed.models)), selected, t,
     });
   }
-  renderWeights(table, names);
+  if (!AI) renderWeights(table, names);
   message.textContent = "";
   render(names, colors);
 }
