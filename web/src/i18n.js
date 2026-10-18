@@ -196,7 +196,7 @@ export const STRINGS = {
     "ai.none": "Výsledky AI zatím nejsou k dispozici.",
     "ai.fcTitle": "Předpověď MeteoVerdict AI",
     "ai.fcIntro":
-      "Příští dny v okrese podle MeteoVerdict AI (fialově) a naší kombinované předpovědi z karty Předpověď (šedě). AI opravuje předpovědi všech modelů na každé stanici okresu; křivka je průměr těch stanic. Vydáno {time}.",
+      "Okresy podle MeteoVerdict AI. Klikněte na okres: jeho příští dny podle AI (fialově) a naší kombinované předpovědi z karty Předpověď (šedě). AI opravuje předpovědi všech modelů na každé stanici okresu; hodnota okresu je průměr těch stanic. Vydáno {time}.",
     "ai.fcAi": "MeteoVerdict AI",
     "ai.fcCombined": "Kombinovaná předpověď",
     "ai.mapShow": "Mapa",
@@ -206,7 +206,7 @@ export const STRINGS = {
     "ai.layer.diff_temperature_2m": "Teplota: AI − kombinovaná",
     "ai.layer.diff_wind_speed_10m": "Vítr: AI − kombinovaná",
     "ai.layer.temp100m": "Teplota po 100 m (experiment)",
-    "ai.mapNote": "Klikněte na okres: jeho průběh níže.",
+    "ai.mapNote": "Klikněte na okres: jeho předpověď na příští dny.",
     "ai.updated": "Spočteno {time}",
     "ai.modelTitle": "MeteoVerdict AI",
     "ai.modelIntro":
@@ -1116,7 +1116,7 @@ export const STRINGS = {
     "ai.none": "No AI results yet.",
     "ai.fcTitle": "MeteoVerdict AI forecast",
     "ai.fcIntro":
-      "The next days in the okres according to MeteoVerdict AI (purple) and our combined forecast from the Forecast tab (grey). The AI corrects every model's forecast at each station of the okres; the line is the mean of those stations. Issued {time}.",
+      "The okresy according to MeteoVerdict AI. Click an okres: its next days by the AI (purple) and by our combined forecast from the Forecast tab (grey). The AI corrects every model's forecast at each station of the okres; the okres's value is the mean of those stations. Issued {time}.",
     "ai.fcAi": "MeteoVerdict AI",
     "ai.fcCombined": "Combined forecast",
     "ai.mapShow": "Map",
@@ -1126,7 +1126,7 @@ export const STRINGS = {
     "ai.layer.diff_temperature_2m": "Temperature: AI − combined",
     "ai.layer.diff_wind_speed_10m": "Wind: AI − combined",
     "ai.layer.temp100m": "Temperature at 100 m (experiment)",
-    "ai.mapNote": "Click an okres: its forecast below.",
+    "ai.mapNote": "Click an okres: its forecast for the next days.",
     "ai.updated": "Computed {time}",
     "ai.modelTitle": "MeteoVerdict AI",
     "ai.modelIntro":
