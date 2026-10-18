@@ -303,6 +303,16 @@ def score_combined(
     )
 
 
+def score_candidates(
+    observations: pl.LazyFrame | pl.DataFrame, candidates: pl.DataFrame, start: date, end: date
+) -> pl.DataFrame:
+    """Daily scores of experimental forecasts, scored like the blend (a 6-hourly model)."""
+    ids = sorted(candidates["model"].unique().to_list())
+    models = [replace(blend.MODEL, id=i, name=i) for i in ids]
+    table = scoring.daily_scores(observations, candidates, models, start, end, with_blend=False)
+    return table.filter(pl.col("variable").is_in(list(SCORE_VARIABLES.values())))
+
+
 def daily_errors(
     scores: pl.DataFrame, combined_scores: pl.DataFrame, okres_pools: pl.DataFrame
 ) -> pl.DataFrame:
@@ -337,7 +347,9 @@ def daily_errors(
     )
 
 
-def series(daily: pl.DataFrame, best: pl.DataFrame) -> pl.DataFrame:
+def series(
+    daily: pl.DataFrame, best: pl.DataFrame, exclude: set[str] = frozenset()
+) -> pl.DataFrame:
     """Day totals per okres, variable, lead day, date and series on the days that have
     the combination and both out-of-sample choices: the models, ``blend``,
     ``combined``, ``best_oos`` (the day's out-of-sample choice in the okres),
@@ -372,7 +384,8 @@ def series(daily: pl.DataFrame, best: pl.DataFrame) -> pl.DataFrame:
     out = pl.concat([daily.with_columns(pl.lit(None, pl.String).alias("chosen")), oos, oos_cz])
     out = out.join(tested, on=keys, how="semi").filter(pl.col("n") > 0)
     group = ["region", "variable", "lead_day"]
-    single = out.filter(~pl.col("model").is_in(SERIES))
+    # experimental candidates are compared, never picked as the best in hindsight
+    single = out.filter(~pl.col("model").is_in([*SERIES, *exclude]))
     hindsight = (
         single.group_by(*group, "model")
         .agg((pl.col("sum_abs_err").sum() / pl.col("n").sum()).alias("mae"), pl.len().alias("d"))
@@ -589,11 +602,15 @@ def run(
     seed: int = 0,
     log=lambda _: None,
     regression: bool = True,
+    candidates: pl.DataFrame | None = None,
 ) -> tuple[pl.DataFrame, list[list], list[list], dict]:
     """The whole test for the days ``first`` … ``last``: ``(days, groups, models,
     info)`` with the day totals (``series``), the rows of ``results`` and counts.
     ``regression``: temperature and wind with the regression blend (``mos``), as the
-    live forecast; False: the inverse-error weights alone (the method before)."""
+    live forecast; False: the inverse-error weights alone (the method before).
+    ``candidates``: experimental forecasts (``forecasts.SCHEMA``, one ``model`` id each,
+    e.g. MeteoVerdict AI from ``ai/``), scored like the combination and compared as single
+    models; they never enter the training, ``best_oos`` or ``best_hindsight``."""
     scores = scores.filter(pl.col("variable").is_in(list(SCORE_VARIABLES.values())))
     lead_days = sorted(scores["lead_day"].unique().to_list())
     max_lead = max(lead_days) if lead_days else 1
@@ -631,8 +648,15 @@ def run(
     if combined.is_empty():
         return pl.DataFrame(), [], [], info
     combined_scores = score_combined(observations, combined, first, last)
+    if candidates is not None and not candidates.is_empty():
+        tested = pl.concat(
+            [tested, score_candidates(observations, candidates, first, last)],
+            how="diagonal_relaxed",
+        )
+        log(f"candidates: {', '.join(sorted(candidates['model'].unique()))}")
     daily = daily_errors(tested, combined_scores, okres_pools)
-    days = series(daily, best)
+    exclude = set(candidates["model"].unique()) if candidates is not None else set()
+    days = series(daily, best, exclude)
     names = dict(okres_pools.select("region", "region_name").unique().iter_rows())
     groups, models = results(days, names, resamples, seed)
     return days, groups, models, info

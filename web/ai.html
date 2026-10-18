@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MeteoVerdict: AI forecast</title>
+    <meta name="description" content="Experimental: MeteoVerdict AI and other machine-learning forecasts, trained on an NVIDIA DGX Spark and scored against ČHMÚ measurements." />
+  </head>
+  <body class="page theme-ai">
+    <header>
+      <h1><a href="./">MeteoVerdict</a></h1>
+      <p id="status">Loading…</p>
+      <nav class="site-nav" aria-label="MeteoVerdict">
+        <a href="./" data-i18n="page.map">Map</a>
+        <a href="forecast.html" data-i18n="page.tv">Forecast</a>
+        <a href="radar.html" data-i18n="page.radar">Radar</a>
+        <a href="measured.html" data-i18n="page.station">Measured</a>
+        <a href="compare.html" data-i18n="page.compare">Compare</a>
+        <a href="ai.html" data-i18n="page.ai" aria-current="page">AI forecast</a>
+        <a href="data.html" data-i18n="page.api">Data</a>
+      </nav>
+      <button type="button" id="language">Česky</button>
+    </header>
+    <main class="content">
+      <div class="page-head">
+        <h2 class="page-title"><span data-i18n="ai.title">AI forecast</span> <span class="ai-badge" data-i18n="ai.badge">Experimental</span></h2>
+      </div>
+      <p class="ai-banner" data-i18n="ai.banner"></p>
+
+      <section id="ai-forecast" hidden>
+        <h2 data-i18n="ai.fcTitle">MeteoVerdict AI forecast</h2>
+        <p id="ai-fc-intro"></p>
+        <div class="strip standalone">
+          <div class="strip-row">
+            <label class="field"><span data-i18n="control.okres">Okres</span> <select id="ai-okres"></select></label>
+          </div>
+        </div>
+        <h3 data-i18n="variable.temperature_2m">Temperature</h3>
+        <div id="ai-chart-temperature_2m" class="ai-chart"></div>
+        <h3 data-i18n="variable.wind_speed_10m">Wind</h3>
+        <div id="ai-chart-wind_speed_10m" class="ai-chart"></div>
+      </section>
+
+      <section id="ai-model" hidden>
+        <h2 data-i18n="ai.modelTitle">MeteoVerdict AI</h2>
+        <p id="ai-model-intro"></p>
+        <h3 data-i18n="ai.scoreTitle">Does it beat our combined forecast?</h3>
+        <p id="ai-score-intro"></p>
+        <div id="ai-scores"></div>
+      </section>
+
+      <section>
+        <h2 data-i18n="ai.expTitle">Experiments</h2>
+        <p data-i18n="ai.expIntro"></p>
+        <div id="ai-experiments" class="ai-experiments"></div>
+      </section>
+
+      <section>
+        <h2 data-i18n="ai.howTitle">How we test</h2>
+        <p data-i18n="ai.how"></p>
+      </section>
+    </main>
+    <footer data-footer="models" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/ai/README.md">
+      <!-- filled in by src/footer.js (the credits and licences of every page) -->
+      Data: ČHMÚ, Open-Meteo.com and the model providers (CC BY 4.0; UK Met Office CC BY-SA 4.0); scores CC BY-SA 4.0.
+    </footer>
+    <script type="module" src="/src/ai-page.js"></script>
+  </body>
+</html>
