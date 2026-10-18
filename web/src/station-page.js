@@ -33,9 +33,6 @@ import {
   DEFAULT_SHOWN, dayLabel, displayName, labelFor, okresColours, rampKey, today, valueFor,
 } from "./tv.js";
 import { keepRoomForPanels } from "./panel-room.js";
-import { placeSearch } from "./place-search.js";
-import { placesLoader } from "./places.js";
-import placesUrl from "./data/obce.json?url";
 
 const t = setUpLanguage();
 const language = document.documentElement.lang;
@@ -475,15 +472,6 @@ const measuredMap = createMeasuredMap({
 });
 // a long okres panel reaches below the map instead of resizing it
 keepRoomForPanels($("measured-map").parentElement, $("measured-map"), [$("okres-panel")]);
-// "Find a place" (place-search.js, as on the forecast map): the map goes to the place, with
-// the stations around it
-$("obce-search").replaceChildren(
-  placeSearch({
-    t,
-    load: placesLoader(placesUrl),
-    choose: (place) => measuredMap.goTo([place.lon, place.lat], place.name),
-  }),
-);
 
 
 /** Open an okres's panel (okres layer); on phones it is under the map: bring it into view. */
