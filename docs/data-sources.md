@@ -2431,7 +2431,7 @@ okres Litoměřice (105) instead of only the okres's forecast point. After each 
   their population on 1 January from ČSÚ (DataStat set `OBY02A`, selection by okres and
   obec `UZ35H`, matched by okres code and name; checked 2026-10-18: all 105 matched, 35 to
   22,627 inhabitants), rebuilt by `scripts/build_obce_elevations.py <okres name> …`.
-  Litoměřice: 149–438 m. On the map the dot's area grows with the population.
+  Litoměřice: 149–438 m. On the map the bigger places are labelled first.
 - **Models:** every model with weights in the okres, its newest complete run in the
   bucket ([single runs from the bucket](#single-runs-from-the-bucket)), at least 3 h old,
   read at the obec's nearest grid cell with the temperature moved from the cell's terrain
@@ -2445,11 +2445,13 @@ okres Litoměřice (105) instead of only the okres's forecast point. After each 
   combined temperature, precipitation and wind and every model's temperature), served as
   `data/scores/forecast/obce-<okres>.json`. The forecast detail page shows an "Obec (test)"
   picker for an okres that has the file (link `#CZ0423/<obec>`). The forecast map
-  (`web/src/obce-map.js`) shows a dot per obec from zoom 8.5 on, with our combination only:
-  the parts of day summed from the hours as the outlook does (rain in mm, as a single
-  model's), the okres faded and its marker hidden; a click opens the obec's panel (as an okres's,
-  without symbols, cloud and rain probability, with a link back to its okres), and an
-  "Obec (test)" picker above the map takes the map to an obec and opens its panel; from zoom 9.5 the dots carry their names. On the first run (2026-10-18) the obce differed by 2–3 °C in a part of
+  (`web/src/obce-map.js`) shows the obce from zoom 8.5 on as yr.no and Windy draw places: no
+  dots, the name small and the value large beneath it (coloured by the scale, darkened), the
+  bigger places placed first (population) and the rest only where they fit, so zooming in
+  fills the gaps; the okres fades and its marker hides. Parts of day are summed from the
+  hours as the outlook does (rain in mm, as a single model's). A click on a label, or the
+  "Obec (test)" picker above the map, opens the obec's panel (as an okres's, without
+  symbols, cloud and rain probability, with a link back to its okres). On the first run (2026-10-18) the obce differed by 2–3 °C in a part of
   day (Lovečkovice, 438 m, the coldest; the Labe valley the warmest).
 - **Not verified yet:** no station is held out to measure how good a forecast at a place
   without a station is; that is the next step if the test stays.

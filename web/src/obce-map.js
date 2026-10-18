@@ -1,13 +1,15 @@
 // Test (forecast for a place): the obce of the okresy that have an obce file
-// (obce-test.js, Litoměřice) on the forecast map from okres zoom on, a dot per obec
-// coloured and labelled like the okres markers for the day and part shown. Only with
+// (obce-test.js, Litoměřice) on the forecast map from okres zoom on: per obec its name
+// and its value for the day and part shown, the bigger places first. Only with
 // our combination (the obce have no single-model parts).
 import { obecTimes } from "./obce-test.js";
-import { colorFor, labelFor, rampKey, valueFor } from "./tv.js";
+import { colorFor, labelFor, mixColor, rampKey, valueFor } from "./tv.js";
 
 export const OBCE_OKRESY = ["CZ0423"];
 // from about the zoom where one okres fills the map
 export const MIN_ZOOM = 8.5;
+// from this population a place is a town: larger text
+const TOWN = 5000;
 const PARTS = { night: [0, 6], morning: [6, 12], afternoon: [12, 18], evening: [18, 24] };
 // as the outlook (outlook.py MIN_PART_HOURS, MIN_DAY_HOURS)
 const MIN_PART_HOURS = 4;
@@ -93,70 +95,47 @@ export function goToObec(map, name) {
   }
 }
 
-/** The source and layers (once the map has loaded); a click on a dot calls `onPick(okres, name)`. */
+/** The source and its layer (once the map has loaded); a click on a label calls `onPick(okres, name)`. */
 export function addObceLayers(map, onPick) {
   map.addSource("obce-test", { type: "geojson", data: empty });
-  map.addLayer({
-    id: "obce-test-dot",
-    type: "circle",
-    source: "obce-test",
-    minzoom: MIN_ZOOM,
-    paint: {
-      "circle-color": ["get", "color"],
-      // the area grows with the population (square root): a village of 100 is a small dot,
-      // a town of 20,000 a large one
-      "circle-radius": [
-        "interpolate", ["linear"], ["zoom"],
-        MIN_ZOOM, ["+", 2.5, ["*", 0.055, ["sqrt", ["coalesce", ["get", "population"], 300]]]],
-        11, ["+", 3.5, ["*", 0.085, ["sqrt", ["coalesce", ["get", "population"], 300]]]],
-      ],
-      "circle-stroke-color": "#1d2329",
-      "circle-stroke-width": 0.8,
-    },
-  });
+  // as yr.no and Windy draw places: no dots, the name small and the value large beneath it;
+  // the bigger places are placed first and the rest only where they fit, so zooming in
+  // fills the gaps with villages
   map.addLayer({
     id: "obce-test-label",
     type: "symbol",
     source: "obce-test",
     minzoom: MIN_ZOOM,
     layout: {
-      "text-field": ["get", "label"],
+      "text-field": [
+        "format",
+        ["get", "name"], { "font-scale": 0.62, "text-color": "#4b5863" },
+        "\n", {},
+        ["get", "label"], { "text-font": ["literal", ["Noto Sans Bold"]], "text-color": ["get", "valueColor"] },
+      ],
       "text-font": ["Noto Sans Regular"],
-      "text-size": 11,
-      "text-radial-offset": ["+", 0.7, ["*", 0.006, ["sqrt", ["coalesce", ["get", "population"], 300]]]],
-      "text-anchor": "top",
-      // the bigger places win where labels collide
+      "text-size": ["case", [">=", ["coalesce", ["get", "population"], 0], TOWN], 19, 16],
+      "text-anchor": "center",
+      "text-line-height": 1.05,
+      "text-max-width": 9,
+      "text-padding": 6,
       "symbol-sort-key": ["-", ["coalesce", ["get", "population"], 0]],
     },
-    paint: { "text-color": "#1d2329", "text-halo-color": "#ffffff", "text-halo-width": 1.4 },
-  });
-  // the names from where they fit beside the values
-  map.addLayer({
-    id: "obce-test-name",
-    type: "symbol",
-    source: "obce-test",
-    minzoom: 9.5,
-    layout: {
-      "text-field": ["get", "name"],
-      "text-font": ["Noto Sans Regular"],
-      "text-size": 10,
-      "text-radial-offset": ["+", 0.6, ["*", 0.006, ["sqrt", ["coalesce", ["get", "population"], 300]]]],
-      "text-anchor": "bottom",
-      "text-max-width": 8,
-      "symbol-sort-key": ["-", ["coalesce", ["get", "population"], 0]],
+    paint: {
+      "text-halo-color": ["case", ["get", "selected"], "#ffe08a", "rgba(255,255,255,0.92)"],
+      "text-halo-width": ["case", ["get", "selected"], 3, 1.6],
     },
-    paint: { "text-color": "#4b5863", "text-halo-color": "#ffffff", "text-halo-width": 1.2 },
   });
-  map.on("click", "obce-test-dot", (event) => {
+  map.on("click", "obce-test-label", (event) => {
     const p = event.features[0].properties;
     onPick(p.okres, p.name);
   });
-  map.on("mouseenter", "obce-test-dot", () => (map.getCanvas().style.cursor = "pointer"));
-  map.on("mouseleave", "obce-test-dot", () => (map.getCanvas().style.cursor = ""));
+  map.on("mouseenter", "obce-test-label", () => (map.getCanvas().style.cursor = "pointer"));
+  map.on("mouseleave", "obce-test-label", () => (map.getCanvas().style.cursor = ""));
 }
 
 /** Draw the obce for `state` (day, part, colour); `docs`: [{doc, rows}]; none = hidden;
- * `selected`: the obec whose panel is open (a thicker ring). */
+ * `selected`: the obec whose panel is open (a yellow halo). */
 export function paintObce(map, docs, state, selected = null) {
   const features = [];
   const layer = state.colour;
@@ -173,14 +152,14 @@ export function paintObce(map, docs, state, selected = null) {
           okres: doc.okres,
           elevation: Math.round(place.elevation),
           population: place.population ?? null,
-          color: colorFor(value, rampKey(layer, true)),
+          selected: place.name === selected,
+          // the scale's colour, darkened to read as text on the map
+          valueColor: value == null ? "#1d2329" : mixColor(colorFor(value, rampKey(layer, true)), "#1d2329", 0.4),
           label: labelFor(row, layer === "cloud" ? "temperature" : layer, state.part),
         },
       });
     }
   }
   painted = features;
-  if (!map.getLayer("obce-test-dot")) return;
-  map.getSource("obce-test").setData({ type: "FeatureCollection", features });
-  map.setPaintProperty("obce-test-dot", "circle-stroke-width", ["case", ["==", ["get", "name"], selected ?? ""], 3, 0.8]);
+  map.getSource("obce-test")?.setData({ type: "FeatureCollection", features });
 }
