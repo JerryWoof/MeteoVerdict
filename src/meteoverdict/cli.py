@@ -31,6 +31,7 @@ from meteoverdict import (
     hindcast,
     leads,
     mos,
+    obce_forecast,
     observations,
     observed_map,
     outlook,
@@ -1671,6 +1672,37 @@ def _archive_outlook_parts(
     if archive:
         archive.put(tag, name, path, label=store.sha256(path))
     typer.echo(f"archived the parts of day → {path} ({path.stat().st_size:,} bytes)")
+
+
+@app.command("obce-forecast")
+def obce_forecast_cmd(
+    weights_path: Annotated[
+        Path, typer.Option("--weights", help="forecast-weights.parquet (the okres weights).")
+    ] = Path("data") / combine.FORECAST_WEIGHTS_FILE,
+    out_dir: Annotated[Path, typer.Option(help="Folder for obce-<okres>.json.")] = Path(
+        "site/data/forecast"
+    ),
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Take the weights from and put the files into the release data-latest.",
+        ),
+    ] = False,
+) -> None:
+    """Test: forecast for every obec of the okresy in obce-elevations.csv (Litoměřice),
+    from the bucket's newest runs with the okres's weights. No Open-Meteo calls."""
+    with httpx.Client(timeout=120, transport=httpx.HTTPTransport(retries=3)) as client:
+        releases = _release_store(client) if github_release else None
+        if releases:
+            releases.download(store.LATEST_TAG, combine.FORECAST_WEIGHTS_FILE, weights_path)
+        weights = pl.read_parquet(weights_path)
+        for code in obce_forecast.okresy():
+            doc = obce_forecast.forecast(bucket.Bucket(client), weights, code, log=typer.echo)
+            path = obce_forecast.write(doc, out_dir)
+            typer.echo(f"{path}: {len(doc['places'])} obce, {len(doc['runs'])} models")
+            if releases:
+                releases.put(store.LATEST_TAG, path.name, path)
 
 
 @app.command("frost-fit")
