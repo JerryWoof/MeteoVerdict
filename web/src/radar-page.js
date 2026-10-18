@@ -20,6 +20,9 @@ import {
   bracket, cellFeatures, compass, hourTicks, lonLatToPixel, nowcastSentence, relativeTime, sample,
   satelliteProduct,
 } from "./radar-extras.js";
+import { BASEMAP_ATTRIBUTION, GLYPHS, PLACE_LAYERS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
+import { placeLabel, placesLoader, searchPlaces } from "./places.js";
+import placesUrl from "./data/obce.json?url";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -53,20 +56,18 @@ function store(key, value) {
 
 const map = new MapLibreMap({
   container: "map",
-  style: {
-    version: 8,
-    sources: {},
-    layers: [{ id: "background", type: "background", paint: { "background-color": "#f4f1ea" } }],
-  },
+  // the base map under the radar (radar-basemap.js); its labels go on top in addLayers()
+  style: { version: 8, glyphs: GLYPHS, sources: basemapSources(), layers: baseLayers() },
   bounds: [
     [12.0, 48.5],
     [18.95, 51.1],
   ],
   fitBoundsOptions: { padding: 20 },
-  attributionControl: { customAttribution: "Radar: ČHMÚ (CC BY 4.0) · Boundaries: ČÚZK (CC BY 4.0)" },
+  attributionControl: { customAttribution: `Radar: ČHMÚ (CC BY 4.0) · Boundaries, places: ČÚZK (CC BY 4.0) · ${BASEMAP_ATTRIBUTION}` },
 });
 map.addControl(new NavigationControl({ showCompass: false }));
-const mapLoaded = new Promise((resolve) => map.on("load", resolve));
+// the style, not its tiles: "load" would wait for every base-map tile before the radar
+const mapLoaded = new Promise((resolve) => map.once("style.load", resolve));
 
 const hadHash = window.location.hash.length > 1;
 let view = parseView(window.location.hash);
@@ -83,7 +84,7 @@ let clockState = { ms: 0, hold: 0 };
 let speed = SPEEDS.includes(Number(stored("speed", 1))) ? Number(stored("speed", 1)) : 1;
 // half strength by default: the clouds under the radar, not over it
 let satOpacity = Math.min(1, Math.max(0.2, Number(stored("satOpacity", 0.5)) || 0.5));
-let point = null; // {lon, lat} of the rain-at-my-place panel
+let point = null; // {lon, lat, name?} of the rain-at-my-place panel
 
 function element(tag, text, className) {
   const e = document.createElement(tag);
@@ -553,7 +554,6 @@ function stepBy(direction) {
 function addLayers() {
   map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
   map.addSource("kraje", { type: "geojson", data: "data/kraje.geojson" });
-  map.addLayer({ id: "okresy-fill", type: "fill", source: "okresy", paint: { "fill-color": "#ececec", "fill-opacity": 0.6 } });
   // order: satellite, radar, echo tops, 1-hour sums, then the lines and the storm cells
   const empty = { type: "geojson", data: { type: "FeatureCollection", features: [] } };
   map.addSource("slot", empty);
@@ -562,6 +562,8 @@ function addLayers() {
   map.addLayer({ id: "rain-canvas-slot", type: "line", source: "slot" });
   map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#8a949c", "line-width": 0.4 } });
   map.addLayer({ id: "kraje-line", type: "line", source: "kraje", paint: { "line-color": "#3a444c", "line-width": 1.1 } });
+  // the base map's national border and place labels: over the radar, under the storm cells
+  for (const layer of topLayers(language)) map.addLayer(layer);
   radarCanvas = new GridCanvas("radar-canvas", "rain-canvas-slot");
   rainCanvas = new GridCanvas("rain-canvas", "okresy-line");
 
@@ -584,18 +586,25 @@ function addLayers() {
       "circle-stroke-width": ["case", ["get", "hail"], 4, 2],
     },
   });
-  map.on("mouseenter", "cell-points", () => (map.getCanvas().style.cursor = "pointer"));
-  map.on("mouseleave", "cell-points", () => (map.getCanvas().style.cursor = ""));
+  for (const layer of ["cell-points", ...PLACE_LAYERS]) {
+    map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
+    map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
+  }
+  const around = (p, r) => [
+    [p.x - r, p.y - r],
+    [p.x + r, p.y + r],
+  ];
   map.on("click", (event) => {
-    const hit = map.queryRenderedFeatures(
-      [
-        [event.point.x - 10, event.point.y - 10],
-        [event.point.x + 10, event.point.y + 10],
-      ],
-      { layers: ["cell-points"] },
-    )[0];
-    if (hit) showCell(hit);
-    else setPoint(event.lngLat.lng, event.lngLat.lat);
+    const hit = map.queryRenderedFeatures(around(event.point, 10), { layers: ["cell-points"] })[0];
+    if (hit) return showCell(hit);
+    // a town label: that town's point, with its name
+    const label = map.queryRenderedFeatures(around(event.point, 3), { layers: PLACE_LAYERS })[0];
+    if (label?.geometry?.type === "Point") {
+      const [lon, lat] = label.geometry.coordinates;
+      const name = label.properties[`name:${language}`] ?? label.properties.name;
+      return setPoint(lon, lat, name);
+    }
+    setPoint(event.lngLat.lng, event.lngLat.lat);
   });
 }
 
@@ -620,8 +629,8 @@ function showCell(feature) {
 // --- rain at my place ------------------------------------------------------------------------
 let marker = null;
 let pointToken = 0;
-function setPoint(lon, lat) {
-  point = { lon, lat };
+function setPoint(lon, lat, name = null) {
+  point = { lon, lat, name };
   marker ??= new Marker({ color: "#c0392b" });
   marker.setLngLat([lon, lat]).addTo(map);
   if (window.innerWidth <= 700) document.getElementById("show").open = false;
@@ -640,7 +649,8 @@ async function refreshPoint() {
   panel.hidden = false;
   const token = ++pointToken;
   const title = element("div", null, "point-title");
-  title.append(element("strong", t("radar.point.title", { lat: point.lat.toFixed(2), lon: point.lon.toFixed(2) })));
+  const where = { lat: point.lat.toFixed(2), lon: point.lon.toFixed(2) };
+  title.append(element("strong", point.name ? t("radar.point.titlePlace", { name: point.name }) : t("radar.point.title", where)));
   const close = element("button", "×", "close");
   close.type = "button";
   close.setAttribute("aria-label", t("radar.point.close"));
@@ -653,7 +663,7 @@ async function refreshPoint() {
   const live = view.day === "live";
   const anchor = live ? lastObserved() ?? lastTime() : steps[locate(steps, shownMs).i].time;
   const chosen = allSteps.filter((s) => s.time >= anchor - 2 * 3600000 && s.time <= anchor + 3600000 && (live || !s.forecast));
-  if (panel.dataset.key !== `${point.lon},${point.lat},${anchor}`) {
+  if (panel.dataset.key !== `${point.lon},${point.lat},${point.name},${anchor}`) {
     panel.replaceChildren(title, element("p", t("radar.point.loading"), "muted"));
   }
   const decoded = await Promise.all(chosen.map((s) => frame(radarUrl(s))));
@@ -683,7 +693,7 @@ async function refreshPoint() {
   lines.push(pointChart(series, anchor, live));
   lines.push(element("p", t("radar.point.note"), "muted"));
   panel.replaceChildren(...lines);
-  panel.dataset.key = `${point.lon},${point.lat},${anchor}`;
+  panel.dataset.key = `${point.lon},${point.lat},${point.name},${anchor}`;
 }
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -969,7 +979,111 @@ function renderPointHint() {
   button.type = "button";
   const note = element("span", "", "muted");
   button.addEventListener("click", () => locateMe(button));
-  hint.replaceChildren(element("span", `${t("radar.point.hint")} `), button, note);
+  hint.replaceChildren(element("span", `${t("radar.point.hint")} `), button, note, placeSearch());
+}
+
+// --- find a place: every obec with its okres (places.js, data/obce.json) --------------------
+const loadPlaces = placesLoader(placesUrl);
+
+/** Choose a place: the rain-at-a-place point, as a click there would; the map moves only
+ * when the place is outside the view. */
+function choosePlace(place) {
+  setPoint(place.lon, place.lat, placeLabel(place));
+  if (!map.getBounds().contains([place.lon, place.lat])) map.easeTo({ center: [place.lon, place.lat] });
+}
+
+function placeSearch() {
+  const box = element("div", null, "place-search");
+  const label = element("label", t("radar.place.label"));
+  const input = document.createElement("input");
+  input.type = "search";
+  input.id = "place";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.placeholder = t("radar.place.placeholder");
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
+  input.setAttribute("aria-controls", "place-list");
+  label.htmlFor = input.id;
+  const list = element("ul", null, "place-list");
+  list.id = "place-list";
+  list.setAttribute("role", "listbox");
+  list.hidden = true;
+  let results = [];
+  let active = -1;
+  let token = 0;
+  let enterPending = false; // Enter before the list came: take its first place
+
+  function show(items, message = null) {
+    results = items;
+    active = items.length ? 0 : -1;
+    list.replaceChildren(
+      ...items.map((place, k) => {
+        const option = element("li", null, "option");
+        option.id = `place-${k}`;
+        option.setAttribute("role", "option");
+        option.append(element("span", place.name, "name"), element("span", ` (${place.okres})`, "okres"));
+        // mousedown: before the input loses focus and closes the list
+        option.addEventListener("mousedown", (event) => {
+          event.preventDefault();
+          pick(k);
+        });
+        return option;
+      }),
+    );
+    if (message) list.append(element("li", message, "empty"));
+    list.hidden = !items.length && !message;
+    input.setAttribute("aria-expanded", String(!list.hidden));
+    highlight();
+  }
+  function highlight() {
+    [...list.querySelectorAll(".option")].forEach((option, k) => option.setAttribute("aria-selected", String(k === active)));
+    if (active >= 0) input.setAttribute("aria-activedescendant", `place-${active}`);
+    else input.removeAttribute("aria-activedescendant");
+    list.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: "nearest" });
+  }
+  function pick(k) {
+    const place = results[k];
+    if (!place) return;
+    input.value = placeLabel(place);
+    show([]);
+    choosePlace(place);
+  }
+  async function search() {
+    const query = input.value;
+    const mine = ++token;
+    if (!query.trim()) return show([]);
+    const places = await loadPlaces();
+    if (mine !== token) return;
+    if (!places.length) return show([], t("radar.place.unavailable"));
+    const found = searchPlaces(places, query, 8);
+    show(found, found.length ? null : t("radar.place.none"));
+    if (enterPending && found.length) pick(0);
+    enterPending = false;
+  }
+  input.addEventListener("focus", () => loadPlaces()); // fetch while the user types
+  input.addEventListener("input", () => {
+    enterPending = false;
+    search();
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (!results.length) return;
+      event.preventDefault();
+      active = (active + (event.key === "ArrowDown" ? 1 : -1) + results.length) % results.length;
+      highlight();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      if (active >= 0) pick(active);
+      else if (input.value.trim()) enterPending = true;
+    } else if (event.key === "Escape") {
+      show([]);
+    }
+  });
+  input.addEventListener("blur", () => show([]));
+  box.append(label, input, list);
+  return box;
 }
 
 /** Percent position on the timeline, corrected for the 16 px thumb of the range input. */
@@ -1248,6 +1362,9 @@ async function main() {
   days = Array.isArray(daysJson) ? daysJson : [];
   // phones: the box starts folded so the map stays visible
   if (window.innerWidth <= 700) document.getElementById("show").open = false;
+  // phones: the credits folded behind (i) (they are in full in the footer too), as MapLibre
+  // folds them on the first drag; open they cover a third of a small map
+  if (window.innerWidth <= 700) map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
   addLayers();
   await update({ day: view.day });
   window.addEventListener("resize", () => renderTimeline());
@@ -1277,7 +1394,7 @@ async function bench(scale = perf.scale) {
 }
 
 // for checks in a browser: jump to a time, play, place a point, measure
-window.__radar = { goTo, play, stop, setPoint, bench, state: () => ({ shownMs, playing, steps: steps.length, perf }) };
+window.__radar = { map, goTo, play, stop, setPoint, bench, state: () => ({ shownMs, playing, steps: steps.length, perf }) };
 
 // EUMETSAT's data policy asks for "contains modified EUMETSAT Meteosat data <year>"
 const satYear = document.getElementById("sat-year");

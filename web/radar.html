@@ -64,9 +64,9 @@
         <aside id="show-box" class="map-box legend">
           <details id="show" open>
             <summary data-i18n="radar.onMap">On the map</summary>
+            <div id="point-hint"></div>
             <div id="layers"></div>
             <div id="radar-legend"></div>
-            <p id="point-hint"></p>
           </details>
         </aside>
         <aside id="point-panel" class="map-box panel" hidden aria-live="polite"></aside>
@@ -74,7 +74,7 @@
     </main>
     <footer data-footer="radar" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/data-sources.md#radar-archive">
       <!-- filled in by src/footer.js (the credits and licences of every page) -->
-      Radar and satellite images: ČHMÚ, EUMETSAT (CC BY 4.0).
+      Radar and satellite images: ČHMÚ, EUMETSAT (CC BY 4.0). Base map: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors; relief: Terrain Tiles.
     </footer>
     <script type="module" src="/src/radar-page.js"></script>
   </body>
