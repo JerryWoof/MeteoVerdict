@@ -70,6 +70,9 @@ class FakeGitHub:
             if request.method == "DELETE":
                 del self.assets[asset_id]
                 return httpx.Response(204)
+            if request.method == "PATCH":
+                self.assets[asset_id].update(json.loads(request.content))
+                return httpx.Response(200, json={"id": asset_id})
             assert request.headers["Accept"] == "application/octet-stream"
             return httpx.Response(
                 302, headers={"Location": f"https://objects.githubusercontent.com/x/{asset_id}"}

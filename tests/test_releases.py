@@ -124,6 +124,7 @@ class FakeGitHub:
         self.storage: list[str] = []
         self.limited: list[httpx.Response] = []  # answered before the real answer
         self.next_asset = 1000
+        self.fail_uploads = False
 
     def _by_id(self, release_id: int) -> str:
         return next(t for t, r in self.releases.items() if r["id"] == release_id)
@@ -167,11 +168,22 @@ class FakeGitHub:
             tag = self._by_id(aid // 100000)
             self.releases[tag]["assets"][aid % 100000] = None
             return httpx.Response(204)
+        if path.startswith("/releases/assets/") and request.method == "PATCH":
+            aid = int(path.rsplit("/", 1)[1])
+            tag = self._by_id(aid // 100000)
+            names = self.releases[tag]["assets"]
+            new_name = json.loads(request.content)["name"]
+            if new_name in names:
+                return httpx.Response(422, json={"message": "already_exists"})
+            names[aid % 100000] = new_name
+            return httpx.Response(200, json=self.asset(tag, new_name))
         if path.startswith("/releases/assets/"):
             return httpx.Response(200, content=b"via api")
         if path.endswith("/assets") and url.host == "uploads.github.com":
             tag = self._by_id(int(path.split("/")[2]))
             names = self.releases[tag]["assets"]
+            if self.fail_uploads:
+                return httpx.Response(502)
             if sum(n is not None for n in names) >= rel.MAX_ASSETS:
                 return httpx.Response(422, json={"message": "too many assets"})
             names.append(url.params["name"])
@@ -263,13 +275,17 @@ def test_a_full_release_overflows_into_the_next(tmp_path):
     assets = store.assets("chmi-history-1")
     assert len(assets) == rel.MAX_ASSETS + 1
     assert assets["new.parquet"]["_tag"] == "chmi-history-1.2"
-    # replacing an asset keeps it where it is
+    # replacing an asset of the full release moves it to the one with room
     store.put("chmi-history-1", "h0001.parquet", path)
-    assert "h0001.parquet" in gh.releases["chmi-history-1"]["assets"]
-    assert "h0001.parquet" not in gh.releases["chmi-history-1.2"]["assets"]
+    assert "h0001.parquet" not in gh.releases["chmi-history-1"]["assets"]
+    assert "h0001.parquet" in gh.releases["chmi-history-1.2"]["assets"]
+    # and the next replacement fills the freed slot
+    store.put("chmi-history-1", "h0002.parquet", path)
+    assert "h0002.parquet" in gh.releases["chmi-history-1"]["assets"]
     # a new store finds both releases as one; tags() hides the overflow
     fresh = gh.store()
     assert len(fresh.names("chmi-history-1")) == rel.MAX_ASSETS + 1
+    assert fresh.assets("chmi-history-1")["h0001.parquet"]["_tag"] == "chmi-history-1.2"
     assert fresh.tags("chmi-history") == ["chmi-history-1"]
     fresh.download("chmi-history-1", "new.parquet", tmp_path / "got")
     assert gh.storage[-1] == "/o/r/releases/download/chmi-history-1.2/new.parquet"
@@ -296,3 +312,68 @@ def test_rate_limit_wait_reads_the_headers():
     assert rel.rate_limit_wait(resp(403, **{"retry-after": "5"}), 0, 0) == 5
     reset = {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "50"}
     assert rel.rate_limit_wait(resp(403, **reset), 100, 0) == 1  # already reset
+
+
+def live(gh: FakeGitHub, tag: str) -> list[str]:
+    return [n for n in gh.releases[tag]["assets"] if n is not None]
+
+
+def test_replace_uploads_first_then_deletes_and_renames(tmp_path):
+    gh = FakeGitHub({"data-2026-10": ["obs-2026-10.parquet", "fc-2026-10.parquet"]})
+    store = gh.store()
+    path = tmp_path / "f"
+    path.write_bytes(b"x")
+    store.put("data-2026-10", "obs-2026-10.parquet", path, label="sha")
+    methods = [m for m, _ in gh.api]
+    assert methods[-3:] == ["POST", "DELETE", "PATCH"]
+    assert sorted(live(gh, "data-2026-10")) == ["fc-2026-10.parquet", "obs-2026-10.parquet"]
+    asset = store.assets("data-2026-10")["obs-2026-10.parquet"]
+    assert asset["name"] == "obs-2026-10.parquet" and asset["id"] % 100000 == 2
+
+
+def test_a_failed_upload_leaves_the_old_asset(tmp_path):
+    gh = FakeGitHub({"data-2026-10": ["obs-2026-10.parquet"]})
+    store = gh.store()
+    path = tmp_path / "f"
+    path.write_bytes(b"x")
+    gh.fail_uploads = True
+    with pytest.raises(httpx.HTTPStatusError):
+        store.put("data-2026-10", "obs-2026-10.parquet", path)
+    assert not any(m == "DELETE" for m, _ in gh.api)
+    assert live(gh, "data-2026-10") == ["obs-2026-10.parquet"]
+    assert "obs-2026-10.parquet" in gh.store().names("data-2026-10")
+
+
+def test_a_leftover_new_asset_is_hidden_and_cleaned_up(tmp_path):
+    gh = FakeGitHub({"data-2026-10": ["obs-2026-10.parquet", "obs-2026-10.parquet.new"]})
+    store = gh.store()
+    assert store.names("data-2026-10") == {"obs-2026-10.parquet"}
+    assert store.assets("data-2026-10")["obs-2026-10.parquet"]["id"] % 100000 == 0
+    path = tmp_path / "f"
+    path.write_bytes(b"x")
+    store.put("data-2026-10", "obs-2026-10.parquet", path)
+    assert live(gh, "data-2026-10") == ["obs-2026-10.parquet"]
+
+
+def test_a_leftover_without_its_original_is_the_file(tmp_path):
+    gh = FakeGitHub({"data-2026-10": ["fc-2026-10.parquet", "obs-2026-10.parquet.new"]})
+    store = gh.store()
+    assert store.names("data-2026-10") == {"fc-2026-10.parquet", "obs-2026-10.parquet"}
+    store.download("data-2026-10", "obs-2026-10.parquet", tmp_path / "got")
+    assert gh.storage[-1].endswith("/obs-2026-10.parquet.new")
+    path = tmp_path / "f"
+    path.write_bytes(b"x")
+    store.put("data-2026-10", "obs-2026-10.parquet", path)  # renamed, then replaced
+    assert sorted(live(gh, "data-2026-10")) == ["fc-2026-10.parquet", "obs-2026-10.parquet"]
+    assert gh.store().names("data-2026-10") == {"fc-2026-10.parquet", "obs-2026-10.parquet"}
+
+
+def test_replace_in_a_release_with_one_free_slot(tmp_path):
+    names = [f"a{i}" for i in range(rel.MAX_ASSETS - 1)]
+    gh = FakeGitHub({"t": names})
+    store = gh.store()
+    path = tmp_path / "f"
+    path.write_bytes(b"x")
+    store.put("t", "a5", path)
+    assert len(live(gh, "t")) == rel.MAX_ASSETS - 1
+    assert "a5" in live(gh, "t") and "t.2" not in gh.releases
