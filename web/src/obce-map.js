@@ -80,6 +80,31 @@ export function obcePartRows(doc) {
 }
 
 const empty = { type: "FeatureCollection", features: [] };
+let popup = null;
+let painted = []; // the features last drawn
+
+function openPopup(map, p, lngLat, t) {
+  popup ??= new Popup({ closeButton: true, closeOnClick: true, maxWidth: "240px" });
+  const box = document.createElement("div");
+  const title = document.createElement("strong");
+  title.textContent = `${p.name} (${p.elevation} m)`;
+  const value = document.createElement("div");
+  value.textContent = p.label;
+  const link = document.createElement("a");
+  link.href = `forecast-detail.html#${p.okres}/${encodeURIComponent(p.name)}`;
+  link.textContent = t("tv.obecDetail");
+  box.append(title, value, link);
+  popup.setLngLat(lngLat).setDOMContent(box).addTo(map);
+}
+
+/** The obec chosen in the picker: the map goes there and opens its popup. */
+export function showObec(map, name, t) {
+  const feature = painted.find((f) => f.properties.name === name);
+  if (!feature) return;
+  const lngLat = feature.geometry.coordinates;
+  map.easeTo({ center: lngLat, zoom: Math.max(map.getZoom(), 10.5) });
+  map.once("moveend", () => openPopup(map, feature.properties, lngLat, t));
+}
 
 /** The source and layers (once the map has loaded); a click opens a small popup. */
 export function addObceLayers(map, t) {
@@ -110,20 +135,23 @@ export function addObceLayers(map, t) {
     },
     paint: { "text-color": "#1d2329", "text-halo-color": "#ffffff", "text-halo-width": 1.4 },
   });
-  const popup = new Popup({ closeButton: true, closeOnClick: true, maxWidth: "240px" });
-  map.on("click", "obce-test-dot", (event) => {
-    const p = event.features[0].properties;
-    const box = document.createElement("div");
-    const title = document.createElement("strong");
-    title.textContent = `${p.name} (${p.elevation} m)`;
-    const value = document.createElement("div");
-    value.textContent = p.label;
-    const link = document.createElement("a");
-    link.href = `forecast-detail.html#${p.okres}/${encodeURIComponent(p.name)}`;
-    link.textContent = t("tv.obecDetail");
-    box.append(title, value, link);
-    popup.setLngLat(event.lngLat).setDOMContent(box).addTo(map);
+  // the names from where they fit beside the values
+  map.addLayer({
+    id: "obce-test-name",
+    type: "symbol",
+    source: "obce-test",
+    minzoom: 9.5,
+    layout: {
+      "text-field": ["get", "name"],
+      "text-font": ["Noto Sans Regular"],
+      "text-size": 10,
+      "text-offset": [0, -0.9],
+      "text-anchor": "bottom",
+      "text-max-width": 8,
+    },
+    paint: { "text-color": "#4b5863", "text-halo-color": "#ffffff", "text-halo-width": 1.2 },
   });
+  map.on("click", "obce-test-dot", (event) => openPopup(map, event.features[0].properties, event.lngLat, t));
   map.on("mouseenter", "obce-test-dot", () => (map.getCanvas().style.cursor = "pointer"));
   map.on("mouseleave", "obce-test-dot", () => (map.getCanvas().style.cursor = ""));
 }
@@ -150,5 +178,6 @@ export function paintObce(map, docs, state) {
       });
     }
   }
+  painted = features;
   map.getSource("obce-test")?.setData({ type: "FeatureCollection", features });
 }
