@@ -665,6 +665,10 @@ body.tv > * {
   font-size: 0.85rem;
   font-weight: 600;
 }
+.map-model[hidden] {
+  display: none;
+}
+
 .map-model select {
   min-width: 0;
   max-width: 22rem;
