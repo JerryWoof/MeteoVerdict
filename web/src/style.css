@@ -2685,6 +2685,17 @@ body.station [hidden] {
   /* the date picker for older days first, on the left (time runs left to right) */
   order: -1;
 }
+/* a station's name over its values, zoomed in (measured-map-view.js STATION_ZOOM) */
+.measured-map .wx-name {
+  display: none;
+  font-size: 0.68rem;
+  color: #4b5863;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.measured-map.named .wx-name {
+  display: block;
+}
 .measured-map .station-label.selected .wx-top {
   text-decoration: underline;
 }
