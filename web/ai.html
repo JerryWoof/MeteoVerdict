@@ -30,6 +30,17 @@
       <section id="ai-forecast" hidden>
         <h2 data-i18n="ai.fcTitle">MeteoVerdict AI forecast</h2>
         <p id="ai-fc-intro"></p>
+        <div class="strip attached">
+          <div class="strip-row">
+            <label class="field"><span data-i18n="ai.mapShow">Show</span> <select id="ai-map-layer"></select></label>
+            <label class="field"><span data-i18n="ai.mapTime">Time</span> <select id="ai-map-time"></select></label>
+          </div>
+        </div>
+        <div class="map-wrap">
+          <div id="ai-map" class="map-frame" role="region" aria-label="MeteoVerdict AI map of Czechia"></div>
+          <div id="ai-scale" class="ai-scale"></div>
+        </div>
+        <p class="ai-map-note" data-i18n="ai.mapNote"></p>
         <div class="strip standalone">
           <div class="strip-row">
             <label class="field"><span data-i18n="control.okres">Okres</span> <select id="ai-okres"></select></label>
