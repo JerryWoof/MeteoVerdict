@@ -7,7 +7,7 @@ import { COMBINED, weightTable } from "./forecast.js";
 import { drawIcon, glyph, iconCanvas } from "./icons.js";
 import { setUpLanguage } from "./i18n.js";
 import { mapModelOptions, modelHorizon, modelPeriods, parseModelParts, parseModels } from "./models.js";
-import { MIN_ZOOM, OBCE_OKRESY, addObceLayers, obcePartRows, paintObce, showObec } from "./obce-map.js";
+import { MIN_ZOOM, OBCE_OKRESY, addObceLayers, obceDrawn, obcePartRows, paintObce, showObec } from "./obce-map.js";
 import { fillObce, obceFor } from "./obce-test.js";
 import { renderScale } from "./palette.js";
 import { GLYPHS } from "./radar-basemap.js";
@@ -274,7 +274,7 @@ function declutter() {
     });
   const shown = placeMarkers(boxes, 4, state.okres);
   // test: zoomed in, the obce stand in for their okres's marker
-  if (obceDocs.length && mapModel === COMBINED && map.getZoom() >= MIN_ZOOM) {
+  if (obceDocs.length && mapModel === COMBINED && obceDrawn() && map.getZoom() >= MIN_ZOOM) {
     for (const code of OBCE_OKRESY) shown.delete(code);
   }
   for (const [code, m] of markers) {
@@ -600,8 +600,8 @@ function update(change = {}, fromPlay = false) {
   renderShow();
   paintFill(okresColours(view, state.day, state.part, state.colour));
   map.setFilter("okres-selected", ["==", ["get", "code"], state.okres ?? ""]);
-  paintMarkers(view);
   if (mapReady || obceDocs.length) paintObce(map, mapModel === COMBINED ? obceDocs : [], state);
+  paintMarkers(view);
   renderHeadline(view);
   renderPanel(outlook);
   fitView();
