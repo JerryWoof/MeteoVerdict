@@ -99,6 +99,12 @@ body.theme-data {
   --theme-accent: #486078;
   --theme-ink: #30465b;
 }
+body.theme-ai {
+  --theme-bg: #eeeaf8;
+  --theme-line: #d6cdef;
+  --theme-accent: #6a4fb3;
+  --theme-ink: #4a3585;
+}
 body[class*="theme-"] {
   --strip-bg: var(--theme-bg);
   --strip-line: var(--theme-line);
@@ -2784,4 +2790,59 @@ body.station [hidden] {
     max-height: none;
     overflow: visible;
   }
+}
+
+/* the AI forecast tab (ai.html): everything on it is experimental */
+.ai-badge {
+  display: inline-block;
+  vertical-align: middle;
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--theme-accent);
+}
+.ai-banner {
+  padding: 0.6rem 0.8rem;
+  border-left: 4px solid var(--theme-accent);
+  background: var(--theme-bg);
+  color: var(--theme-ink);
+}
+.ai-verdict.better { color: #1e7a3c; font-weight: 600; }
+.ai-verdict.worse { color: #b23f35; }
+.ai-experiments {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: 0.75rem;
+}
+.ai-card {
+  border: 1px solid var(--theme-line);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+}
+.ai-card h3 { margin: 0 0 0.3rem; font-size: 1rem; }
+.ai-card p { margin: 0.3rem 0; }
+.ai-status {
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: #e6e6e6;
+  color: #444;
+  white-space: nowrap;
+}
+.ai-status.testing { background: #fff1c7; color: #7a5a00; }
+.ai-status.works { background: #d7f0de; color: #1e7a3c; }
+.ai-status.no_gain { background: #f6dcd8; color: #842a22; }
+.ai-result { font-variant-numeric: tabular-nums; }
+.ai-tech { color: var(--ink-soft); font-size: var(--fs-ui); }
+#ai-scores { margin-bottom: 1rem; }
+#ai-scores h4 { margin: 0.75rem 0 0.25rem; }
+.ai-score-table td, .ai-score-table th { padding: 0.25rem 0.4rem; }
+.ai-verdict small { display: block; color: var(--ink-soft); font-weight: 400; white-space: nowrap; }
+.ai-chart { margin-bottom: 0.5rem; }
+@media (max-width: 480px) {
+  .ai-score-table { font-size: 0.82rem; }
+  .ai-score-table td, .ai-score-table th { padding: 0.25rem 0.25rem; }
 }

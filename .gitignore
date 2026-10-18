@@ -36,3 +36,5 @@ web/public/data/
 .vscode/
 .DS_Store
 web/public/api/
+# MeteoVerdict AI outputs on the Spark
+/ai-out/
