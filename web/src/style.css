@@ -2865,3 +2865,19 @@ body.station [hidden] {
 .ai-key::before { content: ""; display: inline-block; width: 0.9rem; height: 3px; margin-right: 0.3rem; vertical-align: middle; }
 .ai-key.ai::before { background: #6a4fb3; }
 .ai-key.combined::before { background: #8a949c; }
+/* the AI forecast tab below the map (ai-extras.js): fits a phone without scrolling */
+.ai-extras { margin-top: 1.25rem; }
+.ai-score-table { width: 100%; max-width: 36rem; }
+.ai-score-table .ai-best b { font-weight: 400; white-space: nowrap; }
+.ai-gain.better { color: #1e7a3c; font-weight: 600; }
+.ai-gain.worse { color: #b23f35; }
+.ai-result-table { width: 100%; }
+.ai-result-table td, .ai-result-table th { overflow-wrap: anywhere; }
+/* a phone: each row of an experiment's table as its own list of "column: value" */
+@media (max-width: 600px) {
+  .ai-result-table, .ai-result-table tbody, .ai-result-table tr, .ai-result-table td { display: block; }
+  .ai-result-table tr:first-child { display: none; }
+  .ai-result-table tr { padding: 0.3rem 0; border-top: 1px solid var(--theme-line); }
+  .ai-result-table td { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.05rem 0; border: 0; text-align: right; }
+  .ai-result-table td::before { content: attr(data-label); color: var(--ink-soft); text-align: left; }
+}

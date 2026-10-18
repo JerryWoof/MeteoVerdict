@@ -104,12 +104,14 @@ export function footerParts(kind, t, { method, year = new Date().getUTCFullYear(
       ...methodLink,
     ];
   }
+  // the AI forecast tab ("ai"): the forecast map's credits, with MeteoVerdict AI's own line
+  const map = kind === "tv" || kind === "ai";
   const processed =
-    kind === "tv"
-      ? `${t("footer.processed")}; ${t("tv.combined")}. ${t("footer.ours")}: `
+    map
+      ? `${t("footer.processed")}; ${t(kind === "ai" ? "ai.footer" : "tv.combined")}. ${t("footer.ours")}: `
       : `${t("footer.processed")}. ${t("footer.scores")}: `;
   // the forecast map: the base map when zoomed in, the obce's population (test)
-  const tvOnly = kind === "tv"
+  const tvOnly = map
     ? [
       ...basemapCredits(t),
       SEP,
