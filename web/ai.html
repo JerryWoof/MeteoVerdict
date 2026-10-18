@@ -32,24 +32,15 @@
         <p id="ai-fc-intro"></p>
         <div class="strip attached">
           <div class="strip-row">
-            <label class="field"><span data-i18n="ai.mapShow">Show</span> <select id="ai-map-layer"></select></label>
+            <label class="field"><span data-i18n="ai.mapShow">Map</span> <select id="ai-map-layer"></select></label>
             <label class="field"><span data-i18n="ai.mapTime">Time</span> <select id="ai-map-time"></select></label>
           </div>
         </div>
         <div class="map-wrap">
           <div id="ai-map" class="map-frame" role="region" aria-label="MeteoVerdict AI map of Czechia"></div>
-          <div id="ai-scale" class="ai-scale"></div>
+          <aside class="map-box legend"><div id="ai-scale" class="ai-scale"></div><p class="ai-map-note" data-i18n="ai.mapNote"></p></aside>
+          <aside id="okres-panel" class="map-box panel ai-panel" aria-live="polite"></aside>
         </div>
-        <p class="ai-map-note" data-i18n="ai.mapNote"></p>
-        <div class="strip standalone">
-          <div class="strip-row">
-            <label class="field"><span data-i18n="control.okres">Okres</span> <select id="ai-okres"></select></label>
-          </div>
-        </div>
-        <h3 data-i18n="variable.temperature_2m">Temperature</h3>
-        <div id="ai-chart-temperature_2m" class="ai-chart"></div>
-        <h3 data-i18n="variable.wind_speed_10m">Wind</h3>
-        <div id="ai-chart-wind_speed_10m" class="ai-chart"></div>
       </section>
 
       <section id="ai-model" hidden>
