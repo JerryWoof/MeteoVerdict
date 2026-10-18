@@ -7,7 +7,7 @@ import { COMBINED, weightTable } from "./forecast.js";
 import { drawIcon, glyph, iconCanvas } from "./icons.js";
 import { setUpLanguage } from "./i18n.js";
 import { mapModelOptions, modelHorizon, modelPeriods, parseModelParts, parseModels } from "./models.js";
-import { MIN_ZOOM, OBCE_OKRESY, addObceLayers, obceDrawn, obcePartRows, paintObce, showObec } from "./obce-map.js";
+import { MIN_ZOOM, OBCE_OKRESY, addObceLayers, goToObec, obceDrawn, obcePartRows, paintObce } from "./obce-map.js";
 import { fillObce, obceFor } from "./obce-test.js";
 import { renderScale } from "./palette.js";
 import { GLYPHS } from "./radar-basemap.js";
@@ -79,6 +79,8 @@ const symbolText = (symbol) => (symbol ? t(`symbol.${symbol}`) : "");
 let state = { day: null, part: null, colour: "temperature", shown: [], okres: null };
 // test: the obce of the okresy that have an obce file, [{doc, rows}] (obce-map.js)
 let obceDocs = [];
+// test: the obec whose panel is open (in place of its okres's), or null
+let panelObec = null;
 let playing = null; // "day" or "week" while playing
 
 // --- which forecast the whole map shows: our combination (outlook.json) or one model's
@@ -489,10 +491,87 @@ function windCell(row) {
   return td;
 }
 
+// test: the panel of an obec (obce-map.js): as the okres's with our combination, but its
+// rows have no symbol, cloud or rain probability (rain in mm)
+function renderObecPanel(panel, { doc, rows }) {
+  const place = doc.places.find((p) => p.name === panelObec);
+  const own = rows.get(panelObec) ?? new Map();
+  const rowOf = (day, part) => own.get(`${day}|${part}`);
+  const info = outlook.okresy.find((o) => o.code === state.okres);
+  panel.classList.remove("single");
+  const now = rowOf(state.day, state.part);
+  const close = element("button", "×", "close");
+  close.type = "button";
+  close.setAttribute("aria-label", t("chart.close"));
+  close.addEventListener("click", () => update({ okres: null }));
+  const big = element("div", null, "now");
+  big.append(element("div", now ? labelFor(now, "temperature", state.part) : "–", "big-temp"));
+  const facts = element("ul", null, "facts");
+  if (now) {
+    for (const text of [
+      t("tv.range", { low: fmt(now.tmin), high: fmt(now.tmax) }),
+      t("tv.obecRain", { amount: fmt(now.precipitation, 1) }),
+      t("tv.wind", { value: fmt(now.wind) }),
+    ]) {
+      facts.append(element("li", text));
+    }
+  }
+  const sun = sunFor(outlook, state.okres, state.day);
+  if (sun) {
+    const li = element("li");
+    li.append(sunLine(sun.sunrise, sun.sunset, "tv.sun"));
+    facts.append(li);
+  }
+  const strip = element("div", null, "strip");
+  strip.append(...PARTS.slice(0, 4).map((p) => partCell(rowOf(state.day, p), p, true)));
+  const week = element("table", null, "week");
+  for (const day of outlook.days) {
+    const row = rowOf(day, "day");
+    if (!row && day < state.day) continue;
+    const tr = element("tr");
+    if (day === state.day) tr.className = "current";
+    tr.addEventListener("click", () => update({ day }));
+    tr.append(
+      element("td", dayText(day)),
+      element("td"),
+      element("td", row ? `${fmt(row.tmax)}° / ${fmt(row.tmin)}°` : "–", "num"),
+      element("td", row ? rainText(row, true) : "", "num rain"),
+      windCell(row),
+    );
+    week.append(tr);
+  }
+  const back = element("a", t("tv.obecOkres", { okres: displayName(info?.name ?? state.okres) }));
+  back.href = "#";
+  back.addEventListener("click", (event) => {
+    event.preventDefault();
+    update({ okres: state.okres });
+  });
+  const note = element("p", t("tv.obecNote", { okres: displayName(info?.name ?? state.okres) }), "model-note");
+  const detail = element("a", t("tv.detail"));
+  detail.href = `forecast-detail.html#${state.okres}/${encodeURIComponent(panelObec)}`;
+  panel.replaceChildren(
+    close,
+    element("h2", `${panelObec}${place ? ` (${Math.round(place.elevation)} m)` : ""}`),
+    element("p", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`, "when"),
+    note,
+    back,
+    big,
+    facts,
+    strip,
+    week,
+    detail,
+  );
+}
+
 function renderPanel(outlook) {
   const panel = document.getElementById("okres-panel");
   if (!state.okres) {
     panel.replaceChildren();
+    return;
+  }
+  const obecDoc = panelObec ? obceDocs.find(({ doc }) => doc.okres === state.okres) : null;
+  if (obecDoc) {
+    renderObecPanel(panel, obecDoc);
     return;
   }
   const info = outlook.okresy.find((o) => o.code === state.okres);
@@ -593,14 +672,19 @@ function update(change = {}, fromPlay = false) {
   if (!fromPlay) stopPlay();
   // another okres (or none) starts on the forecast the map shows
   if ("okres" in change && change.okres !== state.okres) panelModel = mapModel;
-  state = { ...state, ...change };
+  // test: an obec's panel (change.obec) or its okres's; any other okres change closes it
+  if ("okres" in change) panelObec = change.okres ? change.obec ?? null : null;
+  const { obec: _obec, ...rest } = change;
+  state = { ...state, ...rest };
   window.history.replaceState(null, "", viewHash(state));
   const view = shownView();
   renderWhen(outlook);
   renderShow();
   paintFill(okresColours(view, state.day, state.part, state.colour));
   map.setFilter("okres-selected", ["==", ["get", "code"], state.okres ?? ""]);
-  if (mapReady || obceDocs.length) paintObce(map, mapModel === COMBINED ? obceDocs : [], state);
+  if (mapReady || obceDocs.length) paintObce(map, mapModel === COMBINED ? obceDocs : [], state, panelObec);
+  const obceSelect = document.getElementById("obce-select");
+  if (obceSelect && obceDocs.length) obceSelect.value = panelObec ?? "";
   paintMarkers(view);
   renderHeadline(view);
   renderPanel(outlook);
@@ -768,7 +852,7 @@ function addLayers() {
     filter: ["==", ["get", "code"], ""],
     paint: { "line-color": "#1d2329", "line-width": 2.5 },
   });
-  addObceLayers(map, t);
+  addObceLayers(map, (okres, obec) => update({ okres, obec }));
   map.on("click", "okresy-fill", (event) => {
     // a click on an obce dot opens its popup, not the okres
     if (map.queryRenderedFeatures(event.point, { layers: ["obce-test-dot"] }).length) return;
@@ -832,9 +916,10 @@ async function main() {
     pick.hidden = obceDocs.length === 0;
     if (obceDocs.length) fillObce(select, obceDocs[0].doc, "", t("tv.obecChoose"));
     select.addEventListener("change", async () => {
-      if (!select.value) return;
+      if (!select.value) return update({ okres: null });
       if (mapModel !== COMBINED) await setMapModel(COMBINED);
-      showObec(map, select.value, t);
+      update({ okres: obceDocs[0].doc.okres, obec: select.value });
+      goToObec(map, select.value);
     });
     // zoomed in, their okres fades so the dots stand out
     if (obceDocs.length) {
