@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { firstOfLastDays, modelsByMae, okresyByName, pickModel, startOkres } from "./ai-verify.js";
+import { chartRows, measuredHours, modelsByMae, okresyByName, pickModel, startOkres } from "./ai-verify.js";
 
 const names = { a: "Alpha", b: "Beta", c: "Gamma" };
 
@@ -19,11 +19,25 @@ test("the preselected model if it has data here, else the best", () => {
   assert.equal(pickModel([], "a"), null);
 });
 
-test("the last days of the times", () => {
-  const times = ["2026-10-01T00:00Z", "2026-10-01T12:00Z", "2026-10-02T00:00Z", "2026-10-02T12:00Z", "2026-10-03T00:00Z"];
-  assert.equal(firstOfLastDays(times, 1), 3);
-  assert.equal(firstOfLastDays(times, 14), 0);
-  assert.equal(firstOfLastDays(times, 0), 0);
+test("rows with the differences from the measurement", () => {
+  const times = ["2026-10-19T06:00Z", "2026-10-19T07:00Z"];
+  const series = { measured: [10, null], ai: [11, 12], models: { a: [9.5, null] } };
+  const rows = chartRows(times, series, "a");
+  assert.equal(rows[0].dAi, 1);
+  assert.equal(rows[0].dModel, -0.5);
+  assert.equal(rows[1].dAi, null);
+  assert.equal(rows[1].model, null);
+  assert.equal(chartRows(times, undefined, "a")[1].ai, null);
+});
+
+test("measured hours", () => {
+  assert.equal(measuredHours({ measured_hours: 0, measured: [1] }), 0);
+  assert.equal(measuredHours({ measured: [1, null, 2] }), 2);
+  assert.equal(measuredHours(undefined), 0);
+});
+
+test("models without any MAE yet: alphabetical", () => {
+  assert.deepEqual(modelsByMae({ models: { c: [], a: [], b: [] }, mae: {} }, names).map((m) => m.id), ["a", "b", "c"]);
 });
 
 test("okresy by name and the one to start with", () => {
