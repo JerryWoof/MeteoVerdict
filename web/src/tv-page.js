@@ -7,8 +7,8 @@ import { COMBINED, weightTable } from "./forecast.js";
 import { drawIcon, glyph, iconCanvas } from "./icons.js";
 import { setUpLanguage } from "./i18n.js";
 import { mapModelOptions, modelHorizon, modelPeriods, parseModelParts, parseModels } from "./models.js";
-import { MIN_ZOOM, OBCE_OKRESY, addObceLayers, obcePartRows, paintObce } from "./obce-map.js";
-import { obceFor } from "./obce-test.js";
+import { MIN_ZOOM, OBCE_OKRESY, addObceLayers, obcePartRows, paintObce, showObec } from "./obce-map.js";
+import { fillObce, obceFor } from "./obce-test.js";
 import { renderScale } from "./palette.js";
 import { GLYPHS } from "./radar-basemap.js";
 import { fillPicker, issuedText } from "./picker.js";
@@ -826,6 +826,16 @@ async function main() {
   Promise.all(OBCE_OKRESY.map((code) => obceFor(code, getJson))).then((docs) => {
     obceDocs = docs.filter(Boolean).map((doc) => ({ doc, rows: obcePartRows(doc) }));
     document.getElementById("obce-hint").hidden = obceDocs.length === 0;
+    // the picker at the top: the map goes to the obec (with our combination)
+    const pick = document.getElementById("obce-pick");
+    const select = document.getElementById("obce-select");
+    pick.hidden = obceDocs.length === 0;
+    if (obceDocs.length) fillObce(select, obceDocs[0].doc, "", t("tv.obecChoose"));
+    select.addEventListener("change", async () => {
+      if (!select.value) return;
+      if (mapModel !== COMBINED) await setMapModel(COMBINED);
+      showObec(map, select.value, t);
+    });
     // zoomed in, their okres fades so the dots stand out
     if (obceDocs.length) {
       const codes = obceDocs.map(({ doc }) => doc.okres);
