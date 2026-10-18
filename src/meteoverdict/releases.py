@@ -18,6 +18,13 @@ assets go to overflow releases ``<tag>.2``, ``<tag>.3``, …, which this client 
 as part of ``<tag>``: ``assets(tag)`` lists them together (each asset says in ``_tag``
 which release holds it), ``put`` replaces an asset where it is, and ``tags`` leaves the
 overflow releases out.
+
+``put`` never deletes the only copy of a file: it uploads the new content as
+``<name>.new``, then deletes the old asset and renames the new one to ``<name>``. A run
+stopped in between leaves a ``.new`` asset behind; the listing hides it, or shows it as
+``<name>`` when ``<name>`` itself is gone, and the next ``put`` of ``<name>`` cleans it
+up. Because a replacement may move an asset out of a full release, the release after a
+release with ``MAX_ASSETS - 1`` or more assets is read too.
 """
 
 from __future__ import annotations
@@ -42,6 +49,8 @@ SECONDARY_WAIT = 60.0
 #: retries of a download that failed with a server error
 DOWNLOAD_RETRIES = 3
 _OVERFLOW_RE = re.compile(r"\.(\d+)$")
+#: suffix of a replacement uploaded but not yet renamed to its final name
+PENDING = ".new"
 
 
 class RateLimitError(httpx.HTTPStatusError):
@@ -118,6 +127,8 @@ class GitHubReleaseStore:
         self._missing: set[str] = set()  # physical tags known not to exist
         # tag -> (physical tags in order, their asset counts, assets by name)
         self._listing: dict[str, tuple[list[str], dict[str, int], dict[str, dict]]] = {}
+        # tag -> leftover "<name>.new" assets by <name>
+        self._pending: dict[str, dict[str, dict]] = {}
         self.api_calls = 0
 
     # --- requests -------------------------------------------------------------------
@@ -231,6 +242,7 @@ class GitHubReleaseStore:
         parts: list[str] = []
         counts: dict[str, int] = {}
         assets: dict[str, dict] = {}
+        pending: dict[str, dict] = {}
         part = 1
         while True:
             physical = overflow_tag(tag, part)
@@ -241,11 +253,20 @@ class GitHubReleaseStore:
             parts.append(physical)
             counts[physical] = len(batch)
             for asset in batch:
-                assets.setdefault(asset["name"], {**asset, "_tag": physical})
-            if len(batch) < MAX_ASSETS:  # only a full release has a next one
+                name = asset["name"]
+                if name.endswith(PENDING):
+                    pending.setdefault(name.removesuffix(PENDING), {**asset, "_tag": physical})
+                else:
+                    assets.setdefault(name, {**asset, "_tag": physical})
+            # only a full release has a next one (or one left with a free slot by put)
+            if len(batch) < MAX_ASSETS - 1:
                 break
             part += 1
+        for name, asset in pending.items():
+            if name not in assets:  # stopped after the delete: the .new is the file
+                assets[name] = {**asset, "name": name}
         self._listing[tag] = (parts, counts, assets)
+        self._pending[tag] = pending
         return self._listing[tag]
 
     def assets(self, tag: str) -> dict[str, dict]:
@@ -261,39 +282,42 @@ class GitHubReleaseStore:
         """Read the asset list of ``tag`` (or of all) from GitHub again next time."""
         if tag is None:
             self._listing.clear()
+            self._pending.clear()
         else:
             self._listing.pop(tag, None)
+            self._pending.pop(tag, None)
 
     def put(self, tag: str, name: str, path: Path, label: str = "") -> None:
         """Upload ``path`` as ``name``, replacing an existing asset of that name; a new
         asset goes to the first release of ``tag`` with room (``MAX_ASSETS``), a new
-        overflow release when all are full."""
+        overflow release when all are full. The old asset is deleted only after the new
+        content is uploaded (as ``<name>.new``, then renamed)."""
         parts, counts, assets = self._load(tag)
         old = assets.get(name)
-        if old is not None:
+        leftover = self._pending[tag].pop(name, None)
+        if leftover is not None:  # from a run stopped before the rename
+            if old is not None and old["id"] == leftover["id"]:
+                old = assets[name] = self._rename(leftover, name, leftover.get("label") or "")
+            else:
+                self._delete(leftover)
+                counts[leftover["_tag"]] -= 1
+        # the slot of the upload: beside the old asset if there is room, else as new
+        rooms = [p for p in parts if counts[p] < MAX_ASSETS]
+        if old is not None and old["_tag"] in rooms:
             physical = old["_tag"]
+        elif rooms:
+            physical = rooms[0]
         else:
-            physical = next((p for p in parts if counts[p] < MAX_ASSETS), None)
-            if physical is None:
-                physical = overflow_tag(tag, len(parts) + 1)
-                if parts:
-                    self.log(f"release {parts[-1]} is full; new assets go to {physical}")
+            physical = overflow_tag(tag, len(parts) + 1)
+            if parts:
+                self.log(f"release {parts[-1]} is full; new assets go to {physical}")
         release = self._release_id(physical, create=True, notes_tag=tag)
         if physical not in counts:
             parts.append(physical)
             counts[physical] = 0
         self._update_notes(physical, release, tag)
-        if old is not None:  # GitHub cannot overwrite an asset
-            response = self._request(
-                "DELETE",
-                f"{API}/repos/{self.repo}/releases/assets/{old['id']}",
-                headers=self.headers,
-            )
-            if response.status_code != 404:  # already gone is fine
-                response.raise_for_status()
-            del assets[name]
-            counts[physical] -= 1
-        params = {"name": name, **({"label": label} if label else {})}
+        temp = name + PENDING if old is not None else name  # GitHub cannot overwrite
+        params = {"name": temp, **({"label": label} if label else {})}
         response = self._request(
             "POST",
             f"{UPLOADS}/repos/{self.repo}/releases/{release}/assets",
@@ -308,8 +332,41 @@ class GitHubReleaseStore:
             uploaded = {}
         if not isinstance(uploaded, dict):
             uploaded = {}
-        assets[name] = {"name": name, "label": label or None, **uploaded, "_tag": physical}
+        new = {"name": temp, "label": label or None, **uploaded, "_tag": physical}
         counts[physical] += 1
+        if old is not None:
+            self._pending[tag][name] = new
+            self._delete(old)
+            counts[old["_tag"]] -= 1
+            assets[name] = {**new, "name": name}  # until the rename, the .new is the file
+            new = self._rename(new, name, label)
+            del self._pending[tag][name]
+        assets[name] = new
+
+    def _delete(self, asset: dict) -> None:
+        response = self._request(
+            "DELETE",
+            f"{API}/repos/{self.repo}/releases/assets/{asset['id']}",
+            headers=self.headers,
+        )
+        if response.status_code != 404:  # already gone is fine
+            response.raise_for_status()
+
+    def _rename(self, asset: dict, name: str, label: str) -> dict:
+        response = self._request(
+            "PATCH",
+            f"{API}/repos/{self.repo}/releases/assets/{asset['id']}",
+            headers=self.headers,
+            json={"name": name, **({"label": label} if label else {})},
+        )
+        response.raise_for_status()
+        try:
+            renamed = response.json()
+        except ValueError:
+            renamed = {}
+        if not isinstance(renamed, dict):
+            renamed = {}
+        return {**asset, **renamed, "name": name, "_tag": asset["_tag"]}
 
     def download(self, tag: str, name: str, dest: Path) -> Path:
         """Download the asset ``name`` of ``tag`` to ``dest``: from its
