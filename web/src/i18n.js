@@ -188,6 +188,71 @@ export const STRINGS = {
     "page.compare": "Porovnání",
     "page.map": "Mapa",
     "page.api": "Data",
+    "page.ai": "AI předpověď",
+    "ai.title": "AI předpověď",
+    "ai.badge": "Experiment",
+    "ai.banner":
+      "Celá tato stránka je experimentální. MeteoVerdict AI a ostatní pokusy počítáme jednou denně na počítači NVIDIA DGX Spark a hodnotíme je stejně přísně jako všechny modely: proti měřením ČHMÚ, jen na dnech, které při učení neviděly. Co nefunguje, tu zůstává se svým výsledkem. Hlavní předpověď je dál na kartě Předpověď.",
+    "ai.none": "Výsledky AI zatím nejsou k dispozici.",
+    "ai.fcTitle": "Předpověď MeteoVerdict AI",
+    "ai.fcIntro":
+      "Příští dny v okrese podle MeteoVerdict AI (fialově) a naší kombinované předpovědi z karty Předpověď (šedě). AI opravuje předpovědi všech modelů na každé stanici okresu; křivka je průměr těch stanic. Vydáno {time}.",
+    "ai.fcAi": "MeteoVerdict AI",
+    "ai.fcCombined": "Kombinovaná předpověď",
+    "ai.updated": "Spočteno {time}",
+    "ai.modelTitle": "MeteoVerdict AI",
+    "ai.modelIntro":
+      "Náš experimentální model: strojové učení, které čte předpovědi všech {models} modelů najednou a k tomu polohu a nadmořskou výšku stanice, denní dobu a to, jak se modely na stanici v posledních dnech mýlily. Učí se, kterému modelu kdy věřit a o kolik ho opravit.",
+    "ai.scoreTitle": "Je lepší než naše kombinovaná předpověď?",
+    "ai.scoreIntro":
+      "Průměrná chyba (MAE) za {range} ({days} dní), celé Česko. Kombinovaná předpověď je ta z karty Předpověď, nejlepší model je ten, který byl v každém okrese v té době nejlepší. Interval je 95% interval z opakovaného výběru dní.",
+    "ai.colVariable": "Veličina",
+    "ai.colLead": "Den",
+    "ai.colAi": "AI",
+    "ai.colCombined": "Kombinovaná",
+    "ai.colBest": "Nejlepší model",
+    "ai.colVerdict": "AI − kombinovaná",
+    "ai.better": "lepší",
+    "ai.worse": "horší",
+    "ai.same": "bez rozdílu",
+    "ai.expTitle": "Pokusy",
+    "ai.expIntro": "Každý pokus má stav: připravujeme, testujeme, funguje (prokazatelně lepší), nepomohlo.",
+    "ai.status.planned": "Připravujeme",
+    "ai.status.testing": "Testujeme",
+    "ai.status.works": "Funguje",
+    "ai.status.no_gain": "Nepomohlo",
+    "ai.tech": "Technologie: {tech}",
+    "ai.exp.meteoverdict_ai.name": "MeteoVerdict AI v1",
+    "ai.exp.meteoverdict_ai.what":
+      "Stromy rozhodování (gradient boosting) opravují medián všech modelů podle každého modelu zvlášť, rozptylu modelů, stanice, denní doby a nedávných chyb. Jeden model pro všechny stanice a předstihy, učený znovu každý den jen z toho, co bylo v den předpovědi známo.",
+    "ai.exp.meteoverdict_ai.result": "Teplota D+1: {ai} °C proti {combined} °C kombinované předpovědi.",
+    "ai.exp.deep_blend.name": "Hluboká síť přes modely a stanice",
+    "ai.exp.deep_blend.what":
+      "Neuronová síť (transformer / grafová síť), která vidí všechny modely a sousední stanice najednou. Výzkum z roku 2026 ukazuje, že vyhrává hlavně s bohatšími vstupy a v místech bez stanice.",
+    "ai.exp.downscale_100m.name": "Teplota po 100 m",
+    "ai.exp.downscale_100m.what":
+      "Teplota v mřížce 100 m z terénu (výška, údolí, svahy, města): mrazové kotliny a studené noci. Ověřujeme na stanicích vynechaných z učení.",
+    "ai.exp.atlas_ensemble.name": "NVIDIA Earth-2 Atlas: ansámbl",
+    "ai.exp.atlas_ensemble.what":
+      "Otevřený globální AI model NVIDIA (2026) spuštěný na Sparku jako ansámbl mnoha běhů. Dá skutečné pravděpodobnosti, ne jen jedno číslo.",
+    "ai.exp.aifs_ens.name": "ECMWF AIFS ENS: pravděpodobnosti",
+    "ai.exp.aifs_ens.what":
+      "Ansámbl AI modelu ECMWF (verze 2, květen 2026), volně dostupná data. Hodnotíme, jak dobře sedí jeho pravděpodobnosti.",
+    "ai.exp.regimes.name": "Povětrnostní situace",
+    "ai.exp.regimes.what":
+      "Shlukování dní podle situace (vítr, inverze, fronta, bouřky) a kdo v které vyhrává. Výsledek může vylepšit váhy MeteoVerdict AI.",
+    "ai.exp.nowcast.name": "Radar na 0–2 hodiny",
+    "ai.exp.nowcast.what":
+      "Zpětný test na archivu radaru ČHMÚ: klasická extrapolace (pysteps) proti hlubokým generativním modelům.",
+    "ai.exp.chronos.name": "Časové řady bez fyziky",
+    "ai.exp.chronos.what":
+      "Modely trénované na časových řadách místo textu (Chronos, TimesFM) předpovídají stanici jen z jejích minulých hodnot.",
+    "ai.exp.weathernext3.name": "Google WeatherNext 3",
+    "ai.exp.weathernext3.what":
+      "Podle nezávislých živých hodnocení nejpřesnější globální model (září 2026). Není otevřený; přidáme ho, až dostaneme přístup.",
+    "ai.howTitle": "Jak testujeme",
+    "ai.how":
+      "Každý den d a předstih N se model učí jen z dat, která byla známá v den d − N, a pak předpovídá den d. Skóre počítá stejný kód jako u ostatních modelů (teplota a vítr v 00, 06, 12 a 18 UTC, srážky za den), na stejných stanicích a dnech. Pokus označíme „funguje“, jen když je celý interval pod nulou.",
     "api.title": "Otevřená data",
     "api.intro":
       "Naši kombinovanou předpověď a pořadí modelů si můžete stáhnout pro každý okres jako JSON nebo CSV, zdarma, bez registrace a bez klíče. Soubory jsou statické a dají se načíst i přímo z prohlížeče na jiném webu (CORS povolený).",
@@ -1035,6 +1100,71 @@ export const STRINGS = {
     "page.compare": "Compare",
     "page.map": "Map",
     "page.api": "Data",
+    "page.ai": "AI forecast",
+    "ai.title": "AI forecast",
+    "ai.badge": "Experimental",
+    "ai.banner":
+      "This whole page is experimental. MeteoVerdict AI and the other experiments are computed once a day on an NVIDIA DGX Spark and judged as strictly as every model: against ČHMÚ measurements, only on days they never saw while learning. What doesn't work stays here with its result. The main forecast remains on the Forecast tab.",
+    "ai.none": "No AI results yet.",
+    "ai.fcTitle": "MeteoVerdict AI forecast",
+    "ai.fcIntro":
+      "The next days in the okres according to MeteoVerdict AI (purple) and our combined forecast from the Forecast tab (grey). The AI corrects every model's forecast at each station of the okres; the line is the mean of those stations. Issued {time}.",
+    "ai.fcAi": "MeteoVerdict AI",
+    "ai.fcCombined": "Combined forecast",
+    "ai.updated": "Computed {time}",
+    "ai.modelTitle": "MeteoVerdict AI",
+    "ai.modelIntro":
+      "Our experimental model: machine learning that reads the forecasts of all {models} models at once, plus the station's position and elevation, the time of day and how wrong the models have been at the station lately. It learns which model to trust when, and by how much to correct it.",
+    "ai.scoreTitle": "Does it beat our combined forecast?",
+    "ai.scoreIntro":
+      "Mean absolute error (MAE) over {range} ({days} days), all of Czechia. The combined forecast is the one on the Forecast tab; the best model is the one that was best in each okres at the time. The interval is a 95 % interval from resampling days.",
+    "ai.colVariable": "Variable",
+    "ai.colLead": "Day",
+    "ai.colAi": "AI",
+    "ai.colCombined": "Combined",
+    "ai.colBest": "Best model",
+    "ai.colVerdict": "AI − combined",
+    "ai.better": "better",
+    "ai.worse": "worse",
+    "ai.same": "no difference",
+    "ai.expTitle": "Experiments",
+    "ai.expIntro": "Each experiment has a status: planned, testing, works (shown to be better), didn't help.",
+    "ai.status.planned": "Planned",
+    "ai.status.testing": "Testing",
+    "ai.status.works": "Works",
+    "ai.status.no_gain": "Didn't help",
+    "ai.tech": "Technology: {tech}",
+    "ai.exp.meteoverdict_ai.name": "MeteoVerdict AI v1",
+    "ai.exp.meteoverdict_ai.what":
+      "Gradient-boosted decision trees correct the median of all models using each model separately, the models’ spread, the station, the time of day and recent errors. One model for all stations and lead times, retrained every day from only what was known on the day of the forecast.",
+    "ai.exp.meteoverdict_ai.result": "Temperature D+1: {ai} °C against {combined} °C for the combined forecast.",
+    "ai.exp.deep_blend.name": "Deep network over models and stations",
+    "ai.exp.deep_blend.what":
+      "A neural network (transformer / graph network) that sees all models and neighbouring stations at once. 2026 research finds it wins mainly with richer inputs and at places without a station.",
+    "ai.exp.downscale_100m.name": "Temperature at 100 m",
+    "ai.exp.downscale_100m.what":
+      "Temperature on a 100 m grid from the terrain (elevation, valleys, slopes, towns): frost hollows and cold nights. Checked at stations left out of training.",
+    "ai.exp.atlas_ensemble.name": "NVIDIA Earth-2 Atlas ensemble",
+    "ai.exp.atlas_ensemble.what":
+      "NVIDIA’s open global AI model (2026), run on the Spark as an ensemble of many runs. Gives real probabilities, not just one number.",
+    "ai.exp.aifs_ens.name": "ECMWF AIFS ENS probabilities",
+    "ai.exp.aifs_ens.what":
+      "The ensemble of ECMWF’s AI model (version 2, May 2026), free open data. We score how well its probabilities fit.",
+    "ai.exp.regimes.name": "Weather regimes",
+    "ai.exp.regimes.what":
+      "Clustering days by situation (wind, inversion, front, storms) and who wins in each. The result may improve MeteoVerdict AI’s weights.",
+    "ai.exp.nowcast.name": "Radar, 0–2 hours",
+    "ai.exp.nowcast.what":
+      "A backtest on the ČHMÚ radar archive: classic extrapolation (pysteps) against deep generative models.",
+    "ai.exp.chronos.name": "Time series without physics",
+    "ai.exp.chronos.what":
+      "Models trained on time series instead of text (Chronos, TimesFM) forecast a station from its own past values only.",
+    "ai.exp.weathernext3.name": "Google WeatherNext 3",
+    "ai.exp.weathernext3.what":
+      "The most accurate global model in independent live evaluations (September 2026). Not open; we add it once we get access.",
+    "ai.howTitle": "How we test",
+    "ai.how":
+      "For every day d and lead time N the model learns only from data known on day d − N, then forecasts day d. The scores come from the same code as every other model (temperature and wind at 00, 06, 12 and 18 UTC, precipitation per day), on the same stations and days. An experiment is marked “works” only when the whole interval is below zero.",
     "api.title": "Open data",
     "api.intro":
       "Our combined forecast and the ranking of the models can be downloaded for every okres as JSON or CSV, free, without registration or a key. The files are static and can be fetched straight from a browser on another site (CORS allowed).",
