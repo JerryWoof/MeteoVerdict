@@ -66,11 +66,25 @@
         </aside>
         <aside id="okres-panel" class="map-box panel" aria-live="polite"></aside>
       </div>
+      <!-- data/scores/ai/fc/verify/ (src/ai-verify-view.js): hidden until its index loads -->
+      <section id="ai-verify-section" class="ai-extras" hidden>
+        <h2 data-i18n="ai.verifyTitle">Forecast vs measured</h2>
+        <p id="ai-verify-intro" class="note"></p>
+        <form id="ai-verify-controls" class="strip standalone"></form>
+        <div class="ai-verify-head">
+          <p id="ai-verify-legend" class="ai-verify-legend"></p>
+          <div id="ai-verify-range"></div>
+        </div>
+        <div id="ai-verify-chart" class="ai-verify-chart"></div>
+        <p id="ai-verify-mae" class="ai-verify-mae"></p>
+        <p id="ai-verify-stations" class="note"></p>
+      </section>
       <!-- data/scores/ai/ai.json (src/ai-extras.js): hidden until it loads -->
       <section id="ai-score-section" class="ai-extras" hidden>
         <h2 data-i18n="ai.scoreTitle">MeteoVerdict AI vs the best public model</h2>
         <p id="ai-score-intro" class="note"></p>
         <div id="ai-scores"></div>
+        <p class="note" data-i18n="ai.scoreExplain"></p>
       </section>
       <section id="ai-exp-section" class="ai-extras" hidden>
         <h2 data-i18n="ai.expTitle">Experiments that work</h2>
