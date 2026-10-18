@@ -28,6 +28,8 @@ const GREY = "#9aa3ab";
 // zoomed in, the radar page's base map (relief, water, rivers, main roads, town names)
 // under the okres colours, which turn see-through, as on the forecast map
 const BASE_ZOOM = 7.5;
+// from this zoom the okres layer shows the stations instead of the okres means, with names
+const STATION_ZOOM = 8.5;
 
 function element(tag, text, className) {
   const e = document.createElement(tag);
@@ -71,7 +73,11 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
   map.getCanvas().setAttribute("aria-label", t("measured.mapAria"));
 
   let rows = [];
+  let stations = []; // the okres layer's stations, shown from STATION_ZOOM
   let byId = new Map();
+  const zoomedIn = () => view.layer === "okresy" && stations.length > 0 && map.getZoom() >= STATION_ZOOM;
+  // the rows on the map now: the okresy's, or zoomed in their stations
+  const active = () => (zoomedIn() ? stations : rows);
   // part, shown, colour; layer "stations" or "okresy" with fill (okres → colour) and okres
   let view = { part: "day", shown: [], colour: "temperature", layer: "stations", fill: null, okres: null };
   let loaded = false;
@@ -92,6 +98,8 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
     if (entry) return entry;
     const el = element("button", null, "wx-marker station-label");
     el.type = "button";
+    // the station's name, shown when zoomed in (CSS: .measured-map.named)
+    if (!row.okresCode) el.append(element("span", row.name, "wx-name"));
     const top = element("span", null, "wx-top");
     const canvas = iconCanvas("", 30);
     const temp = element("span", "", "wx-temp");
@@ -148,7 +156,8 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
   function declutter() {
     if (!loaded) return;
     const { clientWidth: width, clientHeight: height } = container;
-    const ids = pickLabels(rows, {
+    container.classList.toggle("named", map.getZoom() >= STATION_ZOOM);
+    const ids = pickLabels(active(), {
       shown: view.shown,
       part: view.part,
       selected: view.okres,
@@ -176,11 +185,11 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
 
   // --- dots ---------------------------------------------------------------------------
   function features() {
-    if (view.layer === "okresy") return EMPTY;
+    if (view.layer === "okresy" && !zoomedIn()) return EMPTY;
     const key = rampKey(view.colour, true);
     return {
       type: "FeatureCollection",
-      features: rows.map((r) => {
+      features: active().map((r) => {
         const value = valueFor(r, view.colour, view.part);
         return {
           type: "Feature",
@@ -273,6 +282,14 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
       if (okres) onOkres(okres.properties.code);
     });
     map.on("moveend", declutter);
+    // crossing STATION_ZOOM on the okres layer swaps the okresy for their stations
+    let wasIn = zoomedIn();
+    map.on("zoomend", () => {
+      if (zoomedIn() !== wasIn) {
+        wasIn = zoomedIn();
+        paint();
+      }
+    });
   });
 
   function paint() {
@@ -298,10 +315,11 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
 
   return {
     /** The rows of a day and part (stations or okresy), and what to show: {part, shown,
-     * colour, layer, fill, okres}. */
-    set(nextRows, nextView) {
+     * colour, layer, fill, okres}; on the okres layer also its stations (zoomed in). */
+    set(nextRows, nextView, nextStations = []) {
       rows = nextRows;
-      byId = new Map(rows.map((r) => [r.id, r]));
+      stations = nextStations;
+      byId = new Map([...stations, ...rows].map((r) => [r.id, r]));
       view = nextView;
       popup.remove();
       if (loaded) paint();
