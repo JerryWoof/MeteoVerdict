@@ -2421,38 +2421,45 @@ a year); the committed file is from 2026-09-30.
 
 ## Forecast for every obec (test, `mvd obce-forecast`)
 
-A test, started 2026-10-18, that may be reworked or removed: a forecast for every obec of
-okres Litoměřice (105) instead of only the okres's forecast point. After each outlook run
+A test, started 2026-10-18 for okres Litoměřice and extended the same day to every obec
+(about 6,250 in 77 okresy), that may be reworked or removed: a forecast for each obec
+instead of only the okres's forecast point. After each outlook run
 (`.github/workflows/outlook.yml`, its own step; a failure does not fail the outlook):
 
 - **Places:** `src/meteoverdict/data/obce-elevations.csv` (`okres`, `name`, `lat`, `lon`,
   `elevation`, `population`): the obce of the [municipalities](#municipalities-radar-page-place-search)
-  file with their elevation from the Open-Meteo Elevation API (Copernicus DEM GLO-90) and
-  their population on 1 January from ČSÚ (DataStat set `OBY02A`, selection by okres and
-  obec `UZ35H`, matched by okres code and name; checked 2026-10-18: all 105 matched, 35 to
-  22,627 inhabitants), rebuilt by `scripts/build_obce_elevations.py <okres name> …`.
-  Litoměřice: 149–438 m. On the map the bigger places are labelled first.
-- **Models:** every model with weights in the okres, its newest complete run in the
-  bucket ([single runs from the bucket](#single-runs-from-the-bucket)), at least 3 h old,
-  read at the obec's nearest grid cell with the temperature moved from the cell's terrain
-  height to the obec's (0.65 K per 100 m), as for the stations. No Open-Meteo calls
-  (about 4 minutes for 11 models and 105 obce, 2026-10-18).
-- **Combination:** `outlook.combine_hourly` with the okres's weights and corrections
-  (`forecast-weights.parquet`), so each obec is combined as the okres's point. The slot
-  corrections are those at the okres's point: their elevation term is not moved to the
-  obec.
-- **Output:** `obce-<okres>.json` in the release `data-latest` (about 0.8 MB: per obec the
-  combined temperature, precipitation and wind and every model's temperature), served as
-  `data/scores/forecast/obce-<okres>.json`. The forecast detail page shows an "Obec (test)"
-  picker for an okres that has the file (link `#CZ0423/<obec>`). The forecast map
-  (`web/src/obce-map.js`) shows the obce from zoom 8.5 on as yr.no and Windy draw places: no
-  dots, the name small and the value large beneath it (coloured by the scale, darkened), the
-  bigger places placed first (population) and the rest only where they fit, so zooming in
-  fills the gaps; the okres fades and its marker hides. Parts of day are summed from the
-  hours as the outlook does (rain in mm, as a single model's). A click on a label, or the
-  "Obec (test)" picker above the map, opens the obec's panel (as an okres's, without
-  symbols, cloud and rain probability, with a link back to its okres). On the first run (2026-10-18) the obce differed by 2–3 °C in a part of
-  day (Lovečkovice, 438 m, the coldest; the Labe valley the warmest).
+  file, rebuilt by `scripts/build_obce_elevations.py` (every okres; or names of okresy).
+  - Elevation from the AWS Terrain Tiles (terrarium, zoom 11, a pixel of about 50 m; EU-DEM
+    here), the nearest pixel. The Open-Meteo Elevation API was used for Litoměřice first, but
+    it counts every point as a call, so 6,250 points meet its minute and hour limits.
+  - Population on 1 January from ČSÚ (DataStat set `OBY02A`, selection by okres and obec
+    `UZ35H`), matched by okres code and name. Two names are twice in one okres (Březina in
+    Brno-venkov, Mezholezy in Domažlice); ČSÚ names them by their SO ORP, ours are told apart
+    by position (`TWINS` in the script) and called e.g. "Březina (Tišnov)".
+- **Models:** every model with weights, its newest complete run in the bucket
+  ([single runs from the bucket](#single-runs-from-the-bucket)), at least 3 h old, read at
+  each obec's nearest grid cell with the temperature moved from the cell's terrain height to
+  the obec's (0.65 K per 100 m), as for the stations. All obce in one pass: the cells of a
+  file are read by grid row, points of a row at most 64 cells apart in one request
+  (`bucket.segments`), so 6,250 obce cost a few hundred reads per file. No Open-Meteo calls.
+- **Combination:** `outlook.combine_hourly` with each obec's okres weights and corrections
+  (`forecast-weights.parquet`), so each obec is combined as its okres's point. The slot
+  corrections are those at the okres's point: their elevation term is not moved to the obec.
+- **Output:** `obce-<okres>.json` per okres (per obec the combined temperature,
+  precipitation and wind and every model's temperature, from Prague midnight of the day),
+  packed in `obce.zip` in the release `data-latest`; Pages unpacks it to
+  `data/scores/forecast/`.
+- **Pages:** the forecast detail page shows an "Obec (test)" picker for the okres shown (link
+  `#<okres>/<obec>`). The forecast map (`web/src/obce-map.js`) loads the files of the okresy
+  in view from zoom 8.5 and shows the obce as yr.no and Windy draw places: no dots, the name
+  small and the main value large beneath it, the other values ticked under "Values at each
+  okres and village" (rain in mm, wind) small below; the bigger places placed first
+  (population) and the rest only where they fit; the okresy fade and their markers hide where
+  obce are drawn. A click on a label, or the place search above the map (`place-search.js`,
+  shared with the radar page), opens the obec's panel (as an okres's, without symbols, cloud
+  and rain probability, with a link back to its okres). On the first run (Litoměřice) the
+  obce differed by 2–3 °C in a part of day (Lovečkovice, 438 m, the coldest; the Labe valley
+  the warmest).
 - **Not verified yet:** no station is held out to measure how good a forecast at a place
   without a station is; that is the next step if the test stays.
 

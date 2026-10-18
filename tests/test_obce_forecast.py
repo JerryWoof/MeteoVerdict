@@ -8,10 +8,13 @@ from meteoverdict import models, obce_forecast
 def test_places_of_litomerice():
     points = obce_forecast.places("CZ0423")
     assert points.height == 105
-    assert {"id", "lat", "lon", "elevation", "population"} <= set(points.columns)
+    assert {"id", "okres", "name", "lat", "lon", "elevation", "population"} <= set(points.columns)
+    assert points["id"][0].startswith("CZ0423/")
     assert points["population"].null_count() == 0
-    assert points.filter(pl.col("id") == "Litoměřice")["population"].item() > 20000
-    assert obce_forecast.okresy() == ["CZ0423"]
+    assert points.filter(pl.col("name") == "Litoměřice")["population"].item() > 20000
+    every = obce_forecast.places()
+    assert every["okres"].n_unique() == 77
+    assert every["id"].is_unique().all()
 
 
 def test_candidate_runs_are_old_enough_and_newest_first():
@@ -46,7 +49,8 @@ def test_every_obec_gets_the_okres_weights():
         },
         schema_overrides={"lead_day": pl.Int8},
     )
-    out = obce_forecast.combined(rows, weights, "CZ0423", now).sort("okres", "time")
+    points = pl.DataFrame({"id": ["A", "B"], "okres": ["CZ0423", "CZ0423"]})
+    out = obce_forecast.combined(rows, weights, points, now).sort("okres", "time")
     assert out["okres"].to_list() == ["A", "A", "B", "B"]
     assert out["temperature_2m"].to_list() == [10.5, 11.5, 12.5, 13.5]
 
