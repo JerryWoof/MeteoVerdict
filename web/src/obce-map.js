@@ -97,6 +97,9 @@ function openPopup(map, p, lngLat, t) {
   popup.setLngLat(lngLat).setDOMContent(box).addTo(map);
 }
 
+/** Whether any obce are drawn for the day and part shown (else their okres keeps its marker). */
+export const obceDrawn = () => painted.length > 0;
+
 /** The obec chosen in the picker: the map goes there and opens its popup. */
 export function showObec(map, name, t) {
   const feature = painted.find((f) => f.properties.name === name);
