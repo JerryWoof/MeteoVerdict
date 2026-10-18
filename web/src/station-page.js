@@ -568,7 +568,7 @@ for (const button of document.querySelectorAll("#layer [data-layer]")) {
 
 function renderShow() {
   const okresy = landing.layer === "okresy";
-  $("values-legend").textContent = t(okresy ? "tv.values" : "measured.values");
+  $("values-legend").textContent = t(okresy ? "measured.valuesOkresy" : "measured.values");
   $("colours-legend").textContent = t(okresy ? "tv.colour" : "measured.colour");
   $("measured-hint").textContent = t(okresy ? "measured.hintOkresy" : "measured.hint");
   $("values").replaceChildren(
@@ -706,7 +706,10 @@ async function renderLanding() {
   } else {
     const rows = okresRows(data, part);
     view.fill = data ? okresColours(data, day, part, landing.colour) : null;
-    measuredMap.set(rows, view);
+    // zoomed in, the map shows the stations themselves (their measured values at real places)
+    const stationData = await dayData("stations", day);
+    if (token !== landingToken || mode !== "measured") return;
+    measuredMap.set(rows, view, stationRows(stationData, stationIndexDoc, part));
     renderOkresHeadline(data);
     okresPanel.render(data, landing);
   }
