@@ -202,7 +202,9 @@ def bucket_runs(model, starts, station="s"):
                 step = model.step_at(lead)
                 rows.append((run, model.id, station, lead, run + timedelta(hours=lead),
                              code(run, lead), 0.1 * step, 2.0, None, "bucket"))  # fmt: skip
-    return pl.DataFrame(rows, schema=runs.SCHEMA, orient="row")
+    # as stored before the further variables (old files lack their columns)
+    schema = {k: v for k, v in runs.SCHEMA.items() if k not in runs.EXTRA_VARIABLES}
+    return pl.DataFrame(rows, schema=schema, orient="row")
 
 
 def test_native_steps_spread_the_totals_and_keep_instants_at_native_hours():

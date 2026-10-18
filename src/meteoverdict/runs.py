@@ -5,7 +5,10 @@ The D+N scores use the Previous Runs API (``forecasts``), which blends runs. To 
 every model run by run and lead hour by lead hour (``leads``), every 00, 06, 12 and 18
 UTC run of every enabled model is stored at the ~100 stations of ``data/run-stations.csv``:
 temperature, precipitation, wind and wind gusts, lead 1 to 120 hours, at the station's
-elevation, **at the model's native output steps** (``native``).
+elevation, **at the model's native output steps** (``native``); since 2026-10-19 also the
+further variables of a full forecast (``EXTRA_VARIABLES``: humidity, dew point, pressure,
+wind direction, radiation, cloud cover, sunshine, snow, surface temperature, CAPE,
+visibility), from the bucket only.
 
 **Sources** (``source`` column), in this order:
 
@@ -107,6 +110,28 @@ ALIASES = {
 #: maximum gust in the preceding hour (Open-Meteo docs, "Preceding hour max"). Runs
 #: fetched before the gusts were added have them null.
 VARIABLES = (*VERIFIED, "wind_gusts_10m")
+#: Further variables of a full forecast (since 2026-10-19), read from the bucket only
+#: (``bucket.EXTRA``): the API fallback does not ask for them (its call weight grows with
+#: the variables), so its rows have them null, as do rows stored before. Units as in
+#: Open-Meteo's API: %, °C, hPa, ° (direction the wind comes from), W/m² (mean over the
+#: preceding step), s (sunshine in the preceding step), cm (snowfall in the preceding
+#: step), m (snow depth), mm (snow water equivalent), J/kg, m (visibility).
+EXTRA_VARIABLES = (
+    "relative_humidity_2m",
+    "dew_point_2m",
+    "pressure_msl",
+    "wind_direction_10m",
+    "shortwave_radiation",
+    "cloud_cover",
+    "cloud_cover_low",
+    "sunshine_duration",
+    "snowfall",
+    "snow_depth",
+    "snow_depth_water_equivalent",
+    "surface_temperature",
+    "cape",
+    "visibility",
+)
 
 KEYS = ["run", "model", "station_id", "lead_h"]  # sorted by run first: cheap run filters
 SCHEMA = {
@@ -119,13 +144,14 @@ SCHEMA = {
     "precipitation": pl.Float32,
     "wind_speed_10m": pl.Float32,
     "wind_gusts_10m": pl.Float32,
+    **{v: pl.Float32 for v in EXTRA_VARIABLES},
     #: "bucket" (Open-Meteo's open-data bucket) or "api" (Single Runs API); null in rows
     #: stored before 2026-10-17 (API, every hour filled: ``native`` converts them)
     "source": pl.String,
 }
 SOURCES = ("bucket", "api")
-#: An API answer before ``native`` (every hour filled, no source yet)
-HOURLY_SCHEMA = {k: v for k, v in SCHEMA.items() if k != "source"}
+#: An API answer before ``native`` (every hour filled, no source yet, no further variables)
+HOURLY_SCHEMA = {k: v for k, v in SCHEMA.items() if k != "source" and k not in EXTRA_VARIABLES}
 
 STATE_NAME = "runs-state.json"
 STATE_TAG = "runs-state"
@@ -382,6 +408,10 @@ class State:
     #: run key -> model ids not complete in the bucket once ``BUCKET_FINAL_H`` old: the
     #: API is asked for them
     bucket_missing: dict[str, set[str]] = field(default_factory=dict)
+    #: run key -> model ids whose further variables (``EXTRA_VARIABLES``) are settled:
+    #: read from the bucket, or not to be had there any more. A stored model-run not
+    #: in it is read from the bucket again while the bucket keeps it (``extra_todo``)
+    extra: dict[str, set[str]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> State:
@@ -393,6 +423,7 @@ class State:
             {k: set(v) for k, v in doc.get("fetched", {}).items()},
             {k: set(v) for k, v in doc.get("missing", {}).items()},
             {k: set(v) for k, v in doc.get("bucket_missing", {}).items()},
+            {k: set(v) for k, v in doc.get("extra", {}).items()},
         )
 
     def save(self) -> None:
@@ -400,6 +431,7 @@ class State:
             "fetched": {k: sorted(v) for k, v in sorted(self.fetched.items())},
             "missing": {k: sorted(v) for k, v in sorted(self.missing.items()) if v},
             "bucket_missing": {k: sorted(v) for k, v in sorted(self.bucket_missing.items()) if v},
+            "extra": {k: sorted(v) for k, v in sorted(self.extra.items()) if v},
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(doc, indent=0) + "\n", encoding="utf-8")
@@ -411,6 +443,7 @@ class State:
             (self.fetched, other.fetched),
             (self.missing, other.missing),
             (self.bucket_missing, other.bucket_missing),
+            (self.extra, other.extra),
         ):
             for k, ids in theirs.items():
                 mine.setdefault(k, set()).update(ids)
@@ -424,6 +457,12 @@ class State:
         """Models of ``run`` to look for in the bucket."""
         gone = self.bucket_missing.get(key(run), set())
         return [m for m in self.todo(run, models) if m.id not in gone]
+
+    def extra_todo(self, run: datetime, models: list[Model]) -> list[Model]:
+        """Models of ``run`` stored without their further variables settled: read from
+        the bucket again (the whole model-run, which replaces the stored one)."""
+        stored = self.fetched.get(key(run), set()) - self.extra.get(key(run), set())
+        return [m for m in models if m.id in stored]
 
     def api_todo(self, run: datetime, models: list[Model], now: datetime) -> list[Model]:
         """Models of ``run`` to ask the API for: within the bucket's window only those
@@ -703,10 +742,14 @@ def native(frame: pl.LazyFrame | pl.DataFrame, models: list[Model]) -> pl.LazyFr
 
 
 def from_api(table: pl.DataFrame, models: list[Model]) -> pl.DataFrame:
-    """An API answer (``HOURLY_SCHEMA``) as stored: native steps, ``source`` "api"."""
+    """An API answer (``HOURLY_SCHEMA``) as stored: native steps, ``source`` "api", the
+    further variables null (``EXTRA_VARIABLES``: bucket only)."""
     return (
         native(table, models)
-        .with_columns(pl.lit("api").alias("source"))
+        .with_columns(
+            pl.lit("api").alias("source"),
+            *(pl.lit(None, pl.Float32).alias(v) for v in EXTRA_VARIABLES),
+        )
         .select(list(SCHEMA))
         .cast(SCHEMA)
         .collect()
