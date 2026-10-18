@@ -2419,6 +2419,32 @@ WGS 84 with pyproj and rounds to 4 decimals (about 10 m). Praha belongs to no ok
 RÚIAN; it is listed under "Hlavní město Praha". Rebuild after municipal changes (a few
 a year); the committed file is from 2026-09-30.
 
+## Forecast for every obec (test, `mvd obce-forecast`)
+
+A test, started 2026-10-18, that may be reworked or removed: a forecast for every obec of
+okres Litoměřice (105) instead of only the okres's forecast point. After each outlook run
+(`.github/workflows/outlook.yml`, its own step; a failure does not fail the outlook):
+
+- **Places:** `src/meteoverdict/data/obce-elevations.csv` (`okres`, `name`, `lat`, `lon`,
+  `elevation`): the obce of the [municipalities](#municipalities-radar-page-place-search)
+  file with their elevation from the Open-Meteo Elevation API (Copernicus DEM GLO-90),
+  rebuilt by `scripts/build_obce_elevations.py <okres name> …`. Litoměřice: 149–438 m.
+- **Models:** every model with weights in the okres, its newest complete run in the
+  bucket ([single runs from the bucket](#single-runs-from-the-bucket)), at least 3 h old,
+  read at the obec's nearest grid cell with the temperature moved from the cell's terrain
+  height to the obec's (0.65 K per 100 m), as for the stations. No Open-Meteo calls
+  (about 4 minutes for 11 models and 105 obce, 2026-10-18).
+- **Combination:** `outlook.combine_hourly` with the okres's weights and corrections
+  (`forecast-weights.parquet`), so each obec is combined as the okres's point. The slot
+  corrections are those at the okres's point: their elevation term is not moved to the
+  obec.
+- **Output:** `obce-<okres>.json` in the release `data-latest` (about 0.8 MB: per obec the
+  combined temperature, precipitation and wind and every model's temperature), served as
+  `data/scores/forecast/obce-<okres>.json`. The forecast detail page shows an "Obec (test)"
+  picker for an okres that has the file (link `#CZ0423/<obec>`).
+- **Not verified yet:** no station is held out to measure how good a forecast at a place
+  without a station is; that is the next step if the test stays.
+
 ## Radar base map
 
 The radar page draws its own light, muted base map (`web/src/radar-basemap.js`):
