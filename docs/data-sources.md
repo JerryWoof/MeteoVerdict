@@ -1252,6 +1252,12 @@ the mean of its stations next to what our forecast had said ("Okresy",
 `<day>.json`, `web/src/observed.js` and `measured-okres.js`). Module
 `meteoverdict.observed_map`.
 
+Zoomed in (from zoom 7.5), its map has the radar page's base map under the okres colours
+(relief, water, rivers, main roads, town names; `radar-basemap.js`, as the forecast map),
+and a "Find a place" search over every obec (`place-search.js`) takes the map there with a
+pin, so the stations around a place are easy to find. Nothing is measured at the obce
+themselves; only the stations' values are shown.
+
 **Days.** The last `PART_DAYS` = 30 Prague days before today have the four parts of day
 and the whole day (Prague time, as the outlook: night 0–6, morning 6–12, afternoon
 12–18, evening 18–24, day 0–24), from the 10-minute and hourly data of the

@@ -1,5 +1,5 @@
-// The measured-weather map of measured.html's landing: okres and kraj boundaries (no
-// third-party tiles), every ČHMÚ station with a value as a dot coloured by the chosen
+// The measured-weather map of measured.html's landing: okres and kraj boundaries (zoomed
+// in over the radar page's base map), every ČHMÚ station with a value as a dot coloured by the chosen
 // value, and the forecast map's markers (symbol, temperature, value chips) on the
 // stations that fit without overlapping (measured.js pickLabels: the main stations at
 // the country's zoom, more as you zoom in). A click on a dot or a label opens the station.
@@ -14,6 +14,7 @@ import { pickLabels } from "./measured.js";
 import { NEUTRAL, RAMPS, colorFor, rampKey } from "./palette.js";
 import { ALL_LAYERS, iconName, labelFor, valueFor } from "./tv.js";
 import { panelRoom } from "./panel-room.js";
+import { BASEMAP_ATTRIBUTION, GLYPHS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
 
 setWorkerUrl(workerUrl);
 
@@ -24,6 +25,9 @@ const BOUNDS = [
 const EMPTY = { type: "FeatureCollection", features: [] };
 const HIT_PX = 8;
 const GREY = "#9aa3ab";
+// zoomed in, the radar page's base map (relief, water, rivers, main roads, town names)
+// under the okres colours, which turn see-through, as on the forecast map
+const BASE_ZOOM = 7.5;
 
 function element(tag, text, className) {
   const e = document.createElement(tag);
@@ -45,12 +49,18 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
     container,
     style: {
       version: 8,
-      sources: {},
-      layers: [{ id: "background", type: "background", paint: { "background-color": "#f4f1ea" } }],
+      glyphs: GLYPHS,
+      sources: basemapSources(),
+      layers: [
+        { id: "background", type: "background", paint: { "background-color": "#f4f1ea" } },
+        ...baseLayers()
+          .filter((layer) => layer.type !== "background")
+          .map((layer) => ({ ...layer, minzoom: Math.max(layer.minzoom ?? 0, BASE_ZOOM) })),
+      ],
     },
     bounds: BOUNDS,
     fitBoundsOptions: { padding: 10 },
-    attributionControl: { customAttribution: "Boundaries: ČÚZK (CC BY 4.0)", compact: true },
+    attributionControl: { customAttribution: `Boundaries: ČÚZK (CC BY 4.0) · ${BASEMAP_ATTRIBUTION}`, compact: true },
     dragRotate: false,
     pitchWithRotate: false,
     touchPitch: false,
@@ -68,6 +78,7 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
   const ready = new Promise((resolve) => map.on("load", resolve));
   const markers = new Map(); // id → {marker, el, canvas, temp, chips, chipBox, icon, onMap}
   const popup = new Popup({ closeButton: false, closeOnClick: false, offset: 10, className: "station-map-popup" });
+  let pin = null; // the place found in the search
 
   function popupFor(row) {
     const box = element("div");
@@ -210,9 +221,17 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
     map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
     map.addSource("kraje", { type: "geojson", data: "data/kraje.geojson" });
     map.addSource("obs-dots", { type: "geojson", data: EMPTY });
-    map.addLayer({ id: "okresy-fill", type: "fill", source: "okresy", paint: { "fill-color": "#ececec", "fill-opacity": 0.85 } });
+    map.addLayer({
+      id: "okresy-fill",
+      type: "fill",
+      source: "okresy",
+      paint: { "fill-color": "#ececec", "fill-opacity": ["step", ["zoom"], 0.85, BASE_ZOOM, 0.45] },
+    });
     map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#ffffff", "line-width": 0.6 } });
     map.addLayer({ id: "kraje-line", type: "line", source: "kraje", paint: { "line-color": "#4b5863", "line-width": 1.1 } });
+    for (const layer of topLayers(document.documentElement.lang).filter((l) => l.id === "place-town" || l.id === "place-city")) {
+      map.addLayer({ ...layer, minzoom: Math.max(layer.minzoom ?? 0, BASE_ZOOM) });
+    }
     map.addLayer({
       id: "okres-selected",
       type: "line",
@@ -302,6 +321,14 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
         map.resize();
         map.fitBounds(BOUNDS, { padding: { top: 10, bottom: 10, left: 10, right }, duration: first ? 0 : 400 });
       });
+    },
+    /** A place found in the search: a pin there and the map around it (the user's move, so
+     * it stays). */
+    goTo(lngLat, name) {
+      pin ??= new Marker({ color: "#1d2329", scale: 0.8 });
+      pin.setLngLat(lngLat).addTo(map);
+      pin.getElement().title = name;
+      map.easeTo({ center: lngLat, zoom: Math.max(map.getZoom(), 10.5) }, { originalEvent: "place-search" });
     },
     /** Make it fit its box again (after being hidden). */
     resize() {
