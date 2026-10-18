@@ -15,12 +15,22 @@ export function pickModel(ranked, preferred) {
   return ranked[0]?.id ?? null;
 }
 
-/** Index of the first time within the last `days` days of `times` (0: all of them). */
-export function firstOfLastDays(times, days) {
-  if (!times?.length || !days) return 0;
-  const cutoff = Date.parse(times.at(-1)) - days * 86_400_000;
-  const i = times.findIndex((time) => Date.parse(time) > cutoff);
-  return i < 0 ? 0 : i;
+/** One row per hour: measured, AI and the model, and each forecast minus measured. */
+export function chartRows(times, series, modelId) {
+  const model = series?.models?.[modelId] ?? [];
+  const diff = (value, measured) => (value == null || measured == null ? null : value - measured);
+  return (times ?? []).map((time, i) => {
+    const measured = series?.measured?.[i] ?? null;
+    const ai = series?.ai?.[i] ?? null;
+    const m = model[i] ?? null;
+    return { time: new Date(time), measured, ai, model: m, dAi: diff(ai, measured), dModel: diff(m, measured) };
+  });
+}
+
+/** How many hours of this series are measured (measured_hours, else counted). */
+export function measuredHours(series) {
+  if (Number.isInteger(series?.measured_hours)) return series.measured_hours;
+  return (series?.measured ?? []).filter((v) => v != null).length;
 }
 
 /** The okresy of index.json sorted by name ([[code, name]]), in the page's language. */
