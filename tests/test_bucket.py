@@ -68,9 +68,11 @@ class FakeBucket:
         self.fail: dict[str, int] = {}  # path -> how many times to drop the connection
         self.requests = []
 
-    def add_meta(self, bucket_model, run, lead_hours):
+    def add_meta(self, bucket_model, run, lead_hours, variables=None):
         times = [f"{run + timedelta(hours=h):%Y-%m-%dT%H:%MZ}" for h in lead_hours]
         doc = {"crs_wkt": "x", "valid_times": times, "reference_time": f"{run:%Y-%m-%dT%H:%MZ}"}
+        if variables is not None:  # as Open-Meteo writes it: the text of a Python list
+            doc["variables"] = str(sorted(variables))
         import json
 
         self.files[f"{bucket.run_path(bucket_model, run)}/meta.json"] = json.dumps(doc).encode()
@@ -217,6 +219,114 @@ def test_a_model_not_in_the_bucket():
     assert read(FakeBucket(), other).reason == "not in the bucket"
 
 
+# --- the further variables ----------------------------------------------------------------
+
+#: ICON-EU's further files in the fake run (the rest of ``bucket.EXTRA`` it does not list)
+ICON_EXTRA = {
+    "relative_humidity_2m": 80.0,
+    "pressure_msl": 1013.0,
+    "direct_radiation": 300.0,
+    "diffuse_radiation": 100.0,
+    "cloud_cover": 50.0,
+    "snowfall_water_equivalent": 1.0,  # mm → 0.7 cm
+    "soil_temperature_0cm": 5.0,
+    "visibility": -5.0,  # implausible: null
+}
+
+
+def with_extras(fake, tmp_path, model=ICON_EU, extra=ICON_EXTRA, missing=()):
+    """``complete`` plus constant further files (listed in meta.json; ``missing``:
+    listed, but no file)."""
+    hours = complete(fake, tmp_path, model)
+    source = bucket.SOURCES[model.id]
+    listed = {*extra, "temperature_2m", "precipitation", "wind_u_component_10m"}
+    fake.add_meta(source.bucket, RUN, hours, variables=listed | {"wind_v_component_10m"})
+    for name, value in extra.items():
+        if name not in missing:
+            data = np.full((NY, NX, len(hours)), value)
+            fake.add(source.bucket, RUN, name, om_file(tmp_path, data))
+    return hours
+
+
+def test_further_variables_are_read_and_derived_like_the_api(tmp_path):
+    fake = FakeBucket()
+    with_extras(fake, tmp_path)
+    with ThreadPoolExecutor(4) as pool:
+        fetched = bucket.read_run(reader(fake), ICON_EU, RUN, STATIONS, cells(), pool, extra=True)
+    assert fetched.extra_complete
+    rows = fetched.rows
+    assert rows.schema == pl.Schema(runs.SCHEMA)
+    a = rows.filter(pl.col("station_id") == "a").sort("lead_h").row(0, named=True)
+    assert a["relative_humidity_2m"] == 80
+    # from the temperature at the station's elevation (11.76 °C) and the humidity
+    assert a["dew_point_2m"] == pytest.approx(8.4)  # 8.42, to 1 decimal
+    assert a["wind_direction_10m"] == 217  # u 3, v 4: from the south-west
+    assert a["shortwave_radiation"] == 400  # direct + diffuse
+    assert a["pressure_msl"] == pytest.approx(1013.0)
+    assert a["cloud_cover"] == 50 and a["snowfall"] == pytest.approx(0.7)
+    assert a["surface_temperature"] == pytest.approx(5.7)  # 5 + 0.65, moved like temperature
+    assert a["visibility"] is None  # implausible
+    assert a["cape"] is None and a["sunshine_duration"] is None  # not listed
+    # without extra (the obce): none of them, the rest the same
+    plain = read(fake, ICON_EU).rows
+    assert plain.select(runs.EXTRA_VARIABLES).null_count().sum_horizontal().item() == (
+        plain.height * len(runs.EXTRA_VARIABLES)
+    )
+    assert plain.select(runs.VARIABLES).equals(rows.select(runs.VARIABLES))
+
+
+def test_a_listed_further_file_not_written_yet_leaves_the_run_to_read_again(tmp_path):
+    fake = FakeBucket()
+    with_extras(fake, tmp_path, missing=("cloud_cover",))
+    with ThreadPoolExecutor(4) as pool:
+        fetched = bucket.read_run(reader(fake), ICON_EU, RUN, STATIONS, cells(), pool, extra=True)
+    assert fetched.rows is not None and not fetched.extra_complete
+    assert fetched.rows["cloud_cover"].null_count() == fetched.rows.height
+    assert fetched.rows["relative_humidity_2m"].null_count() == 0
+
+
+def test_derivations():
+    t = np.array([20.0, -5.0], dtype=np.float32)
+    rh = np.array([50.0, 90.0], dtype=np.float32)
+    td = bucket._dew_point(t, rh)
+    assert td[0] == pytest.approx(9.26, abs=0.01)
+    assert bucket._relative_humidity(t, td) == pytest.approx(rh, abs=0.01)
+    u = np.array([0.0, -1.0, 0.0, 1.0])
+    v = np.array([-1.0, 0.0, 1.0, 0.0])
+    assert bucket._direction(u, v).tolist() == pytest.approx([0, 90, 180, 270])
+    assert bucket._hpa(np.array([101300.0, 1013.0])).tolist() == [1013.0, 1013.0]
+    assert bucket.meta_variables({"variables": "['cape', 'rain']"}) == {"cape", "rain"}
+    assert bucket.meta_variables({"variables": ["cape"]}) == {"cape"}
+    assert bucket.meta_variables({}) == set()
+
+
+def test_extra_files_per_model():
+    gfs = bucket.SOURCES["ncep_gfs_global"]
+    found = gfs.extra_files(
+        {
+            "ncep_gfs013": {"relative_humidity_2m", "temperature_2m", "wind_u_component_10m"}
+            | {"wind_v_component_10m", "shortwave_radiation"},
+            "ncep_gfs025": {"pressure_msl", "cape", "visibility"},
+        }
+    )
+    assert {v: m for v, (m, _) in found.items()} == {
+        "relative_humidity_2m": "ncep_gfs013",
+        "dew_point_2m": "ncep_gfs013",
+        "wind_direction_10m": "ncep_gfs013",
+        "shortwave_radiation": "ncep_gfs013",
+        "pressure_msl": "ncep_gfs025",  # from the other GFS grid, as the gusts
+        "cape": "ncep_gfs025",
+        "visibility": "ncep_gfs025",
+    }
+    aladin = bucket.SOURCES["chmi_aladin_cz_1km"].extra_files(
+        {"chmi_aladin_cz_1km": {"wind_direction_10m", "dew_point_2m", "relative_humidity_2m"}}
+    )
+    assert aladin["dew_point_2m"][1].files == ("dew_point_2m",)  # its own file first
+    assert aladin["wind_direction_10m"][1].files == ("wind_direction_10m",)
+    assert set(bucket.EXTRA) == set(runs.EXTRA_VARIABLES)
+    assert set(bucket.EXTRA_PLAUSIBLE) == set(runs.EXTRA_VARIABLES)
+
+
 # --- HTTP ------------------------------------------------------------------------------
 
 
@@ -316,7 +426,53 @@ def test_a_model_run_from_the_bucket_replaces_the_api_rows_of_it(tmp_path):
     stored = pl.read_parquet(tmp_path / "runs" / "2026-10.parquet")
     aifs = stored.filter(pl.col("model") == AIFS.id)
     assert aifs.height == 40 and set(aifs["source"]) == {"bucket"}  # no hourly rows left
-    assert stored.filter(pl.col("model") == "jma_gsm").height == 1
+    jma = stored.filter(pl.col("model") == "jma_gsm")
+    assert jma.height == 1 and jma["cloud_cover"].to_list() == [None]  # an old row: null
+
+
+def test_stored_model_runs_are_read_again_for_the_further_variables(tmp_path):
+    fake = FakeBucket()
+    complete(fake, tmp_path, ICON_EU)  # a run stored before: its meta lists nothing more
+    assert collect(fake, tmp_path, models=[ICON_EU]).stored == {"2026101500": {"dwd_icon_eu"}}
+    state = runs.State.load(tmp_path / runs.STATE_NAME)
+    assert state.extra == {"2026101500": {"dwd_icon_eu"}}  # nothing listed: settled
+    state.extra = {}  # as in the state before 2026-10-19
+    state.save()
+    with_extras(fake, tmp_path)
+    result = collect(fake, tmp_path, models=[ICON_EU])
+    assert result.stored == {} and result.refilled == {"2026101500": {"dwd_icon_eu"}}
+    assert "1 stored ones read again" in bucket.summary(result)
+    stored = pl.read_parquet(tmp_path / "runs" / "2026-10.parquet")
+    assert stored.height == 2 * 92 and stored["relative_humidity_2m"].null_count() == 0
+    assert runs.State.load(tmp_path / runs.STATE_NAME).extra == {"2026101500": {"dwd_icon_eu"}}
+    before = len(fake.requests)
+    assert collect(fake, tmp_path, models=[ICON_EU]).refilled == {}  # settled: not again
+    assert len(fake.requests) == before
+
+
+def test_a_young_run_with_a_further_file_missing_is_read_again_later(tmp_path):
+    fake = FakeBucket()
+    with_extras(fake, tmp_path, missing=("cloud_cover",))
+    young = RUN + timedelta(hours=5)
+    assert collect(fake, tmp_path, now=young, models=[ICON_EU]).stored
+    assert runs.State.load(tmp_path / runs.STATE_NAME).extra == {}
+    fake.add("dwd_icon_eu", RUN, "cloud_cover", om_file(tmp_path, np.full((NY, NX, 93), 40.0)))
+    result = collect(fake, tmp_path, now=young + timedelta(hours=6), models=[ICON_EU])
+    assert result.refilled == {"2026101500": {"dwd_icon_eu"}}
+    stored = pl.read_parquet(tmp_path / "runs" / "2026-10.parquet")
+    assert set(stored["cloud_cover"]) == {40.0}
+    assert runs.State.load(tmp_path / runs.STATE_NAME).extra == {"2026101500": {"dwd_icon_eu"}}
+
+
+def test_api_rows_not_in_the_bucket_are_settled_once_final(tmp_path):
+    state = runs.State(tmp_path / runs.STATE_NAME, fetched={"2026101500": {"dwd_icon_eu"}})
+    state.bucket_missing = {"2026101500": {"dwd_icon_eu"}}
+    state.save()
+    result = collect(FakeBucket(), tmp_path, models=[ICON_EU])
+    assert result.refilled == {} and result.missing == {}
+    after = runs.State.load(tmp_path / runs.STATE_NAME)
+    assert after.extra == {"2026101500": {"dwd_icon_eu"}}
+    assert after.fetched == {"2026101500": {"dwd_icon_eu"}}  # the API's rows stay
 
 
 def test_collect_gives_up_when_the_bucket_keeps_failing(tmp_path):
