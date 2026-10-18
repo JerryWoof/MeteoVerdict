@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MeteoVerdict: AI forecast</title>
-    <meta name="description" content="Experimental: MeteoVerdict AI and other machine-learning forecasts, trained on an NVIDIA DGX Spark and scored against ČHMÚ measurements." />
+    <meta name="description" content="Experimental: MeteoVerdict AI's forecast for every okres and village, machine learning that corrects all 19 weather models, computed daily on an NVIDIA DGX Spark." />
   </head>
-  <body class="page theme-ai">
+  <body class="page tv map-page theme-ai" data-source="ai">
     <header>
       <h1><a href="./">MeteoVerdict</a></h1>
       <p id="status">Loading…</p>
@@ -21,51 +21,72 @@
       </nav>
       <button type="button" id="language">Česky</button>
     </header>
-    <main class="content">
+    <main class="content map-page">
       <div class="page-head">
-        <h2 class="page-title"><span data-i18n="ai.title">AI forecast</span> <span class="ai-badge" data-i18n="ai.badge">Experimental</span></h2>
+        <h2 class="page-title"><span data-i18n="ai.tvTitle">MeteoVerdict AI forecast</span> <span class="ai-badge" data-i18n="ai.badge">Experimental</span></h2>
       </div>
+      <p class="page-intro" data-i18n="ai.tvIntro">The weather of the next days in every okres by MeteoVerdict AI.</p>
       <p class="ai-banner" data-i18n="ai.banner"></p>
-
-      <section id="ai-forecast" hidden>
-        <h2 data-i18n="ai.fcTitle">MeteoVerdict AI forecast</h2>
-        <p id="ai-fc-intro"></p>
-        <div class="strip attached">
-          <div class="strip-row">
-            <label class="field"><span data-i18n="ai.mapShow">Map</span> <select id="ai-map-layer"></select></label>
-            <label class="field"><span data-i18n="ai.mapTime">Time</span> <select id="ai-map-time"></select></label>
+      <nav id="ribbon" class="strip attached" data-i18n-aria="tv.when">
+        <div class="when">
+          <div class="day-row">
+            <div id="days" class="daytabs"></div>
+            <button type="button" id="play-week" class="play">▶</button>
+          </div>
+          <div class="when-row">
+            <div id="parts" class="segmented"></div>
+            <button type="button" id="play-day" class="play">▶</button>
+            <!-- which forecast the whole map shows (not remembered: every load starts on MeteoVerdict AI) -->
+            <label id="map-model" class="map-model">
+              <span data-i18n="forecast.pick">Forecast</span>
+              <select id="map-model-select"></select>
+            </label>
+            <!-- test: find an obec (place-search.js); the map goes there and opens its panel -->
+            <div id="obce-search"></div>
           </div>
         </div>
-        <div class="map-wrap">
-          <div id="ai-map" class="map-frame" role="region" aria-label="MeteoVerdict AI map of Czechia"></div>
-          <aside class="map-box legend"><div id="ai-scale" class="ai-scale"></div><p class="ai-map-note" data-i18n="ai.mapNote"></p></aside>
-          <aside id="okres-panel" class="map-box panel ai-panel" aria-live="polite"></aside>
-        </div>
-      </section>
-
-      <section id="ai-model" hidden>
-        <h2 data-i18n="ai.modelTitle">MeteoVerdict AI</h2>
-        <p id="ai-model-intro"></p>
-        <h3 data-i18n="ai.scoreTitle">Does it beat our combined forecast?</h3>
-        <p id="ai-score-intro"></p>
+      </nav>
+      <div class="map-wrap">
+        <aside id="headline" class="map-box info" aria-live="polite"></aside>
+        <div id="map" class="map-frame" role="region" aria-label="MeteoVerdict AI weather map of Czechia"></div>
+        <aside id="show-box" class="map-box legend">
+          <details id="show" open>
+            <summary data-i18n="tv.onMap">On the map</summary>
+            <fieldset>
+              <legend data-i18n="tv.values">Values at each okres and village</legend>
+              <div id="values"></div>
+            </fieldset>
+            <fieldset>
+              <legend data-i18n="tv.colour">Colour of the okresy</legend>
+              <div id="colours"></div>
+              <div id="scale"></div>
+              <p id="obce-hint" class="note" data-i18n="tv.obceHint">Test: zoom in to see the forecast for each village.</p>
+            </fieldset>
+          </details>
+        </aside>
+        <aside id="okres-panel" class="map-box panel" aria-live="polite"></aside>
+      </div>
+      <!-- data/scores/ai/ai.json (src/ai-extras.js): hidden until it loads -->
+      <section id="ai-score-section" class="ai-extras" hidden>
+        <h2 data-i18n="ai.scoreTitle">MeteoVerdict AI vs the best public model</h2>
+        <p id="ai-score-intro" class="note"></p>
         <div id="ai-scores"></div>
       </section>
-
-      <section>
-        <h2 data-i18n="ai.expTitle">Experiments</h2>
-        <p data-i18n="ai.expIntro"></p>
+      <section id="ai-exp-section" class="ai-extras" hidden>
+        <h2 data-i18n="ai.expTitle">Experiments that work</h2>
+        <p class="note" data-i18n="ai.expIntro"></p>
         <div id="ai-experiments" class="ai-experiments"></div>
       </section>
-
-      <section>
-        <h2 data-i18n="ai.howTitle">How we test</h2>
-        <p data-i18n="ai.how"></p>
+      <section id="ai-testing-section" class="ai-extras" hidden>
+        <h2 data-i18n="ai.testingTitle">Under evaluation</h2>
+        <p class="note" data-i18n="ai.testingIntro"></p>
+        <div id="ai-testing" class="ai-experiments"></div>
       </section>
     </main>
-    <footer data-footer="models" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/ai/README.md">
+    <footer data-footer="ai" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/ai/README.md">
       <!-- filled in by src/footer.js (the credits and licences of every page) -->
-      Data: ČHMÚ, Open-Meteo.com and the model providers (CC BY 4.0; UK Met Office CC BY-SA 4.0); scores CC BY-SA 4.0.
+      Data: ČHMÚ, Open-Meteo.com and the model providers (CC BY 4.0; UK Met Office CC BY-SA 4.0); MeteoVerdict AI forecast CC BY-SA 4.0.
     </footer>
-    <script type="module" src="/src/ai-page.js"></script>
+    <script type="module" src="/src/tv-page.js"></script>
   </body>
 </html>
