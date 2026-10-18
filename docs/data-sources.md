@@ -1255,8 +1255,10 @@ the mean of its stations next to what our forecast had said ("Okresy",
 Zoomed in (from zoom 7.5), its map has the radar page's base map under the okres colours
 (relief, water, rivers, main roads, town names; `radar-basemap.js`, as the forecast map),
 and a "Find a place" search over every obec (`place-search.js`) takes the map there with a
-pin, so the stations around a place are easy to find. Nothing is measured at the obce
-themselves; only the stations' values are shown.
+pin, so the stations around a place are easy to find. Zoomed in further (from zoom 8.5),
+the okres layer shows the stations themselves instead of the okres means, and every
+station label carries the station's name. Nothing is measured at the obce themselves;
+only the stations' values are shown.
 
 **Days.** The last `PART_DAYS` = 30 Prague days before today have the four parts of day
 and the whole day (Prague time, as the outlook: night 0–6, morning 6–12, afternoon
