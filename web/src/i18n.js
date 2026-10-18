@@ -533,6 +533,10 @@ export const STRINGS = {
     "forecast.modelHorizon": "Model počítá jen do {end}; dny dál jsou „–“.",
     "forecast.legendModel": "Barevně {model}: jeho surová předpověď (bez naší korekce); tence černě naše kombinovaná předpověď; šedě ostatní modely; přerušovaná čára je teď.",
     "forecast.titleFor": "Předpověď pro okres {okres}",
+    "forecast.obec": "Obec (test)",
+    "forecast.obecWhole": "celý okres",
+    "forecast.titleForObec": "Předpověď pro obec {obec} (test)",
+    "forecast.obecNote": "Test: předpověď přímo pro obec {obec} ({elevation} m). Každý model z jeho nejnovějšího běhu v buňce mřížky nad obcí, teplota přepočtená na výšku obce, zkombinováno s vahami a korekcemi okresu {okres}. Grafy srážek a větru ukazují jen naši kombinaci. Tabulka vah níže platí pro celý okres. Spočítáno {time}.",
     "forecast.note":
       "Naše předpověď kombinuje aktuální předpovědi všech modelů: každý model má váhu podle toho, jak přesný byl v tomto okrese za posledních 90 dní, a teplotu a vítr opravujeme o jeho průměrnou chybu. S málo dny se váhy blíží prostému průměru. Zda kombinace poráží nejlepší model, zpětně ověřujeme na stránce srovnání modelů; historie je zatím krátká.",
     "forecast.loading": "Načítám předpovědi modelů…",
@@ -1369,6 +1373,10 @@ export const STRINGS = {
     "forecast.modelHorizon": "The model only runs until {end}; later days show “–”.",
     "forecast.legendModel": "Colour: {model}, its raw forecast (without our correction); thin black: our combined forecast; grey: the other models; dashed line: now.",
     "forecast.titleFor": "Forecast for okres {okres}",
+    "forecast.obec": "Obec (test)",
+    "forecast.obecWhole": "whole okres",
+    "forecast.titleForObec": "Forecast for {obec} (test)",
+    "forecast.obecNote": "Test: a forecast for {obec} itself ({elevation} m). Each model from its newest run at the grid cell over the village, temperature moved to the village's height, combined with the weights and corrections of okres {okres}. The rain and wind charts show only our combination. The weight table below is the okres's. Computed {time}.",
     "forecast.note":
       "Our forecast combines the current forecasts of all models: each model is weighted by how accurate it was in this okres over the last 90 days, and temperature and wind are corrected by its mean error there. With few days the weights stay close to a plain mean. Whether the combination beats the best model is tested on past days on the model comparison page; the history is still short.",
     "forecast.loading": "Loading the model forecasts…",
