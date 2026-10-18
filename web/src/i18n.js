@@ -199,7 +199,7 @@ export const STRINGS = {
     "ai.mapModelHint": "Celá mapa podle MeteoVerdict AI, nebo podle jednoho veřejného modelu (surový výstup). Volba se nepamatuje.",
     "ai.obecNote": "Test: předpověď MeteoVerdict AI přímo pro tuto obec (teplota přepočtená na její výšku). Bez symbolů počasí a pravděpodobnosti srážek.",
     "ai.fcNone": "Předpověď MeteoVerdict AI zatím není k dispozici.",
-    "ai.detailNote": "Experiment: teplotu a vítr předpovídá MeteoVerdict AI, strojové učení (XGBoost a transformer), které opravuje všech 19 modelů zvlášť pro každou stanici; srážky, oblačnost a slunce jsou z kombinace modelů. Počítáno každý den na počítači NVIDIA DGX Spark.",
+    "ai.detailNote": "Experiment: teplotu a vítr předpovídá MeteoVerdict AI, strojová korekce všech modelů; srážky, oblačnost a slunce jsou z kombinace modelů. Počítáno každý den na počítači NVIDIA DGX Spark.",
     "ai.legend": "Černě MeteoVerdict AI; šedě veřejné modely; přerušovaná čára je teď.",
     "ai.legendOkres": "Šedě veřejné modely. Hodinovou předpověď MeteoVerdict AI má jen obec (vyberte ji nahoře); dny okresu jsou v tabulce. Přerušovaná čára je teď.",
     "ai.legendModel": "Barevně {model}: jeho surová předpověď; šedě ostatní modely; přerušovaná čára je teď.",
@@ -207,7 +207,7 @@ export const STRINGS = {
     "ai.titleFor": "Předpověď MeteoVerdict AI pro okres {okres}",
     "ai.titleForObec": "Předpověď MeteoVerdict AI pro obec {obec} (test)",
     "ai.colGain": "Zlepšení",
-    "ai.banner": "Experiment, počítaný každý den na počítači NVIDIA DGX Spark. MeteoVerdict AI je strojové učení (XGBoost a transformer), které opravuje všech 19 modelů zvlášť pro každou stanici. Teplota a vítr jsou od AI, srážky, oblačnost a slunce z kombinace modelů.",
+    "ai.banner": "Experiment, počítaný každý den na počítači NVIDIA DGX Spark. MeteoVerdict AI je strojová korekce všech modelů. Teplota a vítr jsou od AI, srážky, oblačnost a slunce z kombinace modelů.",
     "ai.scoreTitle": "MeteoVerdict AI proti nejlepšímu veřejnému modelu",
     "ai.scoreIntro": "Průměrná chyba (MAE) proti měřením ČHMÚ za {range} ({days} dní), celé Česko, jen dny, které AI při učení neviděla. Nejlepší veřejný model je ten s nejmenší chybou na daný den předpovědi.",
     "ai.colLead": "Den",
@@ -224,10 +224,10 @@ export const STRINGS = {
     "ai.tech": "Technologie: {tech}",
     "ai.exp.meteoverdict_ai.name": "MeteoVerdict AI v1",
     "ai.exp.meteoverdict_ai.what":
-      "Stromy rozhodování (gradient boosting) opravují medián všech modelů podle každého modelu zvlášť, rozptylu modelů, stanice, denní doby a nedávných chyb. Jeden model pro všechny stanice a předstihy, učený znovu každý den jen z toho, co bylo v den předpovědi známo.",
+      "Strojová korekce všech 19 modelů, učená znovu každý den jen z toho, co bylo v den předpovědi známo.",
     "ai.exp.deep_blend.name": "Hluboká síť přes modely a stanice",
     "ai.exp.deep_blend.what":
-      "Neuronová síť (transformer / grafová síť), která vidí všechny modely a sousední stanice najednou. Výzkum z roku 2026 ukazuje, že vyhrává hlavně s bohatšími vstupy a v místech bez stanice.",
+      "Neuronová síť přes všechny modely; je součástí MeteoVerdict AI.",
     "ai.exp.downscale_100m.name": "Teplota po 100 m",
     "ai.exp.downscale_100m.what":
       "Teplota v mřížce 100 m z terénu (výška, údolí, svahy, města): mrazové kotliny a studené noci. Ověřujeme na stanicích vynechaných z učení.",
@@ -1107,7 +1107,7 @@ export const STRINGS = {
     "ai.mapModelHint": "The whole map from MeteoVerdict AI, or from one public model (raw output). The choice is not remembered.",
     "ai.obecNote": "Test: MeteoVerdict AI's forecast for this village itself (temperature moved to its height). No weather symbols or rain probability.",
     "ai.fcNone": "No MeteoVerdict AI forecast yet.",
-    "ai.detailNote": "Experimental: temperature and wind are forecast by MeteoVerdict AI, machine learning (XGBoost and a transformer) that corrects all 19 models for each station; precipitation, cloud and sunshine come from the model combination. Computed daily on an NVIDIA DGX Spark.",
+    "ai.detailNote": "Experimental: temperature and wind are forecast by MeteoVerdict AI, a machine-learning correction of all models; precipitation, cloud and sunshine come from the model combination. Computed daily on an NVIDIA DGX Spark.",
     "ai.legend": "Black: MeteoVerdict AI; grey: the public models; dashed line: now.",
     "ai.legendOkres": "Grey: the public models. MeteoVerdict AI's hourly forecast is per village (choose one above); the okres's days are in the table. Dashed line: now.",
     "ai.legendModel": "Colour: {model}, its raw forecast; grey: the other models; dashed line: now.",
@@ -1115,7 +1115,7 @@ export const STRINGS = {
     "ai.titleFor": "MeteoVerdict AI forecast for okres {okres}",
     "ai.titleForObec": "MeteoVerdict AI forecast for {obec} (test)",
     "ai.colGain": "Improvement",
-    "ai.banner": "Experimental, computed daily on an NVIDIA DGX Spark. MeteoVerdict AI is machine learning (XGBoost and a transformer) that corrects all 19 models for each station. Temperature and wind come from the AI; precipitation, cloud and sunshine from the model combination.",
+    "ai.banner": "Experimental, computed daily on an NVIDIA DGX Spark. MeteoVerdict AI is a machine-learning correction of all models. Temperature and wind come from the AI; precipitation, cloud and sunshine from the model combination.",
     "ai.scoreTitle": "MeteoVerdict AI vs the best public model",
     "ai.scoreIntro": "Mean absolute error (MAE) against ČHMÚ measurements over {range} ({days} days), all of Czechia, only days the AI never saw while learning. The best public model is the one with the smallest error at that day of the forecast.",
     "ai.colLead": "Day",
@@ -1132,10 +1132,10 @@ export const STRINGS = {
     "ai.tech": "Technology: {tech}",
     "ai.exp.meteoverdict_ai.name": "MeteoVerdict AI v1",
     "ai.exp.meteoverdict_ai.what":
-      "Gradient-boosted decision trees correct the median of all models using each model separately, the models’ spread, the station, the time of day and recent errors. One model for all stations and lead times, retrained every day from only what was known on the day of the forecast.",
+      "A machine-learning correction of all 19 models, retrained every day from only what was known on the day of the forecast.",
     "ai.exp.deep_blend.name": "Deep network over models and stations",
     "ai.exp.deep_blend.what":
-      "A neural network (transformer / graph network) that sees all models and neighbouring stations at once. 2026 research finds it wins mainly with richer inputs and at places without a station.",
+      "A neural network over all models; part of MeteoVerdict AI.",
     "ai.exp.downscale_100m.name": "Temperature at 100 m",
     "ai.exp.downscale_100m.what":
       "Temperature on a 100 m grid from the terrain (elevation, valleys, slopes, towns): frost hollows and cold nights. Checked at stations left out of training.",
