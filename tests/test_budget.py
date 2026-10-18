@@ -71,7 +71,8 @@ def test_fallback_runs_fit_one_or_two_models():
 def test_the_outlook_runs_after_each_model_run_and_never_five_times_a_day():
     # 00/06/12/18 UTC runs are on Open-Meteo 3.5-6 h after their start
     assert schedules("outlook.yml") == ["50 4 * * *", "50 10 * * *", "50 16 * * *", "50 22 * * *"]
-    script = workflow("outlook.yml")["jobs"]["outlook"]["steps"][-1]["run"]
+    steps = workflow("outlook.yml")["jobs"]["outlook"]["steps"]
+    script = next(s for s in steps if s.get("name") == "Outlook")["run"]
     # a 22:50 run that starts after midnight UTC would be the next day's fifth: skipped
     assert '"$SCHEDULE" = "50 22 * * *"' in script and "exit 0" in script
     assert script.index("exit 0") < script.index("mvd outlook --github-release")
