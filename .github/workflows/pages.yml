@@ -100,10 +100,11 @@ jobs:
               echo "no $name yet; the pages that use it say so or hide that part"
             fi
           done
-          # test: the forecast for every obec of Litoměřice (`mvd obce-forecast`)
+          # test: the forecast for every obec, one file per okres (`mvd obce-forecast`)
           mkdir -p site/data/forecast
-          if gh release download data-latest --pattern 'obce-*.json' --dir site/data/forecast --clobber 2>/dev/null; then
-            echo "obce forecast from data-latest"
+          if gh release download data-latest --pattern obce.zip --dir /tmp --clobber 2>/dev/null; then
+            unzip -o -q /tmp/obce.zip -d site/data/forecast
+            echo "obce forecast from data-latest ($(ls site/data/forecast/obce-*.json | wc -l) okresy)"
           else
             echo "no obce forecast yet"
           fi
