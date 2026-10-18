@@ -7,7 +7,10 @@ import { COMBINED, weightTable } from "./forecast.js";
 import { drawIcon, glyph, iconCanvas } from "./icons.js";
 import { setUpLanguage } from "./i18n.js";
 import { mapModelOptions, modelHorizon, modelPeriods, parseModelParts, parseModels } from "./models.js";
+import { MIN_ZOOM, OBCE_OKRESY, addObceLayers, obcePartRows, paintObce } from "./obce-map.js";
+import { obceFor } from "./obce-test.js";
 import { renderScale } from "./palette.js";
+import { GLYPHS } from "./radar-basemap.js";
 import { fillPicker, issuedText } from "./picker.js";
 import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, currentPart, dayLabel, displayName, ease,
@@ -36,6 +39,8 @@ const map = new MapLibreMap({
   container: "map",
   style: {
     version: 8,
+    // the labels of the obce (test, obce-map.js)
+    glyphs: GLYPHS,
     sources: {},
     layers: [{ id: "background", type: "background", paint: { "background-color": "#f4f1ea" } }],
   },
@@ -72,6 +77,8 @@ const symbolText = (symbol) => (symbol ? t(`symbol.${symbol}`) : "");
 
 // --- state, kept in the URL (tv.js parseView / viewHash) ----------------------------
 let state = { day: null, part: null, colour: "temperature", shown: [], okres: null };
+// test: the obce of the okresy that have an obce file, [{doc, rows}] (obce-map.js)
+let obceDocs = [];
 let playing = null; // "day" or "week" while playing
 
 // --- which forecast the whole map shows: our combination (outlook.json) or one model's
@@ -266,6 +273,10 @@ function declutter() {
       return { code, x: p.x, y: p.y, w: m.el.offsetWidth, h: m.el.offsetHeight };
     });
   const shown = placeMarkers(boxes, 4, state.okres);
+  // test: zoomed in, the obce stand in for their okres's marker
+  if (obceDocs.length && mapModel === COMBINED && map.getZoom() >= MIN_ZOOM) {
+    for (const code of OBCE_OKRESY) shown.delete(code);
+  }
   for (const [code, m] of markers) {
     m.el.hidden = !shown.has(code);
     m.el.classList.toggle("selected", code === state.okres);
@@ -590,6 +601,7 @@ function update(change = {}, fromPlay = false) {
   paintFill(okresColours(view, state.day, state.part, state.colour));
   map.setFilter("okres-selected", ["==", ["get", "code"], state.okres ?? ""]);
   paintMarkers(view);
+  if (mapReady || obceDocs.length) paintObce(map, mapModel === COMBINED ? obceDocs : [], state);
   renderHeadline(view);
   renderPanel(outlook);
   fitView();
@@ -756,7 +768,12 @@ function addLayers() {
     filter: ["==", ["get", "code"], ""],
     paint: { "line-color": "#1d2329", "line-width": 2.5 },
   });
-  map.on("click", "okresy-fill", (event) => update({ okres: event.features[0].properties.code }));
+  addObceLayers(map, t);
+  map.on("click", "okresy-fill", (event) => {
+    // a click on an obce dot opens its popup, not the okres
+    if (map.queryRenderedFeatures(event.point, { layers: ["obce-test-dot"] }).length) return;
+    update({ okres: event.features[0].properties.code });
+  });
   map.on("mouseenter", "okresy-fill", () => (map.getCanvas().style.cursor = "pointer"));
   map.on("mouseleave", "okresy-fill", () => (map.getCanvas().style.cursor = ""));
   map.on("moveend", declutter);
@@ -805,6 +822,20 @@ async function main() {
   addLayers();
   buildMarkers(outlook);
   update();
+  // test: the obce, once their files are there
+  Promise.all(OBCE_OKRESY.map((code) => obceFor(code, getJson))).then((docs) => {
+    obceDocs = docs.filter(Boolean).map((doc) => ({ doc, rows: obcePartRows(doc) }));
+    document.getElementById("obce-hint").hidden = obceDocs.length === 0;
+    // zoomed in, their okres fades so the dots stand out
+    if (obceDocs.length) {
+      const codes = obceDocs.map(({ doc }) => doc.okres);
+      map.setPaintProperty("okresy-fill", "fill-opacity", [
+        "step", ["zoom"], 0.85, MIN_ZOOM, ["case", ["in", ["get", "code"], ["literal", codes]], 0.25, 0.85],
+      ]);
+    }
+    paintObce(map, mapModel === COMBINED ? obceDocs : [], state);
+    declutter();
+  });
   picker.addEventListener("change", () => setMapModel(picker.value));
   mapReady = true;
   renderMapPicker();
