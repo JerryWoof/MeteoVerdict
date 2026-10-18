@@ -2441,7 +2441,12 @@ okres Litoměřice (105) instead of only the okres's forecast point. After each 
 - **Output:** `obce-<okres>.json` in the release `data-latest` (about 0.8 MB: per obec the
   combined temperature, precipitation and wind and every model's temperature), served as
   `data/scores/forecast/obce-<okres>.json`. The forecast detail page shows an "Obec (test)"
-  picker for an okres that has the file (link `#CZ0423/<obec>`).
+  picker for an okres that has the file (link `#CZ0423/<obec>`). The forecast map
+  (`web/src/obce-map.js`) shows a dot per obec from zoom 8.5 on, with our combination only:
+  the parts of day summed from the hours as the outlook does (rain in mm, as a single
+  model's), the okres faded and its marker hidden; a click opens a popup with a link to
+  the obec's detail. On the first run (2026-10-18) the obce differed by 2–3 °C in a part of
+  day (Lovečkovice, 438 m, the coldest; the Labe valley the warmest).
 - **Not verified yet:** no station is held out to measure how good a forecast at a place
   without a station is; that is the next step if the test stays.
 
