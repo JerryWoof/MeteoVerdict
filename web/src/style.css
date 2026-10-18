@@ -1869,7 +1869,9 @@ body.radar #show-box {
   overflow-y: auto;
 }
 #point-hint {
-  margin: 0.5rem 0 0;
+  margin: 0.4rem 0 0.6rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--line, #e3ddd0);
   font-size: 0.78rem;
 }
 #point-hint .locate {
@@ -1879,6 +1881,49 @@ body.radar #show-box {
   border-radius: 999px;
   background: var(--surface);
   cursor: pointer;
+}
+/* find a place: the results open under the field, inside the box (it scrolls) */
+.place-search {
+  margin-top: 0.45rem;
+}
+.place-search label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+.place-search input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 16px; /* no zoom on focus on phones */
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.place-list {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0.15rem 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.place-list li {
+  padding: 0.3rem 0.5rem;
+}
+.place-list .option {
+  cursor: pointer;
+}
+.place-list .option[aria-selected="true"],
+.place-list .option:hover {
+  background: #e8eef5;
+}
+.place-list .okres,
+.place-list .empty {
+  color: var(--muted, #667);
 }
 /* rain at a place */
 /* rain at a place: bottom left (the layers are on the right) */
