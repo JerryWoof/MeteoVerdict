@@ -9,6 +9,7 @@ import {
 import { setUpLanguage } from "./i18n.js";
 import { glyph } from "./icons.js";
 import { asForecast, modelHorizon, modelPeriods, parseModels } from "./models.js";
+import { fillObce, obceFor, obecSeries, obecTimes, placeOf } from "./obce-test.js";
 import { fillPicker, issuedText } from "./picker.js";
 import { statusText } from "./status.js";
 import { dayLabel, parseOutlook, rowFor, sunFor, today } from "./tv.js";
@@ -216,6 +217,8 @@ function renderWeights(table, names) {
 let selected = COMBINED;
 // the okres on screen: {point, table, parsed, forecast, combined, periods, days, sunOf, gustOf}
 let state = null;
+// test: the obec shown instead of the okres (obce-test.js), "" = the whole okres
+let obec = "";
 
 const dayRow = (d) => ({ day: d.day, tmin: d.tmin, tmax: d.tmax, precipitation: d.precipitation, wind: d.wind });
 
@@ -305,13 +308,35 @@ async function show(point, names, colors, outlook) {
   const fromOutlook = outlook.days
     .map((day) => ({ ...rowFor(outlook, point.code, day, "day"), day }))
     .filter((d) => d.tmin != null);
-  const days = fromOutlook.length ? fromOutlook : dailySummary(parsed.times, combined, TIME_ZONE);
+  let days = fromOutlook.length ? fromOutlook : dailySummary(parsed.times, combined, TIME_ZONE);
   state = { point, table, parsed, forecast, combined, days, sunOf, gustOf };
-  const when = issuedText(parsed.generated);
+  // test: an obec of the okres instead of the okres's point
+  const obceDoc = await obceFor(point.code, getJson);
+  if (token !== showToken) return;
+  const obecPick = document.getElementById("obec-pick");
+  obecPick.hidden = !obceDoc;
+  if (obceDoc) fillObce(document.getElementById("obec"), obceDoc, obec, t("forecast.obecWhole"));
+  const place = placeOf(obceDoc, obec);
+  const obecNote = document.getElementById("obec-note");
+  obecNote.hidden = !place;
+  document.getElementById("model-pick").hidden = Boolean(place);
+  if (place) {
+    const series = obecSeries(obceDoc, place);
+    days = dailySummary(obecTimes(obceDoc), series.combined, TIME_ZONE);
+    state = { ...state, ...series, days, gustOf: () => null, parsed: { ...parsed, generated: obceDoc.generated } };
+    selected = COMBINED;
+    document.getElementById("title").textContent = t("forecast.titleForObec", { obec: place.name });
+    obecNote.textContent = t("forecast.obecNote", {
+      obec: place.name, elevation: Math.round(place.elevation), okres: point.name, time: issuedText(obceDoc.generated) ?? "",
+    });
+  }
+  const when = issuedText(state.parsed.generated);
   issued.textContent = when ? t("forecast.issued", { time: when }) : "";
-  selected = fillPicker(document.getElementById("model"), {
-    table, names, available: new Set(Object.keys(parsed.models)), selected, t,
-  });
+  if (!place) {
+    selected = fillPicker(document.getElementById("model"), {
+      table, names, available: new Set(Object.keys(parsed.models)), selected, t,
+    });
+  }
   renderWeights(table, names);
   message.textContent = "";
   render(names, colors);
@@ -334,7 +359,9 @@ async function main() {
     document.getElementById("message").textContent = t("forecast.noWeights");
     return;
   }
-  const wanted = window.location.hash.slice(1);
+  const [wanted, wantedObec] = window.location.hash.slice(1).split("/");
+  obec = wantedObec ? decodeURIComponent(wantedObec) : "";
+  const link = (point) => `#${point.code}${obec ? `/${encodeURIComponent(obec)}` : ""}`;
   const current = points.find((p) => p.code === wanted) ?? points.find((p) => p.code === "CZ0100") ?? points[0];
   const select = document.getElementById("okres");
   select.replaceChildren(
@@ -350,10 +377,18 @@ async function main() {
   modelSelect.addEventListener("change", () => pick(modelSelect.value, names, colors));
   select.addEventListener("change", () => {
     const point = points.find((p) => p.code === select.value);
-    window.history.replaceState(null, "", `#${point.code}`);
+    obec = "";
+    window.history.replaceState(null, "", link(point));
     show(point, names, colors, outlook);
   });
-  window.history.replaceState(null, "", `#${current.code}`);
+  const obecSelect = document.getElementById("obec");
+  obecSelect.addEventListener("change", () => {
+    const point = points.find((p) => p.code === select.value);
+    obec = obecSelect.value;
+    window.history.replaceState(null, "", link(point));
+    show(point, names, colors, outlook);
+  });
+  window.history.replaceState(null, "", link(current));
   await show(current, names, colors, outlook);
 }
 
