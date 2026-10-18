@@ -465,3 +465,9 @@ def test_native_leads_and_horizons():
     ]
     assert "wind_gusts_10m" not in bucket.SOURCES["jma_gsm"].files()
     assert math.isclose(bucket.LAPSE_RATE * 100, 0.65)
+
+
+def test_points_are_read_in_row_segments():
+    cells = [(3, 10), (3, 12), (3, 200), (1, 5), (3, 10)]
+    assert bucket.segments(cells, gap=64) == [(1, 5, 5), (3, 10, 12), (3, 200, 200)]
+    assert bucket.segments([(0, 0), (0, 64), (0, 129)], gap=64) == [(0, 0, 64), (0, 129, 129)]

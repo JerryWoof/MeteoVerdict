@@ -39,11 +39,8 @@
               <span data-i18n="forecast.pick">Forecast</span>
               <select id="map-model-select"></select>
             </label>
-            <!-- test: an obec of okres Litoměřice (obce-map.js) -->
-            <label id="obce-pick" class="map-model" hidden>
-              <span data-i18n="forecast.obec">Obec (test)</span>
-              <select id="obce-select"></select>
-            </label>
+            <!-- test: find an obec (place-search.js); the map goes there and opens its panel -->
+            <div id="obce-search"></div>
           </div>
         </div>
       </nav>
@@ -54,14 +51,14 @@
           <details id="show" open>
             <summary data-i18n="tv.onMap">On the map</summary>
             <fieldset>
-              <legend data-i18n="tv.values">Values at each okres</legend>
+              <legend data-i18n="tv.values">Values at each okres and village</legend>
               <div id="values"></div>
             </fieldset>
             <fieldset>
               <legend data-i18n="tv.colour">Colour of the okresy</legend>
               <div id="colours"></div>
               <div id="scale"></div>
-              <p id="obce-hint" class="note" data-i18n="tv.obceHint" hidden>Test: zoom into okres Litoměřice to see the forecast for each village.</p>
+              <p id="obce-hint" class="note" data-i18n="tv.obceHint">Test: zoom in to see the forecast for each village.</p>
             </fieldset>
           </details>
         </aside>
