@@ -679,6 +679,55 @@ body.tv > * {
   border-radius: 6px;
   background: var(--surface);
 }
+/* the forecast map's "Find a place" (test, obce): in the row like "Forecast", its list
+   a dropdown over the map so the bar keeps its height */
+#obce-search .place-search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.85rem;
+}
+#obce-search .place-search label {
+  display: inline;
+  margin: 0;
+  font-weight: 600;
+  white-space: nowrap;
+}
+#obce-search .place-search input {
+  width: 15rem;
+  max-width: 100%;
+  font-size: 16px; /* no zoom on focus on phones */
+  padding: 0.25rem 0.5rem;
+}
+#obce-search .place-list {
+  position: absolute;
+  top: calc(100% + 3px);
+  right: 0;
+  width: 18rem;
+  max-width: 90vw;
+  margin: 0;
+  z-index: 20;
+  font-weight: 400;
+  box-shadow: 0 4px 14px rgba(29, 35, 41, 0.18);
+}
+@media (max-width: 700px) {
+  #obce-search {
+    flex: 1 0 100%;
+  }
+  #obce-search .place-search {
+    display: flex;
+  }
+  #obce-search .place-search input {
+    flex: 1;
+    width: auto;
+  }
+  #obce-search .place-list {
+    left: 0;
+    width: auto;
+  }
+}
 /* a single model on the map: marked so it is not taken for ours */
 #headline.single {
   box-shadow:
