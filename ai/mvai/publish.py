@@ -141,7 +141,10 @@ def write_zip(doc: dict, out_dir: Path, results_dir: Path | None = None) -> Path
         z.write(out_dir / "ai.json", "ai.json")
         # the files an experiment's map points to (e.g. the 100 m temperature image)
         for e in doc["experiments"]:
-            for name in (e.get("map") or {}).values():
+            for key in ("png", "meta"):
+                name = (e.get("map") or {}).get(key)
+                if not isinstance(name, str):
+                    continue
                 source = results_dir / name if results_dir else None
                 if source is not None and source.is_file() and ".." not in name:
                     z.write(source, name)

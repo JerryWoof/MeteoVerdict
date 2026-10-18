@@ -228,7 +228,8 @@ function setUpMap(fc, onPick, overlay = null) {
       const box = document.getElementById("ai-scale");
       const { min, max, unit } = overlay.meta.legend ?? {};
       const bar = cell("div", null, "bar");
-      bar.style.background = overlay.meta.gradient ?? "linear-gradient(to right, #313695, #abd9e9, #fee090, #f46d43, #a50026)";
+      const stops = overlay.meta.colormap?.map((c) => c.color) ?? ["#313695", "#abd9e9", "#fee090", "#f46d43", "#a50026"];
+      bar.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
       const at = overlay.meta.time ? when.format(new Date(overlay.meta.time)) : "";
       box.replaceChildren(cell("div", `${t("ai.layer.temp100m")} ${at}`, "scale-title"), bar, cell("div", `${min ?? ""} … ${max ?? ""} ${unit ?? ""}`, "scale-ends"));
       return;
