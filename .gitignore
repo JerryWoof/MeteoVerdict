@@ -38,3 +38,6 @@ web/public/data/
 web/public/api/
 # MeteoVerdict AI outputs on the Spark
 /ai-out/
+
+# MeteoVerdict AI: a clone of the private MeteoVerdict-engine (see its README)
+/ai/
