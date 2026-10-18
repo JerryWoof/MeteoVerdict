@@ -1,9 +1,11 @@
 // The AI forecast tab below the map (data/scores/ai/ai.json, computed daily on the DGX
-// Spark): MeteoVerdict AI against the best public model per lead day, and the cards of
+// Spark): MeteoVerdict AI against the best public model per lead day since its launch, and the cards of
 // the experiments that work and of those still under evaluation. Nothing here compares with our combined forecast.
 
 const VARIABLES = ["temperature_2m", "wind_speed_10m"];
 const UNITS = { temperature_2m: "°C", wind_speed_10m: "m/s" };
+// the day MeteoVerdict AI went live: scores count from here on
+const LAUNCH = "2026-10-19";
 
 const lang = () => document.documentElement.lang;
 
@@ -137,14 +139,19 @@ function renderExperiments(box, experiments, t) {
 export async function renderAiExtras(t, getJson) {
   const [doc, meta] = await Promise.all([getJson("data/scores/ai/ai.json"), getJson("data/scores/meta.json")]);
   if (!doc) return;
+  // scored on live data since the launch; until the first measured days only a note
+  const test = doc.test ?? {};
+  const intro = document.getElementById("ai-score-intro");
   if (doc.scores?.length && renderScores(doc, t, { ...meta?.models })) {
-    const test = doc.test ?? {};
-    document.getElementById("ai-score-intro").textContent = t("ai.scoreIntro", {
+    intro.textContent = t("ai.scoreIntro", {
       range: test.from && test.to ? `${dateText(test.from)}–${dateText(test.to)}` : "–",
       days: test.days ?? "–",
     });
-    document.getElementById("ai-score-section").hidden = false;
+  } else {
+    document.getElementById("ai-scores").replaceChildren();
+    intro.textContent = t("ai.scoreNone", { launch: dateText(doc.launch ?? test.from ?? LAUNCH) });
   }
+  document.getElementById("ai-score-section").hidden = false;
   for (const [status, section, box] of [["works", "ai-exp-section", "ai-experiments"], ["testing", "ai-testing-section", "ai-testing"]]) {
     const shown = experimentsWith(doc.experiments, status);
     if (!shown.length) continue;

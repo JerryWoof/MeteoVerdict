@@ -2884,12 +2884,15 @@ body.station [hidden] {
 
 /* "Forecast vs measured" on the AI tab (ai-verify-view.js) */
 .ai-verify-compare { margin-left: auto; }
-.ai-verify-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.3rem 1rem; }
 .ai-verify-legend { display: flex; flex-wrap: wrap; gap: 0.2rem 1rem; margin: 0.2rem 0; font-size: var(--fs-small); }
 .ai-verify-key::before { content: ""; display: inline-block; width: 1rem; height: 3px; margin-right: 0.35rem; vertical-align: middle; }
-.ai-verify-key.measured::before { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #1d2329; }
-.ai-verify-key.ai::before { background: #6a4fb3; }
-.ai-verify-key.model::before { background: #e08a1e; }
+.ai-verify-key.measured::before {
+  width: 1.2rem; height: 0.45rem;
+  background: radial-gradient(circle, #1d2329 0 0.18rem, transparent 0.2rem) center / 0.45rem 0.45rem no-repeat,
+    linear-gradient(#1d2329, #1d2329) center / 100% 1px no-repeat;
+}
+.ai-verify-key.ai::before { width: 1.2rem; height: 3px; background: #6a4fb3; }
+.ai-verify-key.model::before { width: 1.2rem; height: 2px; background: repeating-linear-gradient(90deg, #e08a1e 0 0.38rem, transparent 0.38rem 0.6rem); }
 .ai-verify-chart { min-width: 0; }
 .ai-verify-chart svg { max-width: 100%; height: auto; }
 .ai-verify-mae { margin: 0.2rem 0 0; font-variant-numeric: tabular-nums; }
