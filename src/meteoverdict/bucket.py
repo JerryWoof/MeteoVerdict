@@ -53,7 +53,6 @@ from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from functools import partial
 from importlib.resources import files
 from pathlib import Path
 
@@ -356,12 +355,55 @@ def _water(height: float) -> bool:
     return math.isnan(height) or height <= -999
 
 
-def _read_height(reader, index: tuple[int, int]) -> float:
-    return float(np.asarray(reader[index[0], index[1]]).ravel()[0])
+def _read_heights(reader, cells: list[tuple[int, int]], pool) -> list[float]:
+    """The model surface height of every cell, read by row ``segments``."""
+    parts = segments(cells)
+
+    def read(segment):
+        y, first, last = segment
+        return np.asarray(reader[y, first : last + 1], dtype=np.float64).ravel()
+
+    found = {}
+    for (y, first, last), block in zip(parts, pool.map(read, parts), strict=True):
+        for x in range(first, last + 1):
+            found[(y, x)] = float(block[x - first])
+    return [found[cell] for cell in cells]
 
 
 def _read_point(reader, index: tuple[int, int]) -> np.ndarray:
     return np.asarray(reader[index[0], index[1], :], dtype=np.float32).ravel()
+
+
+#: points of one grid row at most this many cells apart are read in one request (with the
+#: cells between): many points (the obce) cost a few hundred reads instead of thousands
+SEGMENT_GAP = 64
+
+
+def segments(
+    indices: Iterable[tuple[int, int]], gap: int = SEGMENT_GAP
+) -> list[tuple[int, int, int]]:
+    """``(row, first, last)`` column ranges covering ``indices``, near points merged."""
+    rows: dict[int, list[int]] = {}
+    for y, x in set(indices):
+        rows.setdefault(y, []).append(x)
+    out = []
+    for y, xs in sorted(rows.items()):
+        xs.sort()
+        start = previous = xs[0]
+        for x in xs[1:]:
+            if x - previous > gap:
+                out.append((y, start, previous))
+                start = x
+            previous = x
+        out.append((y, start, previous))
+    return out
+
+
+def _read_segment(reader, segment: tuple[int, int, int]) -> np.ndarray:
+    """The values of ``segment`` as an array (cells, times)."""
+    y, first, last = segment
+    block = np.asarray(reader[y, first : last + 1, :], dtype=np.float32)
+    return block.reshape(last - first + 1, -1)
 
 
 def build_cells(
@@ -399,13 +441,13 @@ def build_cells(
             elevations: dict[tuple[int, int], float] = {}
             if hsurf is not None:
                 unique = sorted({p[3] for p in points})
-                heights = list(pool.map(partial(_read_height, hsurf), unique))
+                heights = _read_heights(hsurf, unique, pool)
                 elevations = dict(zip(unique, heights, strict=True))
                 # a water cell (HSURF -999): the nearest land cell of the 3 x 3 around it,
                 # as the API does (checked: DMI at Rozkoš, 2026-10-15)
                 wet = [p for p in points if _water(elevations[p[3]]) and grid.kind == "regular"]
                 around = sorted({c for p in wet for c in grid.around(p[3])} - set(elevations))
-                heights = list(pool.map(partial(_read_height, hsurf), around))
+                heights = _read_heights(hsurf, around, pool)
                 elevations |= dict(zip(around, heights, strict=True))
                 for i, (sid, lat, lon, index) in enumerate(points):
                     if (sid, lat, lon, index) not in wet:
@@ -540,14 +582,24 @@ def _read_run(bucket, model, run, stations, cells, pool, readers) -> Fetched:
             axes[(bucket_model, name)] = axis
             rows = mine.select("station_id", "y", "x").rows()
             indices[bucket_model] = {sid: (y, x) for sid, y, x in rows}
-    jobs = [
-        (key, sid, indices[key[0]][sid])
+    wanted = stations["id"].to_list()
+    jobs = []
+    for key in readers:
+        mine = [indices[key[0]][sid] for sid in wanted if sid in indices[key[0]]]
+        jobs += [(key, segment) for segment in segments(mine)]
+    blocks = dict(
+        zip(jobs, pool.map(lambda job: _read_segment(readers[job[0]], job[1]), jobs), strict=True)
+    )
+    found = {}
+    for (key, (y, first, last)), block in blocks.items():
+        for x in range(first, last + 1):
+            found[(key, y, x)] = block[x - first]
+    values = {
+        (key, sid): found[(key, *indices[key[0]][sid])]
         for key in readers
-        for sid in stations["id"].to_list()
+        for sid in wanted
         if sid in indices[key[0]]
-    ]
-    points = pool.map(lambda job: _read_point(readers[job[0]], job[2]), jobs)
-    values = {(key, sid): v for (key, sid, _), v in zip(jobs, points, strict=True)}
+    }
     return Fetched(*_assemble(model, source, run, stations, cells, times, axes, values, need))
 
 

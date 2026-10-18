@@ -7,8 +7,11 @@ import { COMBINED, weightTable } from "./forecast.js";
 import { drawIcon, glyph, iconCanvas } from "./icons.js";
 import { setUpLanguage } from "./i18n.js";
 import { mapModelOptions, modelHorizon, modelPeriods, parseModelParts, parseModels } from "./models.js";
-import { MIN_ZOOM, OBCE_OKRESY, addObceLayers, goToObec, obceDrawn, obcePartRows, paintObce } from "./obce-map.js";
-import { fillObce, obceFor } from "./obce-test.js";
+import { MIN_ZOOM, addObceLayers, goToObec, nearestObec, obceDrawn, obcePartRows, paintObce } from "./obce-map.js";
+import { obceFor } from "./obce-test.js";
+import { placeSearch } from "./place-search.js";
+import { placesLoader } from "./places.js";
+import placesUrl from "./data/obce.json?url";
 import { renderScale } from "./palette.js";
 import { BASEMAP_ATTRIBUTION, GLYPHS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
 import { fillPicker, issuedText } from "./picker.js";
@@ -31,7 +34,8 @@ const BOUNDS = [
 // from this zoom the base map shows under the okres colours
 const BASE_ZOOM = 7.5;
 // the okres colours: solid at the country's zoom, see-through over the base map
-const FILL_OPACITY = ["step", ["zoom"], 0.85, BASE_ZOOM, 0.45];
+// (and fainter still where the obce are drawn)
+const FILL_OPACITY = ["step", ["zoom"], 0.85, BASE_ZOOM, 0.45, MIN_ZOOM, 0.2];
 // hours of each part of the day, shown under its name
 const HOURS = { night: "0–6", morning: "6–12", afternoon: "12–18", evening: "18–24", day: "0–24" };
 
@@ -88,7 +92,9 @@ const symbolText = (symbol) => (symbol ? t(`symbol.${symbol}`) : "");
 
 // --- state, kept in the URL (tv.js parseView / viewHash) ----------------------------
 let state = { day: null, part: null, colour: "temperature", shown: [], okres: null };
-// test: the obce of the okresy that have an obce file, [{doc, rows}] (obce-map.js)
+// test: the obce of the okresy loaded so far (those zoomed into): okres → {doc, rows}, or
+// null without a file; obceDocs: the loaded ones (obce-map.js)
+const obceLoaded = new Map();
 let obceDocs = [];
 // test: the obec whose panel is open (in place of its okres's), or null
 let panelObec = null;
@@ -287,8 +293,8 @@ function declutter() {
     });
   const shown = placeMarkers(boxes, 4, state.okres);
   // test: zoomed in, the obce stand in for their okres's marker
-  if (obceDocs.length && mapModel === COMBINED && obceDrawn() && map.getZoom() >= MIN_ZOOM) {
-    for (const code of OBCE_OKRESY) shown.delete(code);
+  if (obceDocs.length && mapModel === COMBINED && map.getZoom() >= MIN_ZOOM) {
+    for (const code of obceDrawn()) shown.delete(code);
   }
   for (const [code, m] of markers) {
     m.el.hidden = !shown.has(code);
@@ -583,7 +589,7 @@ function renderPanel(outlook) {
     panel.replaceChildren();
     return;
   }
-  const obecDoc = panelObec ? obceDocs.find(({ doc }) => doc.okres === state.okres) : null;
+  const obecDoc = panelObec ? obceLoaded.get(state.okres) : null;
   if (obecDoc) {
     renderObecPanel(panel, obecDoc);
     return;
@@ -697,8 +703,6 @@ function update(change = {}, fromPlay = false) {
   paintFill(okresColours(view, state.day, state.part, state.colour));
   map.setFilter("okres-selected", ["==", ["get", "code"], state.okres ?? ""]);
   if (mapReady || obceDocs.length) paintObce(map, mapModel === COMBINED ? obceDocs : [], state, panelObec);
-  const obceSelect = document.getElementById("obce-select");
-  if (obceSelect && obceDocs.length) obceSelect.value = panelObec ?? "";
   paintMarkers(view);
   renderHeadline(view);
   renderPanel(outlook);
@@ -881,6 +885,44 @@ function addLayers() {
   map.on("moveend", declutter);
 }
 
+// --- test: the obce (obce-map.js) ------------------------------------------------------
+const loadPlaces = placesLoader(placesUrl);
+
+/** The okres's obce (its file, loaded once); null without one. */
+async function obceOf(code) {
+  if (!obceLoaded.has(code)) {
+    const doc = await obceFor(code, getJson);
+    obceLoaded.set(code, doc ? { doc, rows: obcePartRows(doc) } : null);
+    obceDocs = [...obceLoaded.values()].filter(Boolean);
+  }
+  return obceLoaded.get(code);
+}
+
+/** Zoomed in: load the obce of the okresy in view, then draw them. */
+async function loadObceInView() {
+  if (map.getZoom() < MIN_ZOOM) return;
+  const codes = new Set(map.queryRenderedFeatures({ layers: ["okresy-fill"] }).map((f) => f.properties.code));
+  const missing = [...codes].filter((code) => !obceLoaded.has(code));
+  if (!missing.length) return;
+  await Promise.all(missing.map(obceOf));
+  paintObce(map, mapModel === COMBINED ? obceDocs : [], state, panelObec);
+  declutter();
+}
+
+/** A place found in the search: its okres's file, the obec there nearest to it, its panel. */
+async function chooseObec(place) {
+  // the places list names Prague's okres as the city, ČÚZK's okresy as its territory
+  const info = outlook.okresy.find((o) => o.name === place.okres)
+    ?? (place.okres === "Hlavní město Praha" ? outlook.okresy.find((o) => o.code === "CZ0100") : null);
+  if (!info) return;
+  const loaded = await obceOf(info.code);
+  const obec = nearestObec(loaded?.doc, place.lat, place.lon);
+  if (!obec) return;
+  if (mapModel !== COMBINED) await setMapModel(COMBINED);
+  update({ okres: info.code, obec: obec.name });
+  goToObec(map, [obec.lon, obec.lat]);
+}
+
 async function main() {
   outlook = parseOutlook(await getJson("data/scores/outlook.json"));
   const status = document.getElementById("status");
@@ -924,31 +966,12 @@ async function main() {
   addLayers();
   buildMarkers(outlook);
   update();
-  // test: the obce, once their files are there
-  Promise.all(OBCE_OKRESY.map((code) => obceFor(code, getJson))).then((docs) => {
-    obceDocs = docs.filter(Boolean).map((doc) => ({ doc, rows: obcePartRows(doc) }));
-    document.getElementById("obce-hint").hidden = obceDocs.length === 0;
-    // the picker at the top: the map goes to the obec (with our combination)
-    const pick = document.getElementById("obce-pick");
-    const select = document.getElementById("obce-select");
-    pick.hidden = obceDocs.length === 0;
-    if (obceDocs.length) fillObce(select, obceDocs[0].doc, "", t("tv.obecChoose"));
-    select.addEventListener("change", async () => {
-      if (!select.value) return update({ okres: null });
-      if (mapModel !== COMBINED) await setMapModel(COMBINED);
-      update({ okres: obceDocs[0].doc.okres, obec: select.value });
-      goToObec(map, select.value);
-    });
-    // zoomed in, their okres fades so the dots stand out
-    if (obceDocs.length) {
-      const codes = obceDocs.map(({ doc }) => doc.okres);
-      map.setPaintProperty("okresy-fill", "fill-opacity", [
-        "step", ["zoom"], 0.85, BASE_ZOOM, 0.45, MIN_ZOOM, ["case", ["in", ["get", "code"], ["literal", codes]], 0.2, 0.45],
-      ]);
-    }
-    paintObce(map, mapModel === COMBINED ? obceDocs : [], state);
-    declutter();
-  });
+  // test: the obce of the okresy in view, loaded once zoomed in, and the search above
+  map.on("moveend", loadObceInView);
+  loadObceInView();
+  document.getElementById("obce-search").replaceChildren(
+    placeSearch({ t, load: loadPlaces, choose: chooseObec }),
+  );
   picker.addEventListener("change", () => setMapModel(picker.value));
   mapReady = true;
   renderMapPicker();
