@@ -11,7 +11,7 @@ const links = (parts) => parts.filter((p) => p.href).map((p) => p.href);
 for (const language of LANGUAGES) {
   const t = translator(language);
 
-  for (const kind of ["models", "tv"]) {
+  for (const kind of ["models", "tv", "ai"]) {
     test(`${kind} footer credits every provider and links the licences (${language})`, () => {
       const parts = footerParts(kind, t, { method: "https://example.org/method" });
       const text = footerText(parts);
@@ -62,6 +62,6 @@ test("every page has a footer the shared helper fills", () => {
   assert.ok(pages.length >= 7);
   for (const page of pages) {
     const html = readFileSync(new URL(`../${page}`, import.meta.url), "utf8");
-    assert.match(html, /<footer data-footer="(models|tv|radar|station)" data-method="https:\/\//, page);
+    assert.match(html, /<footer data-footer="(models|tv|ai|radar|station)" data-method="https:\/\//, page);
   }
 });
