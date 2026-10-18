@@ -238,7 +238,7 @@ export const STRINGS = {
     "ai.status.works": "Funguje",
     "ai.status.no_gain": "Nepomohlo",
     "ai.tech": "Technologie: {tech}",
-    "ai.exp.meteoverdict_ai.name": "MeteoVerdict AI v1",
+    "ai.exp.meteoverdict_ai.name": "MeteoVerdict AI",
     "ai.exp.meteoverdict_ai.what":
       "Strojová korekce všech 19 modelů, učená znovu každý den jen z toho, co bylo v den předpovědi známo.",
     "ai.exp.deep_blend.name": "Hluboká síť přes modely a stanice",
@@ -1162,7 +1162,7 @@ export const STRINGS = {
     "ai.status.works": "Works",
     "ai.status.no_gain": "Didn't help",
     "ai.tech": "Technology: {tech}",
-    "ai.exp.meteoverdict_ai.name": "MeteoVerdict AI v1",
+    "ai.exp.meteoverdict_ai.name": "MeteoVerdict AI",
     "ai.exp.meteoverdict_ai.what":
       "A machine-learning correction of all 19 models, retrained every day from only what was known on the day of the forecast.",
     "ai.exp.deep_blend.name": "Deep network over models and stations",
