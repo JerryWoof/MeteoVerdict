@@ -10,7 +10,7 @@ import { mapModelOptions, modelHorizon, modelPeriods, parseModelParts, parseMode
 import { MIN_ZOOM, OBCE_OKRESY, addObceLayers, goToObec, obceDrawn, obcePartRows, paintObce } from "./obce-map.js";
 import { fillObce, obceFor } from "./obce-test.js";
 import { renderScale } from "./palette.js";
-import { GLYPHS } from "./radar-basemap.js";
+import { BASEMAP_ATTRIBUTION, GLYPHS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
 import { fillPicker, issuedText } from "./picker.js";
 import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, currentPart, dayLabel, displayName, ease,
@@ -28,6 +28,10 @@ const BOUNDS = [
   [12.0, 48.5],
   [18.95, 51.1],
 ];
+// from this zoom the base map shows under the okres colours
+const BASE_ZOOM = 7.5;
+// the okres colours: solid at the country's zoom, see-through over the base map
+const FILL_OPACITY = ["step", ["zoom"], 0.85, BASE_ZOOM, 0.45];
 // hours of each part of the day, shown under its name
 const HOURS = { night: "0–6", morning: "6–12", afternoon: "12–18", evening: "18–24", day: "0–24" };
 
@@ -37,16 +41,23 @@ if (/^#CZ\w{4}$/.test(window.location.hash)) window.location.replace(`forecast-d
 
 const map = new MapLibreMap({
   container: "map",
+  // zoomed in, the radar page's base map (relief, water, rivers, main roads) under the okres
+  // colours, which turn see-through, so a place is easier to find; at the country's zoom
+  // nothing of it is drawn or loaded
   style: {
     version: 8,
-    // the labels of the obce (test, obce-map.js)
     glyphs: GLYPHS,
-    sources: {},
-    layers: [{ id: "background", type: "background", paint: { "background-color": "#f4f1ea" } }],
+    sources: basemapSources(),
+    layers: [
+      { id: "background", type: "background", paint: { "background-color": "#f4f1ea" } },
+      ...baseLayers()
+        .filter((layer) => layer.type !== "background")
+        .map((layer) => ({ ...layer, minzoom: Math.max(layer.minzoom ?? 0, BASE_ZOOM) })),
+    ],
   },
   bounds: BOUNDS,
   fitBoundsOptions: { padding: 20 },
-  attributionControl: { customAttribution: "Boundaries: ČÚZK (CC BY 4.0)" },
+  attributionControl: { customAttribution: `Boundaries: ČÚZK (CC BY 4.0) · ${BASEMAP_ATTRIBUTION}` },
 });
 // the map grows with a long okres panel (it shares a grid cell with it): keep it drawn
 new ResizeObserver(() => map.resize()).observe(map.getContainer());
@@ -552,6 +563,9 @@ function renderObecPanel(panel, { doc, rows }) {
   panel.replaceChildren(
     close,
     element("h2", `${panelObec}${place ? ` (${Math.round(place.elevation)} m)` : ""}`),
+    ...(place?.population != null
+      ? [element("p", t("tv.obecPopulation", { people: place.population.toLocaleString(language) }), "when")]
+      : []),
     element("p", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`, "when"),
     note,
     back,
@@ -842,9 +856,13 @@ async function setMapModel(model) {
 function addLayers() {
   map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
   map.addSource("kraje", { type: "geojson", data: "data/kraje.geojson" });
-  map.addLayer({ id: "okresy-fill", type: "fill", source: "okresy", paint: { "fill-color": "#ececec", "fill-opacity": 0.85 } });
+  map.addLayer({ id: "okresy-fill", type: "fill", source: "okresy", paint: { "fill-color": "#ececec", "fill-opacity": FILL_OPACITY } });
   map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#ffffff", "line-width": 0.6 } });
   map.addLayer({ id: "kraje-line", type: "line", source: "kraje", paint: { "line-color": "#4b5863", "line-width": 1.2 } });
+  // the towns' and cities' names over the base map (the obce of the test have their own)
+  for (const layer of topLayers(language).filter((l) => l.id === "place-town" || l.id === "place-city")) {
+    map.addLayer({ ...layer, minzoom: Math.max(layer.minzoom ?? 0, BASE_ZOOM) });
+  }
   map.addLayer({
     id: "okres-selected",
     type: "line",
@@ -925,7 +943,7 @@ async function main() {
     if (obceDocs.length) {
       const codes = obceDocs.map(({ doc }) => doc.okres);
       map.setPaintProperty("okresy-fill", "fill-opacity", [
-        "step", ["zoom"], 0.85, MIN_ZOOM, ["case", ["in", ["get", "code"], ["literal", codes]], 0.25, 0.85],
+        "step", ["zoom"], 0.85, BASE_ZOOM, 0.45, MIN_ZOOM, ["case", ["in", ["get", "code"], ["literal", codes]], 0.2, 0.45],
       ]);
     }
     paintObce(map, mapModel === COMBINED ? obceDocs : [], state);

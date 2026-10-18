@@ -34,12 +34,17 @@ NAME = "obce-{code}.json"
 
 
 def places(code: str) -> pl.DataFrame:
-    """``id`` (the obec's name), ``lat``, ``lon``, ``elevation`` of the okres ``code``."""
+    """``id`` (the obec's name), ``lat``, ``lon``, ``elevation``, ``population`` (ČSÚ, 1 Jan;
+    null where unknown) of the okres ``code``."""
     source = files("meteoverdict").joinpath("data", ELEVATIONS_FILE)
     with source.open("rb") as f:
         table = pl.read_csv(f.read())
     return table.filter(pl.col("okres") == code).select(
-        pl.col("name").alias("id"), "lat", "lon", pl.col("elevation").cast(pl.Float64)
+        pl.col("name").alias("id"),
+        "lat",
+        "lon",
+        pl.col("elevation").cast(pl.Float64),
+        pl.col("population").cast(pl.Int64),
     )
 
 
@@ -136,7 +141,9 @@ def document(
     by_place = hourly.partition_by("okres", as_dict=True)
     model_rows = rows.rename({"valid_time": "time"}).partition_by("station_id", as_dict=True)
     places_out = []
-    for pid, lat, lon, elevation in points.select("id", "lat", "lon", "elevation").rows():
+    for pid, lat, lon, elevation, population in points.select(
+        "id", "lat", "lon", "elevation", "population"
+    ).rows():
         frame = by_place.get((pid,))
         if frame is None:
             continue
@@ -147,6 +154,7 @@ def document(
                 "lat": lat,
                 "lon": lon,
                 "elevation": elevation,
+                "population": population,
                 "temperature_2m": series(frame, "temperature_2m", 1),
                 "precipitation": series(frame, "precipitation", 1),
                 "wind_speed_10m": series(frame, "wind_speed_10m", 1),
