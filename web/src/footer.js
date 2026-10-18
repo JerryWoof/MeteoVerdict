@@ -94,16 +94,7 @@ export function footerParts(kind, t, { method, year = new Date().getUTCFullYear(
       `${t("footer.boundaries")}, ${t("footer.places")}: ČÚZK `,
       ...licence(),
       SEP,
-      `${t("footer.basemap")}: `,
-      link("OpenFreeMap", "https://openfreemap.org/"),
-      ", ",
-      link("© OpenMapTiles", "https://www.openmaptiles.org/"),
-      ", ",
-      link("© OpenStreetMap contributors", OSM_COPYRIGHT),
-      " (ODbL); ",
-      `${t("footer.relief")}: `,
-      link("Terrain Tiles", TERRAIN_ATTRIBUTION),
-      " (EU-DEM © Copernicus, SRTM/GMTED2010 USGS, DGM Österreich, ETOPO1 NOAA)",
+      ...basemapCredits(t),
       SEP,
       `${t("footer.radarProcessed")}; ${t("footer.ours")}: `,
       link("CC BY 4.0", CC_BY),
@@ -114,6 +105,16 @@ export function footerParts(kind, t, { method, year = new Date().getUTCFullYear(
     kind === "tv"
       ? `${t("footer.processed")}; ${t("tv.combined")}. ${t("footer.ours")}: `
       : `${t("footer.processed")}. ${t("footer.scores")}: `;
+  // the forecast map: the base map when zoomed in, the obce's population (test)
+  const tvOnly = kind === "tv"
+    ? [
+      ...basemapCredits(t),
+      SEP,
+      `${t("footer.population")}: `,
+      link("ČSÚ", "https://data.csu.gov.cz/datastat/data/SADA/OBY02A"),
+      SEP,
+    ]
+    : [];
   return [
     ...observations(t),
     SEP,
@@ -121,9 +122,26 @@ export function footerParts(kind, t, { method, year = new Date().getUTCFullYear(
     SEP,
     ...boundaries(t),
     SEP,
+    ...tvOnly,
     processed,
     link("CC BY-SA 4.0", CC_BY_SA),
     ...methodLink,
+  ];
+}
+
+/** The base map of the radar page and of the zoomed-in forecast map (radar-basemap.js). */
+function basemapCredits(t) {
+  return [
+    `${t("footer.basemap")}: `,
+    link("OpenFreeMap", "https://openfreemap.org/"),
+    ", ",
+    link("© OpenMapTiles", "https://www.openmaptiles.org/"),
+    ", ",
+    link("© OpenStreetMap contributors", OSM_COPYRIGHT),
+    " (ODbL); ",
+    `${t("footer.relief")}: `,
+    link("Terrain Tiles", TERRAIN_ATTRIBUTION),
+    " (EU-DEM © Copernicus, SRTM/GMTED2010 USGS, DGM Österreich, ETOPO1 NOAA)",
   ];
 }
 
