@@ -1,17 +1,19 @@
-"""Forecast for every obec of an okres (test, roadmap: forecast for a place).
+"""Forecast for every obec (test, roadmap: forecast for a place).
 
 Each model's newest complete run from the bucket at the obec's own grid cell, its
 temperature moved from the cell's terrain height to the obec's (``bucket.read_run``),
 then combined with the weights and corrections of the obec's okres
 (``outlook.combine_hourly``), exactly as the okres's own point. No Open-Meteo calls.
 
-Only the okresy in ``ELEVATIONS_FILE`` (Litoměřice for now). The corrections are those
-at the okres's forecast point (their elevation term is not moved to the obec).
+The obce of ``ELEVATIONS_FILE`` (all, about 6,250), read in one pass over the models
+(row segments, ``bucket.segments``); one file per okres. The corrections are those at
+the okres's forecast point (their elevation term is not moved to the obec).
 """
 
 from __future__ import annotations
 
 import json
+import zipfile
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -28,30 +30,29 @@ ELEVATIONS_FILE = "obce-elevations.csv"
 LOOKBACK_H = 30
 #: a run younger than this is usually not complete in the bucket yet
 MIN_AGE_H = 3
-#: ``mvd obce-forecast`` writes ``obce-<okres>.json`` (release data-latest, site
-#: ``data/forecast/obce/``)
+#: ``mvd obce-forecast`` writes ``obce-<okres>.json`` per okres, packed in ``ZIP_NAME``
+#: (release data-latest; the site unpacks it into ``data/forecast/``)
 NAME = "obce-{code}.json"
+ZIP_NAME = "obce.zip"
 
 
-def places(code: str) -> pl.DataFrame:
-    """``id`` (the obec's name), ``lat``, ``lon``, ``elevation``, ``population`` (ČSÚ, 1 Jan;
-    null where unknown) of the okres ``code``."""
+def places(code: str | None = None) -> pl.DataFrame:
+    """``id`` (``<okres>/<name>``), ``okres``, ``name``, ``lat``, ``lon``, ``elevation``,
+    ``population`` (ČSÚ, 1 Jan; null where unknown) of the okres ``code``, or of all."""
     source = files("meteoverdict").joinpath("data", ELEVATIONS_FILE)
     with source.open("rb") as f:
         table = pl.read_csv(f.read())
-    return table.filter(pl.col("okres") == code).select(
-        pl.col("name").alias("id"),
+    if code is not None:
+        table = table.filter(pl.col("okres") == code)
+    return table.select(
+        pl.concat_str("okres", pl.lit("/"), "name").alias("id"),
+        "okres",
+        "name",
         "lat",
         "lon",
         pl.col("elevation").cast(pl.Float64),
         pl.col("population").cast(pl.Int64),
     )
-
-
-def okresy() -> list[str]:
-    source = files("meteoverdict").joinpath("data", ELEVATIONS_FILE)
-    with source.open("rb") as f:
-        return sorted(pl.read_csv(f.read())["okres"].unique().to_list())
 
 
 def candidate_runs(model: models.Model, now: datetime) -> list[datetime]:
@@ -106,9 +107,11 @@ def start_of_day(now: datetime) -> datetime:
     return local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
 
 
-def combined(rows: pl.DataFrame, weights: pl.DataFrame, code: str, now: datetime) -> pl.DataFrame:
-    """One row per obec (``okres`` column = obec) and hour, as ``outlook.combine_hourly``,
-    every obec with the weights of the okres ``code``."""
+def combined(
+    rows: pl.DataFrame, weights: pl.DataFrame, points: pl.DataFrame, now: datetime
+) -> pl.DataFrame:
+    """One row per obec (``okres`` column = the obec's id) and hour, as
+    ``outlook.combine_hourly``, every obec with the weights of its okres (``points``)."""
     fc = rows.select(
         pl.col("station_id").alias("okres"),
         pl.col("valid_time").alias("time"),
@@ -116,9 +119,11 @@ def combined(rows: pl.DataFrame, weights: pl.DataFrame, code: str, now: datetime
         *outlook.COMBINED,
         *[pl.lit(None, pl.Float64).alias(v) for v in outlook.MEANS],
     ).filter(pl.col("time") >= start_of_day(now))
-    own = weights.filter(pl.col("region") == code)
-    obce = pl.DataFrame({"region": rows["station_id"].unique()})
-    shared = obce.join(own.drop("region"), how="cross")
+    shared = (
+        points.select(pl.col("id").alias("region"), "okres")
+        .join(weights.rename({"region": "okres"}), on="okres")
+        .drop("okres")
+    )
     return outlook.combine_hourly(fc, shared, now)
 
 
@@ -141,8 +146,8 @@ def document(
     by_place = hourly.partition_by("okres", as_dict=True)
     model_rows = rows.rename({"valid_time": "time"}).partition_by("station_id", as_dict=True)
     places_out = []
-    for pid, lat, lon, elevation, population in points.select(
-        "id", "lat", "lon", "elevation", "population"
+    for pid, name, lat, lon, elevation, population in points.select(
+        "id", "name", "lat", "lon", "elevation", "population"
     ).rows():
         frame = by_place.get((pid,))
         if frame is None:
@@ -150,7 +155,7 @@ def document(
         mine = model_rows.get((pid,), pl.DataFrame())
         places_out.append(
             {
-                "name": pid,
+                "name": name,
                 "lat": lat,
                 "lon": lon,
                 "elevation": elevation,
@@ -177,23 +182,44 @@ def document(
 def forecast(
     store: bucket.Bucket,
     weights: pl.DataFrame,
-    code: str,
     now: datetime | None = None,
     log: Callable[[str], None] = lambda _: None,
-) -> dict:
+    code: str | None = None,
+) -> dict[str, dict]:
+    """The page's document of every okres (or of ``code``) that has weights."""
     now = now or datetime.now(UTC)
-    points = places(code)
-    wanted = set(weights.filter(pl.col("region") == code)["model"].unique().to_list())
+    points = places(code).filter(pl.col("okres").is_in(weights["region"].unique().to_list()))
+    wanted = set(
+        weights.filter(pl.col("region").is_in(points["okres"].unique().to_list()))["model"]
+    )
     chosen = [m for m in models.enabled_models() if m.id in wanted]
+    log(f"{points.height} obce in {points['okres'].n_unique()} okresy, {len(chosen)} models")
     rows = newest_runs(store, chosen, points, now, log)
     if rows.is_empty():
-        raise RuntimeError(f"{code}: no model run found in the bucket")
-    hourly = combined(rows, weights, code, now)
-    return document(code, points, rows, hourly, now)
+        raise RuntimeError("no model run found in the bucket")
+    hourly = combined(rows, weights, points, now)
+    okres_of = dict(points.select("id", "okres").rows())
+    hourly = hourly.with_columns(pl.col("okres").replace_strict(okres_of).alias("_okres"))
+    rows = rows.with_columns(pl.col("station_id").replace_strict(okres_of).alias("_okres"))
+    by_okres = {k[0]: v for k, v in hourly.partition_by("_okres", as_dict=True).items()}
+    rows_by_okres = {k[0]: v for k, v in rows.partition_by("_okres", as_dict=True).items()}
+    docs = {}
+    for (okres,), own in sorted(points.partition_by("okres", as_dict=True).items()):
+        if okres in by_okres:
+            docs[okres] = document(okres, own, rows_by_okres[okres], by_okres[okres], now)
+    return docs
 
 
 def write(doc: dict, folder: Path) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / NAME.format(code=doc["okres"])
     path.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
+    return path
+
+
+def write_zip(paths: list[Path], path: Path) -> Path:
+    """The okres files in one zip (one release asset instead of 77)."""
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in paths:
+            z.write(p, p.name)
     return path

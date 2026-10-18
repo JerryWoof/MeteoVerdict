@@ -67,11 +67,11 @@ jobs:
             exit 0
           fi
           uv run --frozen mvd outlook --github-release
-      - name: Forecast for every obec (test, Litoměřice)
+      - name: Forecast for every obec (test)
         # a test (forecast for a place); its failure does not fail the outlook
         if: always()
         continue-on-error: true
-        timeout-minutes: 15
+        timeout-minutes: 25
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run --frozen mvd obce-forecast --github-release
