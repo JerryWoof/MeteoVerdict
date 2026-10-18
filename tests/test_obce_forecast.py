@@ -8,7 +8,9 @@ from meteoverdict import models, obce_forecast
 def test_places_of_litomerice():
     points = obce_forecast.places("CZ0423")
     assert points.height == 105
-    assert {"id", "lat", "lon", "elevation"} <= set(points.columns)
+    assert {"id", "lat", "lon", "elevation", "population"} <= set(points.columns)
+    assert points["population"].null_count() == 0
+    assert points.filter(pl.col("id") == "Litoměřice")["population"].item() > 20000
     assert obce_forecast.okresy() == ["CZ0423"]
 
 
