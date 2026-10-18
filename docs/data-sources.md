@@ -2426,9 +2426,12 @@ okres Litoměřice (105) instead of only the okres's forecast point. After each 
 (`.github/workflows/outlook.yml`, its own step; a failure does not fail the outlook):
 
 - **Places:** `src/meteoverdict/data/obce-elevations.csv` (`okres`, `name`, `lat`, `lon`,
-  `elevation`): the obce of the [municipalities](#municipalities-radar-page-place-search)
-  file with their elevation from the Open-Meteo Elevation API (Copernicus DEM GLO-90),
-  rebuilt by `scripts/build_obce_elevations.py <okres name> …`. Litoměřice: 149–438 m.
+  `elevation`, `population`): the obce of the [municipalities](#municipalities-radar-page-place-search)
+  file with their elevation from the Open-Meteo Elevation API (Copernicus DEM GLO-90) and
+  their population on 1 January from ČSÚ (DataStat set `OBY02A`, selection by okres and
+  obec `UZ35H`, matched by okres code and name; checked 2026-10-18: all 105 matched, 35 to
+  22,627 inhabitants), rebuilt by `scripts/build_obce_elevations.py <okres name> …`.
+  Litoměřice: 149–438 m. On the map the dot's area grows with the population.
 - **Models:** every model with weights in the okres, its newest complete run in the
   bucket ([single runs from the bucket](#single-runs-from-the-bucket)), at least 3 h old,
   read at the obec's nearest grid cell with the temperature moved from the cell's terrain
