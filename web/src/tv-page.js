@@ -24,6 +24,7 @@ import {
 import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 import { AI_FILES, aiPath, aiText } from "./ai-source.js";
 import { renderAiExtras } from "./ai-extras.js";
+import { renderAiVerify } from "./ai-verify-view.js";
 
 setWorkerUrl(workerUrl);
 // the AI forecast tab (ai.html) is this page on MeteoVerdict AI's forecast: its own
@@ -703,6 +704,10 @@ function update(change = {}, fromPlay = false) {
   if ("okres" in change && change.okres !== state.okres) panelModel = mapModel;
   // test: an obec's panel (change.obec) or its okres's; any other okres change closes it
   if ("okres" in change) panelObec = change.okres ? change.obec ?? null : null;
+  // the AI tab's "forecast vs measured" follows the okres opened on the map
+  if (AI && change.okres && change.okres !== state.okres) {
+    document.dispatchEvent(new CustomEvent("mv:okres", { detail: change.okres }));
+  }
   const { obec: _obec, ...rest } = change;
   state = { ...state, ...rest };
   window.history.replaceState(null, "", viewHash(state));
@@ -978,8 +983,11 @@ async function main() {
   // test: the obce of the okresy in view, loaded once zoomed in, and the search above
   map.on("moveend", loadObceInView);
   loadObceInView();
-  // the AI tab: MeteoVerdict AI's scores and its working experiments below the map
-  if (AI) renderAiExtras(t, fetchJson);
+  // the AI tab: forecast vs measured, MeteoVerdict AI's scores and its experiments below the map
+  if (AI) {
+    renderAiVerify(t, fetchJson, state.okres);
+    renderAiExtras(t, fetchJson);
+  }
   document.getElementById("obce-search").replaceChildren(
     placeSearch({ t, load: loadPlaces, choose: chooseObec }),
   );
