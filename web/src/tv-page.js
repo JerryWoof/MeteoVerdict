@@ -872,8 +872,8 @@ function addLayers() {
   });
   addObceLayers(map, (okres, obec) => update({ okres, obec }));
   map.on("click", "okresy-fill", (event) => {
-    // a click on an obce dot opens its popup, not the okres
-    if (map.queryRenderedFeatures(event.point, { layers: ["obce-test-dot"] }).length) return;
+    // a click on an obec's label opens its panel, not the okres's
+    if (map.queryRenderedFeatures(event.point, { layers: ["obce-test-label"] }).length) return;
     update({ okres: event.features[0].properties.code });
   });
   map.on("mouseenter", "okresy-fill", () => (map.getCanvas().style.cursor = "pointer"));
