@@ -1253,9 +1253,9 @@ the mean of its stations next to what our forecast had said ("Okresy",
 `meteoverdict.observed_map`.
 
 Zoomed in (from zoom 7.5), its map has the radar page's base map under the okres colours
-(relief, water, rivers, main roads, town names; `radar-basemap.js`, as the forecast map),
-and a "Find a place" search over every obec (`place-search.js`) takes the map there with a
-pin, so the stations around a place are easy to find. Zoomed in further (from zoom 8.5),
+(relief, water, rivers, main roads, town names; `radar-basemap.js`, as the forecast map)
+for orientation; the page's own "Find a station" search finds a station (no obec search
+here: nothing is measured at the obce). Zoomed in further (from zoom 8.5),
 the okres layer shows the stations themselves instead of the okres means, and every
 station label carries the station's name. Nothing is measured at the obce themselves;
 only the stations' values are shown.
