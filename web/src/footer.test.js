@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
 
-import { CC_BY, CC_BY_SA, ECCC_LICENCE, JMA_TERMS, footerParts, footerText } from "./footer.js";
+import { CC_BY, CC_BY_SA, ECCC_LICENCE, JMA_TERMS, OSM_COPYRIGHT, TERRAIN_ATTRIBUTION, footerParts, footerText } from "./footer.js";
 import { LANGUAGES, translator } from "./i18n.js";
 
 const links = (parts) => parts.filter((p) => p.href).map((p) => p.href);
@@ -36,6 +36,18 @@ for (const language of LANGUAGES) {
     assert.ok(text.includes(t("footer.radarProcessed")));
     assert.ok(links(parts).includes(CC_BY));
     assert.equal(parts.find((p) => p.id === "sat-year").text, "2026");
+  });
+
+  test(`radar footer credits the base map and the municipalities (${language})`, () => {
+    const parts = footerParts("radar", t, { year: 2026 });
+    const text = footerText(parts);
+    for (const name of ["OpenFreeMap", "© OpenMapTiles", "© OpenStreetMap contributors", "ODbL", "Terrain Tiles", "EU-DEM", "ČÚZK"]) {
+      assert.ok(text.includes(name), name);
+    }
+    assert.ok(text.includes(t("footer.places")));
+    assert.ok(links(parts).includes(OSM_COPYRIGHT));
+    assert.ok(links(parts).includes(TERRAIN_ATTRIBUTION));
+    assert.ok(!text.includes("footer."), "untranslated key");
   });
 
   test(`station footer links CC BY 4.0 and says what changed (${language})`, () => {
