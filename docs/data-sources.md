@@ -908,8 +908,11 @@ precipitation 0…120 mm.
 `data/{obs,gauges,fc,scores}/YYYY-MM.parquet` as the assets
 `{obs,gauges,fc,scores}-YYYY-MM.parquet`
 of the release `data-YYYY-MM`. GitHub
-cannot overwrite a release asset, so a changed file is deleted and uploaded again; the
-asset label holds the file's SHA-256 so unchanged files are skipped. Downloads go
+cannot overwrite a release asset, so a changed file is first uploaded as `<name>.new`,
+then the old asset is deleted and the new one renamed; a failed upload leaves the old
+file in place, and a `.new` left by a stopped run is hidden (or used when the original
+is gone) and cleaned up by the next upload. The asset label holds the file's SHA-256 so
+unchanged files are skipped. Downloads go
 through the API (`Accept: application/octet-stream`), which redirects to GitHub's storage
 host; httpx drops the token on that redirect. Checked end to end on 2026-10-12 with a
 throwaway release (upload, skip, replace, download byte for byte, then deleted). Release
