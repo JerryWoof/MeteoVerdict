@@ -2846,3 +2846,12 @@ body.station [hidden] {
   .ai-score-table { font-size: 0.82rem; }
   .ai-score-table td, .ai-score-table th { padding: 0.25rem 0.25rem; }
 }
+.ai-scale { max-width: 18rem; margin-top: 0.4rem; }
+.ai-scale .bar { height: 0.6rem; border-radius: 3px; margin: 0.3rem 0 0.15rem; }
+.ai-scale .scale-title { font-size: 0.75rem; }
+.ai-scale .scale-ends { color: var(--muted); font-size: 0.75rem; }
+.ai-map-note { color: var(--ink-soft); font-size: var(--fs-ui); margin-top: 0.3rem; }
+.ai-result-table { font-size: 0.8rem; margin: 0.4rem 0; }
+.ai-result-table td, .ai-result-table th { padding: 0.15rem 0.3rem; }
+.ai-card { overflow-wrap: anywhere; }
+.ai-card.wide { grid-column: 1 / -1; }

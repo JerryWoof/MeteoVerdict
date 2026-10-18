@@ -86,9 +86,12 @@ def sync_cmd(args: argparse.Namespace) -> None:
     today = date.today()
     days = (today - timedelta(days=30 * k) for k in range(args.months))
     months = sorted({d.strftime("%Y-%m") for d in days})
-    repo, token = os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_TOKEN"]
+    repo = os.environ.get("GITHUB_REPOSITORY", "JerryWoof/MeteoVerdict")
+    token = os.environ.get("GITHUB_TOKEN", "")
     with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
         releases = GitHubReleaseStore(client, repo, token, notes=store.RELEASE_NOTES)
+        if not token:  # public releases read without a token (the Mac uploads the results)
+            releases.headers.pop("Authorization")
         done = store.download(releases, args.data, months, print)
         runs.RunsSync(releases, args.data, print).pull(months)
         # every model's forecast per okres for the next days (`mvd outlook`)
@@ -101,8 +104,9 @@ def publish_cmd(args: argparse.Namespace) -> None:
     sm = blend_test["single_models"]
     at = sm["columns"].index("model")
     models = len({r[at] for r in sm["rows"]} - {args.model_id})
-    doc = publish.document(blend_test, args.model_id, models)
-    path = publish.write_zip(doc, args.out_dir)
+    found = publish.results(args.results)
+    doc = publish.document(blend_test, args.model_id, models, found)
+    path = publish.write_zip(doc, args.out_dir, args.results)
     for row in doc["scores"]:
         print(f"{row['variable']:15} D+{row['lead_day']}  AI {row['mae_ai']:.3f}  "
               f"combined {row['mae_combined']:.3f}  diff {row['diff']:+.3f} "
@@ -143,6 +147,10 @@ def main() -> None:
     u.add_argument("--model-id", default=MODEL_ID)
     u.add_argument("--out-dir", type=Path, default=Path("ai-out/site"))
     u.add_argument("--upload", action="store_true")
+    u.add_argument(
+        "--results", type=Path, default=Path.home() / "mv-ai" / "results",
+        help="the experiments' own results (<id>.json and the files their maps name)",
+    )  # fmt: skip
     u.set_defaults(func=publish_cmd)
     args = p.parse_args()
     args.func(args)

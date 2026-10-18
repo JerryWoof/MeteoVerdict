@@ -85,11 +85,33 @@ def status(rows: list[dict]) -> str:
     return "testing"
 
 
-def document(blend_test: dict, model_id: str, models: int) -> dict:
+#: what an experiment's own run leaves (``<id>.json``, see ai/README.md) and may show
+RESULT_KEYS = ("status", "tech", "headline", "table", "period", "map", "drivers", "generated")
+
+
+def results(results_dir: Path | None) -> dict[str, dict]:
+    """The experiments' own results (``<results_dir>/<id>.json``) by id."""
+    if results_dir is None or not results_dir.is_dir():
+        return {}
+    out = {}
+    for path in sorted(results_dir.glob("*.json")):
+        try:
+            doc = json.loads(path.read_text())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(doc, dict) and doc.get("id"):
+            out[doc["id"]] = {k: doc[k] for k in RESULT_KEYS if k in doc}
+    return out
+
+
+def document(
+    blend_test: dict, model_id: str, models: int, found: dict[str, dict] | None = None
+) -> dict:
     rows = scores(blend_test, model_id)
+    found = found or {}
     experiments = []
     for e in EXPERIMENTS:
-        e = dict(e)
+        e = {**e, **found.get(e["id"], {})}
         if e["id"] == "meteoverdict_ai":
             e["status"] = status(rows)
             first = [r for r in rows if r["variable"] == "temperature_2m" and r["lead_day"] == 1]
@@ -111,12 +133,18 @@ def document(blend_test: dict, model_id: str, models: int) -> dict:
     }  # fmt: skip
 
 
-def write_zip(doc: dict, out_dir: Path) -> Path:
+def write_zip(doc: dict, out_dir: Path, results_dir: Path | None = None) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "ai.json").write_text(json.dumps(doc, ensure_ascii=False, indent=1))
     path = out_dir / "ai.zip"
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         z.write(out_dir / "ai.json", "ai.json")
+        # the files an experiment's map points to (e.g. the 100 m temperature image)
+        for e in doc["experiments"]:
+            for name in (e.get("map") or {}).values():
+                source = results_dir / name if results_dir else None
+                if source is not None and source.is_file() and ".." not in name:
+                    z.write(source, name)
         # the live forecast per okres (`mvai forecast`), when it was made
         if (out_dir / "ai-forecast.json").exists():
             z.write(out_dir / "ai-forecast.json", "ai-forecast.json")
