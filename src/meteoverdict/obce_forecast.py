@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from importlib.resources import files
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import polars as pl
 
@@ -93,6 +94,13 @@ def newest_runs(
     return pl.concat(frames) if frames else pl.DataFrame()
 
 
+def start_of_day(now: datetime) -> datetime:
+    """Midnight of ``now``'s Prague day (UTC): the outlook's days start there, so the
+    obce keep the day's earlier hours too (the newest runs reach back that far)."""
+    local = now.astimezone(ZoneInfo("Europe/Prague"))
+    return local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
+
+
 def combined(rows: pl.DataFrame, weights: pl.DataFrame, code: str, now: datetime) -> pl.DataFrame:
     """One row per obec (``okres`` column = obec) and hour, as ``outlook.combine_hourly``,
     every obec with the weights of the okres ``code``."""
@@ -102,7 +110,7 @@ def combined(rows: pl.DataFrame, weights: pl.DataFrame, code: str, now: datetime
         "model",
         *outlook.COMBINED,
         *[pl.lit(None, pl.Float64).alias(v) for v in outlook.MEANS],
-    ).filter(pl.col("time") > now)
+    ).filter(pl.col("time") >= start_of_day(now))
     own = weights.filter(pl.col("region") == code)
     obce = pl.DataFrame({"region": rows["station_id"].unique()})
     shared = obce.join(own.drop("region"), how="cross")
