@@ -215,6 +215,10 @@ input[type="text"] {
   max-width: 100%;
   font-weight: 600;
 }
+.field[hidden] {
+  display: none;
+}
+
 .field select,
 .field input {
   min-width: 0;
