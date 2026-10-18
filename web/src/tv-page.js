@@ -22,9 +22,15 @@ import {
   today, viewHash, measuredRedirect,
 } from "./tv.js";
 import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
+import { AI_FILES, aiPath, aiText } from "./ai-source.js";
+import { renderAiExtras } from "./ai-extras.js";
 
 setWorkerUrl(workerUrl);
-const t = setUpLanguage();
+// the AI forecast tab (ai.html) is this page on MeteoVerdict AI's forecast: its own
+// outlook.json and obce files (ai-source.js), "MeteoVerdict AI" wherever ours is named
+const AI = document.body.dataset.source === "ai";
+const t = AI ? aiText(setUpLanguage()) : setUpLanguage();
+const DETAIL = AI ? "forecast-detail.html?source=ai" : "forecast-detail.html";
 const language = document.documentElement.lang;
 
 const BOUNDS = [
@@ -41,7 +47,7 @@ const HOURS = { night: "0–6", morning: "6–12", afternoon: "12–18", evening
 
 // the detailed forecast per okres used to live at forecast.html#CZ0423 (now
 // forecast-detail.html): send those old links there
-if (/^#CZ\w{4}$/.test(window.location.hash)) window.location.replace(`forecast-detail.html${window.location.hash}`);
+if (/^#CZ\w{4}$/.test(window.location.hash)) window.location.replace(`${DETAIL}${window.location.hash}`);
 
 const map = new MapLibreMap({
   container: "map",
@@ -70,7 +76,7 @@ map.addControl(new NavigationControl({ showCompass: false }));
 // registered at once: the map may finish loading while the forecast is still on its way
 const mapLoaded = new Promise((resolve) => map.on("load", resolve));
 
-async function getJson(path) {
+async function fetchJson(path) {
   try {
     const response = await fetch(path);
     return response.ok ? await response.json() : null;
@@ -78,6 +84,9 @@ async function getJson(path) {
     return null;
   }
 }
+
+// on the AI tab the files with an AI version come from data/scores/ai/fc/ (ai-source.js)
+const getJson = AI ? async (path) => (AI_FILES.test(path) ? fetchJson(aiPath(path)) : fetchJson(path)) : fetchJson;
 
 function element(tag, text, className) {
   const e = document.createElement(tag);
@@ -565,7 +574,7 @@ function renderObecPanel(panel, { doc, rows }) {
   });
   const note = element("p", t("tv.obecNote", { okres: displayName(info?.name ?? state.okres) }), "model-note");
   const detail = element("a", t("tv.detail"));
-  detail.href = `forecast-detail.html#${state.okres}/${encodeURIComponent(panelObec)}`;
+  detail.href = `${DETAIL}#${state.okres}/${encodeURIComponent(panelObec)}`;
   panel.replaceChildren(
     close,
     element("h2", `${panelObec}${place ? ` (${Math.round(place.elevation)} m)` : ""}`),
@@ -652,7 +661,7 @@ function renderPanel(outlook) {
     week.append(tr);
   }
   const detail = element("a", t("tv.detail"));
-  detail.href = `forecast-detail.html#${state.okres}`;
+  detail.href = `${DETAIL}#${state.okres}`;
   panel.replaceChildren(
     close,
     element("h2", displayName(info?.name ?? state.okres)),
@@ -969,6 +978,8 @@ async function main() {
   // test: the obce of the okresy in view, loaded once zoomed in, and the search above
   map.on("moveend", loadObceInView);
   loadObceInView();
+  // the AI tab: MeteoVerdict AI's scores and its working experiments below the map
+  if (AI) renderAiExtras(t, fetchJson);
   document.getElementById("obce-search").replaceChildren(
     placeSearch({ t, load: loadPlaces, choose: chooseObec }),
   );
