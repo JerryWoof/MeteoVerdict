@@ -2855,3 +2855,13 @@ body.station [hidden] {
 .ai-result-table td, .ai-result-table th { padding: 0.15rem 0.3rem; }
 .ai-card { overflow-wrap: anywhere; }
 .ai-card.wide { grid-column: 1 / -1; }
+.ai-panel .ai-facts { list-style: none; padding: 0; margin: 0.4rem 0; }
+.ai-panel .ai-facts li { display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
+.ai-panel .ai-fact-name { min-width: 6.5rem; color: var(--ink-soft); }
+.ai-panel .ai-fact-ai { color: #6a4fb3; font-size: 1.1rem; }
+.ai-panel .ai-fact-combined { color: var(--muted); font-size: var(--fs-small); }
+.ai-panel .ai-panel-h { font-size: 0.85rem; margin: 0.5rem 0 0; }
+.ai-panel-legend { margin: 0.2rem 0; font-size: var(--fs-small); }
+.ai-key::before { content: ""; display: inline-block; width: 0.9rem; height: 3px; margin-right: 0.3rem; vertical-align: middle; }
+.ai-key.ai::before { background: #6a4fb3; }
+.ai-key.combined::before { background: #8a949c; }
