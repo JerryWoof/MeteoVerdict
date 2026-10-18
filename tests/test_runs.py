@@ -216,6 +216,11 @@ def test_what_the_bucket_and_the_api_are_asked_for(tmp_path):
     state.save()
     again = runs.State.load(state.path)
     assert again.bucket_missing == {"2026101206": {"ecmwf_ifs"}}
+    # stored, further variables not settled yet: read from the bucket again
+    assert again.extra_todo(RUN, two) == [BY_ID["dwd_icon_eu"]]
+    again.extra[runs.key(RUN)] = {"dwd_icon_eu"}
+    again.save()
+    assert runs.State.load(state.path).extra_todo(RUN, two) == []
 
 
 def test_each_model_from_its_start_in_the_archive():
@@ -600,7 +605,9 @@ def test_merge_is_a_union(tmp_path):
     mine.bucket_missing = {"2026101200": {"b"}}
     theirs.fetched = {"2026101200": {"b"}, "2026060100": {"a"}}
     theirs.missing = {"2026060100": {"c"}}
+    theirs.extra = {"2026101200": {"b"}}
     mine.merge(theirs)
+    assert mine.extra == {"2026101200": {"b"}}
     assert mine.fetched == {"2026101200": {"a", "b"}, "2026060100": {"a"}}
     assert mine.missing == {"2026060100": {"c"}}
     assert mine.bucket_missing == {"2026101200": {"b"}}
@@ -634,6 +641,10 @@ def test_native_keeps_the_native_hours_with_their_totals():
     assert runs.native(legacy.drop("source"), MODELS).collect().height == 40
     stored = runs.from_api(legacy.drop("source"), MODELS)
     assert stored.schema == pl.Schema(runs.SCHEMA) and set(stored["source"]) == {"api"}
+    # the further variables come from the bucket only: null in the API's rows
+    assert stored.select(runs.EXTRA_VARIABLES).null_count().sum_horizontal().item() == (
+        stored.height * len(runs.EXTRA_VARIABLES)
+    )
 
 
 def test_summary_states_the_budget(tmp_path):

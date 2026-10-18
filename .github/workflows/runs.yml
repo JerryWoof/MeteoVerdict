@@ -8,7 +8,10 @@ name: Single runs
 #    run: each schedule stores every model-run of the bucket's window (the last 90 days;
 #    it keeps ~3 months) not stored yet, newest first, so a missed schedule catches up and
 #    nothing ages out; a few minutes a run, at most --bucket-minutes. A model-run still
-#    incomplete there at 24 h is recorded as missing in the bucket.
+#    incomplete there at 24 h is recorded as missing in the bucket. With the further
+#    variables of a full forecast (humidity, pressure, wind direction, radiation, cloud,
+#    sunshine, snow, surface temperature, CAPE, visibility; bucket only, never asked from
+#    the API); stored model-runs without them are read again while the bucket keeps them.
 # 2. The Open-Meteo Single Runs API, newest first, 100 calls a schedule (<= 400 a day;
 #    one or two models of a run cost 100 at 100 stations): the bucket's gaps (a
 #    model-run still missing there at 24 h), then the runs older than the bucket's window
