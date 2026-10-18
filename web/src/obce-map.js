@@ -2,8 +2,6 @@
 // (obce-test.js, Litoměřice) on the forecast map from okres zoom on, a dot per obec
 // coloured and labelled like the okres markers for the day and part shown. Only with
 // our combination (the obce have no single-model parts).
-import { Popup } from "maplibre-gl";
-
 import { obecTimes } from "./obce-test.js";
 import { colorFor, labelFor, rampKey, valueFor } from "./tv.js";
 
@@ -80,37 +78,23 @@ export function obcePartRows(doc) {
 }
 
 const empty = { type: "FeatureCollection", features: [] };
-let popup = null;
 let painted = []; // the features last drawn
-
-function openPopup(map, p, lngLat, t) {
-  popup ??= new Popup({ closeButton: true, closeOnClick: true, maxWidth: "240px" });
-  const box = document.createElement("div");
-  const title = document.createElement("strong");
-  title.textContent = `${p.name} (${p.elevation} m)`;
-  const value = document.createElement("div");
-  value.textContent = p.label;
-  const link = document.createElement("a");
-  link.href = `forecast-detail.html#${p.okres}/${encodeURIComponent(p.name)}`;
-  link.textContent = t("tv.obecDetail");
-  box.append(title, value, link);
-  popup.setLngLat(lngLat).setDOMContent(box).addTo(map);
-}
 
 /** Whether any obce are drawn for the day and part shown (else their okres keeps its marker). */
 export const obceDrawn = () => painted.length > 0;
 
-/** The obec chosen in the picker: the map goes there and opens its popup. */
-export function showObec(map, name, t) {
+/** The obec chosen in the picker: the map goes there (its panel opens beside). */
+export function goToObec(map, name) {
   const feature = painted.find((f) => f.properties.name === name);
-  if (!feature) return;
-  const lngLat = feature.geometry.coordinates;
-  map.easeTo({ center: lngLat, zoom: Math.max(map.getZoom(), 10.5) });
-  map.once("moveend", () => openPopup(map, feature.properties, lngLat, t));
+  // the user's own choice: counts as their move (panel-room.js userMoved), so the map
+  // stays there when the panel opens or closes
+  if (feature) {
+    map.easeTo({ center: feature.geometry.coordinates, zoom: Math.max(map.getZoom(), 10.5) }, { originalEvent: "obce-picker" });
+  }
 }
 
-/** The source and layers (once the map has loaded); a click opens a small popup. */
-export function addObceLayers(map, t) {
+/** The source and layers (once the map has loaded); a click on a dot calls `onPick(okres, name)`. */
+export function addObceLayers(map, onPick) {
   map.addSource("obce-test", { type: "geojson", data: empty });
   map.addLayer({
     id: "obce-test-dot",
@@ -154,13 +138,17 @@ export function addObceLayers(map, t) {
     },
     paint: { "text-color": "#4b5863", "text-halo-color": "#ffffff", "text-halo-width": 1.2 },
   });
-  map.on("click", "obce-test-dot", (event) => openPopup(map, event.features[0].properties, event.lngLat, t));
+  map.on("click", "obce-test-dot", (event) => {
+    const p = event.features[0].properties;
+    onPick(p.okres, p.name);
+  });
   map.on("mouseenter", "obce-test-dot", () => (map.getCanvas().style.cursor = "pointer"));
   map.on("mouseleave", "obce-test-dot", () => (map.getCanvas().style.cursor = ""));
 }
 
-/** Draw the obce for `state` (day, part, colour); `docs`: [{doc, rows}]; none = hidden. */
-export function paintObce(map, docs, state) {
+/** Draw the obce for `state` (day, part, colour); `docs`: [{doc, rows}]; none = hidden;
+ * `selected`: the obec whose panel is open (a thicker ring). */
+export function paintObce(map, docs, state, selected = null) {
   const features = [];
   const layer = state.colour;
   for (const { doc, rows } of docs) {
@@ -182,5 +170,7 @@ export function paintObce(map, docs, state) {
     }
   }
   painted = features;
-  map.getSource("obce-test")?.setData({ type: "FeatureCollection", features });
+  if (!map.getLayer("obce-test-dot")) return;
+  map.getSource("obce-test").setData({ type: "FeatureCollection", features });
+  map.setPaintProperty("obce-test-dot", "circle-stroke-width", ["case", ["==", ["get", "name"], selected ?? ""], 3, 0.8]);
 }
