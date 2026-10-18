@@ -25,6 +25,10 @@ the API's conventions:
   ``cmc_gem_gdps_15km``, ARPEGE World from ``meteofrance_arpege_world025``;
 - precipitation below 0 (a few packing artefacts) as 0.
 
+**Further variables** (``EXTRA``, ``read_run(extra=True)``, since 2026-10-19): the files
+the run's ``meta.json`` lists, derived where the API derives them; they never decide
+whether a model-run is taken (docs/data-sources.md#further-variables).
+
 Differences that remain: ECMWF IFS HRES (O1280 grid) where the API picks a neighbouring
 cell (temperature 0.23 °C mean absolute difference) and DMI HARMONIE temperature
 (0.13 °C) at a few cell edges; the rest is equal to rounding.
@@ -112,6 +116,19 @@ class Source:
     def gust_model(self) -> str | None:
         return self.bucket if self.gusts == "" else self.gusts
 
+    def extra_files(self, listed: dict[str, set[str]]) -> dict[str, tuple[str, Derived]]:
+        """Further variable -> (bucket model, ``Derived``) for a run whose bucket models
+        list ``listed`` variable files; variables none of them has are left out."""
+        models = [self.bucket] + [m for m in (self.gust_model,) if m and m != self.bucket]
+        found = {}
+        for variable, choices in EXTRA.items():
+            for choice in choices:
+                where = [m for m in models if set(choice.files) <= listed.get(m, set())]
+                if where:
+                    found[variable] = (where[0], choice)
+                    break
+        return found
+
     def horizon(self, run_hour: int) -> int:
         return min(self.horizon_h.get(run_hour, runs.MAX_LEAD_H), runs.MAX_LEAD_H)
 
@@ -130,6 +147,134 @@ class Source:
         if self.gust_model:
             found["wind_gusts_10m"] = [(self.gust_model, "wind_gusts_10m")]
         return found
+
+
+# --- the further variables --------------------------------------------------------------
+
+
+def _magnus(t: np.ndarray) -> np.ndarray:
+    """The exponent of Open-Meteo's Magnus formula (a = 17.625, b = 243.04 °C)."""
+    return 17.625 * t / (243.04 + t)
+
+
+def _relative_humidity(t: np.ndarray, td: np.ndarray) -> np.ndarray:
+    return 100 * np.exp(_magnus(td) - _magnus(t))
+
+
+def _dew_point(t: np.ndarray, rh: np.ndarray) -> np.ndarray:
+    with np.errstate(divide="ignore", invalid="ignore"):
+        alpha = np.log(np.clip(rh, 0.01, None) / 100) + _magnus(t)
+    return 243.04 * alpha / (17.625 - alpha)
+
+
+def _hpa(pressure: np.ndarray) -> np.ndarray:
+    """Pressure in hPa (ECMWF IFS HRES's file is in Pa, checked 2026-10-19)."""
+    return np.where(pressure > 2000, pressure / 100, pressure)
+
+
+def _direction(u: np.ndarray, v: np.ndarray) -> np.ndarray:
+    """Where the wind comes from, 0-360° (0 north, 90 east)."""
+    return np.mod(270 - np.degrees(np.arctan2(v, u)), 360)
+
+
+@dataclass(frozen=True)
+class Derived:
+    """A further variable from bucket files: one file as it is, or ``combine`` of
+    several (each on the run's valid times)."""
+
+    files: tuple[str, ...]
+    combine: Callable[..., np.ndarray] | None = None
+
+
+#: How each of ``runs.EXTRA_VARIABLES`` is read, in order of preference: the first whose
+#: files a model's run lists (``meta.json`` "variables") is used; none: null. Which
+#: model has which (runs of 2026-10-18, checked 2026-10-19) is in
+#: docs/data-sources.md#further-variables; the derivations are Open-Meteo's.
+EXTRA: dict[str, tuple[Derived, ...]] = {
+    "relative_humidity_2m": (
+        Derived(("relative_humidity_2m",)),
+        Derived(("temperature_2m", "dew_point_2m"), _relative_humidity),  # IFS HRES
+    ),
+    "dew_point_2m": (
+        Derived(("dew_point_2m",)),  # ALADIN, IFS HRES
+        Derived(("temperature_2m", "relative_humidity_2m"), _dew_point),
+    ),
+    "pressure_msl": (Derived(("pressure_msl",), _hpa),),  # GFS: from ncep_gfs025
+    "wind_direction_10m": (
+        Derived(("wind_direction_10m",)),  # the models read with wind speed itself
+        Derived(("wind_u_component_10m", "wind_v_component_10m"), _direction),
+    ),
+    "shortwave_radiation": (
+        Derived(("shortwave_radiation",)),
+        Derived(("direct_radiation", "diffuse_radiation"), np.add),  # ICON
+    ),
+    "cloud_cover": (Derived(("cloud_cover",)),),
+    "cloud_cover_low": (Derived(("cloud_cover_low",)),),
+    "sunshine_duration": (Derived(("sunshine_duration",)),),  # ALADIN, GeoSphere AROME
+    # Open-Meteo: 7 cm of snow per 10 mm of water (CMA's own "snowfall" file is left
+    # out: its unit is unverified)
+    "snowfall": (Derived(("snowfall_water_equivalent",), lambda swe: swe * 0.7),),
+    "snow_depth": (Derived(("snow_depth",)),),
+    "snow_depth_water_equivalent": (Derived(("snow_depth_water_equivalent",)),),
+    "surface_temperature": (
+        Derived(("surface_temperature",)),
+        Derived(("soil_temperature_0cm",)),  # ICON: the soil's surface
+    ),
+    "cape": (Derived(("cape",)),),  # GFS: from ncep_gfs025
+    "visibility": (Derived(("visibility",)),),  # GFS: from ncep_gfs025
+}
+#: Plausible further values; others (packing artefacts, a file being replaced) are
+#: dropped (null), the model-run is still taken
+EXTRA_PLAUSIBLE = {
+    "relative_humidity_2m": (0.0, 105.0),
+    "dew_point_2m": (-80.0, 45.0),
+    "pressure_msl": (850.0, 1100.0),
+    "wind_direction_10m": (0.0, 360.0),
+    "shortwave_radiation": (-50.0, 1500.0),  # GEM Global: down to -11 at night
+    "cloud_cover": (0.0, 100.5),
+    "cloud_cover_low": (0.0, 100.5),
+    "sunshine_duration": (-60.0, 6 * 3600.0),  # ALADIN: a few seconds below 0
+    "snowfall": (-1.0, 300.0),
+    "snow_depth": (0.0, 30.0),
+    "snow_depth_water_equivalent": (0.0, 10_000.0),
+    "surface_temperature": (-80.0, 80.0),
+    "cape": (-1.0, 20_000.0),
+    "visibility": (0.0, 1_000_000.0),
+}
+#: Clipped to these bounds after the plausibility check (rounding noise, packing)
+EXTRA_CLIP = {
+    "relative_humidity_2m": (0.0, 100.0),
+    "shortwave_radiation": (0.0, None),
+    "cloud_cover": (0.0, 100.0),
+    "cloud_cover_low": (0.0, 100.0),
+    "sunshine_duration": (0.0, None),
+    "snowfall": (0.0, None),
+    "cape": (0.0, None),
+}
+#: Decimals of the further variables (``DECIMALS`` otherwise)
+EXTRA_DECIMALS = {
+    "relative_humidity_2m": 0,
+    "pressure_msl": 1,
+    "wind_direction_10m": 0,
+    "shortwave_radiation": 0,
+    "cloud_cover": 0,
+    "cloud_cover_low": 0,
+    "sunshine_duration": 0,
+    "snow_depth": 3,
+    "dew_point_2m": 1,
+    "surface_temperature": 1,
+    "cape": 0,
+    "visibility": 0,
+}
+
+
+def meta_variables(meta: dict) -> set[str]:
+    """The variable files a run lists (``meta.json`` "variables": a list, or the text of
+    a Python list as Open-Meteo writes it)."""
+    found = meta.get("variables") or []
+    if isinstance(found, str):
+        found = re.findall(r"'([^']+)'", found)
+    return set(found)
 
 
 def _all(hours: int) -> dict[int, int]:
@@ -506,6 +651,8 @@ class Fetched:
 
     rows: pl.DataFrame | None
     reason: str = ""
+    #: every further variable file the run lists was there (else read it again later)
+    extra_complete: bool = True
 
 
 def _valid_times(meta: dict) -> list[datetime]:
@@ -530,18 +677,21 @@ def read_run(
     stations: pl.DataFrame,
     cells: pl.DataFrame,
     pool: ThreadPoolExecutor,
+    extra: bool = False,
 ) -> Fetched:
     """One model-run at ``stations`` (``id``, ``elevation``), complete or not at all
-    (module docstring). Network errors other than missing files propagate."""
+    (module docstring); with ``extra`` also the further variables (``EXTRA``) the run
+    lists, as far as their files are written (``Fetched.extra_complete``). Network errors other
+    than missing files propagate."""
     readers: dict = {}
     try:
-        return _read_run(bucket, model, run, stations, cells, pool, readers)
+        return _read_run(bucket, model, run, stations, cells, pool, readers, extra)
     finally:  # close the readers here, not at interpreter exit (omfiles holds callbacks)
         for reader in readers.values():
             reader.close()
 
 
-def _read_run(bucket, model, run, stations, cells, pool, readers) -> Fetched:
+def _read_run(bucket, model, run, stations, cells, pool, readers, extra) -> Fetched:
     source = SOURCES.get(model.id)
     if source is None:
         return Fetched(None, "not in the bucket")
@@ -561,7 +711,7 @@ def _read_run(bucket, model, run, stations, cells, pool, readers) -> Fetched:
     have = leads(times[source.bucket])
     if not set(need) <= have:
         return Fetched(None, f"{len(set(need) & have)} of {len(need)} lead hours written")
-    axes, indices = {}, {}
+    axes, indices, grids = {}, {}, {}
     for variable, parts in files_.items():
         for bucket_model, name in parts:
             reader = bucket.open(f"{run_path(bucket_model, run)}/{name}.om")
@@ -572,6 +722,7 @@ def _read_run(bucket, model, run, stations, cells, pool, readers) -> Fetched:
             mine = cells.filter(pl.col("bucket_model") == bucket_model)
             if mine.height == 0 or (mine["ny"][0], mine["nx"][0]) != shape[:2]:
                 return Fetched(None, f"{bucket_model}: grid {shape[:2]} not in the cells file")
+            grids[bucket_model] = shape[:2]
             axis = file_times(times[bucket_model], shape[-1])
             # a total over the preceding step has none at the run's first time (AIGFS:
             # its 6 h); the gusts may end before the horizon (IFS 0.25°: 90 h)
@@ -582,9 +733,30 @@ def _read_run(bucket, model, run, stations, cells, pool, readers) -> Fetched:
             axes[(bucket_model, name)] = axis
             rows = mine.select("station_id", "y", "x").rows()
             indices[bucket_model] = {sid: (y, x) for sid, y, x in rows}
+    chosen, extra_complete = {}, True
+    if extra:
+        listed = {b: meta_variables(m) for b, m in metas.items()}
+        for variable, (bucket_model, derived) in source.extra_files(listed).items():
+            usable = True
+            for name in derived.files:
+                if (bucket_model, name) in readers:
+                    continue
+                reader = bucket.open(f"{run_path(bucket_model, run)}/{name}.om")
+                if reader is None:  # listed, not written yet
+                    usable = extra_complete = False
+                    break
+                readers[(bucket_model, name)] = reader
+                if tuple(reader.shape)[:2] != grids[bucket_model]:
+                    usable = False  # not on the grid of the cells: left out
+                    break
+                # some end before the run does (ARPEGE Europe's CAPE, the UK Met
+                # Office's radiation): the hours after are null
+                axes[(bucket_model, name)] = file_times(times[bucket_model], reader.shape[-1])
+            if usable:
+                chosen[variable] = (bucket_model, derived)
     wanted = stations["id"].to_list()
     jobs = []
-    for key in readers:
+    for key in axes:
         mine = [indices[key[0]][sid] for sid in wanted if sid in indices[key[0]]]
         jobs += [(key, segment) for segment in segments(mine)]
     blocks = dict(
@@ -596,15 +768,48 @@ def _read_run(bucket, model, run, stations, cells, pool, readers) -> Fetched:
             found[(key, y, x)] = block[x - first]
     values = {
         (key, sid): found[(key, *indices[key[0]][sid])]
-        for key in readers
+        for key in axes
         for sid in wanted
         if sid in indices[key[0]]
     }
-    return Fetched(*_assemble(model, source, run, stations, cells, times, axes, values, need))
+    rows, reason = _assemble(model, source, run, stations, cells, times, axes, values, need, chosen)
+    return Fetched(rows, reason, extra_complete)
 
 
-def _assemble(model, source, run, stations, cells, times, axes, values, need):
-    """Rows from the point values; ``(rows, "")`` or ``(None, reason)``."""
+def _on_times(axis: list[datetime], value: np.ndarray, times: list[datetime]) -> np.ndarray:
+    """``value`` (on ``axis``) at ``times``, NaN where the file has none."""
+    lookup = dict(zip(axis, value[: len(axis)].tolist(), strict=True))
+    return np.array([lookup.get(t, np.nan) for t in times], dtype=np.float32)
+
+
+#: Files moved to the station's elevation like temperature_2m (the API does so for the
+#: dew point and the surface temperature too, and derives humidity and dew point from
+#: the moved values; checked against the Single Runs API 2026-10-19)
+LAPSE_FILES = ("temperature_2m", "dew_point_2m", "surface_temperature", "soil_temperature_0cm")
+
+
+def _extras(chosen, sid, axes, values, main, shift: float) -> dict[str, np.ndarray]:
+    """The further variables of one station on the run's times ``main``; ``shift``: the
+    elevation correction (K) of ``LAPSE_FILES``."""
+    found = {}
+    for variable, (bucket_model, derived) in chosen.items():
+        keys = [(bucket_model, name) for name in derived.files]
+        arrays = [values.get((key, sid)) for key in keys]
+        if any(a is None for a in arrays):
+            continue
+        arrays = [
+            _on_times(axes[k], a, main) + np.float32(shift if k[1] in LAPSE_FILES else 0)
+            for k, a in zip(keys, arrays, strict=True)
+        ]
+        with np.errstate(invalid="ignore", over="ignore"):
+            value = derived.combine(*arrays) if derived.combine else arrays[0]
+        found[variable] = np.asarray(value, dtype=np.float32)
+    return found
+
+
+def _assemble(model, source, run, stations, cells, times, axes, values, need, chosen=None):
+    """Rows from the point values; ``(rows, "")`` or ``(None, reason)``. ``chosen``: the
+    further variables read (``Source.extra_files``); the others are null."""
     main = times[source.bucket]
     elevation = dict(
         cells.filter(pl.col("bucket_model") == source.bucket)
@@ -627,8 +832,11 @@ def _assemble(model, source, run, stations, cells, times, axes, values, need):
             series[variable] = np.array([lookup.get(t, np.nan) for t in main], dtype=np.float32)
         grid_height = elevation.get(sid)
         temperature = series["temperature_2m"]
+        shift = 0.0
         if grid_height is not None and height is not None and not math.isnan(height):
-            temperature = temperature + np.float32((grid_height - height) * LAPSE_RATE)
+            shift = (grid_height - height) * LAPSE_RATE
+            temperature = temperature + np.float32(shift)
+        extras = _extras(chosen or {}, sid, axes, values, main, shift)
         frames.append(
             pl.DataFrame(
                 {
@@ -641,8 +849,9 @@ def _assemble(model, source, run, stations, cells, times, axes, values, need):
                     "precipitation": series["precipitation"],
                     "wind_speed_10m": series["wind_speed_10m"],
                     "wind_gusts_10m": series.get("wind_gusts_10m", nan),
+                    **{v: extras.get(v, nan) for v in runs.EXTRA_VARIABLES},
                 },
-                schema=runs.HOURLY_SCHEMA,
+                schema={**runs.HOURLY_SCHEMA, **{v: pl.Float32 for v in runs.EXTRA_VARIABLES}},
             )
         )
     table = (
@@ -663,7 +872,21 @@ def _assemble(model, source, run, stations, cells, times, axes, values, need):
     table = table.with_columns(
         pl.col("precipitation").clip(lower_bound=0.0), pl.lit("bucket").alias("source")
     ).with_columns(pl.col(v).round(DECIMALS) for v in runs.VARIABLES)
-    return table.select(list(runs.SCHEMA)), ""
+    return tidy_extras(table).select(list(runs.SCHEMA)), ""
+
+
+def tidy_extras(table: pl.DataFrame) -> pl.DataFrame:
+    """The further variables NaN-free, implausible values null (``EXTRA_PLAUSIBLE``),
+    clipped (``EXTRA_CLIP``) and rounded (``EXTRA_DECIMALS``)."""
+    columns = []
+    for v in runs.EXTRA_VARIABLES:
+        low, high = EXTRA_PLAUSIBLE[v]
+        value = pl.col(v).fill_nan(None)
+        value = pl.when(value.is_between(low, high)).then(value).otherwise(None)
+        if v in EXTRA_CLIP:
+            value = value.clip(*EXTRA_CLIP[v])
+        columns.append(value.round(EXTRA_DECIMALS.get(v, DECIMALS)).cast(pl.Float32).alias(v))
+    return table.with_columns(columns)
 
 
 def _coverage_gap(table: pl.DataFrame, source: Source, need: list[int], n_stations: int) -> str:
@@ -691,6 +914,8 @@ class Result:
     #: run key -> {model: why not} recorded as missing in the bucket (API fallback)
     missing: dict[str, dict[str, str]] = field(default_factory=dict)
     failed: dict[str, str] = field(default_factory=dict)  # "run model" -> error
+    #: run key -> models stored before, read again for their further variables
+    refilled: dict[str, set[str]] = field(default_factory=dict)
     rows: int = 0
     stopped: str = ""
 
@@ -712,8 +937,11 @@ def collect(
 ) -> Result:
     """Store every model-run of the bucket window (``runs.bucket_runs``, newest first)
     not stored yet; record those still incomplete at ``runs.BUCKET_FINAL_H`` as missing in the
-    bucket. Month files and the state are pushed once at the end (the bucket costs no
-    quota, so a run cut short is simply read again)."""
+    bucket. Model-runs stored without their further variables (``runs.State.extra_todo``:
+    stored before 2026-10-19, from the API, or read while a file was still being
+    written) are read again and replace the stored rows; once ``runs.BUCKET_FINAL_H``
+    old they are settled either way. Month files and the state are pushed once at the end
+    (the bucket costs no quota, so a run cut short is simply read again)."""
     cells = load_cells() if cells is None else cells
     state = runs.State.load(data_dir / runs.STATE_NAME)
     result, touched, start, errors = Result(), set(), clock(), 0
@@ -721,7 +949,10 @@ def collect(
     with ThreadPoolExecutor(threads) as pool, ThreadPoolExecutor(parallel_models) as outer:
         for run in todo:
             k = runs.key(run)
-            pending = state.bucket_todo(run, runs.wanted(models, run))
+            every = runs.wanted(models, run)
+            new = state.bucket_todo(run, every)
+            again = {m.id for m in state.extra_todo(run, every)}
+            pending = new + [m for m in every if m.id in again]
             if not pending:
                 continue
             if clock() - start > max_minutes * 60:
@@ -735,7 +966,9 @@ def collect(
             if sync and month not in touched:
                 sync.pull([month])
             jobs = {
-                model.id: outer.submit(read_run, bucket, model, run, stations, cells, pool)
+                model.id: outer.submit(
+                    read_run, bucket, model, run, stations, cells, pool, extra=True
+                )
                 for model in pending
             }
             frames = []
@@ -747,11 +980,20 @@ def collect(
                     errors += 1
                     continue
                 errors = 0
+                final = now - run >= timedelta(hours=runs.BUCKET_FINAL_H)
                 if fetched.rows is not None:
                     frames.append(fetched.rows)
                     state.fetched.setdefault(k, set()).add(model.id)
-                    result.stored.setdefault(k, set()).add(model.id)
-                elif now - run >= timedelta(hours=runs.BUCKET_FINAL_H):
+                    if model.id in again:
+                        result.refilled.setdefault(k, set()).add(model.id)
+                    else:
+                        result.stored.setdefault(k, set()).add(model.id)
+                    if fetched.extra_complete or final:
+                        state.extra.setdefault(k, set()).add(model.id)
+                elif model.id in again:  # the stored rows stay
+                    if final:
+                        state.extra.setdefault(k, set()).add(model.id)
+                elif final:
                     state.bucket_missing.setdefault(k, set()).add(model.id)
                     result.missing.setdefault(k, {})[model.id] = fetched.reason
                 else:
@@ -764,10 +1006,15 @@ def collect(
                 result.rows += table.height
                 touched.add(month)
             state.save()
-            if k in result.stored or k in result.missing:
+            if k in result.stored or k in result.missing or k in result.refilled:
                 log(
                     f"run {run:%Y-%m-%d %H} UTC: {len(result.stored.get(k, ()))} models from "
                     "the bucket"
+                    + (
+                        f", {len(result.refilled[k])} read again for the further variables"
+                        if k in result.refilled
+                        else ""
+                    )
                     + (
                         f"; missing there: {', '.join(sorted(result.missing[k]))}"
                         if k in result.missing
@@ -782,9 +1029,11 @@ def collect(
 def summary(result: Result) -> str:
     """Markdown lines for the job summary."""
     stored = sum(len(v) for v in result.stored.values())
+    refilled = sum(len(v) for v in result.refilled.values())
     lines = [
         f"- Bucket: {stored} model-runs stored ({result.rows:,} rows) from "
         f"s3://openmeteo, no API calls"
+        + (f"; {refilled} stored ones read again for the further variables" if refilled else "")
     ]
     waiting = sum(len(v) for v in result.waiting.values())
     if waiting:
@@ -837,6 +1086,7 @@ def from_harvest(frame: pl.DataFrame | pl.LazyFrame) -> pl.LazyFrame:
             pl.col("precipitation").clip(lower_bound=0.0), pl.lit("bucket").alias("source")
         )
         .with_columns(pl.col(v).round(DECIMALS) for v in runs.VARIABLES)
+        .with_columns(pl.lit(None, pl.Float32).alias(v) for v in runs.EXTRA_VARIABLES)
         .select(list(runs.SCHEMA))
         .cast(runs.SCHEMA)
     )

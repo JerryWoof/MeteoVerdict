@@ -1877,6 +1877,100 @@ stored then have no `source` (null) and every hour filled
   A one-off harvest of 2026-07-15 to 10-16 read the same way agrees row for row with
   live reads (after the import's corrections below).
 
+### Further variables
+
+Since 2026-10-19 the single runs also hold the variables a full forecast needs beyond
+the four verified ones (`runs.EXTRA_VARIABLES`, columns of the same month files), so
+that they can be verified against ČHMÚ (element and number of stations measuring it in
+brackets) and used later:
+
+| Column | Unit | ČHMÚ |
+|---|---|---|
+| `relative_humidity_2m` | % | `H` (282) |
+| `dew_point_2m` | °C | vapour pressure `E` (237), `Td` |
+| `pressure_msl` | hPa | `P` (50; station pressure: from `pressure_msl`, temperature and elevation) |
+| `wind_direction_10m` | ° (where the wind comes from) | `D` (208) |
+| `shortwave_radiation` | W/m², mean over the preceding step | `RGLB` (24) |
+| `cloud_cover`, `cloud_cover_low` | % | none (cloud amount `N` at the main stations) |
+| `sunshine_duration` | s in the preceding step | `SSV` (164) |
+| `snowfall` | cm in the preceding step | `SNO` (602) |
+| `snow_depth` | m | `SCE` (675) |
+| `snow_depth_water_equivalent` | mm | (water equivalent of the snow cover, a few stations) |
+| `surface_temperature` | °C | ground frost `TPM` (240; 5 cm above the ground) |
+| `cape` | J/kg | thunderstorms (phenomenon `BO`) |
+| `visibility` | m | fog (phenomena `ML`, `VY`), `VV` |
+
+- **From the bucket only.** The Single Runs API is not asked for them (Open-Meteo
+  weighs a request by its variables: 18 instead of 4 would cost 4.5 times as many
+  calls), so rows from the API (the bucket's gaps, the history before the bucket's
+  window, everything stored before 2026-10-17) have them null, as do month files
+  written before 2026-10-19 (the column is missing there; `partitions.scan_months`
+  fills it with nulls).
+- **As if always collected:** a model-run stored without them is read from the bucket
+  again, whole, and replaces its stored rows (`runs.State.extra_todo`; the four verified
+  variables come out identical), newest run first, after the new runs of each schedule,
+  within `--bucket-minutes`. The bucket keeps runs for ~3 months and older runs list the
+  same files (checked on 2026-07-22), so the history reaches back to the bucket's
+  window (mid-July 2026 at the start); the model-runs it no longer has, or has
+  incomplete, keep their nulls.
+- **Which file** (`bucket.EXTRA`, `Source.extra_files`): the run's `meta.json` lists its
+  files (`variables`); for each column the first way whose files are listed is used,
+  else it is null: humidity and dew point from their own file, or derived from the
+  other and the temperature with Open-Meteo's Magnus formula (a = 17.625, b = 243.04);
+  direction from its own file or from the u and v components; shortwave radiation from
+  its own file or direct + diffuse (ICON); snowfall from the water equivalent × 0.7 (7 cm
+  of snow per 10 mm, as the API); surface temperature from its own file or ICON's
+  `soil_temperature_0cm`; pressure in hPa (IFS HRES's file is in Pa). GFS's pressure,
+  CAPE and visibility are on the 0.25° grid (`ncep_gfs025`, like its gusts).
+- **Like the API:** dew point and surface temperature are moved to the station's
+  elevation like the temperature (0.65 K per 100 m), and humidity and dew point are
+  derived from the moved temperature. Checked against the Single Runs API (run
+  2026-10-18 12 UTC, Praděd 1490 m, IFS HRES cell ~600 m lower, ALADIN CZ,
+  ICON-D2 and IFS HRES, 24 h): humidity, dew point, direction, pressure, surface
+  temperature, CAPE and visibility identical, radiation within 0.7 W/m². The API computes **sunshine** for every model from the
+  radiation; it is stored only where the bucket has a file (ALADIN, AROME AT) and can be
+  derived from `shortwave_radiation` for the rest.
+- **Plausible values** (`bucket.EXTRA_PLAUSIBLE`): others are dropped (null) without
+  rejecting the model-run (the four verified variables decide that, as before); then
+  clipped to 0 (radiation: GEM Global gives −11 W/m² at night; ALADIN's sunshine a few
+  seconds below 0) and to 100 % (humidity, cloud cover).
+- **Rounding:** whole numbers for humidity, cloud cover, direction, radiation,
+  sunshine, CAPE and visibility, 1 decimal for pressure, dew point and surface
+  temperature, 3 for snow depth (m), 2 otherwise.
+- **A file listed but not written yet** leaves the column null and the model-run is
+  read again at the next schedule; once it is 24 h old it is settled as it is (state
+  `extra`). Files that end before the run does (ARPEGE Europe's CAPE, UKMO's radiation
+  at 54 of 89 steps) have the later hours null.
+
+Which model has which (runs of 2026-10-18; ✓ own file, d derived, – none):
+
+| Model | RH | Td | MSLP | dir | SW | cloud / low | sun | snowfall | snow depth / SWE | surface T | CAPE | vis |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ALADIN CZ 1 km, ALADIN CE 2 km | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ / ✓ | ✓ | ✓ | – / ✓ | ✓ | ✓ | ✓ |
+| ICON-D2, ICON-EU | ✓ | d | ✓ | d | d | ✓ / ✓ | – | ✓ | ✓ / – | ✓ (soil 0 cm) | ✓ | ✓ |
+| ICON | ✓ | d | ✓ | d | d | ✓ / ✓ | – | ✓ | ✓ / – | ✓ (soil 0 cm) | ✓ | – |
+| IFS HRES | d | ✓ | ✓ | d | ✓ | ✓ / ✓ | – | ✓ | ✓ / – | ✓ | ✓ | ✓ |
+| IFS 0.25° | ✓ | d | ✓ | d | ✓ | ✓ / ✓ | – | ✓ | ✓ / ✓ | ✓ | ✓ | – |
+| AIFS | ✓ | d | ✓ | d | ✓ | ✓ / ✓ | – | ✓ | – / – | ✓ | – | – |
+| GFS | ✓ | d | ✓ (0.25°) | d | ✓ | ✓ / ✓ | – | ✓ | ✓ / – | ✓ | ✓ (0.25°) | ✓ (0.25°) |
+| UKMO 10 km | ✓ | d | ✓ | ✓ | ✓ (to 54 h) | ✓ / ✓ | – | – | – / ✓ | ✓ | ✓ | ✓ |
+| ARPEGE Europe | ✓ | d | ✓ | d | ✓ | ✓ / ✓ | – | ✓ | – / – | – | ✓ (shorter) | – |
+| AROME AT | ✓ | d | ✓ | ✓ | ✓ | ✓ / ✓ | ✓ | ✓ | – / ✓ | ✓ | ✓ | – |
+| KNMI HARMONIE | ✓ | d | – (file empty) | ✓ | ✓ | ✓ / ✓ | – | ✓ | ✓ / ✓ | ✓ | – | ✓ |
+| DMI HARMONIE | ✓ | d | ✓ | ✓ | ✓ | ✓ / ✓ | – | ✓ | – / ✓ | ✓ | ✓ | ✓ |
+| GEM Global | ✓ | d | ✓ | ✓ | ✓ | ✓ / – | – | ✓ | ✓ / – | – | – | – |
+| JMA GSM | ✓ | d | ✓ | d | – | ✓ / ✓ | – | – | – / – | – | – | – |
+| CMA GRAPES | ✓ | d | ✓ | d | ✓ | ✓ / ✓ | – | – (unit unverified) | ✓ / – | ✓ | ✓ | ✓ |
+| ARPEGE World | ✓ | d | ✓ | d | ✓ | ✓ / ✓ | – | ✓ | – / – | – | ✓ | – |
+| AIGFS | – | – | ✓ | d | – | ✓ / ✓ | – | – | – / – | – | – | – |
+
+**Cost** (run 2026-10-18 12 UTC, all 19 models, from Prague): 27,100 range requests
+instead of 8,350 and ~150 s instead of ~48 s; ~1.7 MB a run instead of ~0.6 MB, so a
+month file grows from ~65 MB to ~200 MB (dew point, direction, pressure, surface
+temperature, humidity and cloud cover ~0.1 MB a run each; snow ~0 in October). The
+readers scan the month files lazily and read only the columns they need. No Open-Meteo
+calls.
+
 ### Single runs API
 
 Open-Meteo's **Single Runs API**, the fallback and the source of the history older than
@@ -2006,7 +2100,8 @@ each station is in (`reason`: `okres`, `mountain`, `spread`).
   its month file at once; stops after `--bucket-minutes` (40) or when the bucket keeps
   failing (20 model-runs in a row after their retries) and continues next time. Month
   files and state go up once at the end (the bucket costs nothing, so a run cut short
-  is simply read again).
+  is simply read again). Stored model-runs without their further variables are read
+  again in the same pass ([further variables](#further-variables)).
 - **2. The API** (`--source api` or `all`), newest first, within `--max-calls`: the
   model-runs recorded as missing in the bucket (`--mode recent`), and every model-run
   of the runs older than the bucket's window but from the start of the month it starts
@@ -2034,7 +2129,8 @@ each station is in (`reason`: `okres`, `mountain`, `spread`).
   with `valid_time` (= run + lead), `temperature_2m` (°C), `precipitation` (mm since the
   previous native step: the hour for hourly output, 3 or 6 hours for the coarser steps),
   `wind_speed_10m` (m/s), `wind_gusts_10m` (m/s, Open-Meteo's maximum of the preceding
-  hour; null for AIFS, JMA GSM and AIGFS, and in API runs stored before 2026-10-15) and
+  hour; null for AIFS, JMA GSM and AIGFS, and in API runs stored before 2026-10-15), the
+  [further variables](#further-variables) (bucket only, since 2026-10-19) and
   `source` (`bucket` or `api`), sorted by run. A model-run is written whole and replaces
   any stored rows of it (`partitions.write_monthly(..., replace=["run", "model"])`), so
   a run's rows always come from one source. The API's answers are converted before
@@ -2046,7 +2142,9 @@ each station is in (`reason`: `okres`, `mountain`, `spread`).
   either way. About 125,000 rows a run, ~45 MB a month.
 - **State:** `data/runs-state.json`: per run (`YYYYMMDDHH`) the models stored
   (`fetched`), the models the API does not have (`missing`, gaps for good) and the
-  models missing in the bucket (`bucket_missing`, asked from the API).
+  models missing in the bucket (`bucket_missing`, asked from the API), and the
+  models whose [further variables](#further-variables) are settled (`extra`: read, or
+  not to be had from the bucket).
 - **Release storage** (`--github-release`): the month files as `runs-YYYY-MM.parquet` in
   the releases `runs-YYYY-MM` (a family of their own, CC BY-SA 4.0 like the other data
   files, with release notes crediting Open-Meteo, CC BY 4.0, and the source services),
