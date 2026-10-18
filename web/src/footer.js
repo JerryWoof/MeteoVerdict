@@ -72,6 +72,9 @@ export function footerParts(kind, t, { method, year = new Date().getUTCFullYear(
       " (Czech Hydrometeorological Institute, ",
       link("CC BY 4.0", CC_BY),
       `; ${t("station.changes")})`,
+      SEP,
+      // the measured map's base map when zoomed in
+      ...basemapCredits(t),
       ...(method ? [SEP, link(t("station.archive"), method)] : []),
     ];
   }
