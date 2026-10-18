@@ -103,7 +103,13 @@ export function addObceLayers(map, onPick) {
     minzoom: MIN_ZOOM,
     paint: {
       "circle-color": ["get", "color"],
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], MIN_ZOOM, 4, 11, 7],
+      // the area grows with the population (square root): a village of 100 is a small dot,
+      // a town of 20,000 a large one
+      "circle-radius": [
+        "interpolate", ["linear"], ["zoom"],
+        MIN_ZOOM, ["+", 2.5, ["*", 0.055, ["sqrt", ["coalesce", ["get", "population"], 300]]]],
+        11, ["+", 3.5, ["*", 0.085, ["sqrt", ["coalesce", ["get", "population"], 300]]]],
+      ],
       "circle-stroke-color": "#1d2329",
       "circle-stroke-width": 0.8,
     },
@@ -117,8 +123,10 @@ export function addObceLayers(map, onPick) {
       "text-field": ["get", "label"],
       "text-font": ["Noto Sans Regular"],
       "text-size": 11,
-      "text-offset": [0, 1.1],
+      "text-radial-offset": ["+", 0.7, ["*", 0.006, ["sqrt", ["coalesce", ["get", "population"], 300]]]],
       "text-anchor": "top",
+      // the bigger places win where labels collide
+      "symbol-sort-key": ["-", ["coalesce", ["get", "population"], 0]],
     },
     paint: { "text-color": "#1d2329", "text-halo-color": "#ffffff", "text-halo-width": 1.4 },
   });
@@ -132,9 +140,10 @@ export function addObceLayers(map, onPick) {
       "text-field": ["get", "name"],
       "text-font": ["Noto Sans Regular"],
       "text-size": 10,
-      "text-offset": [0, -0.9],
+      "text-radial-offset": ["+", 0.6, ["*", 0.006, ["sqrt", ["coalesce", ["get", "population"], 300]]]],
       "text-anchor": "bottom",
       "text-max-width": 8,
+      "symbol-sort-key": ["-", ["coalesce", ["get", "population"], 0]],
     },
     paint: { "text-color": "#4b5863", "text-halo-color": "#ffffff", "text-halo-width": 1.2 },
   });
@@ -163,6 +172,7 @@ export function paintObce(map, docs, state, selected = null) {
           name: place.name,
           okres: doc.okres,
           elevation: Math.round(place.elevation),
+          population: place.population ?? null,
           color: colorFor(value, rampKey(layer, true)),
           label: labelFor(row, layer === "cloud" ? "temperature" : layer, state.part),
         },
