@@ -47,3 +47,13 @@ def test_every_obec_gets_the_okres_weights():
     out = obce_forecast.combined(rows, weights, "CZ0423", now).sort("okres", "time")
     assert out["okres"].to_list() == ["A", "A", "B", "B"]
     assert out["temperature_2m"].to_list() == [10.5, 11.5, 12.5, 13.5]
+
+
+def test_the_day_starts_at_prague_midnight():
+    assert obce_forecast.start_of_day(datetime(2026, 10, 18, 2, 13, tzinfo=UTC)) == datetime(
+        2026, 10, 17, 22, tzinfo=UTC
+    )
+    # 01:30 Prague on 18 Oct is still that day
+    assert obce_forecast.start_of_day(datetime(2026, 10, 17, 23, 30, tzinfo=UTC)) == datetime(
+        2026, 10, 17, 22, tzinfo=UTC
+    )
