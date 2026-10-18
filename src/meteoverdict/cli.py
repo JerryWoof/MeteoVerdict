@@ -969,6 +969,13 @@ def blend_test_cmd(
     publish: Annotated[
         bool, typer.Option("--publish", help="Put the JSON file into the release data-latest.")
     ] = False,
+    candidate: Annotated[
+        list[Path] | None,
+        typer.Option(
+            help="Experimental forecasts to compare as single models (Parquet in the "
+            "forecast table's layout, e.g. MeteoVerdict AI's hindcast); repeatable."
+        ),
+    ] = None,
 ) -> None:
     """Out of sample: does our combined forecast beat the best single model? (roadmap 6.4)"""
     if publish and not github_release:
@@ -1010,9 +1017,14 @@ def blend_test_cmd(
             typer.echo("mvd blend-test: no observations or forecasts for the test period", err=True)
             raise typer.Exit(code=1)
         table = pl.read_parquet(stations_path)
+        candidates = (
+            pl.concat([pl.read_parquet(p) for p in candidate]).cast(forecasts.SCHEMA)
+            if candidate
+            else None
+        )
         test_days, groups, models, info = blendtest.run(
             scores, fc, obs, table, first, last, window, min_training_days, resamples,
-            log=typer.echo,
+            log=typer.echo, candidates=candidates,
         )  # fmt: skip
         if not groups:
             typer.echo("mvd blend-test: nothing to test yet (warm-up)", err=True)
