@@ -84,7 +84,6 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
   const ready = new Promise((resolve) => map.on("load", resolve));
   const markers = new Map(); // id → {marker, el, canvas, temp, chips, chipBox, icon, onMap}
   const popup = new Popup({ closeButton: false, closeOnClick: false, offset: 10, className: "station-map-popup" });
-  let pin = null; // the place found in the search
 
   function popupFor(row) {
     const box = element("div");
@@ -339,14 +338,6 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
         map.resize();
         map.fitBounds(BOUNDS, { padding: { top: 10, bottom: 10, left: 10, right }, duration: first ? 0 : 400 });
       });
-    },
-    /** A place found in the search: a pin there and the map around it (the user's move, so
-     * it stays). */
-    goTo(lngLat, name) {
-      pin ??= new Marker({ color: "#1d2329", scale: 0.8 });
-      pin.setLngLat(lngLat).addTo(map);
-      pin.getElement().title = name;
-      map.easeTo({ center: lngLat, zoom: Math.max(map.getZoom(), 10.5) }, { originalEvent: "place-search" });
     },
     /** Make it fit its box again (after being hidden). */
     resize() {
