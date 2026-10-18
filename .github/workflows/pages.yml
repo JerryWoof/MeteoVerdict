@@ -100,6 +100,13 @@ jobs:
               echo "no $name yet; the pages that use it say so or hide that part"
             fi
           done
+          # test: the forecast for every obec of Litoměřice (`mvd obce-forecast`)
+          mkdir -p site/data/forecast
+          if gh release download data-latest --pattern 'obce-*.json' --dir site/data/forecast --clobber 2>/dev/null; then
+            echo "obce forecast from data-latest"
+          else
+            echo "no obce forecast yet"
+          fi
       - uses: actions/setup-node@v7
         with:
           node-version: 22
