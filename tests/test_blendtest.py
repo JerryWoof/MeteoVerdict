@@ -160,6 +160,33 @@ def test_out_of_sample_test_end_to_end():
     assert any("D+1" in line for line in blendtest.summary(groups))
 
 
+def test_a_candidate_is_compared_but_never_trained_on_or_picked():
+    obs, fc = _data()
+    scores = _scores(obs, fc)
+    last = FIRST + timedelta(days=DAYS - 1)
+    # a perfect experimental forecast (exactly the observations)
+    perfect = fc.filter(pl.col("model") == GOOD).with_columns(
+        pl.lit("meteoverdict_ai").alias("model"),
+        pl.lit(10.0, pl.Float32).alias("temperature_2m"),
+        pl.lit(2.0, pl.Float32).alias("wind_speed_10m"),
+    )
+    args = (scores, fc, obs, STATIONS, FIRST, last)
+    _, groups, _, _ = blendtest.run(*args, min_training_days=5, resamples=50)
+    _, with_ai, ai_models, _ = blendtest.run(
+        *args, min_training_days=5, resamples=50, candidates=perfect
+    )
+    at = {c: i for i, c in enumerate(blendtest.GROUP_COLUMNS)}
+    # the combination, the out-of-sample choice and the hindsight best are unchanged
+    for name in ("mae_combined", "best_oos", "best_hindsight", "mae_best_hindsight"):
+        assert [r[at[name]] for r in with_ai] == [r[at[name]] for r in groups]
+    mat = {c: i for i, c in enumerate(blendtest.MODEL_COLUMNS)}
+    ai = [r for r in ai_models if r[mat["model"]] == "meteoverdict_ai"]
+    temp = next(r for r in ai if r[mat["variable"]] == "temperature_2m")
+    assert temp[mat["mae"]] == pytest.approx(0, abs=1e-6)
+    # ours minus the candidate: positive, the candidate is better than the combination
+    assert temp[mat["low_combined"]] > 0
+
+
 def test_a_model_with_the_newest_days_only_does_not_shrink_the_test():
     # regression: a newly added model, delivered by the backfill for its newest window
     # only, made the fair station-days of every model start on its first day, both in

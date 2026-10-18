@@ -71,6 +71,16 @@ jobs:
           else
             echo "no observed-data.zip yet; the forecast map offers no past days"
           fi
+          # the AI forecast tab (experimental): MeteoVerdict AI's scores and the
+          # experiments, computed daily on the DGX Spark (`ai/`, release ai-latest)
+          if gh release download ai-latest --pattern ai.zip --dir /tmp 2>/dev/null; then
+            rm -rf site/data/ai
+            mkdir -p site/data/ai
+            unzip -o -q /tmp/ai.zip -d site/data/ai
+            echo "AI results from ai-latest ($(ls site/data/ai | wc -l) files)"
+          else
+            echo "no ai.zip yet; the AI forecast tab says so"
+          fi
           # every model's own hourly forecast per okres (`mvd outlook`): the forecast
           # pages read these instead of asking Open-Meteo from the visitor's browser
           if gh release download data-latest --pattern outlook-models.zip --dir /tmp 2>/dev/null; then
