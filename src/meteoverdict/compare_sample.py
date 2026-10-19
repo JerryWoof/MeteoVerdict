@@ -140,6 +140,33 @@ def from_days(
     )  # fmt: skip
 
 
+def same_okresy(days: pl.DataFrame, candidates: set[str]) -> pl.DataFrame:
+    """The day totals for summing okresy (a kraj, Czechia). A candidate such as the AI
+    has forecasts only at some stations, so a few okresy may lack it; ``czechia`` would
+    then drop it from the whole sum. Instead, for a variable and lead day with candidates,
+    only the okres-days where every candidate has a value stay, for all series, so the
+    sum still compares everything on the same okres-days (and stations)."""
+    if not candidates:
+        return days
+    have = (
+        days.filter(pl.col("model").is_in(list(candidates)))
+        .group_by("region", "variable", "lead_day", "date")
+        .agg(pl.col("model").n_unique().alias("_have"))
+        .filter(pl.col("_have") == len(candidates))
+        .drop("_have")
+    )
+    keys = ["variable", "lead_day"]
+    covered = have.select(keys).unique()
+    return pl.concat(
+        [
+            days.join(covered, on=keys, how="anti"),
+            days.join(covered, on=keys, how="semi").join(
+                have, on=["region", *keys, "date"], how="semi"
+            ),
+        ]
+    )
+
+
 def documents(
     days: pl.DataFrame,
     czechia,
@@ -154,14 +181,15 @@ def documents(
     Czechia (``cz``), every kraj and every okres. ``czechia`` is ``blendtest.czechia``
     (sums the okresy a series is compared in on every day); a kraj sums its okresy."""
     days = days.filter(~pl.col("model").is_in(CHOICES))
-    frames: dict[str, tuple[str, str, pl.DataFrame]] = {"cz": ("cz", "Česko", czechia(days))}
+    wide = same_okresy(days, candidates)
+    frames: dict[str, tuple[str, str, pl.DataFrame]] = {"cz": ("cz", "Česko", czechia(wide))}
     for okres in sorted(days["region"].unique()):
         frames[okres] = ("okres", region_names.get(okres, okres), days.filter(region=okres))
     krajs: dict[str, tuple[str, list[str]]] = {}
     for okres, (code, name) in kraj_of.items():
         krajs.setdefault(code, (name, []))[1].append(okres)
     for code, (name, okresy) in krajs.items():
-        part = days.filter(pl.col("region").is_in(okresy))
+        part = wide.filter(pl.col("region").is_in(okresy))
         if not part.is_empty():
             frames[code] = ("kraj", name, czechia(part).with_columns(pl.lit(code).alias("region")))
     docs = {}
