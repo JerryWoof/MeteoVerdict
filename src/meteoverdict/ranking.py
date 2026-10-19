@@ -90,6 +90,7 @@ def rank(
     windows: tuple[str, ...] = aggregate.WINDOWS,
     resamples: int = RESAMPLES,
     seed: int = 0,
+    levels: tuple[str, ...] = aggregate.LEVELS,
 ) -> pl.DataFrame:
     """One row per group and model with its rank and interval."""
     scores = scores.lazy().filter(pl.col("variable").is_in(RANKED_VARIABLES))
@@ -102,7 +103,7 @@ def rank(
         _, days = aggregate.window_days(window, as_of, first_day)
         in_window = scores.filter(days).join(info, on="station_id", how="inner")
         in_window = aggregate.covered_only(in_window)
-        for level in aggregate.LEVELS:
+        for level in levels:
             regions = aggregate.with_regions(in_window, level, distance)
             daily = (
                 aggregate.common_days(regions, by="region")
