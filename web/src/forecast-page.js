@@ -12,7 +12,7 @@ import { asForecast, modelHorizon, modelPeriods, parseModels } from "./models.js
 import { fillObce, obceFor, obecSeries, obecTimes, placeOf } from "./obce-test.js";
 import { fillPicker, issuedText } from "./picker.js";
 import { statusText } from "./status.js";
-import { dayLabel, parseOutlook, rowFor, sunFor, today } from "./tv.js";
+import { chmiNotice, dayLabel, gustOver, gustOverText, parseOutlook, rowFor, sunFor, today } from "./tv.js";
 import { AI_FILES, aiPath, aiText } from "./ai-source.js";
 
 // ?source=ai: MeteoVerdict AI's forecast (the AI forecast tab's detail, ai-source.js): its
@@ -108,14 +108,18 @@ function renderDays(days, sunOf, gustOf) {
     if (withGust) {
       // from outlook.json (the single runs, corrected): null beyond the newest run
       const gust = gustOf(d.day);
-      const td = cell("td", fmt(gust?.gust), gust?.gust_warning ? "num gust-warning" : "num");
-      if (gust?.gust_warning) td.title = t("tv.gustWarning");
+      const td = cell("td", fmt(gust?.gust), gustOver(gust) ? "num gust-over-threshold" : "num");
+      if (gustOver(gust)) td.title = gustOverText(t, document.documentElement.lang);
       tr.append(td);
     }
     if (withSun) tr.append(sunCell(sunOf(d.day)));
     return tr;
   });
   table.replaceChildren(head, ...rows);
+  // the notice under the table, only where a gust is flagged
+  document.getElementById("gust-notice").replaceChildren(
+    ...(withGust && days.some((d) => gustOver(gustOf(d.day))) ? [chmiNotice(t)] : []),
+  );
 }
 
 // `selected`: COMBINED (our forecast highlighted, with the best model per lead day) or a
