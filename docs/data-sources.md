@@ -2569,6 +2569,10 @@ instead of only the okres's forecast point. After each outlook run
 - **Checked away from the stations** with every ČHMÚ station held out in turn
   (`mvd obce-loso`, `obce-loso.json` in the release `data-latest`): results and method in
   [methodology.md](methodology.md#the-obec-forecast-away-from-the-stations-mvd-obce-loso).
+  The methodology page shows the key numbers read from that file (`web/src/obce-loso.js`,
+  section `#obce-loso`: MAE, gain against the okres forecast and the plain model median,
+  the mountain stations where it is worse than the median); the obec panel of the forecast
+  map and the obec view of the detail page link to it (not on the AI pages).
 
 ## Radar base map
 

@@ -343,6 +343,8 @@ async function show(point, names, colors, outlook) {
   const place = placeOf(obceDoc, obec);
   const obecNote = document.getElementById("obec-note");
   obecNote.hidden = !place;
+  // how good the obec forecast is away from the stations (not the AI's, a different method)
+  document.getElementById("obec-accuracy").hidden = !place || AI;
   document.getElementById("model-pick").hidden = Boolean(place);
   if (place) {
     const series = obecSeries(obceDoc, place);
