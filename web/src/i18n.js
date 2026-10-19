@@ -715,6 +715,13 @@ export const STRINGS = {
     "legend.hint": "Klikněte na model: zvýrazní okresy, kde vede. Klikněte na okres: proč tam vede.",
     "hover.tied": "+ {n} statisticky stejně dobrých",
     "hover.click": "klikněte pro podrobnosti",
+    "hover.noClear": "bez jasného vítěze, nejblíž má:",
+    "hover.pBest": "nejlepší v {pct} % přepočtů",
+    "legend.noClear": "bez jasného vítěze (žádný model není nejlepší s pravděpodobností aspoň {pct} %)",
+    "legend.small": "malý vzorek (méně než 30 dní)",
+    "detail.pBest": "Pravděpodobnost, že je nejlepší: {pct} % (podíl přepočtů bootstrapu, ve kterých má nejmenší chybu).",
+    "detail.noClear": "Bez jasného vítěze: nejlepší je jen v {pct} % přepočtů bootstrapu, méně než {min} %. Mapa proto okres nebarví žádným modelem.",
+    "detail.highSite": "vysoko nad okresem, hodnocena zvlášť",
     "find.placeholder": "— vyberte okres —",
     "detail.noRanking": "Pro tuto volbu tu zatím není pořadí.",
     "detail.mae": "průměrná chyba {mae}",
@@ -801,7 +808,7 @@ export const STRINGS = {
     "blendTest.basis":
       "Otestováno {days} dní, {from} až {to}. Prvních {warmup} dní s daty jsme vynechali jako zahřívání: váhy potřebují aspoň {min} dní skóre.",
     "blendTest.caveats":
-      "Pozor: historie je zatím krátká (několik týdnů jednoho podzimu), intervaly jsou proto široké a výsledek se může změnit. Interval z bootstrapu přes dny nepočítá s tím, že po sobě jdoucí dny si jsou podobné, takže je spíš příliš úzký. Na D+N používáme jen skóre do dne, kdy byla předpověď vydána. „Nejlepší model zpětně“ je model, který byl v okrese nejlepší za celé testované období; ten nikdo předem znát nemohl, je to horní mez pro výběr jednoho modelu.",
+      "Pozor: historie je zatím krátká (několik týdnů jednoho podzimu), intervaly jsou proto široké a výsledek se může změnit. Interval je z bootstrapu přes bloky 4 po sobě jdoucích dnů, protože sousední dny si jsou podobné. Na D+N používáme jen skóre do dne, kdy byla předpověď vydána. „Nejlepší model zpětně“ je model, který byl v okrese nejlepší za celé testované období; ten nikdo předem znát nemohl, je to horní mez pro výběr jednoho modelu.",
     "blendTest.chartTitle": "MAE podle předstihu: {variable}",
     "blendTest.series.combined": "Naše předpověď",
     "blendTest.series.best_cz_oos": "Nejlepší model pro celé Česko v té době",
@@ -849,7 +856,7 @@ export const STRINGS = {
       "Pásma hodin jen pro Česko a kraje: z asi 100 stanic, na kterých hodnotíme jednotlivé běhy, má většina okresů jednu nebo žádnou. Okresy najdete u D+1 až D+5.",
     "compare.intervals": "Jak jisté je pořadí",
     "compare.intervalsNote":
-      "O kolik má každý model větší chybu (MAE) než nejlepší, s 95% intervalem z bootstrapu přes dny. Šedý interval sahá k nule: model není prokazatelně horší než nejlepší. Červený: je prokazatelně horší.",
+      "O kolik má každý model větší chybu (MAE) než nejlepší, s 95% intervalem z bootstrapu přes bloky 4 po sobě jdoucích dnů. Šedý interval sahá k nule: model není prokazatelně horší než nejlepší. Červený: je prokazatelně horší.",
     "compare.byLead": "Chyba podle předstihu",
     "compare.byLeadNote": "MAE každého modelu na D+1 až D+5 v této oblasti; čárkovaně průměr všech modelů. Krátkodobé modely (ICON-D2, AROME, ALADIN) končí po 1–2 dnech.",
     "compare.leadHours": "Chyba podle hodin dopředu (po jednotlivých bězích)",
@@ -916,7 +923,7 @@ export const STRINGS = {
     "compare.ranking": "Pořadí pro Česko",
     "region.cz": "Česko",
     "compare.rankingNote":
-      "Střední absolutní chyba (MAE), bias (předpověď minus měření) a RMSE na stanicích a ve dnech, které pokrývají všechny modely. „≈“ značí modely, jejichž rozdíl MAE od nejlepšího není významný (95% bootstrapový interval přes dny). Průměr všech modelů je srovnávací základ, nemá pořadí; „proti průměru“ říká, o kolik procent má model menší chybu než tento průměr. U srážek ETS pro dny se srážkami ≥ 0,1, ≥ 1 a ≥ 10 mm, POD a FAR u prahu v záhlaví. Stanice v závorce: půjčené ze sousedních okresů. Model se skóre za méně než 80 % dní období (např. nově přidaný) se zatím neřadí ani nezkracuje srovnání ostatních; je uveden na konci s chybou za své vlastní dny.",
+      "Střední absolutní chyba (MAE), bias (předpověď minus měření) a RMSE na stanicích a ve dnech, které pokrývají všechny modely. „≈“ značí modely, jejichž rozdíl MAE od nejlepšího není významný (95% interval z bootstrapu přes bloky 4 dnů nebo Dieboldův–Marianův test). Průměr všech modelů je srovnávací základ, nemá pořadí; „proti průměru“ říká, o kolik procent má model menší chybu než tento průměr. U srážek ETS pro dny se srážkami ≥ 0,1, ≥ 1 a ≥ 10 mm, POD a FAR u prahu v záhlaví. Stanice v závorce: půjčené ze sousedních okresů. Model se skóre za méně než 80 % dní období (např. nově přidaný) se zatím neřadí ani nezkracuje srovnání ostatních; je uveden na konci s chybou za své vlastní dny.",
     "compare.bias": "Bias podle nadmořské výšky",
     "compare.biasNote": "Kladný: model předpovídá příliš vysoké hodnoty, např. příliš teplo na horách.",
     "compare.empty": "Pro tuto volbu zatím nejsou žádná skóre.",
@@ -1723,6 +1730,13 @@ export const STRINGS = {
     "legend.hint": "Click a model to highlight where it wins. Click an okres to see why.",
     "hover.tied": "+ {n} statistically as good",
     "hover.click": "click for details",
+    "hover.noClear": "no clear winner, closest:",
+    "hover.pBest": "best in {pct} % of resamples",
+    "legend.noClear": "no clear winner (no model is best with a probability of at least {pct} %)",
+    "legend.small": "small sample (fewer than 30 days)",
+    "detail.pBest": "Probability of being the best: {pct} % (share of the bootstrap resamples in which it has the smallest error).",
+    "detail.noClear": "No clear winner: it is best in only {pct} % of the bootstrap resamples, less than {min} %. So the map gives the okres no model's colour.",
+    "detail.highSite": "high above the okres, scored on its own",
     "find.placeholder": "— choose an okres —",
     "detail.noRanking": "No ranking here for this choice yet.",
     "detail.mae": "mean error {mae}",
@@ -1809,7 +1823,7 @@ export const STRINGS = {
     "blendTest.basis":
       "Tested on {days} days, {from} to {to}. The first {warmup} days with data were left out as warm-up: the weights need at least {min} days of scores.",
     "blendTest.caveats":
-      "Caution: the history is still short (a few weeks of one autumn), so the intervals are wide and the result may change. The interval comes from resampling days and ignores that consecutive days are alike, so it is rather too narrow. At D+N only scores up to the day the forecast was issued are used. The “best model in hindsight” is the model that was best in each okres over the whole test period; nobody could have known it in advance, it is an upper bound for picking one model.",
+      "Caution: the history is still short (a few weeks of one autumn), so the intervals are wide and the result may change. The interval comes from resampling blocks of 4 consecutive days, because neighbouring days are alike. At D+N only scores up to the day the forecast was issued are used. The “best model in hindsight” is the model that was best in each okres over the whole test period; nobody could have known it in advance, it is an upper bound for picking one model.",
     "blendTest.chartTitle": "MAE by lead day: {variable}",
     "blendTest.series.combined": "Our forecast",
     "blendTest.series.best_cz_oos": "Best model for all of Czechia at the time",
@@ -1857,7 +1871,7 @@ export const STRINGS = {
       "Bands of hours for Czechia and the kraje only: of the about 100 stations where we verify the single runs, most okresy have one or none. The okresy are under D+1 to D+5.",
     "compare.intervals": "How sure is the ranking?",
     "compare.intervalsNote":
-      "How much larger each model's error (MAE) is than the best one's, with a 95 % bootstrap interval over days. A grey interval reaches zero: the model is not shown to be worse than the best. Red: it is significantly worse.",
+      "How much larger each model's error (MAE) is than the best one's, with a 95 % bootstrap interval over blocks of 4 consecutive days. A grey interval reaches zero: the model is not shown to be worse than the best. Red: it is significantly worse.",
     "compare.byLead": "Error by lead time",
     "compare.byLeadNote": "Each model's MAE at D+1 to D+5 in this region; dashed: the mean of all models. The short-range models (ICON-D2, AROME, ALADIN) end after 1–2 days.",
     "compare.leadHours": "Error by hours ahead (run-based)",
@@ -1924,7 +1938,7 @@ export const STRINGS = {
     "compare.ranking": "Ranking for Czechia",
     "region.cz": "Czechia",
     "compare.rankingNote":
-      'Mean absolute error (MAE), bias (forecast minus observed) and RMSE over the stations and days every model covers. "≈" marks models whose MAE difference from the best is not significant (95 % bootstrap interval over days). The mean of all models is a baseline, not ranked; "vs mean" is how much smaller (in %) the model\'s error is than that mean\'s. For precipitation, ETS for days with ≥ 0.1, ≥ 1 and ≥ 10 mm, POD and FAR at the threshold in their heading. Stations in brackets: borrowed from neighbouring okresy. A model with scores on fewer than 80 % of the period\'s days (e.g. newly added) is not ranked yet and does not shorten the others\' comparison; it is listed last with its error over its own days.',
+      'Mean absolute error (MAE), bias (forecast minus observed) and RMSE over the stations and days every model covers. "≈" marks models whose MAE difference from the best is not significant (95 % interval from a bootstrap over blocks of 4 days, or the Diebold–Mariano test). The mean of all models is a baseline, not ranked; "vs mean" is how much smaller (in %) the model\'s error is than that mean\'s. For precipitation, ETS for days with ≥ 0.1, ≥ 1 and ≥ 10 mm, POD and FAR at the threshold in their heading. Stations in brackets: borrowed from neighbouring okresy. A model with scores on fewer than 80 % of the period\'s days (e.g. newly added) is not ranked yet and does not shorten the others\' comparison; it is listed last with its error over its own days.',
     "compare.bias": "Bias by elevation",
     "compare.biasNote": "Positive: the model forecasts too high, e.g. too warm in the mountains.",
     "compare.empty": "No scores for this choice yet.",

@@ -3,8 +3,8 @@ import { test } from "node:test";
 
 import {
   stationsIn,
-  NO_DATA, TOO_FEW, bestByRegion, fillExpression, modelColors, records,
-  regionColor, stationFeatures,
+  NO_CLEAR, NO_DATA, P_BEST_MIN, TOO_FEW, bestByRegion, fillExpression, modelColors, records,
+  regionColor, smallSampleCodes, stationFeatures,
 } from "./data.js";
 
 
@@ -43,7 +43,7 @@ test("best model per region at one lead day, with ties but without the blend", (
   const best = bestByRegion(records(DOC), 1);
   assert.deepEqual(best.get("CZ020"), {
     name: "Středočeský kraj", model: "icon", mae: 1.2, tied: ["ifs"], enough: true, ranked: true,
-    borrowed: 0,
+    borrowed: 0, pBest: null, clear: true, small: false,
   });
   assert.equal(bestByRegion(records(DOC), 2).get("CZ020").model, "ifs");
 });
@@ -113,4 +113,22 @@ test("station pages of an okres: all its stations by name, also by kraj", () => 
   assert.equal(stationsIn(table, "CZ042").length, 4);
   assert.deepEqual(stationsIn(table, "CZ0999"), []);
   assert.deepEqual(stationsIn(null, "CZ0423"), []);
+});
+
+test("no clear winner below P_BEST_MIN, and the small-sample regions", () => {
+  const rows = [
+    { region: "a", region_name: "A", lead_day: 1, model: "icon", mae: 1, rank: 1, enough_stations: true, p_best: 0.9 },
+    { region: "b", region_name: "B", lead_day: 1, model: "icon", mae: 1, rank: 1, enough_stations: true, p_best: 0.45, small_sample: true },
+    { region: "b", region_name: "B", lead_day: 1, model: "ifs", mae: 1.01, rank: 2, enough_stations: true, p_best: 0.55, tied_with_best: true },
+  ];
+  const colors = modelColors(MODELS);
+  const best = bestByRegion(rows, 1);
+  assert.equal(P_BEST_MIN, 0.6);
+  assert.deepEqual([best.get("a").clear, best.get("a").pBest], [true, 0.9]);
+  assert.equal(regionColor(best.get("a"), colors), colors.icon);
+  // the rank-1 model leads on MAE but is best in fewer than 60 % of the resamples
+  assert.deepEqual([best.get("b").model, best.get("b").clear, best.get("b").small], ["icon", false, true]);
+  assert.equal(regionColor(best.get("b"), colors), NO_CLEAR);
+  assert.equal(regionColor(bestByRegion(rows, 1, 0.4).get("b"), colors), colors.icon);
+  assert.deepEqual(smallSampleCodes(best), ["b"]);
 });

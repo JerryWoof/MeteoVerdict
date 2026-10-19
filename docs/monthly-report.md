@@ -16,8 +16,8 @@ mvd monthly-report 2026-09                   # → site/reports/2026-09.json and
   window of their own: `aggregate.aggregate` and `ranking.rank` run on those days only,
   at the levels Czechia and okres. So the report uses the **same fair sample** (the
   station-days every compared model has), the **80 % coverage rule** and the **tie rule**
-  (days resampled 1,000 times, "≈" when the 95 % interval of the difference to the best
-  includes zero) as the web pages. It refuses a month with fewer than 20 scored days.
+  (blocks of 4 consecutive days resampled 1,000 times, "≈" unless the 95 % interval of
+  the difference to the best excludes zero and the Diebold–Mariano test agrees) as the web pages. It refuses a month with fewer than 20 scored days.
 - Variables: temperature at 2 m, wind at 10 m, precipitation (the 06–06 UTC total, which
   also covers the manual gauges); leads D+1 … D+5.
 - Per variable and lead, for Czechia: every model's MAE and bias, who is best, who is

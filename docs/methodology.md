@@ -187,9 +187,10 @@ runs) and `all` (every run), from the same single runs and observations as `lead
   model's mean error at the same station, band and valid hour of day over the 30 valid
   dates before the run's day (every one observed before the run started; at least 10),
   is subtracted; only where every model of the set has such a bias (`n_bc`).
-- **Intervals.** As for D+N ([ranking](#ranking-and-uncertainty)): whole days of runs
-  are resampled 1000 times; `tied` (the page's "≈") when the 95 % interval of a model's
-  MAE minus the best one's contains 0.
+- **Intervals.** As for D+N ([ranking](#ranking-and-uncertainty)): blocks of 4
+  consecutive days of runs are resampled 1000 times; `tied` (the page's "≈") unless the
+  95 % interval of a model's MAE minus the best one's excludes 0 and the Diebold–Mariano
+  test agrees (p < 0.05).
 - **Levels.** Czechia, the station kinds (main WMO stations, 23 of the ~100, vs the
   other 77) and kraje with at least 3 of the ~100 stations (all but Praha, which has 1).
   **No okres level:** with ~100 stations for 76 okresy most okresy have one station or
@@ -309,6 +310,29 @@ are not independent.
   borrows the nearest stations of its neighbours (at most 30 km beyond its border) up to
   3, and the map says how many. So every okres has a ranking, but for a third of them it
   partly describes the surrounding area.
+- **High sites are not in any okres.** A station more than **300 m above the median
+  elevation of its okres's stations** (all stations of the station table in that okres)
+  is a *high site* (`high_site` in `stations.json`): 47 of 782 stations in October 2026,
+  the summits (Milešovka, Lysá hora, Praděd, Sněžka, Klínovec, Kleť, …) and a few
+  ridge and plateau stations (Protivanov, Potštát). It is left out of its own okres and
+  never borrowed by another. Why: an okres ranking is read as "which model to use where
+  people live", and a summit is another climate. 300 m is about 2 °C of temperature at
+  the usual lapse rate, more than the models differ by, and the same margin the frost
+  and gust corrections use for "not representative of the okres". Before, Milešovka
+  (830 m, 620 m above Litoměřice's median) had 35 % of Litoměřice's D+1 pairs but 40 % of
+  its temperature error and 70 % of its wind error (August–October 2026), so it decided
+  the okres's wind ranking; leaving the high sites out changed the D+1/D+2 winner in 80
+  of 770 okres rankings of the 90-day window, most in Litoměřice, Jeseník, Šumperk and
+  Frýdek-Místek. The high sites stay visible: each is ranked on its own (station level;
+  the okres panel lists it as "high above the okres, scored on its own"), all of them
+  together in the level `high_sites` (region `high_sites`), and they remain in the kraj,
+  elevation, network and Czechia levels, which describe whole areas including their
+  mountains. The median rather than the okres's lowest point or a fixed elevation keeps
+  mountain okresy (Prachatice, Trutnov, Klatovy) ranked on their own typical stations:
+  Churáňov (1118 m) is 326 m above Prachatice's median (792 m) and out, while Kvilda
+  (1059 m) and Kubova Huť (997 m) stay in. Our forecast's temperature and wind regression
+  still trains on all pool stations including the high sites (`mos.pools`), as it was
+  tested; its model weights follow the okres scores and so no longer include them.
 - Windows: the last 90 days, the current season, all time, and each season over all
   years (all winters, springs, summers, autumns). "All time" starts with the oldest day
   scored so far and grows as the backfill fills in history back to January 2024 (ALADIN
@@ -325,7 +349,7 @@ number are open sites. All models over-forecast wind at the climate stations, th
 that keep more wind near the ground (ALADIN, AROME) most, so the station mix decides
 part of the wind ranking. The level `network` aggregates and ranks every variable
 separately for `main` (WIGOS id `0-20000-0-<WMO>`) and `other` (all other stations),
-Czechia only, with the same fair station-days and day bootstrap as the other levels; the
+Czechia only, with the same fair station-days and block bootstrap as the other levels; the
 comparison page offers "Stations: all / main (WMO) only / other (climate)" for the
 ranking table and the two charts below it. (`mvd station-check` compares these subsets in
 more detail, [station-check.md](station-check.md).)
@@ -373,14 +397,61 @@ few, so those scores are noisy. In autumn 2026 ALADIN is no better by ETS at 1 m
 
 ## Ranking and uncertainty
 
-- Models are ordered by MAE. To tell real differences from luck, whole **days** are
-  resampled 1,000 times (all stations of a day together, because errors on one day are
-  correlated across the country) and the MAE difference to the best model gets a 95 %
-  interval.
-- A model whose interval includes zero is **tied with the best** ("≈" on the comparison page);
-  the best model is a **clear winner** only if nobody is tied.
+- Models are ordered by MAE. To tell real differences from luck the days are resampled
+  1,000 times with all stations of a day together (errors on one day are correlated
+  across the country) and the MAE difference to the best model gets a 95 % interval.
+- **Blocks of 4 days** (a circular moving-block bootstrap, `ranking.BLOCK_DAYS`): the
+  resampling draws runs of 4 consecutive scored days, not single days, because the
+  difference between two models persists from one day to the next (a weather regime
+  favours one model for a few days). Measured on the 90 days to 18 October 2026, D+1
+  and D+3, between each okres's best model and the next three: the median lag-1
+  correlation of the daily MAE difference is 0.11 (okres) to 0.21 (Czechia) for
+  temperature and 0.16 to 0.28 for wind, 0.07 to 0.14 at lag 2 for wind, and about 0
+  from lag 3 on; for precipitation about 0 at every lag. Resampling single days ignored
+  this, so the intervals were too narrow. 4 days covers the dependence with a day to
+  spare; longer blocks would leave too few of them in a short window (a 30-day sample
+  has 7–8). With the blocks, the intervals for temperature and wind are 14–17 % wider
+  in the median (up to about 45 % for the 10 % most persistent okres comparisons);
+  precipitation's are about the same. Circular means a block may run from the last day
+  back to the first, so the first and last days are drawn as often as the others; in
+  the seasons over all years a block can cross from one year's season to the next.
+- **Diebold–Mariano test** (`dm_p`): for every model against the best one, the daily
+  loss differential (scaled so its mean is the pooled MAE difference) is tested for a
+  mean of 0 with a Newey–West (HAC) variance over 3 lags (Bartlett weights, the same
+  dependence the 4-day blocks cover), the Harvey–Leybourne–Newbold small-sample factor
+  and a normal p-value. Its HAC variance and the block bootstrap answer the same
+  question in two ways; a model counts as worse only if both agree.
+- A model is **tied with the best** ("≈" on the comparison page and in the README
+  table) unless its interval excludes zero **and** `dm_p` < 0.05; the best model is a
+  **clear winner** only if nobody is tied. On the 90 days to 18 October 2026 the new
+  rule turned 85 clear okres winners (D+1, D+2) into 65, and the Diebold–Mariano test
+  kept 500 of 10,164 okres comparisons tied whose interval alone excluded zero.
+- **Probability of being best** (`p_best`): the share of the 1,000 resamples in which a
+  model has the lowest MAE of the ranked models (a resample where models share the
+  lowest MAE counts for each in part). One winner per okres hides how sure that is;
+  `p_best` says it. The **map** colours an okres with its best model only if that
+  model's `p_best` is at least **0.6** (`ranking.P_BEST_MIN`, `p_best_min` in
+  `meta.json`), and leaves it white, **"no clear winner"**, otherwise. 0.6 means the
+  leader is best more often than all the others together, with a margin: with 1,000
+  resamples the share itself is uncertain by about ±3 percentage points, and with 77
+  okresy, five variables and five lead days some leads of 0.5 or 0.55 are chance. With
+  the 90 days to 18 October 2026 (D+1), 58 of 77 okresy have a clear winner for
+  temperature and 62 for wind, but only 10 for daily precipitation, 22 for the 06–06
+  total and 31 for the daily maximum: for rain the data does not yet single out a
+  model in most okresy, and the map now shows that. The two ALADINs are near-duplicates
+  and split the resamples between them, so where ALADIN leads the map is often white;
+  the okres panel names the closest model and its `p_best`.
+- **Small sample** (`small_sample`): fewer than **30 scored days** in the comparison
+  (`ranking.SMALL_SAMPLE_DAYS`, the same limit at which the okres panel and the
+  lead-band ranking call a result *preliminary*), i.e. fewer than 8 blocks. The map
+  outlines such okresy dashed. The 80 % coverage rule (above) already keeps models with
+  short records out; this flag is about the whole comparison resting on a short window
+  (the current season in its first weeks, a season over all years with little history).
 - Only the compared models (at least 80 % of the window's days, see above) are ranked;
   a model with a shorter record is shown after the mean of all models without a rank.
+- The blend test, the lead-band ranking (`mvd leads`), `mvd station-check` and the
+  monthly report use the same block bootstrap and, where they declare ties, the same
+  rule.
 
 ## Baseline: the mean of all models
 
@@ -609,8 +680,8 @@ combination on past days **out of sample**:
     ČHMÚ ALADIN CZ 1 km first on the page).
 - Czechia sums the 77 okresy; a series counts on a day only if it is compared in every
   okres tested that day. 95 % intervals of the MAE differences (ours minus the
-  competitor) come from the same whole-day bootstrap as the ranking
-  (`ranking.bootstrap_group`). **Warm-up:** an okres is tested only after 14 scored
+  competitor) come from the same block bootstrap as the ranking
+  (`ranking.bootstrap_group`, blocks of 4 consecutive days). **Warm-up:** an okres is tested only after 14 scored
   training days.
 
 On 16 October 2026 the published test briefly covered only 5 days (21–25 September):
@@ -901,7 +972,9 @@ the outlook shows the plain mean until that check on the runs turns it on.
   temperatures are about 0.1-0.3 °C easier and the winners for night temperature and
   wind change, because the main network is better exposed and includes summits where
   every model forecasts far too little wind. Stations whose
-  errors stand out (summits, frost hollows) are explained by their siting and stay in.
+  errors stand out are explained by their siting and stay in the data; the summits and
+  other high sites are scored on their own and not in the okresy (see
+  [fair comparison](#fair-comparison)), frost hollows stay in their okres.
   Manual gauges in a month ČHMÚ has not completed can report a total after missing
   days (probably several days' rain), which makes the models look too dry there.
   Details: [station-check.md](station-check.md) (August-September 2026, 52 days).
@@ -946,9 +1019,12 @@ the outlook shows the plain mean until that check on the runs turns it on.
 - **Model changes.** Models are upgraded over time, and long windows mix versions.
 - **The mean of all models** has different members by lead day (only the global models
   reach D+5) and over time (archive starts).
-- **Statistics.** The bootstrap ignores correlation between consecutive days, so
-  intervals are slightly too narrow; and with many regions, variables and lead days
-  some "clear winners" will be chance. Small regions and short windows are noisy, and
+- **Statistics.** The block bootstrap and the Diebold–Mariano test allow for
+  correlation over a few days, not for slower changes (a whole season that suits one
+  model), and the Diebold–Mariano p-value uses the normal distribution, which is a
+  little too confident under 30 days (flagged as a small sample). With many regions,
+  variables and lead days and no correction for multiple comparisons, some "clear
+  winners" and some `p_best` ≥ 0.6 will still be chance. Small regions and short windows are noisy, and
   the 20 mm and 30 °C scores rest on few events.
 - **Wind.** We use ČHMÚ's element `F` at the full hour; how ČHMÚ averages it is not
   documented. Sensor heights are not corrected.
