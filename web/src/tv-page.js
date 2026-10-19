@@ -1,4 +1,4 @@
-import { Map as MapLibreMap, Marker, NavigationControl, setWorkerUrl } from "maplibre-gl";
+import { Map as MapLibreMap, Marker, Popup, NavigationControl, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
@@ -16,7 +16,7 @@ import { renderScale } from "./palette.js";
 import { BASEMAP_ATTRIBUTION, GLYPHS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
 import { fillPicker, issuedText } from "./picker.js";
 import {
-  COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, currentPart, dayLabel, displayName, ease,
+  COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, colorFor, currentPart, dayLabel, displayName, ease,
   iconName, labelFor, lerpRow, mixColor, okresColours, parseOutlook, parseView,
   placeMarkers, playSteps, rampKey, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary,
   today, viewHash, measuredRedirect,
@@ -25,7 +25,9 @@ import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 import { AI_FILES, aiPath, aiText } from "./ai-source.js";
 import { renderAiExtras } from "./ai-extras.js";
 import { renderAiVerify } from "./ai-verify-view.js";
-import { TEMP100M_JSON, parseTemp100m, temp100mGradient, temp100mTimeText } from "./ai-temp100m.js";
+import {
+  TEMP100M_INDEX, TEMP100M_JSON, parseTemp100m, parseTemp100mIndex, temp100mGradient, temp100mLoader, temp100mTimeText, temp100mTipText,
+} from "./ai-temp100m.js";
 
 setWorkerUrl(workerUrl);
 // the AI forecast tab (ai.html) is this page on MeteoVerdict AI's forecast: its own
@@ -125,8 +127,12 @@ let mapReady = false; // the selector works once the map has its layers
 
 // the AI tab: MeteoVerdict AI's temperature at 100 m from the terrain (ai-temp100m.js), one
 // more choice of the map colour, drawn over the okres colours. Not remembered (not in the URL).
-let temp100m = null; // parseTemp100m of its file, null without one
+let temp100m = null; // { index } (the grayscale series) or { single } (the old coloured file), null without
+let temp100mLoad = null; // temp100mLoader(temp100m, ...)
 let temp100mOn = false;
+let temp100mMap = null; // the shown selection's map (loaded), null when there is none
+let temp100mToken = 0;
+let temp100mTip = null; // the hover popup
 
 /** What the map draws: the chosen model's view, or our combination. */
 const shownView = () => (mapModel !== COMBINED && mapView ? mapView : outlook);
@@ -244,13 +250,21 @@ function renderShow() {
 }
 
 function renderLegend() {
+  if (temp100mOn && temp100m.index) {
+    // the okres fills' own temperature ramp
+    const box = document.getElementById("scale");
+    renderScale(box, "temperature", t("ai.temp100m.scaleSeries"));
+    if (!temp100mMap) box.append(element("div", t("ai.temp100m.none"), "scale-note"));
+    return;
+  }
   if (temp100mOn) {
     const box = document.getElementById("scale");
+    const single = temp100m.single;
     const bar = element("div", null, "bar");
-    bar.style.background = temp100mGradient(temp100m);
-    const { min, max, unit } = temp100m;
+    bar.style.background = temp100mGradient(single);
+    const { min, max, unit } = single;
     box.replaceChildren(
-      element("div", t("ai.temp100m.scale", { time: temp100mTimeText(temp100m.time, Date.now(), language, t) }), "scale-title"),
+      element("div", t("ai.temp100m.scale", { time: temp100mTimeText(single.time, Date.now(), language, t) }), "scale-title"),
       bar,
       element("div", `${min} ${unit} … ${max} ${unit}`, "scale-ends"),
     );
@@ -932,16 +946,54 @@ function addLayers() {
   map.on("mouseenter", "okresy-fill", () => (map.getCanvas().style.cursor = "pointer"));
   map.on("mouseleave", "okresy-fill", () => (map.getCanvas().style.cursor = ""));
   map.on("moveend", declutter);
+  if (AI) {
+    map.on("mousemove", showTemp100mTip);
+    // a tap shows it too and keeps it (the panel opening moves the map and fires a mouseleave)
+    let tapped = 0;
+    map.on("click", (event) => {
+      tapped = Date.now();
+      showTemp100mTip(event);
+    });
+    map.getCanvas().addEventListener("mouseleave", () => {
+      if (Date.now() - tapped > 1000) temp100mTip?.remove();
+    });
+  }
 }
 
 /** The AI tab's 100 m image over the okres colours (its source added when first chosen). */
-function showTemp100m() {
-  if (!temp100mOn && !map.getLayer("temp100m")) return;
-  if (!map.getLayer("temp100m")) {
-    map.addSource("temp100m", { type: "image", url: temp100m.url, coordinates: temp100m.coordinates });
-    map.addLayer({ id: "temp100m", type: "raster", source: "temp100m", paint: { "raster-opacity": ["step", ["zoom"], 0.85, BASE_ZOOM, 0.6] } }, "okresy-line");
+async function showTemp100m() {
+  const token = ++temp100mToken;
+  if (!temp100mOn) {
+    temp100mMap = null;
+    temp100mTip?.remove();
+    if (map.getLayer("temp100m")) map.setLayoutProperty("temp100m", "visibility", "none");
+    return;
   }
-  map.setLayoutProperty("temp100m", "visibility", temp100mOn ? "visible" : "none");
+  // the map of the selected day and part, loaded once; none: the okres colours and a note
+  const loaded = await temp100mLoad.load(state.day, state.part);
+  if (token !== temp100mToken) return;
+  const hadMap = Boolean(temp100mMap);
+  temp100mMap = loaded;
+  if (loaded) {
+    const image = { url: loaded.url, coordinates: loaded.coordinates };
+    if (!map.getSource("temp100m")) map.addSource("temp100m", { type: "image", ...image });
+    else map.getSource("temp100m").updateImage(image);
+    if (!map.getLayer("temp100m")) {
+      map.addLayer({ id: "temp100m", type: "raster", source: "temp100m", paint: { "raster-opacity": ["step", ["zoom"], 0.85, BASE_ZOOM, 0.6] } }, "okresy-line");
+    }
+  }
+  if (map.getLayer("temp100m")) map.setLayoutProperty("temp100m", "visibility", loaded ? "visible" : "none");
+  if (!loaded) temp100mTip?.remove();
+  if (hadMap !== Boolean(loaded)) renderLegend();
+}
+
+/** The hover (and tap) tooltip: the value of the shown image under the pointer. */
+function showTemp100mTip(event) {
+  if (!temp100mOn || !temp100mMap) return;
+  const value = temp100mMap.at(event.lngLat.lng, event.lngLat.lat);
+  if (value == null) return temp100mTip?.remove();
+  temp100mTip ??= new Popup({ closeButton: false, closeOnClick: false, className: "temp-tip", offset: 12, anchor: "top-left", maxWidth: "none" });
+  temp100mTip.setLngLat(event.lngLat).setText(temp100mTipText(value, temp100mMap.time, language)).addTo(map);
 }
 
 // --- test: the obce (obce-map.js) ------------------------------------------------------
@@ -1031,9 +1083,15 @@ async function main() {
   // the AI tab: forecast vs measured, MeteoVerdict AI's scores and its experiments below the map
   if (AI) {
     // the temperature at 100 m: offered only with a valid file
-    fetchJson(TEMP100M_JSON).then((doc) => {
-      temp100m = parseTemp100m(doc);
-      if (temp100m) renderShow();
+    // the grayscale series; without its index the old single coloured file
+    fetchJson(TEMP100M_INDEX).then(async (doc) => {
+      const index = parseTemp100mIndex(doc);
+      const single = index ? null : parseTemp100m(await fetchJson(TEMP100M_JSON));
+      temp100m = index ? { index } : single ? { single } : null;
+      if (!temp100m) return;
+      temp100mLoad = temp100mLoader(temp100m, (v) => colorFor(v, "temperature"));
+      temp100mOn = true; // the default map colour while its files exist
+      update();
     });
     renderAiVerify(t, fetchJson, state.okres);
     renderAiExtras(t, fetchJson);
