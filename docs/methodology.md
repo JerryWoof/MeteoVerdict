@@ -251,8 +251,8 @@ the polytunnel. So the same single runs are also verified as **events** (`mvd fa
   and blocks that all of them have. AIFS has no gusts; 6-hourly output is not scored in
   3-hour blocks.
 - Hits, misses, false alarms and correct negatives give the **POD** ("caught 8 of 10
-  frosts"), the **FAR** ("3 of 10 warnings were false"), the CSI, the **ETS** (the CSI
-  corrected for chance hits; the page colours it) and the frequency bias (warnings per
+  frosts"), the **FAR** ("3 of 10 event forecasts were false"), the CSI, the **ETS** (the CSI
+  corrected for chance hits; the page colours it) and the frequency bias (event forecasts per
   event). With fewer than **20 observed events** in a bin the page warns that the numbers
   are mostly chance, which for −2 °C, 15 and 20 m/s and 5 mm will be the case for months.
 
@@ -708,7 +708,7 @@ the point's to the station's elevation by 0.65 °C/100 m (as Open-Meteo corrects
 elevation). Stations more than 300 m above the okres point (summits such as Milešovka)
 are left out of both: they are cold by height and say nothing about frost in the fields.
 From the okres minimum: `frost_probability` = Φ(−min / σ) with σ the error
-left in training (1.4–1.6 °C), `frost` (air-frost warning) when the minimum is ≤ 1 °C
+left in training (1.4–1.6 °C), `frost` (air-frost threshold flag) when the minimum is ≤ 1 °C
 (the best CSI in every test; ≤ 0 °C catches too few, ≤ 2 °C has a FAR of 0.5–0.7), and
 `ground_min`, the 5 cm minimum, = minimum − 5.0 + 1.5 · cloud + 0.35 · wind
 (`ground_frost` when ≤ 0 °C; ČHMÚ's `TPM` is on average 2.9 °C below `TMInoc`, 4.1 °C
@@ -718,7 +718,7 @@ workflow and writes `frost.json` to `data-latest`; without it the fields stay em
 **Validation** (with `meteoverdict.frost`; event = observed minimum ≤ 0 °C; POD / FAR
 / CSI; MAE in °C). D+N forecasts of 11 models at 238 stations, D+1–D+3:
 
-| Test | Forecast | MAE | bias | warn ≤ 0 °C | warn ≤ 1 °C |
+| Test | Forecast | MAE | bias | flag ≤ 0 °C | flag ≤ 1 °C |
 |---|---|---|---|---|---|
 | Train 1–20 Sep, test 21 Sep–4 Oct (9,966 station-nights × lead, 81 frost) | mean of the models | 2.42 | +1.76 | 0.00 / – / 0.00 | 0.00 / 1.00 / 0.00 |
 | | + per model (1.) | 2.03 | +0.26 | 0.00 / 1.00 / 0.00 | 0.00 / 1.00 / 0.00 |
@@ -867,13 +867,13 @@ day's, so their intercept over-forecasts every part but the windiest. The bootst
 `gust_part` (`src/meteoverdict/data/sun-cloud-gust.json`) is fitted on all 61 days
 (`a = 0.62`, `b = 0.93`).
 
-**Warning.** Of the 15 parts with an observed gust of at least 15 m/s, a forecast of
+**Threshold.** Of the 15 parts with an observed gust of at least 15 m/s, a forecast of
 at least 15 m/s caught 1 (plain mean: 1 hit, 1 false alarm; corrected: 1 hit, none),
-since a mean over models smooths the peaks. `gust_warning` therefore uses a lower
+since a mean over models smooths the peaks. `gust_over_threshold` therefore uses a lower
 threshold, **13.5 m/s** on the corrected gust: the best ETS among 12–15 m/s in steps of
 0.5 (POD 0.47, FAR 0.50, CSI 0.32, ETS 0.31, frequency bias 0.93). The plain mean
 reaches the same CSI at 14 m/s, so the correction improves the size of the gusts, not
-the warnings; with 15 events this is a small sample.
+the flagged parts; with 15 events this is a small sample.
 
 **On the single runs themselves** the check was thin at first: the API's runs had gusts
 only since the runs of 2026-10-15; since 2026-10-17 the runs from Open-Meteo's bucket

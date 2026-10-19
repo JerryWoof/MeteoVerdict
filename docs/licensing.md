@@ -89,3 +89,36 @@ below, and public data is the point of the project.
 7. **GitHub:** data files live in Release assets (≤ 2 GiB each), not in git history.
    The scheduled workflows are this project's data pipeline, which GitHub Actions
    allows.
+8. **No weather warnings.** Only ČHMÚ issues weather warnings (below). Our flags are
+   named and labelled as MeteoVerdict thresholds, never as warnings, and wherever one
+   is shown the page links ČHMÚ's official warnings.
+
+## Weather warnings (Act 262/2024 Sb.)
+
+Act No. 262/2024 Sb., on the public hydrometeorological service (*zákon o veřejné
+hydrometeorologické službě*, in force since 1 January 2025;
+[text](https://www.zakonyprolidi.cz/cs/2024-262), read 2026-10-19):
+
+- **§ 6:** ČHMÚ has the *exclusive right* to issue and cancel hydrometeorological
+  warnings (*výlučné oprávnění k vyhlašování nebo odvolávání hydrometeorologických
+  výstrah*) and publishes them online.
+- **§ 10:** it is an offence to publish or spread information that can give the
+  misleading impression of being such a warning or its cancellation. For a natural
+  person only if done intentionally (§ 10(1)); for a legal person or an entrepreneur
+  without that condition (§ 10(2)). Fine up to **100,000 Kč** (§ 10(3)), handled by the
+  Czech Environmental Inspectorate, **ČIŽP** (§ 10(4)).
+
+What the project does about it (since October 2026):
+
+- Threshold flags are named as thresholds: `gust_over_threshold` (corrected gust at
+  least 13.5 m/s), `frost`, `ground_frost`, `heavy_rain`. The former `gust_warning` is
+  kept for one API version as a deprecated alias with the same value (`outlook.json`,
+  `api/v1`), then removed.
+- The pages say "Gusts over 13.5 m/s (MeteoVerdict threshold, not an ČHMÚ warning)"
+  instead of "Watch for strong gusts", and next to every flag "Not an official ČHMÚ
+  warning; official warnings: chmi.cz" with a link to https://www.chmi.cz/. Every JSON
+  file of `api/v1` carries the same `notice`.
+- Scores of event forecasts (POD, FAR on the comparison page) speak of *event
+  forecasts* (*předpovědi jevu*), not warnings.
+
+This is our reading of the Act, not legal advice.

@@ -148,7 +148,7 @@ export function modelPeriods(parsed, model) {
       sunshine: e.s.length ? sum(e.s) / 3600 : null,
       symbol: modelSymbol(cloud, precipitation, tmean),
       gust: null,
-      gust_warning: null,
+      gust_over_threshold: null,
     });
   }
   return out;
@@ -202,7 +202,7 @@ export function parseModelParts(doc, outlook) {
         const d = dayIndex.get(day);
         const p = doc.parts.indexOf(part);
         const at = d == null || p < 0 ? null : d * doc.parts.length + p;
-        const row = { ...empty, rain_probability: null, gust: null, gust_warning: null, single: true, ...sunTimes };
+        const row = { ...empty, rain_probability: null, gust: null, gust_over_threshold: null, single: true, ...sunTimes };
         let any = false;
         for (const column of columns) {
           const v = at == null ? null : values?.[column]?.[at] ?? null;

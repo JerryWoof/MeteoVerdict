@@ -94,7 +94,7 @@ def test_okres_gusts_corrected_with_day_maximum_and_warning():
     assert night16["gust"][0] == pytest.approx(14.0)  # lead day 1: 12 + 2
     later = table.filter(pl.col("day") == date(2026, 10, 18), pl.col("part") == "morning")
     assert later["gust"][0] == pytest.approx(13.0)  # 12 + 1, station shifts cancel
-    assert later["gust_warning"][0] is False and night16["gust_warning"][0] is True
+    assert later["gust_over_threshold"][0] is False and night16["gust_over_threshold"][0] is True
     day = table.filter(pl.col("day") == date(2026, 10, 17), pl.col("part") == "day")
     parts17 = table.filter(pl.col("day") == date(2026, 10, 17), pl.col("part") != "day")
     assert day["gust"][0] == parts17["gust"].max()
@@ -227,7 +227,7 @@ def test_unreadable_runs_leave_the_outlook_gusts_empty(tmp_path):
     table = pl.DataFrame({"okres": ["CZ0100"], "day": [date(2026, 10, 17)], "part": ["morning"]})
     points = pl.DataFrame({"code": ["CZ0100"], "lat": [50.07], "lon": [14.47]})
     out = outlook.add_gusts(table, pl.scan_parquet(bad), points, PLAIN, NOW)
-    assert out["gust"].to_list() == [None] and out["gust_warning"].to_list() == [None]
+    assert out["gust"].to_list() == [None] and out["gust_over_threshold"].to_list() == [None]
 
 
 def test_a_gust_is_never_below_the_wind(monkeypatch):
@@ -245,7 +245,7 @@ def test_a_gust_is_never_below_the_wind(monkeypatch):
             "day": [date(2026, 10, 17)] * 2,
             "part": ["night", "morning"],
             "gust": [1.9, 12.0],
-            "gust_warning": [False, False],
+            "gust_over_threshold": [False, False],
         }
     )
     monkeypatch.setattr(gusts, "okres_gusts", lambda *args: values)
@@ -253,4 +253,4 @@ def test_a_gust_is_never_below_the_wind(monkeypatch):
     out = outlook.add_gusts(table, None, points, PLAIN, NOW)
     assert out["gust"].to_list() == [2.2, 14.0]
     # the raised gust reaches the warning
-    assert out["gust_warning"].to_list() == [False, True]
+    assert out["gust_over_threshold"].to_list() == [False, True]

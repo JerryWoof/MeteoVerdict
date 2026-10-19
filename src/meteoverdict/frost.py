@@ -26,9 +26,9 @@ mean station correction of the okres, the **coldest site** each station's own (m
 from the point's to the station's elevation with ``LAPSE``, as Open-Meteo does).
 
 From the corrected minimum: frost probability ``P = Φ(-min / sigma)`` (sigma: the error
-left in training), an **air-frost** warning at ``AIR_FROST_AT`` °C or below, and the
+left in training), an **air-frost** threshold flag at ``AIR_FROST_AT`` °C or below, and the
 **ground minimum** ``min + GROUND[0] + GROUND[1] * cloud + GROUND[2] * wind`` with a
-ground-frost warning at 0 °C or below.
+ground-frost threshold flag at 0 °C or below.
 """
 
 from __future__ import annotations
@@ -77,7 +77,7 @@ CLEAR_CALM_MIN_NIGHTS = 30
 GROUND = (-5.0, 1.5, 0.35)
 #: spread of the corrected minimum when it cannot be fitted (°C)
 SIGMA = 1.6
-#: warnings: air frost when the corrected minimum is at most this (best CSI), ground
+#: threshold flags: air frost when the corrected minimum is at most this (best CSI), ground
 #: frost when the ground minimum is at most this
 AIR_FROST_AT = 1.0
 GROUND_FROST_AT = 0.0
@@ -439,7 +439,7 @@ def point_nights(
 
 def okres_nights(nights: pl.DataFrame, cal: Calibration) -> pl.DataFrame:
     """Per okres and night (``point_nights``): the corrected okres minimum, the coldest
-    site, frost probability and the ground minimum with their warnings."""
+    site, frost probability and the ground minimum with their threshold flags."""
     corrected = _model_corrected(nights, cal)
     okres = corrected.group_by("okres", "night").agg(
         pl.col("corrected").mean().alias("model_only"),

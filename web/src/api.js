@@ -13,6 +13,13 @@ export const SITE = "https://jerrywoof.github.io/MeteoVerdict";
 export const DOCS = `${SITE}/data.html`;
 export const LICENCE = "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)";
 // the scores published per okres, and which weights of the combination belong to them
+// the threshold flags are ours: only ČHMÚ issues weather warnings (Act 262/2024 Sb.)
+export const NOTICE =
+  "Threshold flags (gust_over_threshold, frost, ground_frost, heavy_rain) are MeteoVerdict thresholds, not official ČHMÚ warnings; official warnings: https://www.chmi.cz/";
+export const DEPRECATED = {
+  gust_warning: "deprecated: the same value as gust_over_threshold; will be removed in the next API version",
+};
+
 export const SCORE_VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitation_daily", "precipitation_24h"];
 const WEIGHTS_OF = { temperature_2m: "temperature_2m", wind_speed_10m: "wind_speed_10m", precipitation_daily: "precipitation" };
 export const HOURLY = ["temperature_2m", "precipitation", "wind_speed_10m", "cloud_cover", "sunshine_duration"];
@@ -25,8 +32,9 @@ const PART_FIELDS = [
   // older outlook files): corrected night minimum, coldest site, probability, warnings
   "night_min", "coldest_site", "coldest_min", "frost_probability", "frost", "ground_min", "ground_frost",
   // gusts (from the newest single run, corrected; null beyond its end and in older
-  // outlook files): the strongest gust of the period in m/s and the strong-gust warning
-  "gust", "gust_warning",
+  // outlook files): the strongest gust of the period in m/s and whether it is over the
+  // threshold (gust_warning: the deprecated alias of gust_over_threshold, same value)
+  "gust", "gust_over_threshold", "gust_warning",
 ];
 
 const round = (v, digits) => (v == null ? null : Number(v.toFixed(digits)));
@@ -71,13 +79,21 @@ export function okresDoc({ okres, outlook, hourly, weightsDoc, scores, meta }) {
   const series = hourly?.okresy?.[okres.code];
   const parts = records(outlook)
     .filter((r) => r.okres === okres.code)
-    .map((r) => Object.fromEntries(PART_FIELDS.map((k) => [k, r[k] ?? null])));
+    .map((r) => {
+      const part = Object.fromEntries(PART_FIELDS.map((k) => [k, r[k] ?? null]));
+      // outlook files from before the rename only have the old name: same value in both
+      part.gust_over_threshold = r.gust_over_threshold ?? r.gust_warning ?? null;
+      part.gust_warning = part.gust_over_threshold;
+      return part;
+    });
   const window = meta?.windows?.["90d"] ?? null;
   return {
     api: `MeteoVerdict open data ${VERSION}`,
     docs: DOCS,
     licence: LICENCE,
     attribution: meta?.attribution ?? null,
+    notice: NOTICE,
+    deprecated: DEPRECATED,
     okres: { code: okres.code, name: okres.name, lat: okres.lat, lon: okres.lon },
     forecast: {
       generated: hourly?.generated ?? outlook?.generated ?? null,
@@ -114,6 +130,7 @@ export function indexDoc(okresy, meta, generated) {
     docs: DOCS,
     licence: LICENCE,
     attribution: meta?.attribution ?? null,
+    notice: NOTICE,
     generated,
     files: {
       okres_json: `${SITE}/api/${VERSION}/okresy/{code}.json`,

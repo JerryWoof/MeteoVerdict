@@ -22,7 +22,8 @@ model has it; about 10-16 hours old):
    coefficients of ``gust`` make part-of-day maxima worse: docs/methodology.md). Applied
    only while its out-of-sample check beats the plain mean (``apply``).
 4. **Okres**: the mean over its stations; the whole day the largest of its four parts.
-   ``gust_warning`` when the corrected gust is at least ``WARNING_AT``.
+   ``gust_over_threshold`` when the corrected gust is at least ``GUST_THRESHOLD`` (a
+   MeteoVerdict threshold, not an official ČHMÚ warning).
 
 The nightly fit pairs the same station parts with ČHMÚ gusts (hourly maxima of the
 10-minute ``Fmax`` in ``obs``, at least ``MIN_OBS_HOURS`` hours of the part).
@@ -57,11 +58,11 @@ MIN_RUN_AGE_H = 10
 FALLBACK_KM = 30.0
 #: observed part maximum: at least this many hourly gusts of the part
 MIN_OBS_HOURS = 5
-#: ``gust_warning``: the corrected part maximum at least this (m/s). Out of sample
+#: ``gust_over_threshold``: the corrected part maximum at least this (m/s). Out of sample
 #: (2026-09-06..10-14, 8 lowland stations, D+1) it gave the best ETS for observed gusts
 #: of at least ``EVENT_AT`` among 12-15 m/s in steps of 0.5: 0.31, POD 0.47, FAR 0.50,
 #: frequency bias 0.93 (15 events only; docs/methodology.md#gusts-in-the-outlook)
-WARNING_AT = 13.5
+GUST_THRESHOLD = 13.5
 EVENT_AT = 15.0
 MAX_LEAD = sun_cloud_gust.MAX_LEAD
 
@@ -70,7 +71,7 @@ OKRES_SCHEMA = {
     "day": pl.Date,
     "part": pl.String,
     "gust": pl.Float64,
-    "gust_warning": pl.Boolean,
+    "gust_over_threshold": pl.Boolean,
 }
 
 
@@ -239,7 +240,7 @@ def okres_gusts(
     doc: dict,
     now: datetime,
 ) -> pl.DataFrame:
-    """``okres``, ``day``, ``part`` (and "day"), ``gust``, ``gust_warning`` from the
+    """``okres``, ``day``, ``part`` (and "day"), ``gust``, ``gust_over_threshold`` from the
     newest run (step 4); empty without a usable run. ``mapping``: ``okres_stations``."""
     empty = pl.DataFrame(schema=OKRES_SCHEMA)
     if runs is None or mapping.is_empty():
@@ -264,7 +265,7 @@ def okres_gusts(
     )
     return (
         pl.concat([okres, days])
-        .with_columns((pl.col("gust") >= WARNING_AT).alias("gust_warning"))
+        .with_columns((pl.col("gust") >= GUST_THRESHOLD).alias("gust_over_threshold"))
         .cast(OKRES_SCHEMA)
         .sort("okres", "day", "part")
     )

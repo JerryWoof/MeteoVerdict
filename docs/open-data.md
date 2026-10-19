@@ -30,20 +30,26 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
   [data-sources.md](data-sources.md#outlook-mvd-outlook-roadmap-66)), and `sunrise`,
   `sunset` (Prague time, `"07:21"`, at the okres point, the same on every row of a day),
   `heavy_rain_probability` (calibrated chance of at least 5 mm in the period) and
-  `heavy_rain` (true when it is high enough to warn); both `null` while there is no
+  `heavy_rain` (true when it is high enough to flag); both `null` while there is no
   rain calibration ([methodology.md](methodology.md#probability-of-precipitation-and-heavy-rain-meteoverdictrain_calibration)).
   Frost, on the `night` and `day` rows of the date a night (18–06 UTC) ends and `null`
   elsewhere or when not available: `night_min` (corrected night minimum at 2 m, °C),
   `coldest_site` and `coldest_min` (the okres's most frost-prone ČHMÚ station and its
   corrected minimum), `frost_probability` (0–1, minimum ≤ 0 °C), `frost` (air-frost
-  warning, `night_min` ≤ 1 °C), `ground_min` (estimated minimum 5 cm above the ground)
+  threshold flag, `night_min` ≤ 1 °C), `ground_min` (estimated minimum 5 cm above the ground)
   and `ground_frost` (`ground_min` ≤ 0 °C); [methodology.md](methodology.md#frost-night-minimum-frost-and-ground-frost).
   Gusts, on every row the newest single model run covers (about the next 4–5 days,
   `null` beyond it and in files from before 2026-10-16): `gust` (the strongest gust of
   the period, m/s: each model's largest hourly gust at the okres's lowland ČHMÚ
   stations, mean over the models, corrected against ČHMÚ gust observations) and
-  `gust_warning` (true when `gust` ≥ 13.5 m/s, the level that best caught observed
-  gusts of 15 m/s and more); [methodology.md](methodology.md#gusts-in-the-outlook).
+  `gust_over_threshold` (true when `gust` ≥ 13.5 m/s, the level that best caught
+  observed gusts of 15 m/s and more); [methodology.md](methodology.md#gusts-in-the-outlook).
+  `gust_warning` is a **deprecated alias** of `gust_over_threshold` (the same value)
+  and will be removed in the next API version.
+  `gust_over_threshold`, `frost`, `ground_frost` and `heavy_rain` are MeteoVerdict
+  thresholds, **not official warnings**: only ČHMÚ issues those
+  ([chmi.cz](https://www.chmi.cz/); [licensing.md](licensing.md#weather-warnings-act-2622024-sb)).
+  Every file repeats this in its top-level `notice`.
 - `models.variables.<variable>` for `temperature_2m`, `wind_speed_10m`,
   `precipitation_daily` and `precipitation_24h`: `stations`, `borrowed`, `days`, and
   `lead_days."1"…"5"`: the models in rank order with `rank`, `mae`, `bias`, `rmse`,
