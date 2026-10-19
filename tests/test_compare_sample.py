@@ -50,3 +50,30 @@ def test_versus_outlook():
         and ai["vs_outlook"]["p"] < 0.05
     )
     assert next(s for s in e["series"] if s["id"] == "combined")["vs_outlook"] is None
+
+
+def test_same_okresy_keeps_the_candidate_in_the_sum():
+    import polars as pl
+
+    rows = []
+    for region in ("A", "B", "C"):
+        for date in (1, 2):
+            for model in ("m1", "combined", "ai") if region != "C" else ("m1", "combined"):
+                rows.append((region, "temperature_2m", 1, date, model, 10.0, 10, 2))
+    days = pl.DataFrame(
+        rows,
+        schema=["region", "variable", "lead_day", "date", "model", "sum_abs_err", "n", "stations"],
+        orient="row",
+    )
+    wide = compare_sample.same_okresy(days, {"ai"})
+    assert set(wide["region"]) == {"A", "B"} and wide["model"].n_unique() == 3
+    other = days.with_columns(pl.lit("precipitation_daily").alias("variable")).filter(
+        pl.col("model") != "ai"
+    )
+    assert (
+        compare_sample.same_okresy(pl.concat([days, other]), {"ai"})
+        .filter(pl.col("variable") == "precipitation_daily")["region"]
+        .n_unique()
+        == 3
+    )
+    assert compare_sample.same_okresy(days, set()).height == days.height

@@ -149,7 +149,8 @@ export async function setUpAiCompare(t, names, language) {
     document.getElementById("aic-sample-note").textContent = t("aic.sampleNote", {
       days: entry.days, hours: entry.hours, stations: entry.stations ?? "?", from: entry.dates[0], to: entry.dates[1],
       block: valIndex?.block_days ?? 4,
-    }) + (entry.small_sample ? " " + t("aic.smallSample", { days: valIndex?.small_sample_days ?? 30 }) : "");
+    }) + (entry.small_sample ? " " + t("aic.smallSample", { days: valIndex?.small_sample_days ?? 30 }) : "")
+      + (entry.stations != null && entry.stations < 5 ? " " + t("aic.fewStations", { stations: entry.stations }) : "");
   }
 
   function renderTable(entry, unit) {
@@ -207,7 +208,7 @@ export async function setUpAiCompare(t, names, language) {
       color: { domain: names2, range: ids.map((id) => COLORS[kinds[id]]), legend: true },
       marks: [
         Plot.lineY(data, { x: "date", y: "mae", stroke: (r) => label(r.id, r.kind), strokeWidth: (r) => (r.kind === "model" ? 1.5 : 2.5), strokeDasharray: (r) => (r.kind === "mean" ? "5,4" : null), tip: true }),
-        Plot.dot(data, { x: "date", y: "mae", fill: (r) => label(r.id, r.kind), r: 2.5 }),
+        Plot.dot(data.filter((r) => r.mae != null), { x: "date", y: "mae", fill: (r) => label(r.id, r.kind), r: 2.5 }),
       ],
     }));
   }
