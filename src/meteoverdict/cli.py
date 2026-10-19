@@ -958,7 +958,7 @@ def blend_test_cmd(
     min_training_days: Annotated[
         int, typer.Option(help="Warm-up: scored training days needed before a day is tested.")
     ] = blendtest.MIN_TRAINING_DAYS,
-    resamples: Annotated[int, typer.Option(help="Bootstrap resamples of whole days.")] = 1000,
+    resamples: Annotated[int, typer.Option(help="Bootstrap resamples (blocks of days).")] = 1000,
     github_release: Annotated[
         bool,
         typer.Option(

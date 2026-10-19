@@ -2,7 +2,8 @@
 
 The table is built from ``data/aggregates.parquet``: one row per kraj (and Czechia),
 the best model per variable at one lead day over one window. Models that are not
-significantly worse than the best (``tied_with_best``) are listed with "≈".
+significantly worse than the best (``tied_with_best``: by the block bootstrap and the
+Diebold-Mariano test, ``meteoverdict.ranking``) are listed with "≈".
 """
 
 from __future__ import annotations
@@ -106,7 +107,7 @@ def leaderboard(
         f"Best model per region, forecasts for the next day (D+{lead_day}), "
         f"{WINDOW_TEXT.get(window, window)} ({span[0]} to {span[1]}). Mean absolute error in "
         'brackets (°C, m/s, mm/day); "≈" lists models whose difference from the best is '
-        "not significant (95 % bootstrap interval).",
+        "not significant (95 % block-bootstrap interval or Diebold-Mariano test).",
         "",
         "| Region | " + " | ".join(COLUMNS.values()) + " |",
         "|---|" + "---|" * len(COLUMNS),
