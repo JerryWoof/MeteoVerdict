@@ -3168,3 +3168,75 @@ footer .site-links {
 .info-page li {
   line-height: 1.55;
 }
+
+/* the monthly report: bars in plain HTML, so that they print */
+.report .bars {
+  list-style: none;
+  margin: 0.3rem 0 1rem;
+  padding: 0;
+}
+.report .bars li {
+  display: grid;
+  grid-template-columns: minmax(8rem, 14rem) 1fr auto;
+  gap: 0.2rem 0.6rem;
+  align-items: center;
+  padding: 0.12rem 0;
+  font-size: 0.9rem;
+}
+.report .bars .track {
+  display: block;
+  height: 0.8rem;
+  background: var(--surface, #eee);
+  border-radius: 3px;
+}
+.report .bars .bar {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: #9aa7b3;
+}
+.report .bars .tied .bar {
+  background: #5f87ad;
+}
+.report .bars .best .bar {
+  background: #1d4f7c;
+}
+.report .bars .best .name {
+  font-weight: 700;
+}
+.report .bars .value {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.report .sub {
+  color: var(--muted);
+}
+.report-chart h3 {
+  margin: 1.1rem 0 0;
+  font-size: 1rem;
+}
+@media (max-width: 600px) {
+  .report .bars li {
+    grid-template-columns: 1fr auto;
+  }
+  .report .bars .track {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+}
+@media print {
+  header,
+  footer .site-links,
+  .no-print {
+    display: none !important;
+  }
+  .report .bars .bar {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .report h2,
+  .report-chart {
+    break-inside: avoid;
+  }
+}
