@@ -3299,9 +3299,7 @@ footer .site-links {
   text-align: left;
   white-space: nowrap;
 }
-.aic-table td:first-child {
-  text-align: center;
-}
+
 .aic-table tr.leader td {
   background: #f6f2e8;
 }
@@ -3333,4 +3331,30 @@ footer .site-links {
   .aic-table td:nth-child(4) {
     white-space: nowrap;
   }
+}
+
+.aic-headline {
+  font-size: 1.15rem;
+}
+.aic-numbers {
+  display: flex;
+  gap: 2rem;
+  margin: 0.5rem 0 0.2rem;
+}
+.aic-numbers .big {
+  display: block;
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.aic-numbers .label {
+  font-size: 0.8rem;
+  color: #5b6770;
+}
+.aic-verdict .detail {
+  font-size: 0.85rem;
+  color: #3d4750;
+}
+.aic-table td:nth-child(3) {
+  white-space: normal;
 }
