@@ -1008,7 +1008,7 @@ export const STRINGS = {
     "home.mapTitle": "Který model předpovídá nejlépe",
     "site.about": "O projektu",
     "site.method": "Metodika",
-    "site.business": "Pro firmy",
+    "site.business": "Spolupráce",
     "site.contact": "Kontakt",
   },
   en: {
@@ -2015,7 +2015,7 @@ export const STRINGS = {
     "home.mapTitle": "Which model forecasts best",
     "site.about": "About",
     "site.method": "Methodology",
-    "site.business": "For business",
+    "site.business": "Collaboration",
     "site.contact": "Contact",
   },
 };

@@ -1,4 +1,4 @@
-// The text of the pages About, Methodology and For business, in Czech and English: lists of
+// The text of the pages About, Methodology and Collaboration, in Czech and English: lists of
 // blocks (see renderBlocks in info-page.js). Links: [text](url), bold: **text**.
 
 const REPO = "https://github.com/JerryWoof/MeteoVerdict";
@@ -23,7 +23,7 @@ export const PAGES = {
         ["h", "Otevřenost"],
         ["p", "Kód je otevřený a leží na [GitHubu]("+REPO+"). Skóre jsou pod licencí CC BY-SA 4.0, zdroje dat mají své licence (ČHMÚ a Open-Meteo CC BY 4.0), uvedené v patičce každé stránky. Součástí projektu je i to, že zveřejňujeme také experimenty, které nevyšly."],
         ["h", "Kontakt", "contact"],
-        ["p", "Chyby, nápady a dotazy nejlépe napište jako [issue na GitHubu]("+REPO+"/issues): vidí je i ostatní a nic se neztratí. Spolupráce a pilotní provoz pro firmy jsou popsané na stránce Pro firmy."],
+        ["p", "Chyby, nápady a dotazy nejlépe napište jako [issue na GitHubu]("+REPO+"/issues): vidí je i ostatní a nic se neztratí. O spolupráci je stránka [Spolupráce](collaboration.html)."],
       ],
     },
     en: {
@@ -44,7 +44,7 @@ export const PAGES = {
         ["h", "Openness"],
         ["p", "The code is open, on [GitHub]("+REPO+"). The scores are CC BY-SA 4.0; each source has its own licence (ČHMÚ and Open-Meteo CC BY 4.0), listed in every page's footer. We also publish the experiments that did not work."],
         ["h", "Contact", "contact"],
-        ["p", "Bugs, ideas and questions are best sent as an [issue on GitHub]("+REPO+"/issues): others can see them and nothing gets lost. Collaboration and pilots for companies are described on the For business page."],
+        ["p", "Bugs, ideas and questions are best sent as an [issue on GitHub]("+REPO+"/issues): others can see them and nothing gets lost. On collaboration see the [Collaboration](collaboration.html) page."],
       ],
     },
   },
@@ -132,83 +132,39 @@ export const PAGES = {
       ],
     },
   },
-  business: {
+  collaboration: {
     cs: {
-      title: "Pro firmy",
+      title: "Spolupráce",
       blocks: [
-        ["p", "MeteoVerdict měří, jak přesné jsou předpovědi počasí v Česku, po okresech a proti stanicím ČHMÚ. Tahle stránka říká, co z toho už dnes existuje, co zatím ne a jak to můžete vyzkoušet."],
-        ["h", "Co existuje dnes"],
+        ["p", "MeteoVerdict měří, jak přesné jsou předpovědi počasí v Česku, po okresech a proti stanicím ČHMÚ. Je to open-source projekt a web zůstává zdarma a nekomerční."],
+        ["h", "Co je k dispozici"],
         ["ul", [
-          "**Otevřené API:** předpověď a pořadí modelů pro všech 77 okresů jako JSON a CSV, zdarma, bez klíče a bez registrace, s povoleným CORS. Popis a příklady: [Data](data.html).",
-          "**Skóre přesnosti:** pro každý okres, veličinu (teplota, vítr, srážky) a horizont 1 až 5 dní průměrná chyba, systematická chyba a pořadí modelů včetně poctivých remíz „≈“. Postup: [Metodika](methodology.html).",
-          "**Předpověď pro 6 258 obcí:** zkušební; skládá se z modelů podle jejich přesnosti v okrese. Zatím není ověřená v místech bez stanic (viz Metodika).",
-          "**Časy aktualizace:** předpověď čtyřikrát denně, skóre jednou denně; plánovaný čas je na stránce [Data](data.html). Záruku dostupnosti ani doby aktualizace zatím nedáváme.",
-          "**[Měsíční report přesnosti](report.html):** kdo předpovídal nejlépe v uplynulém měsíci, s grafy, PDF a výhradami. První je za září 2026.",
+          "**[Otevřená data](data.html)**: předpověď a pořadí modelů pro 77 okresů jako JSON a CSV, bez klíče a registrace.",
+          "**[Skóre přesnosti](compare.html)** a **[měsíční report](report.html)**: který model měl pravdu a jak jistě. Postup je v [metodice](methodology.html).",
+          "**Předpověď pro 6 258 obcí** je zkušební a zatím není ověřená v místech bez stanic.",
+          "Žádná předpověď tu není oficiální a nic nezaručujeme (bez SLA).",
         ]],
-        ["h", "Co zatím neexistuje"],
-        ["ul", [
-          "SLA, API klíče a limity na míru, předpověď podle libovolné souřadnice, podpora.",
-          "Ověření, že předpověď pro obec platí i tam, kde není stanice.",
-          "Žádná předpověď není oficiální. Nepoužívejte ji jako jediný podklad pro rozhodnutí o bezpečnosti osob a majetku.",
-        ]],
-        ["h", "Pilotní nabídka"],
-        ["p", "Hledáme několik partnerů na krátký pilot. Domluvíme se na konkrétní otázce, spočítáme odpověď na vašich datech a lokalitách a řekneme vám poctivě, jestli to pomáhá. Podmínky se dohodnou individuálně."],
-        ["table", {
-          head: ["Obor", "Co vyzkoušíme"],
-          rows: [
-            ["Média", "Měsíční přehled „který model měl pravdu“ pro vaši rubriku počasí a ověření vaší předpovědi proti stanicím ČHMÚ."],
-            ["Energetika", "Přesnost modelů pro teplotu a vítr v okresech, kde máte výrobu nebo spotřebu, a skládaná předpověď pro ně."],
-            ["Pojišťovny", "Zpětné ověření: co modely předpovídaly před mrazem, vichřicí nebo silným deštěm a jak přesné bývají v daném okrese."],
-            ["Zemědělství", "Mráz a srážky po obcích a přesnost modelů pro váš okres."],
-          ],
-        }],
-        ["h", "Licence a podmínky"],
-        ["ul", [
-          "**Naše výstupy** (skóre, pořadí, otevřená data) jsou pod licencí **CC BY-SA 4.0**: uveďte MeteoVerdict a zdroje a odvozená data sdílejte stejně. **Kód** je pod licencí MIT.",
-          "**Zdroje:** měření ČHMÚ a modely DWD, ECMWF, KNMI, DMI a dalších jsou CC BY 4.0 (přes Open-Meteo), modely UK Met Office CC BY-SA 4.0. Úplný přehled: [licence na GitHubu]("+REPO+"/blob/main/docs/licensing.md).",
-          "**Důležité pro komerční použití:** předpovědi modelů bereme z Open-Meteo v jeho bezplatném, nekomerčním režimu. Jakékoli placené nebo komerční nasazení nad našimi daty proto musíme napřed licenčně vyjasnit (včetně komerčního předplatného Open-Meteo). Do té doby jsou piloty zkušební a nekomerční.",
-        ]],
-        ["h", "Kontakt"],
-        ["p", "Napište nám přes [Kontakt](about.html#contact) (issue na GitHubu) a uveďte obor a otázku, kterou chcete ověřit."],
+        ["h", "Open-source a licence"],
+        ["p", "Kód je pod licencí MIT na [GitHubu]("+REPO+"), skóre a otevřená data pod CC BY-SA 4.0. Zdroje (ČHMÚ, Open-Meteo a poskytovatelé modelů) mají své licence, přehled je v [dokumentaci]("+REPO+"/blob/main/docs/licensing.md)."],
+        ["h", "Jsme otevřeni spolupráci"],
+        ["p", "Rádi se spojíme s lidmi z médií, škol a výzkumu, obcemi, zemědělci i dalšími, kdo chtějí počasí ověřovat, vylepšovat metodiku nebo data využít. Napište nám přes [Kontakt](about.html#contact) (issue na GitHubu) a řekněte, o co jde."],
       ],
     },
     en: {
-      title: "For business",
+      title: "Collaboration",
       blocks: [
-        ["p", "MeteoVerdict measures how accurate weather forecasts in Czechia are, by okres and against ČHMÚ stations. This page says what exists today, what does not yet, and how you can try it."],
-        ["h", "What exists today"],
+        ["p", "MeteoVerdict measures how accurate weather forecasts in Czechia are, by okres and against ČHMÚ stations. It is an open-source project and the site stays free and non-commercial."],
+        ["h", "What is available"],
         ["ul", [
-          "**Open API:** the forecast and the model ranking for all 77 okresy as JSON and CSV, free, no key, no registration, CORS allowed. Description and examples: [Data](data.html).",
-          "**Accuracy scores:** for each okres, variable (temperature, wind, rain) and lead of 1 to 5 days, the mean error, the bias and the model ranking including honest ties “≈”. How: [Methodology](methodology.html).",
-          "**Forecast for 6,258 municipalities:** a test; combined from the models by their accuracy in the okres. Not yet checked at places without a station (see Methodology).",
-          "**Update times:** the forecast four times a day, the scores once a day; the scheduled time is on the [Data](data.html) page. We do not yet guarantee availability or timing.",
-          "**[Monthly accuracy report](report.html):** who forecast best in the past month, with charts, a PDF and caveats. The first covers September 2026.",
+          "**[Open data](data.html)**: the forecast and the model ranking for 77 okresy as JSON and CSV, no key or registration.",
+          "**[Accuracy scores](compare.html)** and the **[monthly report](report.html)**: which model was right and how surely. The method is in the [methodology](methodology.html).",
+          "**The forecast for 6,258 municipalities** is a test and not yet checked at places without a station.",
+          "No forecast here is official and we guarantee nothing (no SLA).",
         ]],
-        ["h", "What does not exist yet"],
-        ["ul", [
-          "An SLA, API keys and limits to order, a forecast for any coordinate, support.",
-          "A check that the municipality forecast holds where there is no station.",
-          "No forecast is official. Do not use it as the only basis for decisions about the safety of people or property.",
-        ]],
-        ["h", "Pilot offer"],
-        ["p", "We are looking for a few partners for a short pilot. We agree on a concrete question, compute the answer on your data and locations, and tell you honestly whether it helps. Terms are agreed individually."],
-        ["table", {
-          head: ["Sector", "What we would try"],
-          rows: [
-            ["Media", "A monthly “which model was right” summary for your weather section and a check of your forecast against ČHMÚ stations."],
-            ["Energy", "Model accuracy for temperature and wind in the okresy where you generate or consume, and the combined forecast for them."],
-            ["Insurers", "Back-checks: what the models forecast before a frost, a storm or heavy rain, and how accurate they usually are in that okres."],
-            ["Agriculture", "Frost and rain by municipality, and model accuracy for your okres."],
-          ],
-        }],
-        ["h", "Licences and terms"],
-        ["ul", [
-          "**Our outputs** (scores, rankings, open data) are **CC BY-SA 4.0**: credit MeteoVerdict and the sources and share derived data alike. The **code** is MIT.",
-          "**Sources:** ČHMÚ measurements and the models of DWD, ECMWF, KNMI, DMI and others are CC BY 4.0 (via Open-Meteo), UK Met Office models CC BY-SA 4.0. Full list: [licences on GitHub]("+REPO+"/blob/main/docs/licensing.md).",
-          "**Important for commercial use:** we take the model forecasts from Open-Meteo's free, non-commercial tier. Any paid or commercial deployment on top of our data must therefore first have its licensing clarified (including an Open-Meteo commercial subscription). Until then pilots are trial and non-commercial.",
-        ]],
-        ["h", "Contact"],
-        ["p", "Write to us via [Contact](about.html#contact) (a GitHub issue) and name your sector and the question you want checked."],
+        ["h", "Open source and licences"],
+        ["p", "The code is MIT on [GitHub]("+REPO+"), the scores and open data CC BY-SA 4.0. The sources (ČHMÚ, Open-Meteo and the model providers) have their own licences, listed in the [documentation]("+REPO+"/blob/main/docs/licensing.md)."],
+        ["h", "We are open to collaboration"],
+        ["p", "We are glad to work with people from media, schools and research, municipalities, farmers and anyone who wants to verify the weather, improve the method or use the data. Write to us via [Contact](about.html#contact) (a GitHub issue) and tell us what it is about."],
       ],
     },
   },
