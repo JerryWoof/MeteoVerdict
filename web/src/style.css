@@ -3097,3 +3097,74 @@ body.station [hidden] {
 .heat-options[hidden] {
   display: none;
 }
+
+/* the home page's top: place search and "my location" above the map */
+.home-find {
+  margin: 0 0 1.4rem;
+  padding: 0.9rem 1rem 0.7rem;
+  border-radius: 6px;
+  background: var(--surface);
+}
+.home-find .page-intro {
+  margin: 0.25rem 0 0.6rem;
+}
+.home-find-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+}
+#home-search .place-search {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+#home-search .place-search label {
+  font-weight: 600;
+}
+#home-search .place-search input {
+  width: 18rem;
+  max-width: 100%;
+  font-size: 16px; /* no zoom on focus on phones */
+  padding: 0.4rem 0.6rem;
+}
+#home-search .place-list {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  width: 22rem;
+  max-width: 90vw;
+  margin: 0;
+  z-index: 20;
+  box-shadow: 0 4px 14px rgba(29, 35, 41, 0.18);
+}
+#home-locate {
+  font: inherit;
+  font-size: 16px;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+/* the links to About, Methodology, For business and Contact, at the top of every footer */
+footer .site-links {
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+}
+
+/* text pages: About, Methodology, For business */
+.info-page {
+  max-width: 46rem;
+}
+.info-page h2 {
+  margin: 1.6rem 0 0.4rem;
+  font-size: 1.15rem;
+}
+.info-page .page-head h2 {
+  margin: 0;
+  font-size: var(--fs-title);
+}
+.info-page p,
+.info-page li {
+  line-height: 1.55;
+}
