@@ -82,7 +82,7 @@ jobs:
         # optional, like the lead hours: a failure here must not fail the daily update
         continue-on-error: true
         timeout-minutes: 30
-        run: uv run --frozen mvd blend-test --github-release --publish
+        run: uv run --frozen mvd blend-test --github-release --publish --compare-zip compare.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Our forecast for the measured page's past days, rebuilt out of sample

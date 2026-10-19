@@ -72,14 +72,15 @@ export function headline(entry) {
     : { kind: "none", leaders };
 }
 
-/** Plot rows of the error over time: one per series and date. */
+/** Plot rows of the error over time: one per series and date (mae null: no value). */
 export function dailyRows(entry, ids) {
   const dates = entry?.date_list ?? [];
   const out = [];
   for (const s of seriesOf(entry)) {
     if (!ids.includes(s.id)) continue;
     s.daily.forEach((mae, i) => {
-      if (mae != null) out.push({ id: s.id, kind: s.kind, date: new Date(`${dates[i]}T12:00:00Z`), mae });
+      // a missing day stays as a null, so the line breaks there instead of bridging it
+      out.push({ id: s.id, kind: s.kind, date: new Date(`${dates[i]}T12:00:00Z`), mae });
     });
   }
   return out;
