@@ -16,6 +16,7 @@ export const PAGES = {
           "**[Radar](radar.html)** a **[Naměřeno](measured.html)**: radar ČHMÚ a měření stanic.",
           "**[AI předpověď](ai.html)** a **[AI teplotní mapa](heatmap.html)**: experimentální modely, které ověřujeme stejně přísně jako ostatní.",
           "**[Otevřená data](data.html)**: předpověď a skóre modelů pro každý okres jako JSON a CSV, zdarma.",
+          "**[Měsíční report](report.html)**: kdo předpovídal nejlépe v uplynulém měsíci.",
         ]],
         ["h", "Odkud jsou data a kolik jim věřit"],
         ["p", "Měření jsou z otevřených dat ČHMÚ, předpovědi modelů z Open-Meteo. Skóre je poctivé, ale zatím krátkodobé: počítáme je z posledních týdnů a měsíců, takže pořadí se může obrátit. Jak přesně počítáme a kde jsou hranice, popisuje [metodika](methodology.html)."],
@@ -36,6 +37,7 @@ export const PAGES = {
           "**[Radar](radar.html)** and **[Measured](measured.html)**: ČHMÚ's radar and the stations' measurements.",
           "**[AI forecast](ai.html)** and **[AI heatmap](heatmap.html)**: experimental models, checked as strictly as the others.",
           "**[Open data](data.html)**: the forecast and the model scores for every okres as JSON and CSV, free.",
+          "**[Monthly report](report.html)**: who forecast best in the past month.",
         ]],
         ["h", "Where the data comes from and how far to trust it"],
         ["p", "Measurements are ČHMÚ's open data, model forecasts come from Open-Meteo. The scores are honest but still short-term: they cover the last weeks and months, so a ranking can flip. How we compute them and where the limits are is in the [methodology](methodology.html)."],
@@ -141,7 +143,7 @@ export const PAGES = {
           "**Skóre přesnosti:** pro každý okres, veličinu (teplota, vítr, srážky) a horizont 1 až 5 dní průměrná chyba, systematická chyba a pořadí modelů včetně poctivých remíz „≈“. Postup: [Metodika](methodology.html).",
           "**Předpověď pro 6 258 obcí:** zkušební; skládá se z modelů podle jejich přesnosti v okrese. Zatím není ověřená v místech bez stanic (viz Metodika).",
           "**Časy aktualizace:** předpověď čtyřikrát denně, skóre jednou denně; plánovaný čas je na stránce [Data](data.html). Záruku dostupnosti ani doby aktualizace zatím nedáváme.",
-          "**Měsíční report přesnosti:** kdo předpovídal nejlépe v uplynulém měsíci, s grafy a výhradami.",
+          "**[Měsíční report přesnosti](report.html):** kdo předpovídal nejlépe v uplynulém měsíci, s grafy, PDF a výhradami. První je za září 2026.",
         ]],
         ["h", "Co zatím neexistuje"],
         ["ul", [
@@ -180,7 +182,7 @@ export const PAGES = {
           "**Accuracy scores:** for each okres, variable (temperature, wind, rain) and lead of 1 to 5 days, the mean error, the bias and the model ranking including honest ties “≈”. How: [Methodology](methodology.html).",
           "**Forecast for 6,258 municipalities:** a test; combined from the models by their accuracy in the okres. Not yet checked at places without a station (see Methodology).",
           "**Update times:** the forecast four times a day, the scores once a day; the scheduled time is on the [Data](data.html) page. We do not yet guarantee availability or timing.",
-          "**Monthly accuracy report:** who forecast best in the past month, with charts and caveats.",
+          "**[Monthly accuracy report](report.html):** who forecast best in the past month, with charts, a PDF and caveats. The first covers September 2026.",
         ]],
         ["h", "What does not exist yet"],
         ["ul", [
