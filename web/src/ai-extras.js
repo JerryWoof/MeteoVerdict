@@ -1,6 +1,7 @@
-// The AI forecast tab below the map (data/scores/ai/ai.json, computed
-// daily): MeteoVerdict AI against the best public model per lead day since its launch, and the cards of
-// the experiments that work and of those still under evaluation. Nothing here compares with our combined forecast.
+// The AI forecast tab below the map (data/scores/ai/ai.json, computed daily):
+// MeteoVerdict AI against our blend (the combined forecast) per lead day since its launch, with the
+// 95 % interval of the difference, the best public model only as context, and the cards of the
+// experiments that work, that are not verified yet and that are still under evaluation.
 
 const VARIABLES = ["temperature_2m", "wind_speed_10m"];
 const UNITS = { temperature_2m: "°C", wind_speed_10m: "m/s" };
@@ -26,7 +27,7 @@ function cell(tag, text, className) {
   return el;
 }
 
-/** How much smaller the AI's error is than the best public model's, in % (null: unknown). */
+/** How much smaller the AI's error is than the best public model's, in % (null: unknown); context only. */
 export function improvement(row) {
   if (row.mae_ai == null || !row.mae_best) return null;
   return ((row.mae_best - row.mae_ai) / row.mae_best) * 100;
@@ -40,21 +41,36 @@ export function improvementText(p, language = "en") {
   return `${sign}${Math.abs(n).toLocaleString(language)} %`;
 }
 
-/** The experiments of one status ("works", "testing"), without columns about our combination. */
+/** The sections of the experiments, in order: status, section and box ids. */
+export const SECTIONS = [
+  ["works", "ai-exp-section", "ai-experiments"],
+  ["unverified", "ai-unverified-section", "ai-unverified"],
+  ["testing", "ai-testing-section", "ai-testing"],
+];
+
+/** The experiments of one status ("works", "unverified", "testing"), tables as published (our blend included). */
 export function experimentsWith(experiments, status) {
-  return (experiments ?? [])
-    .filter((e) => e.status === status)
-    .map((e) => {
-      if (!e.table?.columns) return e;
-      const keep = e.table.columns.map((c) => !/combined/i.test(`${c.key} ${c.en ?? ""}`));
-      return {
-        ...e,
-        table: {
-          columns: e.table.columns.filter((_, i) => keep[i]),
-          rows: (e.table.rows ?? []).map((row) => (Array.isArray(row) ? row.filter((_, i) => keep[i]) : row)),
-        },
-      };
-    });
+  return (experiments ?? []).filter((e) => e.status === status);
+}
+
+/** "−0.11 [−0.15, −0.07]": the AI minus our blend with its 95 % interval ("–" when unknown). */
+export function blendDiffText(row, language = "en") {
+  if (row?.diff_blend == null) return "–";
+  const f = (v) => {
+    const s = Math.abs(v).toLocaleString(language, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `${v > 0 ? "+" : v < 0 ? "−" : ""}${s}`;
+  };
+  const sep = language === "cs" ? "; " : ", ";
+  return row.low_blend != null && row.high_blend != null
+    ? `${f(row.diff_blend)} [${f(row.low_blend)}${sep}${f(row.high_blend)}]`
+    : f(row.diff_blend);
+}
+
+/** "better" when the whole interval is below zero, "worse" above, else "tie". */
+export function blendVerdict(row) {
+  if (row?.high_blend != null && row.high_blend < 0) return "better";
+  if (row?.low_blend != null && row.low_blend > 0) return "worse";
+  return "tie";
 }
 
 function renderScores(doc, t, names) {
@@ -69,12 +85,13 @@ function renderScores(doc, t, names) {
     head.append(
       cell("th", t("ai.colLead")),
       cell("th", `${t("ai.colAi")} (${unit})`, "num"),
+      cell("th", `${t("ai.colBlend")} (${unit})`, "num"),
+      cell("th", t("ai.colDiff"), "num"),
       cell("th", `${t("ai.colBest")} (${unit})`),
-      cell("th", t("ai.colGain"), "num"),
     );
     table.append(head);
     for (const row of rows) {
-      const gain = improvement(row);
+      const verdict = blendVerdict(row);
       const best = cell("td", null, "ai-best");
       const name = row.best_model_name ?? names[row.best_model] ?? row.best_model;
       if (name) best.append(cell("span", name), " ");
@@ -83,8 +100,9 @@ function renderScores(doc, t, names) {
       tr.append(
         cell("td", `D+${row.lead_day}`),
         cell("td", fmt(row.mae_ai), "num"),
+        cell("td", fmt(row.mae_blend), "num"),
+        cell("td", blendDiffText(row, lang()), `num ai-gain${verdict === "tie" ? "" : ` ${verdict}`}`),
         best,
-        cell("td", improvementText(gain, lang()), `num ai-gain${gain > 0 ? " better" : gain < 0 ? " worse" : ""}`),
       );
       table.append(tr);
     }
@@ -151,8 +169,11 @@ export async function renderAiExtras(t, getJson) {
     document.getElementById("ai-scores").replaceChildren();
     intro.textContent = t("ai.scoreNone", { launch: dateText(doc.launch ?? test.from ?? LAUNCH) });
   }
+  // the rule behind the labels ("works" only against our blend, with the whole interval below zero)
+  const rule = document.getElementById("ai-score-rule");
+  if (rule && doc.rule?.[lang()]) rule.textContent = doc.rule[lang()];
   document.getElementById("ai-score-section").hidden = false;
-  for (const [status, section, box] of [["works", "ai-exp-section", "ai-experiments"], ["testing", "ai-testing-section", "ai-testing"]]) {
+  for (const [status, section, box] of SECTIONS) {
     const shown = experimentsWith(doc.experiments, status);
     if (!shown.length) continue;
     renderExperiments(document.getElementById(box), shown, t);
