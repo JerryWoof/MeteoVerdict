@@ -1,0 +1,3263 @@
+{
+ "month": "2026-09",
+ "from": "2026-09-01",
+ "to": "2026-09-30",
+ "scored_days": 30,
+ "generated": "2026-10-19T17:03:05+00:00",
+ "resamples": 1000,
+ "sources": [
+  "previous_runs"
+ ],
+ "variables": {
+  "temperature_2m": {
+   "unit": "°C",
+   "leads": {
+    "1": {
+     "stations": 286,
+     "days": 30,
+     "models": [
+      {
+       "model": "dwd_icon_d2",
+       "name": "DWD ICON-D2",
+       "mae": 1.269,
+       "bias": 0.407,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "geosphere_arome_austria",
+       "name": "GeoSphere Austria AROME 2.5 km",
+       "mae": 1.291,
+       "bias": 0.301,
+       "rank": 2,
+       "tied_with_best": true,
+       "diff_to_best": 0.021,
+       "ci_low": -0.03,
+       "ci_high": 0.073,
+       "short_record": false
+      },
+      {
+       "model": "chmi_aladin_central_europe_2km",
+       "name": "ČHMÚ ALADIN Central Europe 2.3 km",
+       "mae": 1.33,
+       "bias": 0.216,
+       "rank": 3,
+       "tied_with_best": false,
+       "diff_to_best": 0.06,
+       "ci_low": 0.012,
+       "ci_high": 0.108,
+       "short_record": false
+      },
+      {
+       "model": "chmi_aladin_cz_1km",
+       "name": "ČHMÚ ALADIN CZ 1 km",
+       "mae": 1.332,
+       "bias": 0.215,
+       "rank": 4,
+       "tied_with_best": false,
+       "diff_to_best": 0.063,
+       "ci_low": 0.014,
+       "ci_high": 0.111,
+       "short_record": false
+      },
+      {
+       "model": "dmi_harmonie_arome_europe",
+       "name": "DMI HARMONIE-AROME DINI",
+       "mae": 1.391,
+       "bias": 0.281,
+       "rank": 5,
+       "tied_with_best": false,
+       "diff_to_best": 0.122,
+       "ci_low": 0.082,
+       "ci_high": 0.165,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon_eu",
+       "name": "DWD ICON-EU",
+       "mae": 1.393,
+       "bias": 0.573,
+       "rank": 6,
+       "tied_with_best": false,
+       "diff_to_best": 0.124,
+       "ci_low": 0.094,
+       "ci_high": 0.156,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.407,
+       "bias": 0.366,
+       "rank": 7,
+       "tied_with_best": false,
+       "diff_to_best": 0.138,
+       "ci_low": 0.078,
+       "ci_high": 0.198,
+       "short_record": false
+      },
+      {
+       "model": "knmi_harmonie_arome_europe",
+       "name": "KNMI HARMONIE-AROME Europe",
+       "mae": 1.408,
+       "bias": 0.254,
+       "rank": 8,
+       "tied_with_best": false,
+       "diff_to_best": 0.139,
+       "ci_low": 0.098,
+       "ci_high": 0.181,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 1.424,
+       "bias": 0.448,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.155,
+       "ci_low": 0.114,
+       "ci_high": 0.202,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.427,
+       "bias": 0.327,
+       "rank": 10,
+       "tied_with_best": false,
+       "diff_to_best": 0.157,
+       "ci_low": 0.103,
+       "ci_high": 0.217,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.454,
+       "bias": 0.399,
+       "rank": 11,
+       "tied_with_best": false,
+       "diff_to_best": 0.185,
+       "ci_low": 0.114,
+       "ci_high": 0.259,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.522,
+       "bias": 0.294,
+       "rank": 12,
+       "tied_with_best": false,
+       "diff_to_best": 0.252,
+       "ci_low": 0.176,
+       "ci_high": 0.328,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.541,
+       "bias": 0.408,
+       "rank": 13,
+       "tied_with_best": false,
+       "diff_to_best": 0.272,
+       "ci_low": 0.181,
+       "ci_high": 0.37,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_europe",
+       "name": "Météo-France ARPEGE Europe",
+       "mae": 1.547,
+       "bias": 0.65,
+       "rank": 14,
+       "tied_with_best": false,
+       "diff_to_best": 0.277,
+       "ci_low": 0.2,
+       "ci_high": 0.357,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 1.552,
+       "bias": -0.185,
+       "rank": 15,
+       "tied_with_best": false,
+       "diff_to_best": 0.282,
+       "ci_low": 0.224,
+       "ci_high": 0.338,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.663,
+       "bias": 0.544,
+       "rank": 16,
+       "tied_with_best": false,
+       "diff_to_best": 0.394,
+       "ci_low": 0.306,
+       "ci_high": 0.478,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 1.692,
+       "bias": 0.599,
+       "rank": 17,
+       "tied_with_best": false,
+       "diff_to_best": 0.422,
+       "ci_low": 0.34,
+       "ci_high": 0.503,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_world",
+       "name": "Météo-France ARPEGE World",
+       "mae": 1.787,
+       "bias": 1.165,
+       "rank": 18,
+       "tied_with_best": false,
+       "diff_to_best": 0.517,
+       "ci_low": 0.416,
+       "ci_high": 0.626,
+       "short_record": false
+      },
+      {
+       "model": "cma_grapes_global",
+       "name": "CMA GRAPES Global",
+       "mae": 1.794,
+       "bias": -0.17,
+       "rank": 19,
+       "tied_with_best": false,
+       "diff_to_best": 0.525,
+       "ci_low": 0.363,
+       "ci_high": 0.697,
+       "short_record": false
+      }
+     ],
+     "best": "dwd_icon_d2",
+     "tied_with_best": [
+      "geosphere_arome_austria"
+     ],
+     "clear_winner": false,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.246,
+      "bias": 0.373,
+      "rank": null,
+      "tied_with_best": true,
+      "diff_to_best": -0.024,
+      "ci_low": -0.069,
+      "ci_high": 0.026,
+      "short_record": false
+     }
+    },
+    "2": {
+     "stations": 291,
+     "days": 30,
+     "models": [
+      {
+       "model": "chmi_aladin_central_europe_2km",
+       "name": "ČHMÚ ALADIN Central Europe 2.3 km",
+       "mae": 1.407,
+       "bias": 0.156,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "chmi_aladin_cz_1km",
+       "name": "ČHMÚ ALADIN CZ 1 km",
+       "mae": 1.411,
+       "bias": 0.156,
+       "rank": 2,
+       "tied_with_best": false,
+       "diff_to_best": 0.003,
+       "ci_low": 0.0,
+       "ci_high": 0.007,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon_eu",
+       "name": "DWD ICON-EU",
+       "mae": 1.454,
+       "bias": 0.463,
+       "rank": 3,
+       "tied_with_best": true,
+       "diff_to_best": 0.046,
+       "ci_low": -0.01,
+       "ci_high": 0.104,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.46,
+       "bias": 0.321,
+       "rank": 4,
+       "tied_with_best": true,
+       "diff_to_best": 0.053,
+       "ci_low": -0.005,
+       "ci_high": 0.108,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 1.486,
+       "bias": 0.337,
+       "rank": 5,
+       "tied_with_best": false,
+       "diff_to_best": 0.079,
+       "ci_low": 0.021,
+       "ci_high": 0.135,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.507,
+       "bias": 0.363,
+       "rank": 6,
+       "tied_with_best": false,
+       "diff_to_best": 0.099,
+       "ci_low": 0.013,
+       "ci_high": 0.196,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.548,
+       "bias": 0.393,
+       "rank": 7,
+       "tied_with_best": false,
+       "diff_to_best": 0.141,
+       "ci_low": 0.045,
+       "ci_high": 0.239,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.565,
+       "bias": 0.317,
+       "rank": 8,
+       "tied_with_best": false,
+       "diff_to_best": 0.157,
+       "ci_low": 0.067,
+       "ci_high": 0.242,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.59,
+       "bias": 0.284,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.182,
+       "ci_low": 0.109,
+       "ci_high": 0.259,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 1.616,
+       "bias": -0.222,
+       "rank": 10,
+       "tied_with_best": false,
+       "diff_to_best": 0.209,
+       "ci_low": 0.129,
+       "ci_high": 0.278,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_europe",
+       "name": "Météo-France ARPEGE Europe",
+       "mae": 1.644,
+       "bias": 0.647,
+       "rank": 11,
+       "tied_with_best": false,
+       "diff_to_best": 0.237,
+       "ci_low": 0.161,
+       "ci_high": 0.339,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.722,
+       "bias": 0.586,
+       "rank": 12,
+       "tied_with_best": false,
+       "diff_to_best": 0.315,
+       "ci_low": 0.225,
+       "ci_high": 0.404,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 1.8,
+       "bias": 0.535,
+       "rank": 13,
+       "tied_with_best": false,
+       "diff_to_best": 0.393,
+       "ci_low": 0.301,
+       "ci_high": 0.484,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_world",
+       "name": "Météo-France ARPEGE World",
+       "mae": 1.872,
+       "bias": 1.158,
+       "rank": 14,
+       "tied_with_best": false,
+       "diff_to_best": 0.464,
+       "ci_low": 0.362,
+       "ci_high": 0.599,
+       "short_record": false
+      },
+      {
+       "model": "cma_grapes_global",
+       "name": "CMA GRAPES Global",
+       "mae": 1.904,
+       "bias": -0.378,
+       "rank": 15,
+       "tied_with_best": false,
+       "diff_to_best": 0.496,
+       "ci_low": 0.336,
+       "ci_high": 0.658,
+       "short_record": false
+      }
+     ],
+     "best": "chmi_aladin_central_europe_2km",
+     "tied_with_best": [
+      "dwd_icon_eu",
+      "ecmwf_aifs025_single"
+     ],
+     "clear_winner": false,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.358,
+      "bias": 0.341,
+      "rank": null,
+      "tied_with_best": true,
+      "diff_to_best": -0.05,
+      "ci_low": -0.108,
+      "ci_high": 0.008,
+      "short_record": false
+     }
+    },
+    "3": {
+     "stations": 291,
+     "days": 30,
+     "models": [
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.526,
+       "bias": 0.318,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon_eu",
+       "name": "DWD ICON-EU",
+       "mae": 1.586,
+       "bias": 0.511,
+       "rank": 2,
+       "tied_with_best": true,
+       "diff_to_best": 0.06,
+       "ci_low": -0.058,
+       "ci_high": 0.197,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.597,
+       "bias": 0.41,
+       "rank": 3,
+       "tied_with_best": true,
+       "diff_to_best": 0.071,
+       "ci_low": -0.005,
+       "ci_high": 0.153,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 1.612,
+       "bias": 0.382,
+       "rank": 4,
+       "tied_with_best": true,
+       "diff_to_best": 0.086,
+       "ci_low": -0.023,
+       "ci_high": 0.211,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.639,
+       "bias": 0.437,
+       "rank": 5,
+       "tied_with_best": false,
+       "diff_to_best": 0.113,
+       "ci_low": 0.034,
+       "ci_high": 0.198,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.651,
+       "bias": 0.441,
+       "rank": 6,
+       "tied_with_best": false,
+       "diff_to_best": 0.125,
+       "ci_low": 0.052,
+       "ci_high": 0.202,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.722,
+       "bias": 0.285,
+       "rank": 7,
+       "tied_with_best": false,
+       "diff_to_best": 0.195,
+       "ci_low": 0.121,
+       "ci_high": 0.274,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 1.752,
+       "bias": -0.093,
+       "rank": 8,
+       "tied_with_best": false,
+       "diff_to_best": 0.226,
+       "ci_low": 0.146,
+       "ci_high": 0.309,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_europe",
+       "name": "Météo-France ARPEGE Europe",
+       "mae": 1.806,
+       "bias": 0.781,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.279,
+       "ci_low": 0.165,
+       "ci_high": 0.407,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.808,
+       "bias": 0.641,
+       "rank": 10,
+       "tied_with_best": false,
+       "diff_to_best": 0.282,
+       "ci_low": 0.196,
+       "ci_high": 0.371,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 1.894,
+       "bias": 0.516,
+       "rank": 11,
+       "tied_with_best": false,
+       "diff_to_best": 0.368,
+       "ci_low": 0.25,
+       "ci_high": 0.495,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_world",
+       "name": "Météo-France ARPEGE World",
+       "mae": 2.056,
+       "bias": 1.298,
+       "rank": 12,
+       "tied_with_best": false,
+       "diff_to_best": 0.53,
+       "ci_low": 0.392,
+       "ci_high": 0.669,
+       "short_record": false
+      },
+      {
+       "model": "cma_grapes_global",
+       "name": "CMA GRAPES Global",
+       "mae": 2.072,
+       "bias": -0.426,
+       "rank": 13,
+       "tied_with_best": false,
+       "diff_to_best": 0.546,
+       "ci_low": 0.366,
+       "ci_high": 0.754,
+       "short_record": false
+      }
+     ],
+     "best": "ecmwf_aifs025_single",
+     "tied_with_best": [
+      "dwd_icon_eu",
+      "ecmwf_ifs",
+      "dwd_icon"
+     ],
+     "clear_winner": false,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.489,
+      "bias": 0.423,
+      "rank": null,
+      "tied_with_best": true,
+      "diff_to_best": -0.037,
+      "ci_low": -0.093,
+      "ci_high": 0.02,
+      "short_record": false
+     }
+    },
+    "4": {
+     "stations": 291,
+     "days": 30,
+     "models": [
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.658,
+       "bias": 0.378,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon_eu",
+       "name": "DWD ICON-EU",
+       "mae": 1.732,
+       "bias": 0.486,
+       "rank": 2,
+       "tied_with_best": true,
+       "diff_to_best": 0.074,
+       "ci_low": -0.033,
+       "ci_high": 0.173,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 1.766,
+       "bias": 0.356,
+       "rank": 3,
+       "tied_with_best": false,
+       "diff_to_best": 0.107,
+       "ci_low": 0.007,
+       "ci_high": 0.196,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.82,
+       "bias": 0.629,
+       "rank": 4,
+       "tied_with_best": false,
+       "diff_to_best": 0.162,
+       "ci_low": 0.075,
+       "ci_high": 0.246,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.833,
+       "bias": 0.533,
+       "rank": 5,
+       "tied_with_best": false,
+       "diff_to_best": 0.175,
+       "ci_low": 0.082,
+       "ci_high": 0.292,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.875,
+       "bias": 0.56,
+       "rank": 6,
+       "tied_with_best": false,
+       "diff_to_best": 0.217,
+       "ci_low": 0.124,
+       "ci_high": 0.329,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 1.926,
+       "bias": 0.044,
+       "rank": 7,
+       "tied_with_best": false,
+       "diff_to_best": 0.268,
+       "ci_low": 0.166,
+       "ci_high": 0.376,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.958,
+       "bias": 0.446,
+       "rank": 8,
+       "tied_with_best": false,
+       "diff_to_best": 0.3,
+       "ci_low": 0.193,
+       "ci_high": 0.425,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.986,
+       "bias": 0.888,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.328,
+       "ci_low": 0.195,
+       "ci_high": 0.481,
+       "short_record": false
+      },
+      {
+       "model": "cma_grapes_global",
+       "name": "CMA GRAPES Global",
+       "mae": 2.115,
+       "bias": -0.432,
+       "rank": 10,
+       "tied_with_best": false,
+       "diff_to_best": 0.456,
+       "ci_low": 0.235,
+       "ci_high": 0.697,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 2.141,
+       "bias": 0.608,
+       "rank": 11,
+       "tied_with_best": false,
+       "diff_to_best": 0.482,
+       "ci_low": 0.345,
+       "ci_high": 0.648,
+       "short_record": false
+      }
+     ],
+     "best": "ecmwf_aifs025_single",
+     "tied_with_best": [
+      "dwd_icon_eu"
+     ],
+     "clear_winner": false,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.637,
+      "bias": 0.409,
+      "rank": null,
+      "tied_with_best": true,
+      "diff_to_best": -0.021,
+      "ci_low": -0.083,
+      "ci_high": 0.042,
+      "short_record": false
+     }
+    },
+    "5": {
+     "stations": 291,
+     "days": 30,
+     "models": [
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.847,
+       "bias": 0.404,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.938,
+       "bias": 0.416,
+       "rank": 2,
+       "tied_with_best": true,
+       "diff_to_best": 0.091,
+       "ci_low": -0.054,
+       "ci_high": 0.228,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.999,
+       "bias": 0.685,
+       "rank": 3,
+       "tied_with_best": true,
+       "diff_to_best": 0.151,
+       "ci_low": -0.006,
+       "ci_high": 0.308,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 2.037,
+       "bias": 0.716,
+       "rank": 4,
+       "tied_with_best": false,
+       "diff_to_best": 0.189,
+       "ci_low": 0.033,
+       "ci_high": 0.341,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 2.086,
+       "bias": 0.055,
+       "rank": 5,
+       "tied_with_best": false,
+       "diff_to_best": 0.239,
+       "ci_low": 0.054,
+       "ci_high": 0.429,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 2.137,
+       "bias": 0.437,
+       "rank": 6,
+       "tied_with_best": false,
+       "diff_to_best": 0.289,
+       "ci_low": 0.159,
+       "ci_high": 0.45,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 2.204,
+       "bias": 0.586,
+       "rank": 7,
+       "tied_with_best": false,
+       "diff_to_best": 0.356,
+       "ci_low": 0.195,
+       "ci_high": 0.521,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 2.255,
+       "bias": 0.654,
+       "rank": 8,
+       "tied_with_best": false,
+       "diff_to_best": 0.408,
+       "ci_low": 0.209,
+       "ci_high": 0.628,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 2.307,
+       "bias": 0.45,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.459,
+       "ci_low": 0.279,
+       "ci_high": 0.659,
+       "short_record": false
+      }
+     ],
+     "best": "ecmwf_aifs025_single",
+     "tied_with_best": [
+      "ncep_aigfs025",
+      "ecmwf_ifs"
+     ],
+     "clear_winner": false,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.794,
+      "bias": 0.489,
+      "rank": null,
+      "tied_with_best": true,
+      "diff_to_best": -0.054,
+      "ci_low": -0.154,
+      "ci_high": 0.045,
+      "short_record": false
+     }
+    }
+   }
+  },
+  "wind_speed_10m": {
+   "unit": "m/s",
+   "leads": {
+    "1": {
+     "stations": 205,
+     "days": 30,
+     "models": [
+      {
+       "model": "dwd_icon_d2",
+       "name": "DWD ICON-D2",
+       "mae": 1.037,
+       "bias": 0.372,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon_eu",
+       "name": "DWD ICON-EU",
+       "mae": 1.055,
+       "bias": 0.23,
+       "rank": 2,
+       "tied_with_best": false,
+       "diff_to_best": 0.018,
+       "ci_low": 0.001,
+       "ci_high": 0.035,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 1.086,
+       "bias": 0.236,
+       "rank": 3,
+       "tied_with_best": false,
+       "diff_to_best": 0.049,
+       "ci_low": 0.028,
+       "ci_high": 0.069,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 1.111,
+       "bias": -0.139,
+       "rank": 4,
+       "tied_with_best": false,
+       "diff_to_best": 0.074,
+       "ci_low": 0.029,
+       "ci_high": 0.118,
+       "short_record": false
+      },
+      {
+       "model": "knmi_harmonie_arome_europe",
+       "name": "KNMI HARMONIE-AROME Europe",
+       "mae": 1.184,
+       "bias": 0.51,
+       "rank": 5,
+       "tied_with_best": false,
+       "diff_to_best": 0.147,
+       "ci_low": 0.116,
+       "ci_high": 0.175,
+       "short_record": false
+      },
+      {
+       "model": "dmi_harmonie_arome_europe",
+       "name": "DMI HARMONIE-AROME DINI",
+       "mae": 1.186,
+       "bias": 0.524,
+       "rank": 6,
+       "tied_with_best": false,
+       "diff_to_best": 0.149,
+       "ci_low": 0.12,
+       "ci_high": 0.177,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 1.208,
+       "bias": 0.359,
+       "rank": 7,
+       "tied_with_best": false,
+       "diff_to_best": 0.171,
+       "ci_low": 0.128,
+       "ci_high": 0.216,
+       "short_record": false
+      },
+      {
+       "model": "geosphere_arome_austria",
+       "name": "GeoSphere Austria AROME 2.5 km",
+       "mae": 1.255,
+       "bias": 0.759,
+       "rank": 8,
+       "tied_with_best": false,
+       "diff_to_best": 0.218,
+       "ci_low": 0.177,
+       "ci_high": 0.265,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.354,
+       "bias": 0.735,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.317,
+       "ci_low": 0.278,
+       "ci_high": 0.358,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.363,
+       "bias": 0.767,
+       "rank": 10,
+       "tied_with_best": false,
+       "diff_to_best": 0.326,
+       "ci_low": 0.259,
+       "ci_high": 0.393,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_europe",
+       "name": "Météo-France ARPEGE Europe",
+       "mae": 1.383,
+       "bias": 0.768,
+       "rank": 11,
+       "tied_with_best": false,
+       "diff_to_best": 0.346,
+       "ci_low": 0.288,
+       "ci_high": 0.408,
+       "short_record": false
+      },
+      {
+       "model": "chmi_aladin_cz_1km",
+       "name": "ČHMÚ ALADIN CZ 1 km",
+       "mae": 1.399,
+       "bias": 0.967,
+       "rank": 12,
+       "tied_with_best": false,
+       "diff_to_best": 0.362,
+       "ci_low": 0.307,
+       "ci_high": 0.424,
+       "short_record": false
+      },
+      {
+       "model": "chmi_aladin_central_europe_2km",
+       "name": "ČHMÚ ALADIN Central Europe 2.3 km",
+       "mae": 1.401,
+       "bias": 0.975,
+       "rank": 13,
+       "tied_with_best": false,
+       "diff_to_best": 0.364,
+       "ci_low": 0.307,
+       "ci_high": 0.425,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.423,
+       "bias": 0.829,
+       "rank": 14,
+       "tied_with_best": false,
+       "diff_to_best": 0.386,
+       "ci_low": 0.332,
+       "ci_high": 0.445,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_world",
+       "name": "Météo-France ARPEGE World",
+       "mae": 1.437,
+       "bias": 0.821,
+       "rank": 15,
+       "tied_with_best": false,
+       "diff_to_best": 0.4,
+       "ci_low": 0.343,
+       "ci_high": 0.465,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.448,
+       "bias": 0.844,
+       "rank": 16,
+       "tied_with_best": false,
+       "diff_to_best": 0.411,
+       "ci_low": 0.353,
+       "ci_high": 0.473,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.46,
+       "bias": 0.87,
+       "rank": 17,
+       "tied_with_best": false,
+       "diff_to_best": 0.423,
+       "ci_low": 0.355,
+       "ci_high": 0.496,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.508,
+       "bias": 0.936,
+       "rank": 18,
+       "tied_with_best": false,
+       "diff_to_best": 0.471,
+       "ci_low": 0.38,
+       "ci_high": 0.561,
+       "short_record": false
+      },
+      {
+       "model": "cma_grapes_global",
+       "name": "CMA GRAPES Global",
+       "mae": 1.748,
+       "bias": 1.298,
+       "rank": 19,
+       "tied_with_best": false,
+       "diff_to_best": 0.711,
+       "ci_low": 0.647,
+       "ci_high": 0.777,
+       "short_record": false
+      }
+     ],
+     "best": "dwd_icon_d2",
+     "tied_with_best": [],
+     "clear_winner": true,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.203,
+      "bias": 0.666,
+      "rank": null,
+      "tied_with_best": false,
+      "diff_to_best": 0.166,
+      "ci_low": 0.129,
+      "ci_high": 0.206,
+      "short_record": false
+     }
+    },
+    "2": {
+     "stations": 207,
+     "days": 30,
+     "models": [
+      {
+       "model": "dwd_icon_eu",
+       "name": "DWD ICON-EU",
+       "mae": 1.06,
+       "bias": 0.199,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 1.088,
+       "bias": 0.203,
+       "rank": 2,
+       "tied_with_best": false,
+       "diff_to_best": 0.029,
+       "ci_low": 0.023,
+       "ci_high": 0.034,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 1.131,
+       "bias": -0.156,
+       "rank": 3,
+       "tied_with_best": false,
+       "diff_to_best": 0.071,
+       "ci_low": 0.037,
+       "ci_high": 0.105,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 1.213,
+       "bias": 0.345,
+       "rank": 4,
+       "tied_with_best": false,
+       "diff_to_best": 0.154,
+       "ci_low": 0.111,
+       "ci_high": 0.199,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.37,
+       "bias": 0.716,
+       "rank": 5,
+       "tied_with_best": false,
+       "diff_to_best": 0.31,
+       "ci_low": 0.259,
+       "ci_high": 0.362,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.371,
+       "bias": 0.766,
+       "rank": 6,
+       "tied_with_best": false,
+       "diff_to_best": 0.312,
+       "ci_low": 0.242,
+       "ci_high": 0.384,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_europe",
+       "name": "Météo-France ARPEGE Europe",
+       "mae": 1.401,
+       "bias": 0.767,
+       "rank": 7,
+       "tied_with_best": false,
+       "diff_to_best": 0.341,
+       "ci_low": 0.285,
+       "ci_high": 0.4,
+       "short_record": false
+      },
+      {
+       "model": "chmi_aladin_cz_1km",
+       "name": "ČHMÚ ALADIN CZ 1 km",
+       "mae": 1.41,
+       "bias": 0.96,
+       "rank": 8,
+       "tied_with_best": false,
+       "diff_to_best": 0.351,
+       "ci_low": 0.301,
+       "ci_high": 0.403,
+       "short_record": false
+      },
+      {
+       "model": "chmi_aladin_central_europe_2km",
+       "name": "ČHMÚ ALADIN Central Europe 2.3 km",
+       "mae": 1.412,
+       "bias": 0.968,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.352,
+       "ci_low": 0.302,
+       "ci_high": 0.406,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.432,
+       "bias": 0.816,
+       "rank": 10,
+       "tied_with_best": false,
+       "diff_to_best": 0.372,
+       "ci_low": 0.318,
+       "ci_high": 0.43,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.432,
+       "bias": 0.792,
+       "rank": 11,
+       "tied_with_best": false,
+       "diff_to_best": 0.373,
+       "ci_low": 0.3,
+       "ci_high": 0.463,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_world",
+       "name": "Météo-France ARPEGE World",
+       "mae": 1.453,
+       "bias": 0.82,
+       "rank": 12,
+       "tied_with_best": false,
+       "diff_to_best": 0.393,
+       "ci_low": 0.333,
+       "ci_high": 0.458,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.454,
+       "bias": 0.828,
+       "rank": 13,
+       "tied_with_best": false,
+       "diff_to_best": 0.394,
+       "ci_low": 0.337,
+       "ci_high": 0.456,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.513,
+       "bias": 0.913,
+       "rank": 14,
+       "tied_with_best": false,
+       "diff_to_best": 0.453,
+       "ci_low": 0.35,
+       "ci_high": 0.572,
+       "short_record": false
+      },
+      {
+       "model": "cma_grapes_global",
+       "name": "CMA GRAPES Global",
+       "mae": 1.776,
+       "bias": 1.304,
+       "rank": 15,
+       "tied_with_best": false,
+       "diff_to_best": 0.716,
+       "ci_low": 0.64,
+       "ci_high": 0.798,
+       "short_record": false
+      }
+     ],
+     "best": "dwd_icon_eu",
+     "tied_with_best": [],
+     "clear_winner": true,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.249,
+      "bias": 0.683,
+      "rank": null,
+      "tied_with_best": false,
+      "diff_to_best": 0.189,
+      "ci_low": 0.149,
+      "ci_high": 0.233,
+      "short_record": false
+     }
+    },
+    "3": {
+     "stations": 207,
+     "days": 30,
+     "models": [
+      {
+       "model": "dwd_icon_eu",
+       "name": "DWD ICON-EU",
+       "mae": 1.082,
+       "bias": 0.163,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 1.108,
+       "bias": 0.167,
+       "rank": 2,
+       "tied_with_best": false,
+       "diff_to_best": 0.026,
+       "ci_low": 0.019,
+       "ci_high": 0.032,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 1.148,
+       "bias": -0.19,
+       "rank": 3,
+       "tied_with_best": false,
+       "diff_to_best": 0.065,
+       "ci_low": 0.031,
+       "ci_high": 0.101,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 1.232,
+       "bias": 0.279,
+       "rank": 4,
+       "tied_with_best": false,
+       "diff_to_best": 0.15,
+       "ci_low": 0.101,
+       "ci_high": 0.204,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.336,
+       "bias": 0.59,
+       "rank": 5,
+       "tied_with_best": false,
+       "diff_to_best": 0.254,
+       "ci_low": 0.199,
+       "ci_high": 0.313,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.346,
+       "bias": 0.7,
+       "rank": 6,
+       "tied_with_best": false,
+       "diff_to_best": 0.264,
+       "ci_low": 0.201,
+       "ci_high": 0.326,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_europe",
+       "name": "Météo-France ARPEGE Europe",
+       "mae": 1.368,
+       "bias": 0.619,
+       "rank": 7,
+       "tied_with_best": false,
+       "diff_to_best": 0.286,
+       "ci_low": 0.247,
+       "ci_high": 0.323,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.393,
+       "bias": 0.662,
+       "rank": 8,
+       "tied_with_best": false,
+       "diff_to_best": 0.311,
+       "ci_low": 0.245,
+       "ci_high": 0.373,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_world",
+       "name": "Météo-France ARPEGE World",
+       "mae": 1.415,
+       "bias": 0.669,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.332,
+       "ci_low": 0.293,
+       "ci_high": 0.37,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.438,
+       "bias": 0.76,
+       "rank": 10,
+       "tied_with_best": false,
+       "diff_to_best": 0.355,
+       "ci_low": 0.264,
+       "ci_high": 0.451,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.439,
+       "bias": 0.775,
+       "rank": 11,
+       "tied_with_best": false,
+       "diff_to_best": 0.357,
+       "ci_low": 0.307,
+       "ci_high": 0.409,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.459,
+       "bias": 0.789,
+       "rank": 12,
+       "tied_with_best": false,
+       "diff_to_best": 0.377,
+       "ci_low": 0.323,
+       "ci_high": 0.433,
+       "short_record": false
+      },
+      {
+       "model": "cma_grapes_global",
+       "name": "CMA GRAPES Global",
+       "mae": 1.744,
+       "bias": 1.205,
+       "rank": 13,
+       "tied_with_best": false,
+       "diff_to_best": 0.662,
+       "ci_low": 0.559,
+       "ci_high": 0.766,
+       "short_record": false
+      }
+     ],
+     "best": "dwd_icon_eu",
+     "tied_with_best": [],
+     "clear_winner": true,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.217,
+      "bias": 0.553,
+      "rank": null,
+      "tied_with_best": false,
+      "diff_to_best": 0.135,
+      "ci_low": 0.099,
+      "ci_high": 0.165,
+      "short_record": false
+     }
+    },
+    "4": {
+     "stations": 207,
+     "days": 30,
+     "models": [
+      {
+       "model": "dwd_icon_eu",
+       "name": "DWD ICON-EU",
+       "mae": 1.122,
+       "bias": 0.122,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 1.147,
+       "bias": 0.133,
+       "rank": 2,
+       "tied_with_best": false,
+       "diff_to_best": 0.025,
+       "ci_low": 0.019,
+       "ci_high": 0.032,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 1.182,
+       "bias": -0.232,
+       "rank": 3,
+       "tied_with_best": true,
+       "diff_to_best": 0.06,
+       "ci_low": -0.002,
+       "ci_high": 0.12,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 1.26,
+       "bias": 0.285,
+       "rank": 4,
+       "tied_with_best": false,
+       "diff_to_best": 0.138,
+       "ci_low": 0.076,
+       "ci_high": 0.194,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.322,
+       "bias": 0.623,
+       "rank": 5,
+       "tied_with_best": false,
+       "diff_to_best": 0.2,
+       "ci_low": 0.142,
+       "ci_high": 0.259,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.352,
+       "bias": 0.524,
+       "rank": 6,
+       "tied_with_best": false,
+       "diff_to_best": 0.23,
+       "ci_low": 0.165,
+       "ci_high": 0.301,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.352,
+       "bias": 0.541,
+       "rank": 7,
+       "tied_with_best": false,
+       "diff_to_best": 0.231,
+       "ci_low": 0.169,
+       "ci_high": 0.301,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.371,
+       "bias": 0.551,
+       "rank": 8,
+       "tied_with_best": false,
+       "diff_to_best": 0.249,
+       "ci_low": 0.182,
+       "ci_high": 0.322,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.373,
+       "bias": 0.575,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.252,
+       "ci_low": 0.194,
+       "ci_high": 0.322,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.491,
+       "bias": 0.81,
+       "rank": 10,
+       "tied_with_best": false,
+       "diff_to_best": 0.369,
+       "ci_low": 0.269,
+       "ci_high": 0.485,
+       "short_record": false
+      },
+      {
+       "model": "cma_grapes_global",
+       "name": "CMA GRAPES Global",
+       "mae": 1.785,
+       "bias": 1.244,
+       "rank": 11,
+       "tied_with_best": false,
+       "diff_to_best": 0.663,
+       "ci_low": 0.562,
+       "ci_high": 0.776,
+       "short_record": false
+      }
+     ],
+     "best": "dwd_icon_eu",
+     "tied_with_best": [
+      "jma_gsm"
+     ],
+     "clear_winner": false,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.204,
+      "bias": 0.47,
+      "rank": null,
+      "tied_with_best": false,
+      "diff_to_best": 0.083,
+      "ci_low": 0.041,
+      "ci_high": 0.123,
+      "short_record": false
+     }
+    },
+    "5": {
+     "stations": 207,
+     "days": 30,
+     "models": [
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 1.194,
+       "bias": -0.263,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 1.196,
+       "bias": 0.084,
+       "rank": 2,
+       "tied_with_best": true,
+       "diff_to_best": 0.001,
+       "ci_low": -0.065,
+       "ci_high": 0.061,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 1.256,
+       "bias": 0.106,
+       "rank": 3,
+       "tied_with_best": true,
+       "diff_to_best": 0.062,
+       "ci_low": -0.003,
+       "ci_high": 0.13,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.32,
+       "bias": 0.503,
+       "rank": 4,
+       "tied_with_best": false,
+       "diff_to_best": 0.125,
+       "ci_low": 0.057,
+       "ci_high": 0.191,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.401,
+       "bias": 0.586,
+       "rank": 5,
+       "tied_with_best": false,
+       "diff_to_best": 0.207,
+       "ci_low": 0.13,
+       "ci_high": 0.284,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.447,
+       "bias": 0.534,
+       "rank": 6,
+       "tied_with_best": false,
+       "diff_to_best": 0.253,
+       "ci_low": 0.148,
+       "ci_high": 0.36,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.453,
+       "bias": 0.618,
+       "rank": 7,
+       "tied_with_best": false,
+       "diff_to_best": 0.259,
+       "ci_low": 0.182,
+       "ci_high": 0.338,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.469,
+       "bias": 0.63,
+       "rank": 8,
+       "tied_with_best": false,
+       "diff_to_best": 0.275,
+       "ci_low": 0.198,
+       "ci_high": 0.354,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.485,
+       "bias": 0.74,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.29,
+       "ci_low": 0.175,
+       "ci_high": 0.402,
+       "short_record": false
+      }
+     ],
+     "best": "jma_gsm",
+     "tied_with_best": [
+      "dwd_icon",
+      "gem_global"
+     ],
+     "clear_winner": false,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.206,
+      "bias": 0.393,
+      "rank": null,
+      "tied_with_best": true,
+      "diff_to_best": 0.011,
+      "ci_low": -0.05,
+      "ci_high": 0.067,
+      "short_record": false
+     }
+    }
+   }
+  },
+  "precipitation_24h": {
+   "unit": "mm",
+   "leads": {
+    "1": {
+     "stations": 495,
+     "days": 30,
+     "models": [
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.022,
+       "bias": 0.247,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "cma_grapes_global",
+       "name": "CMA GRAPES Global",
+       "mae": 1.039,
+       "bias": -0.062,
+       "rank": 2,
+       "tied_with_best": true,
+       "diff_to_best": 0.017,
+       "ci_low": -0.115,
+       "ci_high": 0.167,
+       "short_record": false
+      },
+      {
+       "model": "knmi_harmonie_arome_europe",
+       "name": "KNMI HARMONIE-AROME Europe",
+       "mae": 1.051,
+       "bias": 0.083,
+       "rank": 3,
+       "tied_with_best": true,
+       "diff_to_best": 0.029,
+       "ci_low": -0.127,
+       "ci_high": 0.208,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.058,
+       "bias": -0.128,
+       "rank": 4,
+       "tied_with_best": true,
+       "diff_to_best": 0.037,
+       "ci_low": -0.114,
+       "ci_high": 0.179,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.084,
+       "bias": 0.109,
+       "rank": 5,
+       "tied_with_best": true,
+       "diff_to_best": 0.063,
+       "ci_low": -0.017,
+       "ci_high": 0.145,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.105,
+       "bias": 0.126,
+       "rank": 6,
+       "tied_with_best": true,
+       "diff_to_best": 0.084,
+       "ci_low": -0.004,
+       "ci_high": 0.177,
+       "short_record": false
+      },
+      {
+       "model": "chmi_aladin_central_europe_2km",
+       "name": "ČHMÚ ALADIN Central Europe 2.3 km",
+       "mae": 1.108,
+       "bias": 0.116,
+       "rank": 7,
+       "tied_with_best": true,
+       "diff_to_best": 0.086,
+       "ci_low": -0.067,
+       "ci_high": 0.257,
+       "short_record": false
+      },
+      {
+       "model": "chmi_aladin_cz_1km",
+       "name": "ČHMÚ ALADIN CZ 1 km",
+       "mae": 1.11,
+       "bias": 0.121,
+       "rank": 8,
+       "tied_with_best": true,
+       "diff_to_best": 0.089,
+       "ci_low": -0.066,
+       "ci_high": 0.26,
+       "short_record": false
+      },
+      {
+       "model": "dmi_harmonie_arome_europe",
+       "name": "DMI HARMONIE-AROME DINI",
+       "mae": 1.144,
+       "bias": 0.189,
+       "rank": 9,
+       "tied_with_best": true,
+       "diff_to_best": 0.122,
+       "ci_low": -0.092,
+       "ci_high": 0.403,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 1.153,
+       "bias": 0.1,
+       "rank": 10,
+       "tied_with_best": true,
+       "diff_to_best": 0.131,
+       "ci_low": -0.092,
+       "ci_high": 0.408,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon_eu",
+       "name": "DWD ICON-EU",
+       "mae": 1.159,
+       "bias": 0.141,
+       "rank": 11,
+       "tied_with_best": true,
+       "diff_to_best": 0.137,
+       "ci_low": -0.089,
+       "ci_high": 0.425,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.16,
+       "bias": 0.123,
+       "rank": 12,
+       "tied_with_best": true,
+       "diff_to_best": 0.138,
+       "ci_low": -0.044,
+       "ci_high": 0.376,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon_d2",
+       "name": "DWD ICON-D2",
+       "mae": 1.179,
+       "bias": -0.327,
+       "rank": 13,
+       "tied_with_best": true,
+       "diff_to_best": 0.158,
+       "ci_low": -0.028,
+       "ci_high": 0.368,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.21,
+       "bias": 0.282,
+       "rank": 14,
+       "tied_with_best": false,
+       "diff_to_best": 0.188,
+       "ci_low": 0.035,
+       "ci_high": 0.381,
+       "short_record": false
+      },
+      {
+       "model": "geosphere_arome_austria",
+       "name": "GeoSphere Austria AROME 2.5 km",
+       "mae": 1.228,
+       "bias": 0.171,
+       "rank": 15,
+       "tied_with_best": false,
+       "diff_to_best": 0.207,
+       "ci_low": 0.047,
+       "ci_high": 0.404,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 1.234,
+       "bias": 0.04,
+       "rank": 16,
+       "tied_with_best": false,
+       "diff_to_best": 0.212,
+       "ci_low": 0.044,
+       "ci_high": 0.414,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_europe",
+       "name": "Météo-France ARPEGE Europe",
+       "mae": 1.241,
+       "bias": 0.004,
+       "rank": 17,
+       "tied_with_best": true,
+       "diff_to_best": 0.22,
+       "ci_low": -0.026,
+       "ci_high": 0.603,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_world",
+       "name": "Météo-France ARPEGE World",
+       "mae": 1.25,
+       "bias": 0.015,
+       "rank": 18,
+       "tied_with_best": true,
+       "diff_to_best": 0.228,
+       "ci_low": -0.022,
+       "ci_high": 0.619,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 1.252,
+       "bias": 0.002,
+       "rank": 19,
+       "tied_with_best": false,
+       "diff_to_best": 0.23,
+       "ci_low": 0.028,
+       "ci_high": 0.482,
+       "short_record": false
+      }
+     ],
+     "best": "ecmwf_aifs025_single",
+     "tied_with_best": [
+      "cma_grapes_global",
+      "knmi_harmonie_arome_europe",
+      "ukmo_global_deterministic_10km",
+      "ecmwf_ifs",
+      "ecmwf_ifs025",
+      "chmi_aladin_central_europe_2km",
+      "chmi_aladin_cz_1km",
+      "dmi_harmonie_arome_europe",
+      "dwd_icon",
+      "dwd_icon_eu",
+      "ncep_gfs_global",
+      "dwd_icon_d2",
+      "meteofrance_arpege_europe",
+      "meteofrance_arpege_world"
+     ],
+     "clear_winner": false,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 0.908,
+      "bias": 0.071,
+      "rank": null,
+      "tied_with_best": false,
+      "diff_to_best": -0.114,
+      "ci_low": -0.215,
+      "ci_high": -0.017,
+      "short_record": false
+     }
+    },
+    "2": {
+     "stations": 500,
+     "days": 30,
+     "models": [
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 1.141,
+       "bias": -0.154,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.144,
+       "bias": -0.255,
+       "rank": 2,
+       "tied_with_best": true,
+       "diff_to_best": 0.003,
+       "ci_low": -0.101,
+       "ci_high": 0.112,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon_eu",
+       "name": "DWD ICON-EU",
+       "mae": 1.156,
+       "bias": -0.187,
+       "rank": 3,
+       "tied_with_best": true,
+       "diff_to_best": 0.015,
+       "ci_low": -0.145,
+       "ci_high": 0.167,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.157,
+       "bias": -0.215,
+       "rank": 4,
+       "tied_with_best": true,
+       "diff_to_best": 0.016,
+       "ci_low": -0.101,
+       "ci_high": 0.14,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 1.163,
+       "bias": -0.235,
+       "rank": 5,
+       "tied_with_best": true,
+       "diff_to_best": 0.022,
+       "ci_low": -0.14,
+       "ci_high": 0.185,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.173,
+       "bias": 0.283,
+       "rank": 6,
+       "tied_with_best": true,
+       "diff_to_best": 0.033,
+       "ci_low": -0.153,
+       "ci_high": 0.231,
+       "short_record": false
+      },
+      {
+       "model": "chmi_aladin_cz_1km",
+       "name": "ČHMÚ ALADIN CZ 1 km",
+       "mae": 1.272,
+       "bias": 0.024,
+       "rank": 7,
+       "tied_with_best": true,
+       "diff_to_best": 0.131,
+       "ci_low": -0.059,
+       "ci_high": 0.34,
+       "short_record": false
+      },
+      {
+       "model": "chmi_aladin_central_europe_2km",
+       "name": "ČHMÚ ALADIN Central Europe 2.3 km",
+       "mae": 1.275,
+       "bias": 0.019,
+       "rank": 8,
+       "tied_with_best": true,
+       "diff_to_best": 0.134,
+       "ci_low": -0.056,
+       "ci_high": 0.342,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.311,
+       "bias": -0.089,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.17,
+       "ci_low": 0.043,
+       "ci_high": 0.349,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.312,
+       "bias": -0.103,
+       "rank": 10,
+       "tied_with_best": true,
+       "diff_to_best": 0.171,
+       "ci_low": -0.05,
+       "ci_high": 0.432,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_europe",
+       "name": "Météo-France ARPEGE Europe",
+       "mae": 1.326,
+       "bias": -0.155,
+       "rank": 11,
+       "tied_with_best": true,
+       "diff_to_best": 0.186,
+       "ci_low": -0.056,
+       "ci_high": 0.467,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_world",
+       "name": "Météo-France ARPEGE World",
+       "mae": 1.342,
+       "bias": -0.154,
+       "rank": 12,
+       "tied_with_best": true,
+       "diff_to_best": 0.202,
+       "ci_low": -0.045,
+       "ci_high": 0.49,
+       "short_record": false
+      },
+      {
+       "model": "cma_grapes_global",
+       "name": "CMA GRAPES Global",
+       "mae": 1.356,
+       "bias": 0.177,
+       "rank": 13,
+       "tied_with_best": false,
+       "diff_to_best": 0.215,
+       "ci_low": 0.046,
+       "ci_high": 0.41,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.376,
+       "bias": 0.327,
+       "rank": 14,
+       "tied_with_best": false,
+       "diff_to_best": 0.235,
+       "ci_low": 0.022,
+       "ci_high": 0.499,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 1.389,
+       "bias": -0.2,
+       "rank": 15,
+       "tied_with_best": false,
+       "diff_to_best": 0.248,
+       "ci_low": 0.007,
+       "ci_high": 0.554,
+       "short_record": false
+      }
+     ],
+     "best": "gem_global",
+     "tied_with_best": [
+      "ecmwf_ifs",
+      "dwd_icon_eu",
+      "ecmwf_ifs025",
+      "dwd_icon",
+      "ecmwf_aifs025_single",
+      "chmi_aladin_cz_1km",
+      "chmi_aladin_central_europe_2km",
+      "ukmo_global_deterministic_10km",
+      "meteofrance_arpege_europe",
+      "meteofrance_arpege_world"
+     ],
+     "clear_winner": false,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.022,
+      "bias": -0.061,
+      "rank": null,
+      "tied_with_best": true,
+      "diff_to_best": -0.119,
+      "ci_low": -0.249,
+      "ci_high": 0.011,
+      "short_record": false
+     }
+    },
+    "3": {
+     "stations": 500,
+     "days": 30,
+     "models": [
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.24,
+       "bias": 0.326,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.31,
+       "bias": -0.468,
+       "rank": 2,
+       "tied_with_best": true,
+       "diff_to_best": 0.071,
+       "ci_low": -0.22,
+       "ci_high": 0.331,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.36,
+       "bias": 0.05,
+       "rank": 3,
+       "tied_with_best": true,
+       "diff_to_best": 0.12,
+       "ci_low": -0.049,
+       "ci_high": 0.314,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.382,
+       "bias": 0.112,
+       "rank": 4,
+       "tied_with_best": true,
+       "diff_to_best": 0.142,
+       "ci_low": -0.055,
+       "ci_high": 0.363,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.442,
+       "bias": -0.119,
+       "rank": 5,
+       "tied_with_best": true,
+       "diff_to_best": 0.203,
+       "ci_low": -0.04,
+       "ci_high": 0.468,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.62,
+       "bias": 0.003,
+       "rank": 6,
+       "tied_with_best": true,
+       "diff_to_best": 0.38,
+       "ci_low": -0.021,
+       "ci_high": 0.859,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 1.621,
+       "bias": 0.112,
+       "rank": 7,
+       "tied_with_best": false,
+       "diff_to_best": 0.381,
+       "ci_low": 0.012,
+       "ci_high": 0.818,
+       "short_record": false
+      },
+      {
+       "model": "cma_grapes_global",
+       "name": "CMA GRAPES Global",
+       "mae": 1.723,
+       "bias": 0.273,
+       "rank": 8,
+       "tied_with_best": false,
+       "diff_to_best": 0.484,
+       "ci_low": 0.003,
+       "ci_high": 1.005,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 1.832,
+       "bias": 0.406,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.593,
+       "ci_low": 0.109,
+       "ci_high": 1.134,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 1.835,
+       "bias": 0.449,
+       "rank": 10,
+       "tied_with_best": true,
+       "diff_to_best": 0.596,
+       "ci_low": -0.001,
+       "ci_high": 1.442,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_world",
+       "name": "Météo-France ARPEGE World",
+       "mae": 1.886,
+       "bias": 0.157,
+       "rank": 11,
+       "tied_with_best": false,
+       "diff_to_best": 0.646,
+       "ci_low": 0.158,
+       "ci_high": 1.202,
+       "short_record": false
+      },
+      {
+       "model": "meteofrance_arpege_europe",
+       "name": "Météo-France ARPEGE Europe",
+       "mae": 1.887,
+       "bias": 0.183,
+       "rank": 12,
+       "tied_with_best": false,
+       "diff_to_best": 0.648,
+       "ci_low": 0.17,
+       "ci_high": 1.2,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon_eu",
+       "name": "DWD ICON-EU",
+       "mae": 1.899,
+       "bias": 0.513,
+       "rank": 13,
+       "tied_with_best": false,
+       "diff_to_best": 0.66,
+       "ci_low": 0.148,
+       "ci_high": 1.242,
+       "short_record": false
+      }
+     ],
+     "best": "ecmwf_aifs025_single",
+     "tied_with_best": [
+      "ukmo_global_deterministic_10km",
+      "ecmwf_ifs",
+      "ecmwf_ifs025",
+      "ncep_aigfs025",
+      "ncep_gfs_global",
+      "gem_global"
+     ],
+     "clear_winner": false,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.355,
+      "bias": 0.154,
+      "rank": null,
+      "tied_with_best": true,
+      "diff_to_best": 0.116,
+      "ci_low": -0.12,
+      "ci_high": 0.349,
+      "short_record": false
+     }
+    },
+    "4": {
+     "stations": 500,
+     "days": 30,
+     "models": [
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.338,
+       "bias": 0.045,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 1.506,
+       "bias": -0.253,
+       "rank": 2,
+       "tied_with_best": true,
+       "diff_to_best": 0.168,
+       "ci_low": -0.229,
+       "ci_high": 0.61,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon_eu",
+       "name": "DWD ICON-EU",
+       "mae": 1.507,
+       "bias": -0.178,
+       "rank": 3,
+       "tied_with_best": true,
+       "diff_to_best": 0.169,
+       "ci_low": -0.236,
+       "ci_high": 0.636,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.578,
+       "bias": -0.366,
+       "rank": 4,
+       "tied_with_best": true,
+       "diff_to_best": 0.24,
+       "ci_low": -0.083,
+       "ci_high": 0.653,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.641,
+       "bias": -0.0,
+       "rank": 5,
+       "tied_with_best": false,
+       "diff_to_best": 0.303,
+       "ci_low": 0.008,
+       "ci_high": 0.659,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 1.678,
+       "bias": -0.439,
+       "rank": 6,
+       "tied_with_best": true,
+       "diff_to_best": 0.339,
+       "ci_low": -0.069,
+       "ci_high": 0.827,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.683,
+       "bias": 0.167,
+       "rank": 7,
+       "tied_with_best": true,
+       "diff_to_best": 0.345,
+       "ci_low": -0.159,
+       "ci_high": 0.988,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.702,
+       "bias": 0.295,
+       "rank": 8,
+       "tied_with_best": true,
+       "diff_to_best": 0.364,
+       "ci_low": -0.117,
+       "ci_high": 0.981,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.736,
+       "bias": -0.242,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.398,
+       "ci_low": 0.026,
+       "ci_high": 0.838,
+       "short_record": false
+      },
+      {
+       "model": "cma_grapes_global",
+       "name": "CMA GRAPES Global",
+       "mae": 1.896,
+       "bias": 0.546,
+       "rank": 10,
+       "tied_with_best": false,
+       "diff_to_best": 0.558,
+       "ci_low": 0.016,
+       "ci_high": 1.381,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 2.327,
+       "bias": 0.601,
+       "rank": 11,
+       "tied_with_best": true,
+       "diff_to_best": 0.988,
+       "ci_low": -0.001,
+       "ci_high": 2.141,
+       "short_record": false
+      }
+     ],
+     "best": "ecmwf_aifs025_single",
+     "tied_with_best": [
+      "dwd_icon",
+      "dwd_icon_eu",
+      "ukmo_global_deterministic_10km",
+      "jma_gsm",
+      "ecmwf_ifs025",
+      "ecmwf_ifs",
+      "gem_global"
+     ],
+     "clear_winner": false,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.443,
+      "bias": 0.016,
+      "rank": null,
+      "tied_with_best": true,
+      "diff_to_best": 0.105,
+      "ci_low": -0.192,
+      "ci_high": 0.459,
+      "short_record": false
+     }
+    },
+    "5": {
+     "stations": 500,
+     "days": 30,
+     "models": [
+      {
+       "model": "ecmwf_aifs025_single",
+       "name": "ECMWF AIFS 0.25°",
+       "mae": 1.567,
+       "bias": 0.037,
+       "rank": 1,
+       "tied_with_best": false,
+       "diff_to_best": 0.0,
+       "ci_low": 0.0,
+       "ci_high": 0.0,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs025",
+       "name": "ECMWF IFS 0.25°",
+       "mae": 1.602,
+       "bias": -0.358,
+       "rank": 2,
+       "tied_with_best": true,
+       "diff_to_best": 0.035,
+       "ci_low": -0.365,
+       "ci_high": 0.391,
+       "short_record": false
+      },
+      {
+       "model": "ecmwf_ifs",
+       "name": "ECMWF IFS HRES 9 km",
+       "mae": 1.655,
+       "bias": -0.227,
+       "rank": 3,
+       "tied_with_best": true,
+       "diff_to_best": 0.088,
+       "ci_low": -0.309,
+       "ci_high": 0.507,
+       "short_record": false
+      },
+      {
+       "model": "ncep_aigfs025",
+       "name": "NOAA AIGFS 0.25°",
+       "mae": 1.809,
+       "bias": 0.145,
+       "rank": 4,
+       "tied_with_best": true,
+       "diff_to_best": 0.243,
+       "ci_low": -0.209,
+       "ci_high": 0.783,
+       "short_record": false
+      },
+      {
+       "model": "ukmo_global_deterministic_10km",
+       "name": "UK Met Office Global 10 km",
+       "mae": 1.883,
+       "bias": -0.095,
+       "rank": 5,
+       "tied_with_best": true,
+       "diff_to_best": 0.317,
+       "ci_low": -0.197,
+       "ci_high": 0.876,
+       "short_record": false
+      },
+      {
+       "model": "gem_global",
+       "name": "ECCC GEM Global 15 km",
+       "mae": 1.916,
+       "bias": -0.018,
+       "rank": 6,
+       "tied_with_best": true,
+       "diff_to_best": 0.35,
+       "ci_low": -0.283,
+       "ci_high": 1.111,
+       "short_record": false
+      },
+      {
+       "model": "ncep_gfs_global",
+       "name": "NOAA GFS 0.11°/0.25°",
+       "mae": 1.929,
+       "bias": 0.035,
+       "rank": 7,
+       "tied_with_best": true,
+       "diff_to_best": 0.362,
+       "ci_low": -0.242,
+       "ci_high": 1.177,
+       "short_record": false
+      },
+      {
+       "model": "jma_gsm",
+       "name": "JMA GSM",
+       "mae": 2.109,
+       "bias": 0.397,
+       "rank": 8,
+       "tied_with_best": true,
+       "diff_to_best": 0.543,
+       "ci_low": -0.38,
+       "ci_high": 1.852,
+       "short_record": false
+      },
+      {
+       "model": "dwd_icon",
+       "name": "DWD ICON global",
+       "mae": 2.249,
+       "bias": 0.436,
+       "rank": 9,
+       "tied_with_best": false,
+       "diff_to_best": 0.683,
+       "ci_low": 0.011,
+       "ci_high": 1.701,
+       "short_record": false
+      }
+     ],
+     "best": "ecmwf_aifs025_single",
+     "tied_with_best": [
+      "ecmwf_ifs025",
+      "ecmwf_ifs",
+      "ncep_aigfs025",
+      "ukmo_global_deterministic_10km",
+      "gem_global",
+      "ncep_gfs_global",
+      "jma_gsm"
+     ],
+     "clear_winner": false,
+     "mean_of_all": {
+      "model": "blend",
+      "name": "Mean of all models",
+      "mae": 1.475,
+      "bias": 0.039,
+      "rank": null,
+      "tied_with_best": true,
+      "diff_to_best": -0.092,
+      "ci_low": -0.523,
+      "ci_high": 0.485,
+      "short_record": false
+     }
+    }
+   }
+  }
+ },
+ "wins": {
+  "temperature_2m/1": {
+   "okresy_total": 77,
+   "models": [
+    {
+     "model": "dwd_icon_d2",
+     "name": "DWD ICON-D2",
+     "okresy": 23,
+     "clear": 8
+    },
+    {
+     "model": "ecmwf_aifs025_single",
+     "name": "ECMWF AIFS 0.25°",
+     "okresy": 18,
+     "clear": 3
+    },
+    {
+     "model": "geosphere_arome_austria",
+     "name": "GeoSphere Austria AROME 2.5 km",
+     "okresy": 13,
+     "clear": 0
+    },
+    {
+     "model": "dwd_icon_eu",
+     "name": "DWD ICON-EU",
+     "okresy": 4,
+     "clear": 0
+    },
+    {
+     "model": "dmi_harmonie_arome_europe",
+     "name": "DMI HARMONIE-AROME DINI",
+     "okresy": 3,
+     "clear": 0
+    },
+    {
+     "model": "ecmwf_ifs",
+     "name": "ECMWF IFS HRES 9 km",
+     "okresy": 3,
+     "clear": 0
+    },
+    {
+     "model": "gem_global",
+     "name": "ECCC GEM Global 15 km",
+     "okresy": 3,
+     "clear": 0
+    },
+    {
+     "model": "chmi_aladin_central_europe_2km",
+     "name": "ČHMÚ ALADIN Central Europe 2.3 km",
+     "okresy": 2,
+     "clear": 0
+    },
+    {
+     "model": "dwd_icon",
+     "name": "DWD ICON global",
+     "okresy": 2,
+     "clear": 0
+    },
+    {
+     "model": "ecmwf_ifs025",
+     "name": "ECMWF IFS 0.25°",
+     "okresy": 2,
+     "clear": 0
+    },
+    {
+     "model": "knmi_harmonie_arome_europe",
+     "name": "KNMI HARMONIE-AROME Europe",
+     "okresy": 2,
+     "clear": 0
+    },
+    {
+     "model": "chmi_aladin_cz_1km",
+     "name": "ČHMÚ ALADIN CZ 1 km",
+     "okresy": 1,
+     "clear": 0
+    },
+    {
+     "model": "jma_gsm",
+     "name": "JMA GSM",
+     "okresy": 1,
+     "clear": 0
+    }
+   ]
+  },
+  "temperature_2m/3": {
+   "okresy_total": 77,
+   "models": [
+    {
+     "model": "ecmwf_aifs025_single",
+     "name": "ECMWF AIFS 0.25°",
+     "okresy": 46,
+     "clear": 10
+    },
+    {
+     "model": "dwd_icon_eu",
+     "name": "DWD ICON-EU",
+     "okresy": 17,
+     "clear": 1
+    },
+    {
+     "model": "ncep_aigfs025",
+     "name": "NOAA AIGFS 0.25°",
+     "okresy": 5,
+     "clear": 0
+    },
+    {
+     "model": "dwd_icon",
+     "name": "DWD ICON global",
+     "okresy": 3,
+     "clear": 0
+    },
+    {
+     "model": "ecmwf_ifs",
+     "name": "ECMWF IFS HRES 9 km",
+     "okresy": 2,
+     "clear": 0
+    },
+    {
+     "model": "ecmwf_ifs025",
+     "name": "ECMWF IFS 0.25°",
+     "okresy": 1,
+     "clear": 0
+    },
+    {
+     "model": "gem_global",
+     "name": "ECCC GEM Global 15 km",
+     "okresy": 1,
+     "clear": 0
+    },
+    {
+     "model": "jma_gsm",
+     "name": "JMA GSM",
+     "okresy": 1,
+     "clear": 0
+    },
+    {
+     "model": "ukmo_global_deterministic_10km",
+     "name": "UK Met Office Global 10 km",
+     "okresy": 1,
+     "clear": 0
+    }
+   ]
+  },
+  "wind_speed_10m/1": {
+   "okresy_total": 77,
+   "models": [
+    {
+     "model": "dwd_icon_d2",
+     "name": "DWD ICON-D2",
+     "okresy": 27,
+     "clear": 11
+    },
+    {
+     "model": "jma_gsm",
+     "name": "JMA GSM",
+     "okresy": 19,
+     "clear": 6
+    },
+    {
+     "model": "dwd_icon_eu",
+     "name": "DWD ICON-EU",
+     "okresy": 17,
+     "clear": 3
+    },
+    {
+     "model": "gem_global",
+     "name": "ECCC GEM Global 15 km",
+     "okresy": 4,
+     "clear": 1
+    },
+    {
+     "model": "dwd_icon",
+     "name": "DWD ICON global",
+     "okresy": 3,
+     "clear": 0
+    },
+    {
+     "model": "dmi_harmonie_arome_europe",
+     "name": "DMI HARMONIE-AROME DINI",
+     "okresy": 2,
+     "clear": 0
+    },
+    {
+     "model": "knmi_harmonie_arome_europe",
+     "name": "KNMI HARMONIE-AROME Europe",
+     "okresy": 2,
+     "clear": 0
+    },
+    {
+     "model": "chmi_aladin_central_europe_2km",
+     "name": "ČHMÚ ALADIN Central Europe 2.3 km",
+     "okresy": 1,
+     "clear": 0
+    },
+    {
+     "model": "meteofrance_arpege_europe",
+     "name": "Météo-France ARPEGE Europe",
+     "okresy": 1,
+     "clear": 0
+    },
+    {
+     "model": "ncep_aigfs025",
+     "name": "NOAA AIGFS 0.25°",
+     "okresy": 1,
+     "clear": 1
+    }
+   ]
+  },
+  "wind_speed_10m/3": {
+   "okresy_total": 77,
+   "models": [
+    {
+     "model": "dwd_icon_eu",
+     "name": "DWD ICON-EU",
+     "okresy": 35,
+     "clear": 11
+    },
+    {
+     "model": "jma_gsm",
+     "name": "JMA GSM",
+     "okresy": 23,
+     "clear": 8
+    },
+    {
+     "model": "dwd_icon",
+     "name": "DWD ICON global",
+     "okresy": 9,
+     "clear": 1
+    },
+    {
+     "model": "ecmwf_aifs025_single",
+     "name": "ECMWF AIFS 0.25°",
+     "okresy": 3,
+     "clear": 0
+    },
+    {
+     "model": "gem_global",
+     "name": "ECCC GEM Global 15 km",
+     "okresy": 3,
+     "clear": 0
+    },
+    {
+     "model": "meteofrance_arpege_europe",
+     "name": "Météo-France ARPEGE Europe",
+     "okresy": 1,
+     "clear": 0
+    },
+    {
+     "model": "meteofrance_arpege_world",
+     "name": "Météo-France ARPEGE World",
+     "okresy": 1,
+     "clear": 0
+    },
+    {
+     "model": "ncep_aigfs025",
+     "name": "NOAA AIGFS 0.25°",
+     "okresy": 1,
+     "clear": 0
+    },
+    {
+     "model": "ukmo_global_deterministic_10km",
+     "name": "UK Met Office Global 10 km",
+     "okresy": 1,
+     "clear": 0
+    }
+   ]
+  },
+  "precipitation_24h/1": {
+   "okresy_total": 77,
+   "models": [
+    {
+     "model": "ukmo_global_deterministic_10km",
+     "name": "UK Met Office Global 10 km",
+     "okresy": 11,
+     "clear": 0
+    },
+    {
+     "model": "cma_grapes_global",
+     "name": "CMA GRAPES Global",
+     "okresy": 9,
+     "clear": 0
+    },
+    {
+     "model": "ecmwf_aifs025_single",
+     "name": "ECMWF AIFS 0.25°",
+     "okresy": 9,
+     "clear": 0
+    },
+    {
+     "model": "chmi_aladin_central_europe_2km",
+     "name": "ČHMÚ ALADIN Central Europe 2.3 km",
+     "okresy": 6,
+     "clear": 0
+    },
+    {
+     "model": "knmi_harmonie_arome_europe",
+     "name": "KNMI HARMONIE-AROME Europe",
+     "okresy": 6,
+     "clear": 0
+    },
+    {
+     "model": "ncep_gfs_global",
+     "name": "NOAA GFS 0.11°/0.25°",
+     "okresy": 6,
+     "clear": 0
+    },
+    {
+     "model": "dmi_harmonie_arome_europe",
+     "name": "DMI HARMONIE-AROME DINI",
+     "okresy": 5,
+     "clear": 0
+    },
+    {
+     "model": "ncep_aigfs025",
+     "name": "NOAA AIGFS 0.25°",
+     "okresy": 5,
+     "clear": 0
+    },
+    {
+     "model": "dwd_icon_d2",
+     "name": "DWD ICON-D2",
+     "okresy": 4,
+     "clear": 0
+    },
+    {
+     "model": "dwd_icon",
+     "name": "DWD ICON global",
+     "okresy": 3,
+     "clear": 0
+    },
+    {
+     "model": "ecmwf_ifs",
+     "name": "ECMWF IFS HRES 9 km",
+     "okresy": 3,
+     "clear": 0
+    },
+    {
+     "model": "chmi_aladin_cz_1km",
+     "name": "ČHMÚ ALADIN CZ 1 km",
+     "okresy": 2,
+     "clear": 0
+    },
+    {
+     "model": "dwd_icon_eu",
+     "name": "DWD ICON-EU",
+     "okresy": 2,
+     "clear": 0
+    },
+    {
+     "model": "meteofrance_arpege_world",
+     "name": "Météo-France ARPEGE World",
+     "okresy": 2,
+     "clear": 0
+    },
+    {
+     "model": "ecmwf_ifs025",
+     "name": "ECMWF IFS 0.25°",
+     "okresy": 1,
+     "clear": 0
+    },
+    {
+     "model": "geosphere_arome_austria",
+     "name": "GeoSphere Austria AROME 2.5 km",
+     "okresy": 1,
+     "clear": 0
+    },
+    {
+     "model": "jma_gsm",
+     "name": "JMA GSM",
+     "okresy": 1,
+     "clear": 0
+    },
+    {
+     "model": "meteofrance_arpege_europe",
+     "name": "Météo-France ARPEGE Europe",
+     "okresy": 1,
+     "clear": 0
+    }
+   ]
+  },
+  "precipitation_24h/3": {
+   "okresy_total": 77,
+   "models": [
+    {
+     "model": "ecmwf_aifs025_single",
+     "name": "ECMWF AIFS 0.25°",
+     "okresy": 23,
+     "clear": 0
+    },
+    {
+     "model": "ukmo_global_deterministic_10km",
+     "name": "UK Met Office Global 10 km",
+     "okresy": 17,
+     "clear": 1
+    },
+    {
+     "model": "ecmwf_ifs",
+     "name": "ECMWF IFS HRES 9 km",
+     "okresy": 9,
+     "clear": 0
+    },
+    {
+     "model": "ncep_aigfs025",
+     "name": "NOAA AIGFS 0.25°",
+     "okresy": 9,
+     "clear": 0
+    },
+    {
+     "model": "ncep_gfs_global",
+     "name": "NOAA GFS 0.11°/0.25°",
+     "okresy": 9,
+     "clear": 0
+    },
+    {
+     "model": "ecmwf_ifs025",
+     "name": "ECMWF IFS 0.25°",
+     "okresy": 6,
+     "clear": 0
+    },
+    {
+     "model": "jma_gsm",
+     "name": "JMA GSM",
+     "okresy": 2,
+     "clear": 0
+    },
+    {
+     "model": "dwd_icon_eu",
+     "name": "DWD ICON-EU",
+     "okresy": 1,
+     "clear": 0
+    },
+    {
+     "model": "meteofrance_arpege_europe",
+     "name": "Météo-France ARPEGE Europe",
+     "okresy": 1,
+     "clear": 0
+    }
+   ]
+  }
+ }
+}
