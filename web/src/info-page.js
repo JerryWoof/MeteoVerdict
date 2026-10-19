@@ -1,4 +1,4 @@
-// Text pages (About, Methodology, For business): the text lives in pages-text.js, one block
+// Text pages (About, Methodology, Collaboration): the text lives in pages-text.js, one block
 // list per page and language, and is built here with DOM calls only.
 import "./style.css";
 
