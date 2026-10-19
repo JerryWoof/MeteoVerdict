@@ -1072,7 +1072,10 @@ def obce_loso_cmd(
     resamples: Annotated[int, typer.Option(help="Bootstrap resamples.")] = obce_loso.RESAMPLES,
     scored_out: Annotated[
         Path | None,
-        typer.Option(help="Also keep the daily scores of every series (Parquet, per variant)."),
+        typer.Option(
+            help="Keep the daily scores of every series here (Parquet, per variant; also "
+            "per batch, so that a stopped run carries on)."
+        ),
     ] = None,
     reuse: Annotated[
         bool,
@@ -1141,8 +1144,9 @@ def obce_loso_cmd(
                 scored[v] = pl.read_parquet(kept)
                 continue
             scored[v] = obce_loso.run(
-                scores, fc, obs, table, first, last, v, buffer_km, log=typer.echo
-            )
+                scores, fc, obs, table, first, last, v, buffer_km, log=typer.echo,
+                checkpoint=scored_out / "batches" if scored_out is not None else None,
+            )  # fmt: skip
             if scored_out is not None and scored[v].height:
                 scored_out.mkdir(parents=True, exist_ok=True)
                 scored[v].write_parquet(scored_out / f"obce-loso-{v}.parquet")
