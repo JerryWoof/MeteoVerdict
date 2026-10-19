@@ -84,6 +84,7 @@ const saveOptions = () => {
   }
 };
 let heatIndex = null; // its index.json, parsed
+let sharpening = null; // percent of the full-size images downloaded while the coarse picture is shown, else null
 let step = 0; // the hourly slider's position, in half hours
 let unit = "°C";
 let map = null;
@@ -152,7 +153,7 @@ function showHeat() {
     renderLegend(range);
     const image = new ImageData(data, width, height);
     if (!map.getSource("heat")) map.addSource("heat", { type: "image", coordinates: heat.index.coordinates });
-    map.getSource("heat").updateImage({ image });
+    map.getSource("heat").updateImage({ image, coordinates: heat.index.coordinates });
     if (!map.getLayer("heat")) {
       map.addLayer({ id: "heat", type: "raster", source: "heat", paint: { "raster-opacity": 0.8, "raster-fade-duration": 0 } }, "okresy-line");
     }
@@ -240,7 +241,8 @@ function renderHourly() {
   const hours = heatIndex.hours;
   $("heat-range").max = String((hours.length - 1) * 2);
   $("heat-range").value = String(step);
-  $("heat-label").textContent = heatTimeText(heatTimeAt(hours, step / 2), language);
+  const time = heatTimeText(heatTimeAt(hours, step / 2), language);
+  $("heat-label").textContent = sharpening === null ? time : `${time} · ${t("heat.sharpening", { pct: sharpening })}`;
   $("heat-prev").disabled = step <= 0;
   $("heat-next").disabled = step >= (hours.length - 1) * 2;
 }
@@ -477,12 +479,52 @@ async function startHourly() {
   $("obce-search").replaceChildren(placeSearch({ t, load: loadPlaces, choose: choosePlace }));
   // the label above the map shows the download's progress, then the time again
   const label = $("heat-label");
+  const percent = (done, total) => (total ? Math.min(100, Math.floor((done / total) * 100)) : 0);
+  const setModel = (model, shrink) => {
+    if (!heat) heat = { fixedLut: heatFixedLut(heatColourLut((v) => colorFor(v, "temperature"))), temps: null, allRange: undefined };
+    Object.assign(heat, { index: model.index, model, shrink });
+  };
+  // the coarse set first (a few hundred kB): drawn at once, the full-size one replaces it later
+  const coarse = heatIndex.lo;
   label.textContent = t("heat.loadingMap", { pct: 0 });
-  try {
+  if (coarse) {
+    try {
+      setModel(await loadHeatModel(coarse, (done, total) => (label.textContent = t("heat.loadingMap", { pct: percent(done, total) }))), 1);
+    } catch {
+      heat = null; // the full-size set below, as without a coarse one
+    }
+  }
+  if (heat) sharpening = 0;
+  const loadFull = async () => {
     const model = await loadHeatModel(heatIndex, (done, total) => {
-      label.textContent = t("heat.loadingMap", { pct: total ? Math.min(100, Math.floor((done / total) * 100)) : 0 });
+      if (!heat) label.textContent = t("heat.loadingMap", { pct: percent(done, total) });
+      else {
+        sharpening = percent(done, total);
+        renderHourly();
+      }
     });
-    heat = { index: heatIndex, model, shrink: pictureShrink(heatIndex.width), fixedLut: heatFixedLut(heatColourLut((v) => colorFor(v, "temperature"))), temps: null, allRange: undefined };
+    setModel(model, pictureShrink(heatIndex.width));
+  };
+  if (heat) {
+    // the full-size images load in the background; the page works with the coarse ones meanwhile
+    renderHourly();
+    renderOptions();
+    if (options.colours === "all") await ensureAllRange();
+    showHeat();
+    if (point) setPoint(point.lng, point.lat, point.name);
+    try {
+      await loadFull();
+    } catch {
+      // the coarse picture stays
+    }
+    sharpening = null;
+    renderHourly();
+    showHeat();
+    if (point) setPoint(point.lng, point.lat, point.name);
+    return;
+  }
+  try {
+    await loadFull();
   } catch {
     label.textContent = t("heat.loadFailed");
     return;
