@@ -30,7 +30,7 @@ test("an okres file: forecast by hour and part of day, licence and attribution",
     "day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol",
     "sunrise", "sunset", "heavy_rain_probability", "heavy_rain",
     "night_min", "coldest_site", "coldest_min", "frost_probability", "frost", "ground_min", "ground_frost",
-    "gust", "gust_warning",
+    "gust", "gust_over_threshold", "gust_warning",
   ]);
   // the saved outlook predates them: null, not missing
   assert.equal(parts[0].heavy_rain, null);
@@ -50,11 +50,26 @@ test("the frost fields of an outlook row are passed through", () => {
 });
 
 test("the gust fields of an outlook row are passed through", () => {
+  const columns = [...OUTLOOK.columns, "gust", "gust_over_threshold", "gust_warning"];
+  const rows = OUTLOOK.rows.map((r) => [...r, 14.2, true, true]);
+  const doc = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, weightsDoc: WEIGHTS, scores: SCORES, meta: META });
+  assert.equal(doc.forecast.parts[0].gust, 14.2);
+  assert.equal(doc.forecast.parts[0].gust_over_threshold, true);
+  assert.equal(doc.forecast.parts[0].gust_warning, true);
+});
+
+test("an outlook row with only the old gust_warning fills both fields", () => {
   const columns = [...OUTLOOK.columns, "gust", "gust_warning"];
   const rows = OUTLOOK.rows.map((r) => [...r, 14.2, true]);
   const doc = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, weightsDoc: WEIGHTS, scores: SCORES, meta: META });
-  assert.equal(doc.forecast.parts[0].gust, 14.2);
+  assert.equal(doc.forecast.parts[0].gust_over_threshold, true);
   assert.equal(doc.forecast.parts[0].gust_warning, true);
+});
+
+test("the files say the flags are thresholds, not ČHMÚ warnings", () => {
+  assert.match(DOC.notice, /not official ČHMÚ warnings/);
+  assert.match(DOC.notice, /chmi\.cz/);
+  assert.match(DOC.deprecated.gust_warning, /gust_over_threshold/);
 });
 
 test("model ranking per variable and lead day, with the weights of our forecast", () => {

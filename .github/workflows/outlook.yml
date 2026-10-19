@@ -20,7 +20,7 @@ name: Outlook
 # The frost fields use frost.json (daily.yml, `mvd frost-fit`); the models' nights at
 # the okres points go into outlook-nights-YYYY-MM.parquet of data-YYYY-MM (no extra
 # calls) to refit the clear-calm term (docs/methodology.md#frost).
-# The gusts (gust, gust_warning) come from the newest stored single run: the month
+# The gusts (gust, gust_over_threshold) come from the newest stored single run: the month
 # file(s) of the release runs-YYYY-MM are downloaded with the GITHUB_TOKEN (read only,
 # a few MB to ~50 MB; no Open-Meteo calls) and corrected with gust_part of
 # sun-cloud-gust.json (docs/methodology.md#gusts-in-the-outlook).

@@ -19,7 +19,7 @@ import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, currentPart, dayLabel, displayName, ease,
   iconName, labelFor, lerpRow, mixColor, okresColours, parseOutlook, parseView,
   placeMarkers, playSteps, rampKey, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary,
-  today, viewHash, measuredRedirect,
+  today, viewHash, measuredRedirect, gustOver, gustOverText, chmiNotice,
 } from "./tv.js";
 import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 import { AI_FILES, aiPath, aiText } from "./ai-source.js";
@@ -514,8 +514,8 @@ function modelPicker(data, rows) {
 function windCell(row) {
   if (!row) return element("td", "", "num");
   if (row.gust == null) return element("td", `${fmt(row.wind)} m/s`, "num");
-  const td = element("td", `${fmt(row.wind)} / ${fmt(row.gust)} m/s`, row.gust_warning ? "num gust-warning" : "num");
-  td.title = t("tv.windGustCell");
+  const td = element("td", `${fmt(row.wind)} / ${fmt(row.gust)} m/s`, gustOver(row) ? "num gust-over-threshold" : "num");
+  td.title = gustOver(row) ? `${t("tv.windGustCell")}. ${gustOverText(t, language)}` : t("tv.windGustCell");
   return td;
 }
 
@@ -634,7 +634,10 @@ function renderPanel(outlook) {
     ]) {
       facts.append(element("li", text));
     }
-    if (now.gust_warning) facts.append(element("li", t("tv.gustWarning"), "gust-warning"));
+    if (gustOver(now)) {
+      facts.append(element("li", gustOverText(t, language), "gust-over-threshold"));
+      facts.append(chmiNotice(t, "li"));
+    }
   }
   const sun = sunFor(outlook, state.okres, state.day);
   if (sun) {
@@ -662,6 +665,8 @@ function renderPanel(outlook) {
     );
     week.append(tr);
   }
+  // the day table can flag a gust on another day than the one in the facts above
+  const weekFlagged = outlook.days.some((day) => gustOver(rowOf(day, "day")));
   const detail = element("a", t("tv.detail"));
   detail.href = `${DETAIL}#${state.okres}`;
   panel.replaceChildren(
@@ -673,6 +678,7 @@ function renderPanel(outlook) {
     facts,
     strip,
     week,
+    ...(weekFlagged && !gustOver(now) ? [chmiNotice(t)] : []),
     detail,
   );
 }

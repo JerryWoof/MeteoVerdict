@@ -172,7 +172,7 @@ All ten are siting, not faults:
 
 - **Summits** (Sněžka, Milešovka, Praděd, Lysá hora, Luční bouda): every model forecasts
   2.5-6 m/s too little wind, because a grid cell of 1-25 km smooths a summit away. These
-  are the stations where wind warnings matter; they stay in, and they help explain why
+  are the stations where strong wind matters; they stay in, and they help explain why
   the main network (with Sněžka, Šerák, Lysá hora, Churáňov and Milešovka) ranks wind
   differently.
 - **Valleys and frost hollows** (Orlické Záhoří - vodárna, Horská Kvilda, Rokytská slať,

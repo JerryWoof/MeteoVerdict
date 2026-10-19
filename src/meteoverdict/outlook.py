@@ -19,7 +19,7 @@ sunshine are the plain mean of the models corrected against ČHMÚ observations
 (``meteoverdict.sun_cloud_gust``: sunshine as a share of the day length, refitted
 nightly; the hourly sunshine is scaled to the corrected day). Every day also gets
 its sunrise and sunset at the okres point (``meteoverdict.sun``, computed, no request).
-Wind gusts (``gust``, the largest per part of day, corrected, and ``gust_warning``) come
+Wind gusts (``gust``, the largest per part of day, corrected, and ``gust_over_threshold``) come
 from the newest stored single run at the okres's lowland stations
 (``meteoverdict.gusts``, no request); null beyond the run and without one.
 
@@ -476,9 +476,11 @@ COLUMNS = (
     "heavy_rain",
 )
 #: after the frost fields: the corrected largest gust of the period (m/s, from the
-#: single runs, ``meteoverdict.gusts``) and whether it reaches ``gusts.WARNING_AT``;
-#: null beyond the newest run's end and without a run
-GUST_COLUMNS = ("gust", "gust_warning")
+#: single runs, ``meteoverdict.gusts``) and whether it reaches ``gusts.GUST_THRESHOLD``
+#: (a MeteoVerdict threshold, not an official warning); null beyond the newest run's end
+#: and without a run. ``gust_warning`` is the deprecated alias of ``gust_over_threshold``
+#: (same value), kept for one API version
+GUST_COLUMNS = ("gust", "gust_over_threshold", "gust_warning")
 
 
 def with_sun(table: pl.DataFrame, points: pl.DataFrame) -> pl.DataFrame:
@@ -531,11 +533,14 @@ def write(table: pl.DataFrame, points: pl.DataFrame, path: Path, generated: date
             (pl.col("gust") if "gust" in table.columns else pl.lit(None, pl.Float64))
             .round(1)
             .alias("gust"),
-            (
-                pl.col("gust_warning")
-                if "gust_warning" in table.columns
-                else pl.lit(None, pl.Boolean)
-            ).alias("gust_warning"),
+            *(
+                (
+                    pl.col("gust_over_threshold")
+                    if "gust_over_threshold" in table.columns
+                    else pl.lit(None, pl.Boolean)
+                ).alias(c)
+                for c in ("gust_over_threshold", "gust_warning")
+            ),
         )
         .with_columns(pl.col("heavy_rain_probability").round(2))
         .select(columns)
@@ -1117,7 +1122,7 @@ def add_gusts(
         .alias("gust")
     ).with_columns(
         pl.when(pl.col("gust").is_not_null())
-        .then(pl.col("gust") >= gusts.WARNING_AT)
-        .otherwise(pl.col("gust_warning"))
-        .alias("gust_warning")
+        .then(pl.col("gust") >= gusts.GUST_THRESHOLD)
+        .otherwise(pl.col("gust_over_threshold"))
+        .alias("gust_over_threshold")
     )
