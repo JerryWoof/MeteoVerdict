@@ -174,6 +174,7 @@ export function renderFooter(footer, t) {
 /** The pages about the project, on every page: About, Methodology, For business, Contact. */
 export const SITE_LINKS = [
   ["site.about", "about.html"],
+  ["site.method", "methodology.html"],
   ["site.contact", "about.html#contact"],
 ];
 
