@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  aiStatus, aiVerdict, bestModel, dailyRows, defaultSeries, headline, parseView, regionGroups, tableRows,
+  aiStatus, aiVerdict, bestModel, compareRows, dailyRows, defaultSeries, parseView, regionGroups,
 } from "./compare-ai.js";
 
 const entry = (aiVs, clear = true) => ({
@@ -28,13 +28,14 @@ describe("aiVerdict", () => {
   });
 });
 
-describe("ranking helpers", () => {
+describe("comparison rows", () => {
   const e = entry({ diff: -0.1, low: -0.15, high: -0.05, p: 0.001 }, false);
-  it("marks the leaders and the headline", () => {
-    assert.deepEqual(tableRows(e).map((r) => r.leader), [true, true, false]);
-    assert.equal(headline(e).kind, "none");
-    assert.equal(headline(e).leaders.length, 2);
-    assert.equal(headline({ ...e, clear_winner: true }).kind, "winner");
+  it("are the AI, the blend, the mean and the best model, each against the blend", () => {
+    const rows = compareRows(e);
+    assert.deepEqual(rows.map((r) => r.id), ["meteoverdict_ai", "combined", "dwd_icon_d2"]);
+    assert.equal(rows[0].relation.verdict, "better");
+    assert.equal(rows[1].relation, null);
+    assert.equal(rows[2].relation.verdict, "worse");
   });
   it("finds the best model and the default series", () => {
     assert.equal(bestModel(e).id, "dwd_icon_d2");
@@ -57,8 +58,8 @@ describe("status and view", () => {
     assert.deepEqual(parseView("x.9.y.zz", { cz: 1 }), { variable: "temperature_2m", lead: 1, sample: "validation", region: "cz" });
   });
   it("groups the regions by level", () => {
-    const g = regionGroups({ regions: { cz: ["cz", "Česko"], CZ010: ["kraj", "Praha"], CZ0201: ["okres", "Benešov"] } });
-    assert.deepEqual(g, { cz: true, kraje: [["CZ010", "Praha"]], okresy: [["CZ0201", "Benešov"]] });
+    const g = regionGroups({ regions: { cz: ["cz", "Česko", true], CZ010: ["kraj", "Praha", true], CZ0201: ["okres", "Benešov", false] } });
+    assert.deepEqual(g, { cz: true, kraje: [["CZ010", "Praha"]], okresy: [] });
   });
 });
 

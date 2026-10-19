@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MeteoVerdict: compare</title>
+    <title>MeteoVerdict: AI vs our blend</title>
     <meta name="description" content="Which weather model forecasts best in Czechia, each kraj and each okres, with confidence intervals." />
   </head>
   <body class="page theme-compare">
@@ -24,12 +24,10 @@
     </header>
     <main class="content wide">
       <div class="page-head">
-        <h2 class="page-title" data-i18n="page.compareTitle">Model comparison</h2>
+        <h2 class="page-title" data-i18n="aic.title">MeteoVerdict AI against our blend</h2>
       </div>
-      <p class="page-intro" data-i18n="page.compareIntro">Which model forecasts best in Czechia.</p>
-      <section id="ai-compare" class="ai-compare card" aria-labelledby="aic-title">
-        <h2 id="aic-title" data-i18n="aic.title">MeteoVerdict AI against our blend and the models</h2>
-        <p class="note" data-i18n="aic.intro"></p>
+      <p class="page-intro" data-i18n="aic.intro">Which model forecasts best.</p>
+      <section id="ai-compare" class="ai-compare" aria-labelledby="aic-title">
         <div id="aic-status" class="aic-status" role="status"></div>
         <form id="aic-controls" class="ranking-controls strip standalone" aria-labelledby="aic-title" onsubmit="return false">
           <label class="field"><span data-i18n="aic.control.region">Region</span> <select id="aic-region"></select></label>
@@ -37,133 +35,19 @@
           <label class="field"><span data-i18n="control.lead">Lead time</span> <select id="aic-lead"></select></label>
           <label class="field"><span data-i18n="aic.control.sample">Sample</span> <select id="aic-sample"></select></label>
         </form>
+        <p class="note" id="aic-region-note" data-i18n="aic.regionNote" hidden></p>
         <div id="aic-verdict" class="aic-verdict" aria-live="polite"></div>
-        <p class="note" id="aic-sample-note"></p>
-        <h3 data-i18n="aic.ranking">Ranking</h3>
-        <p class="note" id="aic-headline"></p>
         <div class="scroll"><table id="aic-table" class="data-table aic-table"></table></div>
+        <p class="note" id="aic-sample-note"></p>
         <h3 data-i18n="aic.errorTime">Error over time</h3>
-        <p class="note" data-i18n="aic.errorTimeNote"></p>
         <div id="aic-chart" class="chart-card"></div>
+        <p class="note" data-i18n="aic.fair"></p>
+        <p class="note"><a href="compare-models.html" data-i18n="aic.modelsLink">All models compared with each other →</a></p>
       </section>
-      <h2 class="section-title aic-more" data-i18n="aic.more">Details: all models at all stations</h2>
-      <p class="note" data-i18n="aic.moreNote"></p>
-      <section id="blend-test-section" class="blend-test card" hidden aria-labelledby="blend-test-title">
-        <h2 id="blend-test-title" data-i18n="blendTest.title">Is our forecast better than one model for all of Czechia?</h2>
-        <p class="scope" id="blend-test-scope"></p>
-        <p class="note" data-i18n="blendTest.intro"></p>
-        <div class="blend-test-switch">
-          <span id="blend-test-variable-label" data-i18n="blendTest.show">Variable</span>
-          <div class="segmented" id="blend-test-variable" role="group" aria-labelledby="blend-test-variable-label"></div>
-        </div>
-        <div class="blend-test-grid">
-          <div>
-            <div id="blend-test-cz">
-              <h3 data-i18n="blendTest.czTitle">Against the best single model for all of Czechia</h3>
-              <div class="scroll"><table id="blend-test-table" class="blend-test-table"></table></div>
-              <p class="note" id="blend-test-cz-note"></p>
-              <p class="note" data-i18n="blendTest.cellsNote"></p>
-            </div>
-            <h3 data-i18n="blendTest.okresTitle">Against the best model in each okres (a harder competitor)</h3>
-            <p class="note" data-i18n="blendTest.okresIntro"></p>
-            <div class="scroll"><table id="blend-test-okres-table" class="blend-test-table"></table></div>
-            <p class="note" id="blend-test-okres"></p>
-          </div>
-          <div id="blend-test-chart" class="chart-card"></div>
-        </div>
-        <div id="blend-test-models-block" hidden>
-          <h3 id="blend-test-models-title"></h3>
-          <p class="note" data-i18n="blendTest.modelsIntro"></p>
-          <table id="blend-test-models" class="blend-test-table blend-test-models"></table>
-          <p class="note" id="blend-test-models-note"></p>
-        </div>
-        <p class="note" id="blend-test-basis"></p>
-        <p class="note" data-i18n="blendTest.caveats"></p>
-      </section>
-      <section id="ranking-section" class="ranking-section" aria-labelledby="ranking-section-title">
-        <h2 id="ranking-section-title" class="section-title" data-i18n="compare.rankingSection">Model ranking</h2>
-        <p class="note" data-i18n="compare.rankingSectionNote"></p>
-        <form id="controls" class="ranking-controls strip standalone" aria-labelledby="ranking-section-title">
-          <label class="field"><span data-i18n="control.region">Region</span> <select id="region"></select></label>
-          <label class="field"><span data-i18n="control.variable">Variable</span> <select id="variable"></select></label>
-          <label class="field"><span data-i18n="control.lead">Lead time</span> <select id="lead"></select></label>
-          <label class="field"><span data-i18n="control.window">Period</span> <select id="window"></select>
-            <span class="help" tabindex="0" role="note" data-i18n-title="window.help">?</span></label>
-        </form>
-        <div class="overview">
-          <div>
-            <div id="mini-map" class="map-frame" aria-label="Map: best model per okres"></div>
-            <p class="note" id="map-note" data-i18n="compare.mapNote"></p>
-            <p class="note" id="map-band-note" hidden></p>
-            <div id="mini-legend" class="mini-legend legend-card"></div>
-          </div>
-          <div id="summary" class="card" aria-live="polite"></div>
-        </div>
-        <h3 id="ranking-title" data-i18n="compare.ranking">Ranking</h3>
-        <p class="note" data-i18n="compare.rankingNote"></p>
-        <div class="ranking-options">
-          <p class="note band-basis" id="band-basis" hidden></p>
-          <div id="band-set-block" class="blend-test-switch" hidden>
-            <span id="band-set-label" data-i18n="compare.bandSet">Hours in the band</span>
-            <div class="segmented" id="band-set" role="group" aria-labelledby="band-set-label"></div>
-          </div>
-          <p class="note" id="band-set-note" hidden></p>
-          <div id="stations-block" class="blend-test-switch" hidden>
-            <span id="stations-label" data-i18n="compare.stations">Stations</span>
-            <div class="segmented" id="stations" role="group" aria-labelledby="stations-label"></div>
-          </div>
-          <p class="note" id="stations-note" hidden></p>
-          <div id="rank-by-block" class="blend-test-switch" hidden>
-            <span id="rank-by-label" data-i18n="compare.rankBy">Sort by</span>
-            <div class="segmented" id="rank-by" role="group" aria-labelledby="rank-by-label"></div>
-          </div>
-          <p class="note" id="rank-by-note" hidden></p>
-        </div>
-        <div class="scroll"><table id="ranking" class="data-table"></table></div>
-        <p class="note" id="bc-note" hidden></p>
-        <p class="note" id="aladin-note" hidden></p>
-        <h3 data-i18n="compare.intervals">How sure is the ranking?</h3>
-        <p class="note" data-i18n="compare.intervalsNote"></p>
-        <div id="intervals" class="chart-card"></div>
-        <h3 data-i18n="compare.byLead">Error by lead time</h3>
-        <p class="note" id="by-lead-note" data-i18n="compare.byLeadNote"></p>
-        <div id="by-lead" class="chart-card"></div>
-        <div id="elevation-section">
-          <h3 data-i18n="compare.bias">Bias by elevation</h3>
-          <p class="note" data-i18n="compare.biasNote"></p>
-          <div id="bias" class="chart-card"></div>
-        </div>
-        <div id="lead-hours-section" hidden>
-          <h3 data-i18n="compare.leadHours">Error by hours ahead (run-based)</h3>
-          <p class="scope" data-i18n="compare.leadHoursScope"></p>
-          <p class="note" data-i18n="compare.leadHoursNote"></p>
-          <p class="note" id="lead-hours-basis"></p>
-          <label class="lead-hours-runs field"><span data-i18n="compare.leadHoursRuns">Runs</span>
-            <select id="lead-hours-run"></select></label>
-          <div id="lead-hours" class="chart-card"></div>
-          <p class="note" data-i18n="compare.leadHoursFair"></p>
-          <p class="note" data-i18n="compare.leadHoursSource"></p>
-        </div>
-      </section>
-      <section id="farm-section" class="farm-section" hidden aria-labelledby="farm-title">
-        <h2 id="farm-title" class="section-title" data-i18n="farm.title">For farmers: frost, gusts, 3-hour rain (run-based)</h2>
-        <p class="scope" data-i18n="farm.scope"></p>
-        <p class="note" data-i18n="farm.intro"></p>
-        <p class="note" id="farm-basis"></p>
-        <label class="lead-hours-runs field"><span data-i18n="farm.event">Event</span>
-          <select id="farm-event"></select></label>
-        <p id="farm-reading" class="farm-reading"></p>
-        <div class="scroll"><table id="farm-table" class="farm-table data-table"></table></div>
-        <p class="note" id="farm-small"></p>
-        <p class="note" data-i18n="farm.howToRead"></p>
-        <p class="note" data-i18n="farm.definitions"></p>
-        <p class="note" data-i18n="farm.fair"></p>
-      </section>
-    </main>
-    <footer data-footer="models" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/methodology.md">
+    </main>    <footer data-footer="models" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/methodology.md">
       <!-- filled in by src/footer.js (the credits and licences of every page) -->
       Data: ČHMÚ, Open-Meteo.com and the model providers (CC BY 4.0; UK Met Office CC BY-SA 4.0); scores CC BY-SA 4.0.
     </footer>
-    <script type="module" src="/src/compare-page.js"></script>
+    <script type="module" src="/src/compare-ai-page.js"></script>
   </body>
 </html>
