@@ -4,7 +4,7 @@ Two checks on the daily scores (``meteoverdict.scoring``):
 
 * ``compare_subsets``: the MAE ranking of the models, for Czechia and per kraj, when
   only a subset of the stations is used (e.g. only the main WMO stations, or only the
-  automatic climate stations), with the same fair station-days and day bootstrap as
+  automatic climate stations), with the same fair station-days, block bootstrap and tie rule as
   ``meteoverdict.ranking``; ``summarize`` compares each subset with all stations
   (Spearman rank correlation, best model, MAE, intervals).
 * ``suspicious_stations``: stations whose errors are much larger than their okres's for
@@ -112,10 +112,11 @@ def compare_subsets(
     variable and lead day, over all days of ``scores``.
 
     As in ``ranking.rank``: only the models with ``aggregate.MIN_COVERAGE`` of the days,
-    only station-days every one of them has in the region, whole days
-    resampled, a model ``tied_with_best`` when the 95 % interval of its MAE minus the
-    best's includes 0; the mean of all models (``blend``) is not ranked. Regions with
-    fewer than ``aggregate.MIN_STATIONS`` stations are left out.
+    only station-days every one of them has in the region, blocks of consecutive days
+    resampled, a model ``tied_with_best`` unless the 95 % interval of its MAE minus the
+    best's excludes 0 and the Diebold-Mariano test agrees (``ranking.ties``); the mean of
+    all models (``blend``) is not ranked. Regions with fewer than
+    ``aggregate.MIN_STATIONS`` stations are left out.
     """
     scores = scores.lazy().filter(
         pl.col("variable").is_in(list(variables)), pl.col("lead_day").is_in(list(lead_days))
@@ -175,7 +176,7 @@ def _rank_group(
         rng = np.random.default_rng([seed, zlib.crc32(key.encode())])
         order, diff, bounds = ranking.bootstrap_group(a, m, rng, resamples, ranked)
     position = order.argsort()
-    tied = (bounds[0] <= 0) & (bounds[1] >= 0) & (position > 0)
+    tied, _, _ = ranking.ties(a, m, order, bounds)
     out = []
     for i in order:
         rank = int(position[i]) + 1 if ranked[i] else None
