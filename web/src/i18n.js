@@ -305,7 +305,9 @@ export const STRINGS = {
     "api.intro":
       "Naši kombinovanou předpověď a pořadí modelů si můžete stáhnout pro každý okres jako JSON nebo CSV, zdarma, bez registrace a bez klíče. Soubory jsou statické a dají se načíst i přímo z prohlížeče na jiném webu (CORS povolený).",
     "api.when":
-      "Předpověď se obnovuje čtyřikrát denně (kolem 5:00, 11:00, 17:00 a 23:00 UTC, po každém běhu modelů), pořadí modelů jednou denně ráno. Čas vytvoření je v každém souboru.",
+      "Aktualizováno denně: skóre modelů v {daily} a předpověď čtyřikrát denně v {outlook} (pražský čas, teď {zone}; po každém běhu modelů). Čas vytvoření je v každém souboru.",
+    "api.whenLate":
+      "Jde o plánovaný začátek: GitHub Actions spouští úlohy s proměnlivým zpožděním (v říjnu 2026 občas i několik hodin) a výpočet pak trvá desítky minut. Skutečný čas poslední aktualizace je v záhlaví stránky a v souboru. Čas ani dostupnost nezaručujeme (bez SLA).",
     "api.try": "Váš okres",
     "api.none": "Otevřená data zatím nejsou k dispozici.",
     "api.files": "Soubory",
@@ -1275,7 +1277,9 @@ export const STRINGS = {
     "api.intro":
       "Our combined forecast and the ranking of the models can be downloaded for every okres as JSON or CSV, free, without registration or a key. The files are static and can be fetched straight from a browser on another site (CORS allowed).",
     "api.when":
-      "The forecast is refreshed four times a day (around 5:00, 11:00, 17:00 and 23:00 UTC, after each model run), the ranking once a day in the morning. Every file says when it was made.",
+      "Updated daily: the model scores at {daily} and the forecast four times a day at {outlook} (Prague time, now {zone}; after each model run). The time of creation is in every file.",
+    "api.whenLate":
+      "These are the scheduled start times: GitHub Actions starts jobs with a variable delay (sometimes several hours in October 2026) and the computation then takes tens of minutes. The actual time of the last update is in the page header and in the file. We do not guarantee timing or availability (no SLA).",
     "api.try": "Your okres",
     "api.none": "The open data files are not available yet.",
     "api.files": "Files",
