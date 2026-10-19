@@ -15,8 +15,8 @@ import {
   temp100mFormat, temp100mGradient, temp100mLoader, temp100mSlot, temp100mSlotText,
 } from "./ai-temp100m.js";
 import {
-  HEAT_INDEX, heatBlend, heatColourLut, heatCompose, heatDayMarks, heatNearestHour, heatSeriesAt, heatTimeAt, heatTimeText,
-  heatValueAt, loadHeatModel, parseHeatIndex,
+  HEAT_INDEX, heatAllRange, heatBlend, heatColourLut, heatDayMarks, heatFixedLut, heatHourRange, heatNearestHour, heatPaint,
+  heatRampGradient, heatRampLut, heatSeriesAt, heatTemperatures, heatTimeAt, heatTimeText, heatValueAt, loadHeatModel, parseHeatIndex,
 } from "./ai-heat.js";
 
 // The AI heatmap tab: MeteoVerdict AI's 100 m temperature over the radar page's base map,
@@ -66,7 +66,27 @@ let slots = []; // [{ day, part, time }] in time order
 let selected = 0;
 let loader = null;
 let source = null; // { index } or { single }
-let heat = null; // the hourly map: { index, model, lut, shrink } once its images are loaded
+let heat = null; // the hourly map: { index, model, fixedLut, shrink, temps, allRange } once its images are loaded
+const OPTIONS_KEY = "heat-options";
+const COLOUR_MODES = ["hour", "all", "fixed"];
+// the display options (remembered in the browser): colours, frost overlay, ground frost overlay
+const options = { colours: "all", frost: true, ground: false };
+try {
+  const saved = JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? "null");
+  // v 2: "All 5 days" became the default; an older stored colour choice was the old default
+  if (saved?.v === 2 && COLOUR_MODES.includes(saved.colours)) options.colours = saved.colours;
+  if (typeof saved?.frost === "boolean") options.frost = saved.frost;
+  if (typeof saved?.ground === "boolean") options.ground = saved.ground;
+} catch {
+  // no storage: the defaults
+}
+const saveOptions = () => {
+  try {
+    localStorage.setItem(OPTIONS_KEY, JSON.stringify({ v: 2, ...options }));
+  } catch {
+    // not remembered
+  }
+};
 let heatIndex = null; // its index.json, parsed
 let step = 0; // the hourly slider's position, in half hours
 let unit = "°C";
@@ -111,13 +131,29 @@ function addLayers() {
   map.getCanvas().addEventListener("mouseleave", () => tip?.remove());
 }
 
+/** The "All 5 days" range, worked out once in the background (the picture uses the hour's range until it is there). */
+function ensureAllRange() {
+  if (!heat || heat.allRange !== undefined) return;
+  heat.allRange = null;
+  return heatAllRange(heat.model, 16, 64, (done) => (done % 8 === 0 ? new Promise((r) => setTimeout(r)) : undefined)).then((range) => {
+    heat.allRange = range ?? false;
+    if (options.colours === "all") showHeat();
+  });
+}
+
 /** The hourly map's picture at the slider's time (the latest request wins). */
 let composeFrame = 0;
 function showHeat() {
   cancelAnimationFrame(composeFrame);
   composeFrame = requestAnimationFrame(() => {
     if (!heat || !map) return;
-    const { data, width, height } = heatCompose(heat.model, step / 2, heat.lut, heat.shrink);
+    if (options.colours === "all") ensureAllRange();
+    heat.temps = heatTemperatures(heat.model, step / 2, heat.shrink, heat.temps);
+    const hourRange = heatHourRange(heat.temps.hist) ?? { lo: -15, hi: 32 };
+    const range = options.colours === "fixed" ? null : options.colours === "all" && heat.allRange ? heat.allRange : hourRange;
+    const lut = range ? heatRampLut(range.lo, range.hi) : heat.fixedLut;
+    const { data, width, height } = heatPaint(heat.temps, lut, options);
+    renderLegend(range);
     const image = new ImageData(data, width, height);
     if (!map.getSource("heat")) map.addSource("heat", { type: "image", coordinates: heat.index.coordinates });
     map.getSource("heat").updateImage({ image });
@@ -156,8 +192,26 @@ function showTip(event) {
   tip.setLngLat(event.lngLat).setText(temp100mFormat(value, language, unit)).addTo(map);
 }
 
-function renderLegend() {
+/** The hourly map's legend: the active ramp with its ends in °C (`range` null: the fixed scale), and the overlays' swatches. */
+function renderHourlyLegend(range) {
   const box = $("scale");
+  if (!range) renderScale(box, "temperature", t("heat.legend"));
+  else {
+    const bar = element("div", null, "bar");
+    bar.style.background = heatRampGradient();
+    box.replaceChildren(element("div", t("heat.legend"), "scale-title"), bar, element("div", `${range.lo}° … ${range.hi}°`, "scale-ends"));
+  }
+  for (const [on, kind, key] of [[options.frost, "frost", "heat.legendFrost"], [options.ground, "ground", "heat.legendGround"]]) {
+    if (!on) continue;
+    const row = element("div", null, "scale-key");
+    row.append(element("span", null, `swatch ${kind}`), element("span", t(key)));
+    box.append(row);
+  }
+}
+
+function renderLegend(range) {
+  const box = $("scale");
+  if (heatIndex && heat) return renderHourlyLegend(range);
   if (!source?.single) return renderScale(box, "temperature", t("heat.legend"));
   // the old single image has its own colours: its own legend
   const { min, max } = source.single;
@@ -267,6 +321,8 @@ function seriesChart(series) {
     svg.append(svgElement("line", { x1: x(mark.pos), x2: x(mark.pos), y1: top, y2: H - bottom, class: "grid" }));
     svg.append(svgElement("text", { x: x(mark.pos) + 2, y: H - 4, class: "tick" }, mark.label));
   }
+  // the band below 0 °C, shaded lightly so that frost hours stand out
+  if (lo < 0) svg.append(svgElement("rect", { x: left, y: y(Math.min(0, hi)), width: W - left - right, height: y(lo) - y(Math.min(0, hi)), class: "frost" }));
   if (lo < 0 && hi > 0) svg.append(svgElement("line", { x1: left, x2: W - right, y1: y(0), y2: y(0), class: "zero" }));
   svg.append(svgElement("text", { x: left - 3, y: y(hi) + 3, class: "tick end" }, `${hi}°`));
   svg.append(svgElement("text", { x: left - 3, y: y(lo) + 3, class: "tick end" }, `${lo}°`));
@@ -360,6 +416,45 @@ function choosePlace(place) {
   if (!map.getBounds().contains([place.lon, place.lat])) map.easeTo({ center: [place.lon, place.lat] });
 }
 
+/** The options row above the map: the colour buttons and the two overlay checkboxes. */
+function renderOptions() {
+  const box = $("heat-options");
+  const change = () => {
+    saveOptions();
+    for (const b of box.querySelectorAll(".seg-buttons button")) b.setAttribute("aria-pressed", String(b.dataset.mode === options.colours));
+    showHeat();
+  };
+  const seg = element("div", null, "seg");
+  seg.append(element("span", t("heat.colours")));
+  const buttons = element("span", null, "seg-buttons");
+  for (const mode of COLOUR_MODES) {
+    const button = element("button", t(`heat.col.${mode}`));
+    button.type = "button";
+    button.dataset.mode = mode;
+    button.setAttribute("aria-pressed", String(options.colours === mode));
+    button.addEventListener("click", () => {
+      options.colours = mode;
+      change();
+    });
+    buttons.append(button);
+  }
+  seg.append(buttons);
+  const check = (key, label) => {
+    const wrap = element("label", null, "check");
+    const input = element("input");
+    input.type = "checkbox";
+    input.checked = options[key];
+    input.addEventListener("change", () => {
+      options[key] = input.checked;
+      change();
+    });
+    wrap.append(input, element("span", label));
+    return wrap;
+  };
+  box.replaceChildren(seg, check("frost", t("heat.frost")), check("ground", t("heat.ground")));
+  box.hidden = false;
+}
+
 /** The hourly map: the slider's range, the images' download (with its progress), the first picture. */
 async function startHourly() {
   const hours = heatIndex.hours;
@@ -385,12 +480,15 @@ async function startHourly() {
     const model = await loadHeatModel(heatIndex, (done, total) => {
       label.textContent = t("heat.loadingMap", { pct: total ? Math.min(100, Math.floor((done / total) * 100)) : 0 });
     });
-    heat = { index: heatIndex, model, shrink: pictureShrink(heatIndex.width), lut: heatColourLut((v) => colorFor(v, "temperature")) };
+    heat = { index: heatIndex, model, shrink: pictureShrink(heatIndex.width), fixedLut: heatFixedLut(heatColourLut((v) => colorFor(v, "temperature"))), temps: null, allRange: undefined };
   } catch {
     label.textContent = t("heat.loadFailed");
     return;
   }
   renderHourly();
+  renderOptions();
+  // the colours of "All 5 days" must not change while scrubbing: wait for the range before the first picture
+  if (options.colours === "all") await ensureAllRange();
   showHeat();
   if (point) setPoint(point.lng, point.lat, point.name);
 }
