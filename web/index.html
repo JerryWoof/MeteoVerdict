@@ -3,18 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MeteoVerdict: který model předpovídá Česko nejlépe</title>
+    <title>MeteoVerdict: počasí a který model předpovídá nejlépe</title>
     <meta
       name="description"
-      content="Daily verification of weather models against ČHMÚ station observations, per region."
+      content="Předpověď počasí pro každou obec v Česku a denní ověřování, který model se trefuje nejlépe, proti měření stanic ČHMÚ."
     />
   </head>
   <body class="page map-page theme-map">
     <header>
       <h1><a href="./">MeteoVerdict</a></h1>
-      <p id="status">Loading…</p>
+      <p id="status">Načítám…</p>
       <nav class="site-nav" aria-label="MeteoVerdict">
-        <a href="./" data-i18n="page.map" aria-current="page">Map</a>
+        <a href="./" data-i18n="page.map" aria-current="page">Mapa</a>
         <a href="forecast.html" data-i18n="page.tv">Forecast</a>
         <a href="radar.html" data-i18n="page.radar">Radar</a>
         <a href="measured.html" data-i18n="page.station">Measured</a>
@@ -26,10 +26,21 @@
       <button type="button" id="language">Česky</button>
     </header>
     <main class="content map-page">
+      <!-- the first thing: the weather at my place -->
+      <section id="home-find" class="home-find" aria-labelledby="home-title">
+        <h2 id="home-title" class="page-title" data-i18n="home.title">Počasí ve vašem místě</h2>
+        <p class="page-intro" data-i18n="home.intro"></p>
+        <div class="home-find-row">
+          <div id="home-search"></div>
+          <button type="button" id="home-locate" data-i18n="home.locate"></button>
+        </div>
+        <p id="home-note" class="note" role="status"></p>
+      </section>
       <div class="page-head">
-        <h2 class="page-title" data-i18n="page.mapTitle">Which model forecasts best</h2>
+        <h2 class="page-title" data-i18n="page.mapTitle">Který model předpovídá nejlépe</h2>
       </div>
-      <p class="page-intro" data-i18n="page.mapIntro">Each okres has the colour of the model that forecast it best.</p>
+      <p class="page-intro" data-i18n="page.mapIntro"></p>
+      <p class="page-intro" data-i18n="home.bestModel"></p>
       <!-- what the map shows: right above it -->
       <form id="controls" class="strip attached">
         <div class="strip-row">
