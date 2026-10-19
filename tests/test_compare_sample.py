@@ -37,3 +37,16 @@ def test_identical_series_no_clear_winner():
     a = n * (1 + rng.normal(0, 0.1, (40, 2)))
     e = compare_sample.entry(list(range(40)), ["a", "b"], a, n, {}, "k", resamples=200)
     assert not e["clear_winner"]
+
+
+def test_versus_outlook():
+    a, n = _data()
+    ids = ["m1", "combined", "blend", "meteoverdict_ai"]
+    e = compare_sample.entry(list(range(40)), ids, a, n, {}, "k", resamples=200)
+    ai = next(s for s in e["series"] if s["id"] == "meteoverdict_ai")
+    assert (
+        ai["vs_outlook"]["diff"] < 0
+        and ai["vs_outlook"]["high"] < 0
+        and ai["vs_outlook"]["p"] < 0.05
+    )
+    assert next(s for s in e["series"] if s["id"] == "combined")["vs_outlook"] is None
