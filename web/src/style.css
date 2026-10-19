@@ -3075,13 +3075,24 @@ body.station [hidden] {
 #scale .swatch.frost {
   background-image: repeating-linear-gradient(135deg, #f2faff 0 3px, rgba(226, 244, 255, 0.35) 3px 6px);
 }
-#scale .swatch.ground {
-  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.9) 1px, transparent 1.5px);
-  background-size: 4px 4px;
-}
 #heat-panel .heat-chart .frost {
   fill: #74add1;
   fill-opacity: 0.18;
+}
+#heat-panel .heat-chart .risk {
+  stroke: #4575b4;
+  stroke-dasharray: 4 3;
+}
+#heat-panel .heat-chart .risk-label {
+  fill: #4575b4;
+}
+#heat-panel .heat-risk {
+  font-weight: 600;
+  color: #2f5f9e;
+}
+#heat-panel .heat-risk-times {
+  font-size: 0.8rem;
+  margin: 0.2rem 0 0.3rem;
 }
 .heat-options[hidden] {
   display: none;
