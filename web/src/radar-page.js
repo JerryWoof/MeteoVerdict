@@ -1291,8 +1291,14 @@ async function main() {
   // folds them on the first drag; open they cover a third of a small map
   if (window.innerWidth <= 700) map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
   addLayers();
+  const linkedTime = view.time != null; // a shared link to one moment stays on that moment
   await update({ day: view.day });
   window.addEventListener("resize", () => renderTimeline());
+  // open playing from 6 hours before now (the window shows the last 24 h), unless a time was asked for or motion is unwanted
+  if (!linkedTime && steps.length > 1 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    goTo((lastObserved() ?? lastTime()) - 6 * 3600000);
+    play();
+  }
 }
 
 main();

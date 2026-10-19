@@ -755,6 +755,47 @@ def write(doc: dict, path: Path) -> Path:
     return path
 
 
+def write_compare(
+    days: pl.DataFrame,
+    stations: pl.DataFrame,
+    doc: dict,
+    path: Path,
+    candidates: set[str],
+    resamples: int = ranking.RESAMPLES,
+) -> Path:
+    """The Compare page's same-sample files (``compare_sample``) of the test, zipped."""
+    import tempfile
+    import zipfile
+
+    from meteoverdict import compare_sample
+
+    names = dict(stations.select("okres_code", "okres").unique().iter_rows())
+    kraj = {
+        okres: (code, name)
+        for okres, code, name in stations.select("okres_code", "kraj_code", "kraj")
+        .unique("okres_code")
+        .iter_rows()
+        if okres and code
+    }
+    docs = compare_sample.documents(days, czechia, names, kraj, candidates, resamples)
+    info = {
+        "generated": doc["generated"], "sample": "validation", "from": doc["from"],
+        "to": doc["to"], "test_days": doc["test_days"], "models": doc["models"],
+        "candidates": sorted(candidates), "units": UNITS,
+        "block_days": ranking.BLOCK_DAYS, "p_best_min": ranking.P_BEST_MIN,
+        "small_sample_days": ranking.SMALL_SAMPLE_DAYS,
+    }  # fmt: skip
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with (
+        tempfile.TemporaryDirectory() as tmp,
+        zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive,
+    ):
+        compare_sample.write(docs, Path(tmp), info)
+        for file in sorted(Path(tmp).glob("*.json")):
+            archive.write(file, file.name)
+    return path
+
+
 def summary(groups: list[list]) -> list[str]:
     """Czechia, one line per variable and lead day, for the command's output."""
     at = {c: i for i, c in enumerate(GROUP_COLUMNS)}

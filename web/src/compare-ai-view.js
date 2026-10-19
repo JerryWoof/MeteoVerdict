@@ -1,0 +1,225 @@
+// The Compare page's same-sample section (compare-ai.js has the pure parts).
+import * as Plot from "@observablehq/plot";
+
+import {
+  SOURCES, LEADS, VARIABLES, aiStatus, aiVerdict, dailyRows, defaultSeries, entryKey, formatView, hasAi, headline,
+  parseView, regionGroups, tableRows,
+} from "./compare-ai.js";
+import { displayName } from "./tv.js";
+
+const COLORS = { ai: "#c0392b", outlook: "#1f78b4", mean: "#1d2329", model: "#6a3d9a" };
+const fmt = (v, signed = false, digits = 2) =>
+  v == null ? "–" : `${signed && v > 0 ? "+" : ""}${v.toFixed(digits)}`.replace("-", "−");
+
+async function getJson(path) {
+  try {
+    const response = await fetch(path);
+    return response.ok ? await response.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+const cache = new Map();
+/** First source that has the file (cached; a miss is not remembered). */
+function load(sample, file) {
+  const key = `${sample}/${file}`;
+  if (!cache.has(key)) {
+    const attempt = async () => {
+      for (const base of SOURCES[sample]) {
+        const doc = await getJson(`${base}/${file}`);
+        if (doc) return doc;
+      }
+      return null;
+    };
+    cache.set(key, attempt().then((doc) => {
+      if (!doc) cache.delete(key);
+      return doc;
+    }));
+  }
+  return cache.get(key);
+}
+
+function el(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text != null) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+
+function fillSelect(id, options, current) {
+  document.getElementById(id).replaceChildren(...options.map(([value, label, group]) => {
+    const option = el("option", label);
+    option.value = value;
+    option.selected = String(value) === String(current);
+    return group ? Object.assign(option, { group }) : option;
+  }));
+}
+
+export async function setUpAiCompare(t, names, language) {
+  const root = document.getElementById("ai-compare");
+  if (!root) return;
+  const [aiDoc, liveIndex, valIndex] = await Promise.all([
+    getJson("data/scores/ai/ai.json"), load("live", "index.json"), load("validation", "index.json"),
+  ]);
+  if (!valIndex && !liveIndex) {
+    root.hidden = true;
+    return;
+  }
+  const status = aiStatus(liveIndex ? { days: liveIndex.days, measured_hours: liveIndex.hours } : aiDoc?.test);
+  const query = new URLSearchParams(window.location.search).get("cmp");
+  const view = parseView(query, valIndex?.regions);
+  if (view.sample === "live" && !liveIndex) view.sample = "validation";
+  const label = (id, kind) =>
+    kind === "ai" ? t("aic.ai") : kind === "outlook" ? t("aic.outlook") : kind === "mean" ? t("model.blend") : (names[id] ?? valIndex?.models?.[id] ?? id);
+
+  function fillRegions(index) {
+    const groups = regionGroups(index, language);
+    const select = document.getElementById("aic-region");
+    const group = (text, items) => {
+      const g = document.createElement("optgroup");
+      g.label = text;
+      g.append(...items.map(([code, name]) => Object.assign(el("option", displayName(name)), { value: code, selected: code === view.region })));
+      return g;
+    };
+    select.replaceChildren(
+      Object.assign(el("option", t("region.cz")), { value: "cz", selected: view.region === "cz" }),
+      ...(groups.kraje.length ? [group(t("compare.kraje"), groups.kraje)] : []),
+      ...(groups.okresy.length ? [group(t("compare.okresy"), groups.okresy)] : []),
+    );
+  }
+
+  function banner(index) {
+    const node = document.getElementById("aic-status");
+    const live = view.sample === "live";
+    node.className = `aic-status ${status.verified ? "verified" : "provisional"}`;
+    node.replaceChildren(
+      el("strong", t(status.verified ? "aic.verified" : "aic.provisional")),
+      document.createTextNode(" " + t("aic.hours", { hours: status.hours, days: status.days, need: status.need })),
+      document.createTextNode(" " + t(live ? "aic.sampleLive" : "aic.sampleValidation", {
+        from: index?.from, to: index?.to, days: index?.test_days ?? index?.days,
+      })),
+    );
+  }
+
+  async function render() {
+    const index = view.sample === "live" ? liveIndex : valIndex;
+    fillRegions(valIndex ?? liveIndex);
+    fillSelect("aic-variable", VARIABLES.map((v) => [v, t(`variable.${v}`)]), view.variable);
+    fillSelect("aic-lead", LEADS.map((l) => [l, `D+${l}`]), view.lead);
+    fillSelect("aic-sample", [
+      ["validation", t("aic.validation")],
+      ["live", t("aic.live") + (liveIndex ? "" : ` (${t("aic.none")})`)],
+    ], view.sample);
+    document.getElementById("aic-sample").querySelector('[value="live"]').disabled = !liveIndex;
+    banner(index);
+    const doc = await load(view.sample, `${view.region}.json`);
+    const entry = doc?.entries?.[entryKey(view.variable, view.lead)];
+    const unit = valIndex?.units?.[view.variable] ?? "";
+    renderVerdict(entry, unit);
+    renderTable(entry, unit);
+    renderChart(entry, unit);
+    const url = new URL(window.location.href);
+    url.searchParams.set("cmp", formatView(view));
+    window.history.replaceState(null, "", url);
+  }
+
+  function renderVerdict(entry, unit) {
+    const node = document.getElementById("aic-verdict");
+    if (!entry) {
+      node.className = "aic-verdict";
+      node.replaceChildren(el("p", t("aic.noData")));
+      document.getElementById("aic-sample-note").textContent = "";
+      return;
+    }
+    const v = aiVerdict(entry);
+    const small = entry.small_sample || view.sample === "validation" || !status.verified;
+    node.className = `aic-verdict ${v?.verdict ?? "none"}`;
+    const lines = [];
+    if (v) {
+      lines.push(el("strong", t(`aic.verdict.${v.verdict}`)));
+      lines.push(el("span", " " + t("aic.verdictDetail", {
+        ai: fmt(v.mae), diff: fmt(v.diff, true), low: fmt(v.low, true), high: fmt(v.high, true), unit,
+      })));
+    } else {
+      lines.push(el("strong", t(hasAi(entry) ? "aic.noVs" : "aic.noAi")));
+    }
+    if (small) lines.push(el("span", " " + t("aic.provisionalTag"), "tag"));
+    node.replaceChildren(...lines);
+    document.getElementById("aic-sample-note").textContent = t("aic.sampleNote", {
+      days: entry.days, hours: entry.hours, stations: entry.stations ?? "?", from: entry.dates[0], to: entry.dates[1],
+      block: valIndex?.block_days ?? 4,
+    }) + (entry.small_sample ? " " + t("aic.smallSample", { days: valIndex?.small_sample_days ?? 30 }) : "");
+  }
+
+  function renderTable(entry, unit) {
+    const table = document.getElementById("aic-table");
+    const note = document.getElementById("aic-headline");
+    if (!entry) {
+      table.replaceChildren();
+      note.textContent = "";
+      return;
+    }
+    const h = headline(entry);
+    note.textContent = h.kind === "winner"
+      ? t("aic.winner", { name: label(h.leaders[0].id, h.leaders[0].kind) })
+      : t("aic.noWinner", { names: h.leaders.map((r) => label(r.id, r.kind)).join(", ") });
+    const head = el("tr");
+    for (const key of ["aic.col.rank", "aic.col.name", "aic.col.mae", "aic.col.diff", "aic.col.pbest"]) head.append(el("th", t(key, { unit })));
+    const body = tableRows(entry).map((r) => {
+      const tr = el("tr", null, `${r.kind} ${r.leader ? "leader" : ""}`);
+      const name = el("td");
+      name.append(el("strong", label(r.id, r.kind)));
+      if (r.kind === "ai") name.append(el("span", t("aic.badge.ai"), "badge provisional"));
+      if (r.kind === "outlook") name.append(el("span", t("aic.badge.outlook"), "badge"));
+      if (r.kind === "mean") name.append(el("span", t("aic.badge.mean"), "badge"));
+      tr.append(
+        el("td", r.leader && !r.best ? "≈" : String(r.rank)),
+        name,
+        el("td", fmt(r.mae)),
+        el("td", r.best ? "–" : `${fmt(r.diff, true)} [${fmt(r.low, true)}; ${fmt(r.high, true)}]`),
+        el("td", r.p_best == null ? "–" : `${Math.round(r.p_best * 100)} %`),
+      );
+      return tr;
+    });
+    table.replaceChildren(el("thead"), el("tbody"));
+    table.tHead.append(head);
+    table.tBodies[0].append(...body);
+  }
+
+  function renderChart(entry, unit) {
+    const target = document.getElementById("aic-chart");
+    if (!entry || entry.days < 2) {
+      target.replaceChildren(el("p", t("aic.noChart")));
+      return;
+    }
+    const ids = defaultSeries(entry);
+    const data = dailyRows(entry, ids);
+    const kinds = Object.fromEntries(entry.series.map((s) => [s.id, s.kind]));
+    const names2 = ids.map((id) => label(id, kinds[id]));
+    const width = Math.min(900, document.querySelector(".content").clientWidth);
+    target.replaceChildren(Plot.plot({
+      width,
+      height: 300,
+      marginLeft: 44,
+      x: { label: null, type: "utc" },
+      y: { label: `MAE (${unit})`, grid: true, zero: true },
+      color: { domain: names2, range: ids.map((id) => COLORS[kinds[id]]), legend: true },
+      marks: [
+        Plot.lineY(data, { x: "date", y: "mae", stroke: (r) => label(r.id, r.kind), strokeWidth: (r) => (r.kind === "model" ? 1.5 : 2.5), strokeDasharray: (r) => (r.kind === "mean" ? "5,4" : null), tip: true }),
+        Plot.dot(data, { x: "date", y: "mae", fill: (r) => label(r.id, r.kind), r: 2.5 }),
+      ],
+    }));
+  }
+
+  for (const [id, key, parse] of [
+    ["aic-region", "region", String], ["aic-variable", "variable", String],
+    ["aic-lead", "lead", Number], ["aic-sample", "sample", String],
+  ]) {
+    document.getElementById(id).addEventListener("change", (event) => {
+      view[key] = parse(event.target.value);
+      render();
+    });
+  }
+  await render();
+}
