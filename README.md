@@ -20,7 +20,7 @@ of the 6,258 obce.
 | [Forecast per okres](https://jerrywoof.github.io/MeteoVerdict/forecast-detail.html) | the hourly combined forecast for one okres (or, as a test, one obec of it) next to the best single model, with sunrise, sunset and the nights shaded |
 | [Measured](https://jerrywoof.github.io/MeteoVerdict/measured.html) | what ČHMÚ's stations measured, as a map like the forecast's: each station (or each okres, next to what our forecast had said) by day and part of day for the last 30 days, the whole day for 60; and for one station what the weather was like there, day by day back to the start of its records (weather symbol, max/min, precipitation, snow, sunshine, gusts, phenomena; week and month views with a summary; the course of recent days), and every element it measures, with its history. Zoomed in, the map shows the stations by name over relief and rivers |
 | [Radar](https://jerrywoof.github.io/MeteoVerdict/radar.html) | ČHMÚ weather radar over Czechia: the last hours with the nowcast for the next hour, hourly precipitation from radar and rain gauges, and archived days |
-| [AI forecast](https://jerrywoof.github.io/MeteoVerdict/ai.html) | experimental: MeteoVerdict AI's forecast for every okres and village, a machine-learning correction of all the models computed daily on an NVIDIA DGX Spark, scored against what was then measured |
+| [AI forecast](https://jerrywoof.github.io/MeteoVerdict/ai.html) | experimental: MeteoVerdict AI's forecast for every okres and village, a machine-learning correction of all the models computed daily, scored against what was then measured |
 | [AI heatmap](https://jerrywoof.github.io/MeteoVerdict/heatmap.html) | experimental: MeteoVerdict AI's temperature at 100 m from the terrain (valleys, slopes, frost hollows), hour by hour; click anywhere for the forecast at that place |
 | [Data](https://jerrywoof.github.io/MeteoVerdict/data.html) | the forecast and the ranking of every okres as JSON or CSV, free, no key |
 
@@ -50,7 +50,7 @@ after it. What the results mean and where they can mislead:
 [methodology](docs/methodology.md).
 
 **MeteoVerdict AI (experimental).** The AI forecast and the 100 m heatmap are trained and
-computed once a day on an NVIDIA DGX Spark from this project's data; their code is kept
+computed once a day from this project's data; their code is kept
 in a private repository, and the site publishes only their results, scored like every
 other model.
 
