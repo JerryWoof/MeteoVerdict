@@ -978,6 +978,15 @@ def blend_test_cmd(
             "forecast table's layout, e.g. MeteoVerdict AI's hindcast); repeatable."
         ),
     ] = None,
+    compare_zip: Annotated[
+        Path | None,
+        typer.Option(
+            "--compare-zip",
+            help="Also write the Compare page's same-sample ranking (models, mean, our "
+            "combination and the candidates; one file per region) into this zip; "
+            "--publish puts it into the release too.",
+        ),
+    ] = None,
 ) -> None:
     """Out of sample: does our combined forecast beat the best single model? (roadmap 6.4)"""
     if publish and not github_release:
@@ -1038,6 +1047,18 @@ def blend_test_cmd(
         path = blendtest.write(doc, out)
         if publish:
             releases.put(store.LATEST_TAG, path.name, path)
+        if compare_zip is not None:
+            zipped = blendtest.write_compare(
+                test_days,
+                table,
+                doc,
+                compare_zip,
+                set(candidates["model"].unique()) if candidates is not None else set(),
+                resamples,
+            )
+            typer.echo(f"→ {zipped}")
+            if publish:
+                releases.put(store.LATEST_TAG, zipped.name, zipped)
     typer.echo(
         f"{doc['test_days']} test days {doc['from']} … {doc['to']} "
         f"({doc['warm_up_days']} scored days before them left out as warm-up)"
