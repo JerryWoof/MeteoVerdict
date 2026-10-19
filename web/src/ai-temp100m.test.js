@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parseTemp100m, parseTemp100mIndex, temp100mColourise, temp100mGrayAt, temp100mGrayLut, temp100mGrayValue, temp100mMapFor, temp100mLookup, temp100mPixel, temp100mTipText, temp100mValue, temp100mGradient, temp100mTimeText, temp100mWhen } from "./ai-temp100m.js";
+import { parseTemp100m, parseTemp100mIndex, temp100mColourise, temp100mGrayAt, temp100mGrayLut, temp100mGrayValue, temp100mMapFor, temp100mLookup, temp100mPixel, temp100mValue, temp100mGradient, temp100mSlot, temp100mSlotText, temp100mDefaultIndex, temp100mFormat, nearestPlaceOf } from "./ai-temp100m.js";
 
 const DOC = {
   bounds: [12.0, 48.5, 19.0, 51.1],
@@ -24,18 +24,29 @@ test("the 100 m file: image corners, legend, and nothing without a usable file",
   }
 });
 
-test("the 100 m time in Prague: tonight, today, tomorrow, another day", () => {
-  const now = Date.parse("2026-10-19T08:00Z"); // 10:00 in Prague
-  assert.deepEqual(temp100mWhen(Date.parse("2026-10-20T00:00Z"), now), { key: "tonight", day: "2026-10-20", clock: "02:00" });
-  assert.equal(temp100mWhen(Date.parse("2026-10-19T19:00Z"), now).key, "tonight");
-  // after midnight, the same night
-  assert.equal(temp100mWhen(Date.parse("2026-10-20T00:00Z"), Date.parse("2026-10-19T22:30Z")).key, "tonight");
-  assert.equal(temp100mWhen(Date.parse("2026-10-19T12:00Z"), now).key, "today");
-  assert.equal(temp100mWhen(Date.parse("2026-10-20T12:00Z"), now).key, "tomorrow");
-  assert.equal(temp100mWhen(Date.parse("2026-10-21T00:00Z"), now).key, null);
-  const t = (key, params) => `${key} ${params.time}`;
-  assert.equal(temp100mTimeText(Date.parse("2026-10-20T12:00Z"), now, "en", t), "ai.temp100m.tomorrow 14:00");
-  assert.equal(temp100mTimeText(Date.parse("2026-10-21T12:00Z"), now, "en", t), "Wed, 10/21 14:00");
+test("a time's slot in Prague and its label: weekday, date, part, clock", () => {
+  assert.deepEqual(temp100mSlot(Date.parse("2026-10-20T02:00Z")), { day: "2026-10-20", part: "night", clock: "04:00" });
+  assert.equal(temp100mSlot(Date.parse("2026-10-20T09:00Z")).part, "morning");
+  assert.equal(temp100mSlot(Date.parse("2026-10-20T22:00Z")).day, "2026-10-21");
+  assert.equal(temp100mSlotText(Date.parse("2026-10-20T02:00Z"), "cs", "noc"), "út 20. 10. noc 04:00");
+  assert.equal(temp100mSlotText(Date.parse("2026-10-20T02:00Z"), "en", "night"), "Tue 20/10 night 04:00");
+});
+
+test("default time: the nearest future one, else the last", () => {
+  const maps = [1000, 2000, 3000].map((time) => ({ time }));
+  assert.equal(temp100mDefaultIndex(maps, 1500), 1);
+  assert.equal(temp100mDefaultIndex(maps, 2000), 1);
+  assert.equal(temp100mDefaultIndex(maps, 500), 0);
+  assert.equal(temp100mDefaultIndex(maps, 9000), 2);
+  assert.equal(temp100mDefaultIndex([], 1), -1);
+});
+
+test("nearest place with its distance", () => {
+  const places = [{ name: "A", lat: 50, lon: 14 }, { name: "B", lat: 49, lon: 16 }];
+  const r = nearestPlaceOf(places, 49.01, 16.01);
+  assert.equal(r.place.name, "B");
+  assert.ok(r.km > 1 && r.km < 2);
+  assert.equal(nearestPlaceOf([], 49, 16), null);
 });
 
 test("pixel from lng/lat: corners, centre in Mercator spacing, outside", () => {
@@ -62,10 +73,9 @@ test("colour to value round-trips every 0.25 step; transparent is null", () => {
   assert.equal(temp100mValue(lookup, 49, 54, 149), 3);
 });
 
-test("tooltip text: decimal comma in cs, Prague clock", () => {
-  const t = Date.parse("2026-10-20T00:00Z");
-  assert.equal(temp100mTipText(2.9, t, "cs"), "2,9 °C · po 02:00");
-  assert.equal(temp100mTipText(2.9, t, "en"), "2.9 °C · at 02:00");
+test("temperature text: decimal comma in cs", () => {
+  assert.equal(temp100mFormat(2.94, "cs"), "2,9 °C");
+  assert.equal(temp100mFormat(-3.06, "en"), "-3.1 °C");
 });
 
 test("gray to °C with the map's own offset and step; 0 is no data", () => {
