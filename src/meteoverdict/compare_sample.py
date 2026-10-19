@@ -14,7 +14,8 @@ Entry (``entry``): ``days``, ``dates`` (first, last), ``stations``, ``hours`` (s
 values of one series), ``small_sample``, ``clear_winner`` and ``series``: one object
 per series, best first: ``id``, ``kind`` (``model``, ``mean``, ``outlook``, ``ai``),
 ``mae``, ``diff`` (MAE minus the best's) with ``low`` and ``high`` (95 % interval),
-``p_best``, ``tied`` (not shown to be worse than the best) and ``daily`` (MAE per date,
+``p_best``, ``tied`` (not shown to be worse than the best), ``vs_outlook`` (minus our
+combination: ``diff``, ``low``, ``high``, Diebold-Mariano ``p``) and ``daily`` (MAE per date,
 null where the series has no value).
 """
 
@@ -70,12 +71,13 @@ def entry(
         order, diff = np.array([0]), np.array([0.0])
         bounds, p_best, tied = np.zeros((2, 1)), np.ones(1), np.array([False])
     mae = a.sum(axis=0) / m.sum(axis=0)
+    versus = _versus(a, m, names, key, resamples, seed)
     daily = np.where(m > 0, a / np.where(m > 0, m, 1), np.nan)
     series = [
         {
             "id": names[i], "kind": kinds.get(names[i], "model"), "mae": _round(mae[i]),
             "diff": _round(diff[i]), "low": _round(bounds[0][i]), "high": _round(bounds[1][i]),
-            "p_best": _round(p_best[i]), "tied": bool(tied[i]),
+            "p_best": _round(p_best[i]), "tied": bool(tied[i]), "vs_outlook": versus.get(names[i]),
             "daily": [_round(v, 2) for v in daily[:, i]],
         }
         for i in order
@@ -90,6 +92,34 @@ def entry(
         "small_sample": bool(a.shape[0] < ranking.SMALL_SAMPLE_DAYS),
         "clear_winner": bool(clear and p_best[order[0]] >= ranking.P_BEST_MIN),
         "series": series,
+    }
+
+
+def _versus(
+    a: np.ndarray, m: np.ndarray, names: list[str], key: str, resamples: int, seed: int
+) -> dict[str, dict]:
+    """Every series minus our combination (the Outlook blend): the MAE difference with
+    its block-bootstrap interval and the Diebold-Mariano p-value (negative: better than
+    the Outlook blend). Empty without the combination or with fewer than 3 days."""
+    if OUTLOOK not in names or a.shape[0] < 3:
+        return {}
+    ref = names.index(OUTLOOK)
+    rng = np.random.default_rng([seed, zlib.crc32((key + "|vs").encode())])
+    boot = ranking.resampled_mae(a, m, rng, resamples)
+    diffs = boot - boot[:, [ref]]
+    tail = (1 - ranking.CONFIDENCE) / 2
+    low, high = np.quantile(diffs, [tail, 1 - tail], axis=0)
+    mae = a.sum(axis=0) / m.sum(axis=0)
+    _, p = ranking.diebold_mariano(a, m, ref)
+    return {
+        name: {
+            "diff": _round(mae[i] - mae[ref]),
+            "low": _round(low[i]),
+            "high": _round(high[i]),
+            "p": _round(p[i], 4),
+        }
+        for i, name in enumerate(names)
+        if i != ref
     }
 
 
