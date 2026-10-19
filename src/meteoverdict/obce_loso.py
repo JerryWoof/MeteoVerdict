@@ -290,6 +290,14 @@ def nearest_weights(
 
 
 # --- the series ----------------------------------------------------------------------------
+#: the weight columns ``combined`` needs (the others would only fill the memory)
+WEIGHT_COLUMNS = tuple(
+    dict.fromkeys(
+        ("date", "region", "lead_day", "model", *combine.BLEND_COLUMNS, *mos.COEFFICIENT_COLUMNS)
+    )
+)
+
+
 def _date_of(variable: str) -> pl.Expr:
     """The day an hour is scored on: precipitation by the hour ending at ``time``."""
     start = pl.col("time") - timedelta(hours=1) if variable == "precipitation" else pl.col("time")
@@ -317,7 +325,9 @@ def combined(
         mine = members.filter(pl.col("variable") == score).select(
             "region", "station_id", *[c for c in ("_elevation", "_point") if c in members.columns]
         )
-        w = weights.filter(pl.col("variable") == name).drop("variable")
+        w = weights.filter(pl.col("variable") == name).select(
+            *[c for c in WEIGHT_COLUMNS if c in weights.columns]
+        )
         rows = (
             raw.select("station_id", "time", "lead_day", "model", name)
             .with_columns(_date_of(name))
@@ -426,11 +436,13 @@ def run(
     regression: bool = True,
     targets: list[str] | None = None,
     log: Callable[[str], None] = lambda _: None,
+    checkpoint: Path | None = None,
 ) -> pl.DataFrame:
     """Daily scores (``sum_abs_err``, ``sum_err``, ``n`` per ``date``, ``station_id``,
     ``variable``, ``lead_day`` and ``model`` = series) of every target, on the
     station-days all ``SERIES`` have. ``variant``: ``loso`` (the target held out) or
-    ``buffer`` (also every station within ``buffer_km``)."""
+    ``buffer`` (also every station within ``buffer_km``). ``checkpoint``: a folder that
+    keeps each batch's scores, so that a run that stopped carries on where it was."""
     variables = list(blendtest.SCORE_VARIABLES.values())
     scores = scores.filter(pl.col("variable").is_in(variables))
     stations = stations.filter(pl.col("lat").is_not_null(), pl.col("lon").is_not_null())
@@ -461,8 +473,17 @@ def run(
         .collect()
         .lazy()
     )
+    # the nearest-station baseline: trained for every target at once
+    available = tested.select("variable", "station_id").unique()
+    nearest = nearest_stations(stations, available, targets, removed)
+    near_w = nearest_weights(scores, nearest, as_of_days, window, min_training_days)
+    obs = observations.lazy()
     frames = []
     for k, batch in enumerate(groups, 1):
+        saved = checkpoint / f"{variant}-{k:03d}.parquet" if checkpoint is not None else None
+        if saved is not None and saved.exists():
+            frames.append(pl.read_parquet(saved))
+            continue
         held = set().union(*(removed[t] for t in batch))
         reach = set().union(*(zone.get(okres_of[t], set()) for t in batch))
         kept = scores.filter(~pl.col("station_id").is_in(list(held)))
@@ -474,23 +495,32 @@ def run(
         w, pools = okres_weights(
             kept, kept_pairs, own, as_of_days, okresy, reach - held, window, min_training_days
         )
+        series = []
         if not w.is_empty():
-            frames += batch_series(test_fc, batch, stations, w, pools, points)
-        log(f"{variant}: batch {k}/{len(groups)}, {len(batch)} targets, {len(held)} held out")
-    # the nearest-station baseline: every target at once
-    available = tested.select("variable", "station_id").unique()
-    nearest = nearest_stations(stations, available, targets, removed)
-    near_w = nearest_weights(scores, nearest, as_of_days, window, min_training_days)
-    if not near_w.is_empty():
-        members = nearest.select("variable", pl.col("target").alias("region"),
-                                 pl.col("target").alias("station_id"))  # fmt: skip
-        near = combined(test_fc.filter(pl.col("station_id").is_in(targets)), members, near_w)
-        frames.append(as_forecasts(near, NEAREST))
-    frames.append(as_forecasts(median(test_fc, targets), MEDIAN))
-    candidates = pl.concat(frames)
-    log(f"{variant}: {candidates.height} forecast rows, scoring")
-    scored = blendtest.score_candidates(observations, candidates, first, last)
-    return fair(scored)
+            series += batch_series(test_fc, batch, stations, w, pools, points)
+        at = test_fc.filter(pl.col("station_id").is_in(batch))
+        mine = nearest.filter(pl.col("target").is_in(batch))
+        if not near_w.is_empty() and mine.height:
+            members = mine.select(
+                "variable", pl.col("target").alias("region"), pl.col("target").alias("station_id")
+            )
+            series.append(as_forecasts(combined(at, members, near_w), NEAREST))
+        series.append(as_forecasts(median(at, batch), MEDIAN))
+        candidates = pl.concat(series)
+        scored = fair(
+            blendtest.score_candidates(
+                obs.filter(pl.col("station_id").is_in(batch)), candidates, first, last
+            )
+        )
+        if saved is not None:
+            saved.parent.mkdir(parents=True, exist_ok=True)
+            scored.write_parquet(saved)
+        frames.append(scored)
+        log(
+            f"{variant}: batch {k}/{len(groups)}, {len(batch)} targets, {len(held)} held out, "
+            f"{scored['station_id'].n_unique()} scored"
+        )
+    return pl.concat(frames) if frames else pl.DataFrame()
 
 
 def fair(scored: pl.DataFrame) -> pl.DataFrame:
