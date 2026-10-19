@@ -1,6 +1,7 @@
 import "./style.css";
 
 import { setUpLanguage } from "./i18n.js";
+import { SCHEDULE, pragueClocks } from "./schedule.js";
 import { displayName } from "./tv.js";
 
 const t = setUpLanguage();
@@ -15,7 +16,22 @@ async function get(path, as = "json") {
   }
 }
 
+/** "Updated daily at …": the workflows' schedule in Prague time (CET or CEST). */
+function showSchedule() {
+  const locale = document.documentElement.lang === "cs" ? "cs-CZ" : "en-GB";
+  const now = new Date();
+  const summer = new Intl.DateTimeFormat("en", { timeZone: "Europe/Prague", timeZoneName: "shortOffset" })
+    .formatToParts(now).find((p) => p.type === "timeZoneName")?.value === "GMT+2";
+  const zone = document.documentElement.lang === "cs" ? (summer ? "SELČ" : "SEČ") : (summer ? "CEST" : "CET");
+  document.getElementById("updates").textContent = t("api.when", {
+    daily: pragueClocks(SCHEDULE.daily, now, locale),
+    outlook: pragueClocks(SCHEDULE.outlook, now, locale),
+    zone,
+  });
+}
+
 async function main() {
+  showSchedule();
   const index = await get("api/v1/index.json");
   const status = document.getElementById("status");
   const select = document.getElementById("okres");
