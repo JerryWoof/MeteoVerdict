@@ -72,7 +72,7 @@ jobs:
             echo "no observed-data.zip yet; the forecast map offers no past days"
           fi
           # the AI forecast tab (experimental): MeteoVerdict AI's scores and the
-          # experiments, computed daily on its own hardware and published as release ai-latest
+          # experiments, computed daily and published as release ai-latest
           if gh release download ai-latest --pattern ai.zip --dir /tmp 2>/dev/null; then
             rm -rf site/data/ai
             mkdir -p site/data/ai
