@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { HOURLY, SITE, indexDoc, okresCsv, okresDoc, okresModels } from "./api.js";
+import { FLAGS, HOURLY, NOTICE, SITE, indexDoc, okresCsv, okresDoc, okresModels } from "./api.js";
 import { records } from "./data.js";
 
 const load = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
@@ -107,6 +107,15 @@ test("CSV of the hourly forecast", () => {
   assert.equal(Number(first[1]), HOURLY_DOC.okresy.CZ0201.temperature_2m[0]);
   const empty = okresDoc({ okres: { code: "X", name: "X" }, outlook: OUTLOOK, hourly: null, weightsDoc: null, scores: {}, meta: META });
   assert.equal(okresCsv(empty), "time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration\n");
+});
+
+test("the CSV has no threshold flags, so it stays plain (no notice line)", () => {
+  const header = okresCsv(DOC).split("\n")[0].split(",");
+  assert.deepEqual(header, ["time_utc", ...HOURLY]);
+  for (const flag of FLAGS) assert.ok(!header.includes(flag), `${flag} in the CSV needs the notice`);
+  // the JSON files and the index carry it, for every flag
+  for (const flag of FLAGS.filter((f) => f !== "gust_warning")) assert.match(NOTICE, new RegExp(flag));
+  assert.equal(indexDoc([BENESOV], META, null).notice, NOTICE);
 });
 
 test("index: every okres with the addresses of its files", () => {
