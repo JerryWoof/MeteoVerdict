@@ -410,14 +410,17 @@ def batch_series(
         .replace_strict(points, default=None, return_dtype=pl.Float64)
         .alias("_point")
     )
-    at_pool = fc.filter(pl.col("station_id").is_in(members["station_id"].unique().to_list()))
     names = list(blendtest.SCORE_VARIABLES)
-    okres = (
-        combined(at_pool, members, weights)
-        .group_by("region", "time", "lead_day")
-        .agg(pl.col(v).mean() for v in names)
-        .join(info.select("region", "station_id"), on="region")
-    )
+    parts = []
+    for (_,), mine in members.partition_by("region", as_dict=True).items():
+        # one okres at a time: all pools at once take several GB
+        at_pool = fc.filter(pl.col("station_id").is_in(mine["station_id"].unique().to_list()))
+        parts.append(
+            combined(at_pool, mine, weights)
+            .group_by("region", "time", "lead_day")
+            .agg(pl.col(v).mean() for v in names)
+        )
+    okres = pl.concat(parts).join(info.select("region", "station_id"), on="region")
     return [as_forecasts(obec, OBEC), as_forecasts(obec_dz, OBEC_DZ), as_forecasts(okres, OKRES)]
 
 

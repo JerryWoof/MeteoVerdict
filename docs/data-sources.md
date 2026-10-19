@@ -2566,8 +2566,9 @@ instead of only the okres's forecast point. After each outlook run
   and rain probability, with a link back to its okres). On the first run (Litoměřice) the
   obce differed by 2–3 °C in a part of day (Lovečkovice, 438 m, the coldest; the Labe valley
   the warmest).
-- **Not verified yet:** no station is held out to measure how good a forecast at a place
-  without a station is; that is the next step if the test stays.
+- **Checked away from the stations** with every ČHMÚ station held out in turn
+  (`mvd obce-loso`, `obce-loso.json` in the release `data-latest`): results and method in
+  [methodology.md](methodology.md#the-obec-forecast-away-from-the-stations-mvd-obce-loso).
 
 ## Radar base map
 
