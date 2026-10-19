@@ -963,6 +963,16 @@ export const STRINGS = {
     "footer.radarProcessed": "Snímky oříznul a převedl MeteoVerdict; výšku odrazů, pohyb a bouřkové buňky z nich odvodil",
     "footer.ours": "Naše data",
     "language.switch": "English",
+    "home.title": "Počasí ve vašem místě",
+    "home.intro": "Najděte obec a uvidíte předpověď poskládanou z nejpřesnějších modelů pro váš okres.",
+    "home.locate": "📍 Předpověď pro moji polohu",
+    "home.noForecast": "Pro toto místo zatím předpověď nemáme.",
+    "home.bestModel": "„Nejlepší model“ je ten, který se za zvolené období nejméně lišil od měření stanic ČHMÚ v okrese (stejné dny a stanice pro všechny modely); když rozdíl není statisticky jistý, píšeme „≈“.",
+    "home.mapTitle": "Který model předpovídá nejlépe",
+    "site.about": "O projektu",
+    "site.method": "Metodika",
+    "site.business": "Pro firmy",
+    "site.contact": "Kontakt",
   },
   en: {
     "page.station": "Measured",
@@ -1923,15 +1933,24 @@ export const STRINGS = {
     "footer.radarProcessed": "Frames cropped and converted by MeteoVerdict; echo tops, motion and storm cells derived from them",
     "footer.ours": "Our data",
     "language.switch": "Česky",
+    "home.title": "Weather where you are",
+    "home.intro": "Find a town or village and see a forecast built from the most accurate models for your okres.",
+    "home.locate": "📍 Forecast for my location",
+    "home.noForecast": "We have no forecast for this place yet.",
+    "home.bestModel": "“Best model” is the one whose forecast differed least from the ČHMÚ stations’ measurements in the okres over the chosen period (same days and stations for every model); where the difference is not statistically certain we write “≈”.",
+    "home.mapTitle": "Which model forecasts best",
+    "site.about": "About",
+    "site.method": "Methodology",
+    "site.business": "For business",
+    "site.contact": "Contact",
   },
 };
 
 export const LANGUAGES = Object.keys(STRINGS);
 
-/** The stored choice if valid, else Czech for Czech and Slovak browsers, else English. */
-export function pickLanguage(stored, browserLanguage) {
-  if (LANGUAGES.includes(stored)) return stored;
-  return /^(cs|sk)\b/i.test(browserLanguage ?? "") ? "cs" : "en";
+/** The stored choice if valid, else Czech: the site is Czech first, English is the toggle. */
+export function pickLanguage(stored) {
+  return LANGUAGES.includes(stored) ? stored : "cs";
 }
 
 /** t(key, {name: value}) in one language, falling back to English, then to the key. */
@@ -1965,7 +1984,7 @@ function storeLanguage(language) {
 /** Language of this page view; sets <html lang>, the [data-i18n] texts, the footer and the
  * switch. */
 export function setUpLanguage() {
-  const language = pickLanguage(storedLanguage(), navigator.language);
+  const language = pickLanguage(storedLanguage());
   const t = translator(language);
   document.documentElement.lang = language;
   for (const element of document.querySelectorAll("[data-i18n]")) {

@@ -159,6 +159,7 @@ export function footerText(parts) {
 export function renderFooter(footer, t) {
   const parts = footerParts(footer.dataset.footer, t, { method: footer.dataset.method });
   footer.replaceChildren(
+    siteLinks(t),
     ...parts.map((part) => {
       if (typeof part === "string") return document.createTextNode(part);
       const element = document.createElement(part.href ? "a" : "span");
@@ -168,4 +169,24 @@ export function renderFooter(footer, t) {
       return element;
     }),
   );
+}
+
+/** The pages about the project, on every page: About, Methodology, For business, Contact. */
+export const SITE_LINKS = [
+  ["site.about", "about.html"],
+  ["site.contact", "about.html#contact"],
+];
+
+function siteLinks(t) {
+  const nav = document.createElement("nav");
+  nav.className = "site-links";
+  nav.setAttribute("aria-label", t("site.about"));
+  SITE_LINKS.forEach(([key, href], k) => {
+    if (k) nav.append(" · ");
+    const a = document.createElement("a");
+    a.href = href;
+    a.textContent = t(key);
+    nav.append(a);
+  });
+  return nav;
 }
