@@ -36,7 +36,7 @@ web/public/data/
 .vscode/
 .DS_Store
 web/public/api/
-# MeteoVerdict AI outputs on the Spark
+# MeteoVerdict AI outputs
 /ai-out/
 
 # MeteoVerdict AI: its code is not part of this repository
