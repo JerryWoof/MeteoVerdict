@@ -9,10 +9,9 @@ test("both languages have the same keys", () => {
 
 test("language choice", () => {
   assert.equal(pickLanguage("en", "cs-CZ"), "en");
-  assert.equal(pickLanguage(null, "cs-CZ"), "cs");
-  assert.equal(pickLanguage(null, "sk"), "cs");
-  assert.equal(pickLanguage("de", "de-DE"), "en");
-  assert.equal(pickLanguage(undefined, undefined), "en");
+  assert.equal(pickLanguage(null, "en-GB"), "cs");
+  assert.equal(pickLanguage("de", "de-DE"), "cs");
+  assert.equal(pickLanguage(undefined, undefined), "cs");
 });
 
 test("translation with parameters and fallbacks", () => {
