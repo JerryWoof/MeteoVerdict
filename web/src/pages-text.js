@@ -76,7 +76,8 @@ export const PAGES = {
         ["h", "Naše předpověď: jak se skládá"],
         ["p", "Předpověď MeteoVerdict pro okres bere aktuální předpovědi všech modelů a váží je podle toho, jak přesně se v tomto okrese trefovaly v posledních 90 dnech. U teploty a větru se navíc odečítá jejich typická chyba (podle denní doby a nadmořské výšky). Váhy a opravy se každý den přepočítají. U srážek se váží, ale neopravuje; pravděpodobnost deště se kalibruje zvlášť."],
         ["p", "Spolehlivost jsme zkusili ověřit zpětným testem: pro každý den jen s tím, co jsme v ten den mohli vědět. Za 26 podzimních dnů vycházela skládaná předpověď pro teplotu a vítr o zhruba 0,1 až 0,3 °C a 0,2 až 0,35 m/s lepší než nejlepší jediný model pro celé Česko (statisticky jistě). U srážek je výhoda menší a u delších horizontů není jistá. **Je to podzimní test na krátkém vzorku, ne konečný verdikt**; test běží denně a výsledek se může změnit."],
-        ["p", "Předpověď pro obce (6 258) je **zkušební**: bere se jako předpověď okresu v bodě obce, s přepočtem teploty na její výšku. Zatím jsme ji neověřili v místech bez stanic (například tak, že bychom některou stanici z výpočtu vynechali a porovnali s ní). Ověření připravujeme. Do té doby ber předpověď pro obec jako orientační."],
+        ["p", "Předpověď pro obce (6 258) je **zkušební**: modely se čtou v místě a výšce obce a kombinují se s vahami a opravami jejího okresu. Jak přesná je v místech bez stanice, ukazuje [test s vynechanou stanicí](#obce-loso)."],
+        ["slot", "obce-loso"],
         ["h", "Co metodika neumí"],
         ["ul", [
           "**Krátké období.** Pořadí vychází z posledních týdnů a měsíců (okno 90 dní, roční období, celá historie od roku 2024; ALADIN až od června 2026). Za jiného počasí se pořadí může obrátit.",
@@ -117,7 +118,8 @@ export const PAGES = {
         ["h", "Our forecast: how it is built"],
         ["p", "MeteoVerdict's forecast for an okres takes the current forecasts of all models and weights them by how accurately each forecast that okres over the last 90 days. For temperature and wind each model's typical error (by time of day and elevation) is also subtracted. Weights and corrections are recomputed every day. Rain is weighted but not corrected; the probability of rain is calibrated separately."],
         ["p", "We tried to check it with a back-test: each day using only what we could have known that day. Over 26 autumn days the combined forecast for temperature and wind was about 0.1 to 0.3 °C and 0.2 to 0.35 m/s better than the best single model for the whole of Czechia (statistically certain). For rain the advantage is smaller and at longer leads not certain. **This is an autumn test on a short sample, not a final verdict**; the test runs daily and the result may change."],
-        ["p", "The forecast for municipalities (6,258) is a **test**: it is the okres's forecast at the municipality's point, with the temperature moved to its elevation. We have not yet checked it at places without a station (for example by leaving a station out of the calculation and comparing against it). That check is planned. Until then treat the municipality forecast as indicative."],
+        ["p", "The forecast for municipalities (6,258) is a **test**: the models are read at the municipality's place and elevation and combined with the weights and corrections of its okres. How accurate it is at places without a station is shown by [the test with the station left out](#obce-loso)."],
+        ["slot", "obce-loso"],
         ["h", "What the method cannot do"],
         ["ul", [
           "**A short period.** Rankings come from the last weeks and months (90-day window, season, the whole history since 2024; ALADIN only since June 2026). In other weather a ranking can flip.",
