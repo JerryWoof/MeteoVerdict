@@ -29,6 +29,7 @@ COMMANDS = [
     "leads",
     "farm",
     "blend-test",
+    "obce-loso",
     "fetch-runs",
     "fetch-obs",
     "fetch-fc",
@@ -441,6 +442,18 @@ def test_blend_test_rejects_bad_options(tmp_path):
     stations_file.touch()
     args = ["blend-test", "--stations", str(stations_file), "--data-dir", str(tmp_path)]
     assert runner.invoke(app, [*args, "--window", "month"]).exit_code == 2
+    result = runner.invoke(app, args)
+    assert result.exit_code == 1
+    assert "no scores" in result.stderr
+
+
+def test_obce_loso_rejects_bad_options(tmp_path):
+    assert runner.invoke(app, ["obce-loso", "--publish"]).exit_code == 2
+    stations_file = tmp_path / "stations.parquet"
+    stations_file.touch()
+    args = ["obce-loso", "--stations", str(stations_file), "--data-dir", str(tmp_path)]
+    assert runner.invoke(app, [*args, "--variant", "kriging"]).exit_code == 2
+    assert runner.invoke(app, [*args, "--reuse"]).exit_code == 2
     result = runner.invoke(app, args)
     assert result.exit_code == 1
     assert "no scores" in result.stderr
