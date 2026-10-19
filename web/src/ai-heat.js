@@ -282,17 +282,27 @@ function nodeGrids(model, pos) {
   return g;
 }
 
+/** The temperatures are kept in hundredths of a degree (Int16); this marks a pixel without data. */
+export const NO_TEMP = -32768;
+/** The histogram of a picture's temperatures: bins of HIST_STEP °C from HIST_MIN. */
+export const HIST_MIN = LUT_MIN;
+export const HIST_STEP = 0.1;
+const HIST_BINS = Math.round((LUT_MAX - LUT_MIN) / HIST_STEP) + 1;
+
 /**
- * The picture of position `pos` (hours, .5 steps) as RGBA pixels: `{ data, width, height }` of
- * the image's size divided by `shrink` (1 = every pixel, 2 = every second one in each direction).
- * Outside Czechia is transparent. `lut` is from heatColourLut.
+ * The temperatures of position `pos` (hours, .5 steps) as `{ values, width, height, hist }`: the
+ * image's size divided by `shrink`; `values` is an Int16Array in hundredths of °C (NO_TEMP outside
+ * Czechia), `hist` counts them in bins of HIST_STEP from HIST_MIN. `into` may be an earlier result
+ * of the same size to reuse its arrays.
  */
-export function heatCompose(model, pos, lut, shrink = 1) {
+export function heatTemperatures(model, pos, shrink = 1, into = null) {
   const { index, elev, gray, grid } = model;
   const { width, height, lapse } = index;
   const ow = Math.ceil(width / shrink);
   const oh = Math.ceil(height / shrink);
-  const data = new Uint8ClampedArray(ow * oh * 4);
+  const values = into?.values.length === ow * oh ? into.values : new Int16Array(ow * oh);
+  values.fill(NO_TEMP);
+  const hist = new Uint32Array(HIST_BINS);
   const g = nodeGrids(model, pos);
   const { step, gw } = grid;
   // per output column: the grid cell and the share of its right node
@@ -307,7 +317,9 @@ export function heatCompose(model, pos, lut, shrink = 1) {
   const [o0, o1, o2, o3] = index.files.fields.map((f) => f.offset - f.scale);
   const [s0, s1, s2, s3] = index.files.fields.map((f) => f.scale);
   const [f0, f1, f2, f3] = gray;
-  const lutMax = (LUT_MAX - LUT_MIN) / LUT_STEP;
+  const binMax = HIST_BINS - 1;
+  const binOffset = Math.round(-HIST_MIN * 100);
+  const binWidth = Math.round(HIST_STEP * 100);
   for (let oy = 0; oy < oh; oy++) {
     const y = oy * shrink;
     const gy = y / step;
@@ -339,15 +351,176 @@ export function heatCompose(model, pos, lut, shrink = 1) {
         (p3[i] + t * (p3[i + 1] - p3[i])) * (o3 + v3 * s3) -
         lapse * e;
       if (T !== T) continue;
-      const li = Math.min(lutMax, Math.max(0, Math.round((T - LUT_MIN) / LUT_STEP))) * 3;
-      const o = (oy * ow + ox) * 4;
-      data[o] = lut[li];
-      data[o + 1] = lut[li + 1];
-      data[o + 2] = lut[li + 2];
+      const h = T > 327 ? 32700 : T < -327 ? -32700 : Math.round(T * 100);
+      values[oy * ow + ox] = h;
+      // bin = (h - HIST_MIN·100) / (HIST_STEP·100), clamped
+      let bin = ((h + binOffset) / binWidth) | 0;
+      if (bin < 0) bin = 0;
+      else if (bin > binMax) bin = binMax;
+      hist[bin]++;
+    }
+  }
+  return { values, width: ow, height: oh, hist };
+}
+
+// --- the colour options ---------------------------------------------------------------------
+
+/** The vivid diverging ramp stretched over the range of "This hour" and "All 5 days". */
+export const HEAT_RAMP = ["#313695", "#4575b4", "#74add1", "#abd9e9", "#e0f3f8", "#ffffbf", "#fee090", "#fdae61", "#f46d43", "#d73027", "#a50026"];
+
+const rgbOf = (hex) => [0, 1, 2].map((c) => parseInt(hex.slice(1 + c * 2, 3 + c * 2), 16));
+
+/** The ramp's colour [r, g, b] at `value` on [lo, hi]: the stops spread evenly, linear between them, clamped at the ends. */
+export function heatRampColour(value, lo, hi, stops = HEAT_RAMP) {
+  const n = stops.length - 1;
+  const f = Math.min(1, Math.max(0, (value - lo) / (hi - lo))) * n;
+  const i = Math.min(n - 1, Math.floor(f));
+  const a = rgbOf(stops[i]);
+  const b = rgbOf(stops[i + 1]);
+  return a.map((c, k) => Math.round(c + (f - i) * (b[k] - c)));
+}
+
+/** The CSS gradient of the ramp (stops evenly spread). */
+export const heatRampGradient = (stops = HEAT_RAMP) => `linear-gradient(to right, ${stops.map((c, i) => `${c} ${((i / (stops.length - 1)) * 100).toFixed(1)}%`).join(", ")})`;
+
+/**
+ * The robust ends of a histogram (from heatTemperatures): the lower edge of the bin holding the
+ * `lowShare` quantile and the upper edge of the one holding the `highShare` quantile; null when empty.
+ */
+export function heatRobustEnds(hist, lowShare = 0.01, highShare = 0.99, min = HIST_MIN, step = HIST_STEP) {
+  let total = 0;
+  for (let i = 0; i < hist.length; i++) total += hist[i];
+  if (!total) return null;
+  const lowCount = total * lowShare;
+  const highCount = total * highShare;
+  let sum = 0;
+  let lo = null;
+  let hi = null;
+  for (let i = 0; i < hist.length; i++) {
+    sum += hist[i];
+    if (lo === null && sum > lowCount) lo = min + i * step;
+    if (sum >= highCount && hist[i]) {
+      hi = min + (i + 1) * step;
+      break;
+    }
+  }
+  lo ??= min;
+  hi ??= min + hist.length * step;
+  return { lo, hi };
+}
+
+/** Rounds a range outwards to 0.5 °C and widens it (evenly) to at least `minSpan` °C. */
+export function heatNiceRange(lo, hi, minSpan = 4) {
+  let a = Math.floor(lo * 2 + 1e-9) / 2;
+  let b = Math.ceil(hi * 2 - 1e-9) / 2;
+  for (let up = false; b - a < minSpan - 1e-9; up = !up) {
+    if (up) b += 0.5;
+    else a -= 0.5;
+  }
+  return { lo: a, hi: b };
+}
+
+/** The "All 5 days" range from the lowest and highest robust ends: at least 0…10 °C, widened where the data goes beyond, rounded to 0.5. */
+export const heatWholeRange = (lo, hi, floorLo = 0, floorHi = 10) => heatNiceRange(Math.min(lo, floorLo), Math.max(hi, floorHi));
+
+/** The "This hour" range of a histogram, or null when empty. */
+export function heatHourRange(hist) {
+  const ends = heatRobustEnds(hist);
+  return ends && heatNiceRange(ends.lo, ends.hi);
+}
+
+/**
+ * The "All 5 days" range: the widest robust ends over all hours (at least 0…10 °C), from a subsample of the pixels
+ * (a coarse grid and every `shrink`th pixel). `onStep(done, total)` may return a promise to let
+ * the page breathe between hours.
+ */
+export async function heatAllRange(model, shrink = 16, gridStep = 64, onStep = () => {}) {
+  const coarse = heatModel(model.index, model.elev, model.gray, heatGrid(model.index, gridStep));
+  const n = model.index.hours.length;
+  let lo = Infinity;
+  let hi = -Infinity;
+  let reuse = null;
+  for (let i = 0; i < n; i++) {
+    reuse = heatTemperatures(coarse, i, shrink, reuse);
+    const ends = heatRobustEnds(reuse.hist);
+    if (ends) {
+      lo = Math.min(lo, ends.lo);
+      hi = Math.max(hi, ends.hi);
+    }
+    await onStep(i + 1, n);
+  }
+  return lo <= hi ? heatWholeRange(lo, hi) : null;
+}
+
+/** The frost class of a temperature: 1 at or below 0 °C (frost), 2 above 0 up to 3 °C (ground frost possible), else 0. */
+export const heatFrostClass = (T) => (T <= 0 ? 1 : T <= 3 ? 2 : 0);
+
+/** A colour lookup for the paint: `rgb` (3 bytes per entry), the temperature of its first entry and its step. */
+export function heatRampLut(lo, hi, entries = 256, stops = HEAT_RAMP) {
+  const rgb = new Uint8ClampedArray(entries * 3);
+  const step = (hi - lo) / (entries - 1);
+  for (let i = 0; i < entries; i++) rgb.set(heatRampColour(lo + i * step, lo, hi, stops), i * 3);
+  return { rgb, min: lo, step };
+}
+
+/** The fixed palette's lookup (from heatColourLut) in the paint's form. */
+export const heatFixedLut = (rgb) => ({ rgb, min: LUT_MIN, step: LUT_STEP });
+
+const ICE = [226, 244, 255];
+
+/**
+ * The picture as RGBA pixels from heatTemperatures' result: coloured by `lut` ({rgb, min, step}),
+ * and with `frost` (T <= 0: an ice tint with white diagonal stripes) and `ground` (0 < T <= 3: white
+ * dots) overlays. Outside Czechia is transparent.
+ */
+export function heatPaint({ values, width, height }, lut, { frost = false, ground = false } = {}) {
+  const data = new Uint8ClampedArray(width * height * 4);
+  const { rgb, min, step } = lut;
+  const last = rgb.length / 3 - 1;
+  // the lookup index from hundredths of °C: (h - min·100) · (1 / (step·100)), rounded
+  const base = min * 100;
+  const scale = 1 / (step * 100);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0, k = y * width, o = k * 4; x < width; x++, k++, o += 4) {
+      const h = values[k];
+      if (h === NO_TEMP) continue;
+      let li = ((h - base) * scale + 0.5) | 0;
+      if (li < 0) li = 0;
+      else if (li > last) li = last;
+      li *= 3;
+      let r = rgb[li];
+      let g = rgb[li + 1];
+      let b = rgb[li + 2];
+      if (h <= 300) {
+        if (h <= 0) {
+          if (frost) {
+            const share = (x + y) % 8 < 3 ? 0.85 : 0.35;
+            r += (ICE[0] - r) * share;
+            g += (ICE[1] - g) * share;
+            b += (ICE[2] - b) * share;
+          }
+        } else if (ground && (x & 3) < 2 && (y & 3) < 2) {
+          r += (255 - r) * 0.6;
+          g += (255 - g) * 0.6;
+          b += (255 - b) * 0.6;
+        }
+      }
+      data[o] = r;
+      data[o + 1] = g;
+      data[o + 2] = b;
       data[o + 3] = 255;
     }
   }
-  return { data, width: ow, height: oh };
+  return { data, width, height };
+}
+
+/**
+ * The picture of position `pos` (hours, .5 steps) as RGBA pixels with a fixed colour lookup:
+ * `{ data, width, height }` of the image's size divided by `shrink`. Outside Czechia is
+ * transparent. `lut` is from heatColourLut.
+ */
+export function heatCompose(model, pos, lut, shrink = 1) {
+  return heatPaint(heatTemperatures(model, pos, shrink), heatFixedLut(lut));
 }
 
 // --- loading --------------------------------------------------------------------------------
