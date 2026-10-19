@@ -291,3 +291,35 @@ test("the all-days range is at least 0 to 10 and widens to the data", () => {
   assert.deepEqual(heatWholeRange(2, 8), { lo: 0, hi: 10 });
   assert.deepEqual(heatWholeRange(2, 12), { lo: 0, hi: 12 });
 });
+
+const LO = { factor: 4, width: 2, height: 2, bounds: [12, 48.9, 14.1, 51], elev: { file: "elev-lo.png", bytes: 5 }, fields: [0, 1, 2, 3].map((k) => ({ file: `f${k}-lo.png`, offset: k, scale: 1, bytes: 7 })) };
+
+test("the coarse set: its own geometry and files, the same hours and points; without a usable one there is none", () => {
+  assert.equal(parseHeatIndex(DOC).lo, undefined);
+  const i = parseHeatIndex({ ...DOC, lo: LO });
+  assert.equal(i.width, 4);
+  assert.equal(i.lo.factor, 4);
+  assert.equal(i.lo.width, 2);
+  assert.deepEqual(i.lo.coordinates, [[12, 51], [14.1, 51], [14.1, 48.9], [12, 48.9]]);
+  assert.equal(i.lo.files.elev.url, "data/scores/ai/fc/heat/elev-lo.png");
+  assert.equal(i.lo.files.fields[3].url, "data/scores/ai/fc/heat/f3-lo.png");
+  assert.equal(i.lo.hours, i.hours);
+  assert.equal(i.lo.sea, i.sea);
+  for (const bad of [null, "x", { ...LO, factor: 1 }, { ...LO, fields: LO.fields.slice(1) }, { ...LO, elev: { file: "../e.png" } }, { ...LO, bounds: [1, 2] }, { ...LO, width: 1 }]) {
+    const j = parseHeatIndex({ ...DOC, lo: bad });
+    assert.ok(j, "the full set still works");
+    assert.equal(j.lo, undefined);
+  }
+});
+
+test("a coarse model works like the full one: its own grid spacing and all-days range", async () => {
+  const index = parseHeatIndex({ ...DOC, lo: LO }).lo;
+  const n = index.width * index.height;
+  const m = heatModel(index, new Uint16Array(n).fill(100), [0, 1, 2, 3].map((k) => new Uint8Array(n).fill(k + 1)));
+  assert.equal(m.grid.step, 2);
+  const { values, width, height } = heatTemperatures(m, 0);
+  assert.equal(values.length, 4);
+  assert.deepEqual([width, height], [2, 2]);
+  assert.ok(values.every((v) => v !== NO_TEMP));
+  assert.ok(await heatAllRange(m));
+});
