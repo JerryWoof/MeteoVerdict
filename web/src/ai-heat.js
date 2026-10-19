@@ -452,8 +452,57 @@ export async function heatAllRange(model, shrink = 16, gridStep = 64, onStep = (
   return lo <= hi ? heatWholeRange(lo, hi) : null;
 }
 
-/** The frost class of a temperature: 1 at or below 0 °C (frost), 2 above 0 up to 3 °C (ground frost possible), else 0. */
-export const heatFrostClass = (T) => (T <= 0 ? 1 : T <= 3 ? 2 : 0);
+/** The frost risk threshold (°C): at or below it frost or ice is possible. */
+export const FROST_RISK_C = 3;
+
+/** The frost level of a temperature: 2 below 0 °C (frost), 1 up to FROST_RISK_C (frost or ice possible), else 0. */
+export const heatFrostLevel = (T) => (T < 0 ? 2 : T <= FROST_RISK_C ? 1 : 0);
+
+/** The runs of consecutive hours at or below FROST_RISK_C in an hourly series (NaN breaks a run): [{from, to}] hour indices, both included. */
+export function heatRiskRuns(series) {
+  const runs = [];
+  let from = -1;
+  for (let i = 0; i <= series.length; i++) {
+    const risk = i < series.length && series[i] <= FROST_RISK_C;
+    if (risk && from < 0) from = i;
+    else if (!risk && from >= 0) {
+      runs.push({ from, to: i - 1 });
+      from = -1;
+    }
+  }
+  return runs;
+}
+
+/** The runs as text in Prague time: "út 03:00–08:00, st 02:00–09:00"; a run over midnight names the second day, a single hour is one time. */
+export function heatRiskText(runs, hours, language) {
+  const day = new Intl.DateTimeFormat(language === "cs" ? "cs" : "en-GB", { timeZone: TIME_ZONE, weekday: "short" });
+  const clock = new Intl.DateTimeFormat("en-GB", { timeZone: TIME_ZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  return runs
+    .map(({ from, to }) => {
+      const start = `${day.format(hours[from].time)} ${clock.format(hours[from].time)}`;
+      if (to === from) return start;
+      const sameDay = day.format(hours[from].time) === day.format(hours[to].time);
+      return `${start}–${sameDay ? "" : `${day.format(hours[to].time)} `}${clock.format(hours[to].time)}`;
+    })
+    .join(", ");
+}
+
+/**
+ * The display options from what was stored (anything, parsed JSON): colours "all" | "hour" | "fixed"
+ * and `frost` (the one frost-risk overlay). Before version 2 the colour choice was the old default;
+ * before version 3 frost and ground frost were two options, now on when either was.
+ */
+export function heatReadOptions(saved) {
+  const options = { colours: "all", frost: true };
+  if (!saved || typeof saved !== "object") return options;
+  if (saved.v >= 2 && ["all", "hour", "fixed"].includes(saved.colours)) options.colours = saved.colours;
+  if (saved.v >= 3) {
+    if (typeof saved.frost === "boolean") options.frost = saved.frost;
+  } else if (typeof saved.frost === "boolean" || typeof saved.ground === "boolean") {
+    options.frost = saved.frost === true || saved.ground === true;
+  }
+  return options;
+}
 
 /** A colour lookup for the paint: `rgb` (3 bytes per entry), the temperature of its first entry and its step. */
 export function heatRampLut(lo, hi, entries = 256, stops = HEAT_RAMP) {
@@ -470,16 +519,16 @@ const ICE = [226, 244, 255];
 
 /**
  * The picture as RGBA pixels from heatTemperatures' result: coloured by `lut` ({rgb, min, step}),
- * and with `frost` (T <= 0: an ice tint with white diagonal stripes) and `ground` (0 < T <= 3: white
- * dots) overlays. Outside Czechia is transparent.
+ * and with `frost` (T at or below FROST_RISK_C: an ice tint with white diagonal stripes). Outside Czechia is transparent.
  */
-export function heatPaint({ values, width, height }, lut, { frost = false, ground = false } = {}) {
+export function heatPaint({ values, width, height }, lut, { frost = false } = {}) {
   const data = new Uint8ClampedArray(width * height * 4);
   const { rgb, min, step } = lut;
   const last = rgb.length / 3 - 1;
   // the lookup index from hundredths of °C: (h - min·100) · (1 / (step·100)), rounded
   const base = min * 100;
   const scale = 1 / (step * 100);
+  const riskHundredths = FROST_RISK_C * 100;
   for (let y = 0; y < height; y++) {
     for (let x = 0, k = y * width, o = k * 4; x < width; x++, k++, o += 4) {
       const h = values[k];
@@ -491,19 +540,11 @@ export function heatPaint({ values, width, height }, lut, { frost = false, groun
       let r = rgb[li];
       let g = rgb[li + 1];
       let b = rgb[li + 2];
-      if (h <= 300) {
-        if (h <= 0) {
-          if (frost) {
-            const share = (x + y) % 8 < 3 ? 0.85 : 0.35;
-            r += (ICE[0] - r) * share;
-            g += (ICE[1] - g) * share;
-            b += (ICE[2] - b) * share;
-          }
-        } else if (ground && (x & 3) < 2 && (y & 3) < 2) {
-          r += (255 - r) * 0.6;
-          g += (255 - g) * 0.6;
-          b += (255 - b) * 0.6;
-        }
+      if (frost && h <= riskHundredths) {
+        const share = (x + y) % 8 < 3 ? 0.85 : 0.35;
+        r += (ICE[0] - r) * share;
+        g += (ICE[1] - g) * share;
+        b += (ICE[2] - b) * share;
       }
       data[o] = r;
       data[o + 1] = g;
