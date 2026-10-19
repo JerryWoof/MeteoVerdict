@@ -171,12 +171,12 @@ export function renderFooter(footer, t) {
   );
 }
 
-/** The pages about the project, on every page: About, Methodology, For business, Contact. */
+/** The pages about the project, on every page: About, Methodology, Collaboration, Contact. */
 export const SITE_LINKS = [
   ["site.about", "about.html"],
   ["site.method", "methodology.html"],
   ["site.report", "report.html"],
-  ["site.business", "business.html"],
+  ["site.business", "collaboration.html"],
   ["site.contact", "about.html#contact"],
 ];
 
