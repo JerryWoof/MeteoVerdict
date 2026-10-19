@@ -2,6 +2,10 @@
 
 export const NO_DATA = "#ececec";
 export const TOO_FEW = "#bdbdbd";
+// no model is best with probability P_BEST_MIN or more (ranking.P_BEST_MIN, also in
+// meta.json as p_best_min): the region is left white instead of taking a model's colour
+export const NO_CLEAR = "#ffffff";
+export const P_BEST_MIN = 0.6;
 
 // Qualitative palette (ColorBrewer Paired, then the Tableau 20 pairs Paired lacks),
 // assigned in the order of the models in meta.json (models.yaml order, new models at the
@@ -28,20 +32,27 @@ export function modelColors(models) {
 
 /**
  * Best model per region at one lead day: region → {name, model, mae, tied, enough,
- * ranked, borrowed}. `tied` lists the models not significantly worse than the best;
- * `borrowed` counts the stations an okres borrowed from its neighbours.
+ * ranked, borrowed, pBest, clear, small}. `tied` lists the models not significantly
+ * worse than the best; `borrowed` counts the stations an okres borrowed from its
+ * neighbours; `pBest` is the best model's probability of being the best (p_best, null
+ * in older files), `clear` whether that is at least `pBestMin` (no p_best: true);
+ * `small` marks a ranking on fewer than 30 days (small_sample).
  */
-export function bestByRegion(rows, leadDay) {
+export function bestByRegion(rows, leadDay, pBestMin = P_BEST_MIN) {
   const best = new Map();
   const unranked = new Map(); // region → lowest MAE, for variables without a ranking
   for (const r of rows) {
     if (r.lead_day !== leadDay) continue;
     const entry = best.get(r.region) ?? {
       name: r.region_name, model: null, mae: null, tied: [], enough: r.enough_stations,
-      ranked: false, borrowed: r.borrowed ?? 0,
+      ranked: false, borrowed: r.borrowed ?? 0, pBest: null, clear: true, small: false,
     };
     if (r.rank === 1) {
-      Object.assign(entry, { model: r.model, mae: r.mae, ranked: true });
+      const pBest = r.p_best ?? null;
+      Object.assign(entry, {
+        model: r.model, mae: r.mae, ranked: true, pBest,
+        clear: pBest == null || pBest >= pBestMin, small: Boolean(r.small_sample),
+      });
     } else if (r.tied_with_best && r.rank != null) {
       entry.tied.push(r.model);
     }
@@ -58,11 +69,18 @@ export function bestByRegion(rows, leadDay) {
   return best;
 }
 
-/** Fill colour of a region: its best model, grey with too few stations. */
+/** Fill colour of a region: its best model, grey with too few stations, white without
+ * a clear winner. */
 export function regionColor(entry, colors) {
   if (!entry || entry.model == null) return NO_DATA;
   if (!entry.enough) return TOO_FEW;
+  if (entry.clear === false) return NO_CLEAR;
   return colors[entry.model] ?? NO_DATA;
+}
+
+/** The regions whose ranking rests on a small sample (outlined dashed on the map). */
+export function smallSampleCodes(best) {
+  return [...best].filter(([, e]) => e.small && e.enough && e.model != null).map(([code]) => code);
 }
 
 /** MapLibre "match" expression colouring features by their `code` property. */
@@ -86,10 +104,11 @@ export function stationFeatures(stations, best, colors) {
 }
 
 /** Every station of an okres (or kraj) in the station table, by name: links to the
- * station pages. All of them, not only those scored for the variable shown. */
+ * station pages. All of them, not only those scored for the variable shown; `high`:
+ * a high site (high_site), scored on its own and not in the okres's ranking. */
 export function stationsIn(table, region) {
   return records(table)
     .filter((s) => s.okres_code === region || s.kraj_code === region)
-    .map((s) => ({ id: s.id, name: s.name }))
+    .map((s) => ({ id: s.id, name: s.name, high: Boolean(s.high_site) }))
     .sort((a, b) => a.name.localeCompare(b.name, "cs"));
 }

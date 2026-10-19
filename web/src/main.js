@@ -6,7 +6,8 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
 import {
-  NO_DATA, TOO_FEW, bestByRegion, fillExpression, modelColors, records, stationFeatures, stationsIn,
+  NO_CLEAR, NO_DATA, P_BEST_MIN, TOO_FEW, bestByRegion, fillExpression, modelColors, records,
+  regionColor, smallSampleCodes, stationFeatures, stationsIn,
 } from "./data.js";
 import { HOURS, explainRegion, reasons } from "./explain.js";
 import { setUpHomeSearch } from "./home-search.js";
@@ -98,7 +99,7 @@ function fillSelect(id, options, current) {
 // --- state: the view (variable, lead day, window) and the chosen region, in the URL ----
 const current = {
   view: null, level: "okres", rows: [], regions: new Map(), stations: new Map(),
-  names: {}, colors: {}, stationTable: null, highlight: null,
+  names: {}, colors: {}, stationTable: null, highlight: null, pBestMin: P_BEST_MIN,
 };
 
 function readView() {
@@ -114,12 +115,13 @@ function writeView() {
 }
 
 const nameOf = (model) => current.names[model] ?? model;
+const percent = (p) => Math.round(p * 100);
 
 // --- legend: models with the number of regions they win; click to highlight ---------
 function renderLegend() {
   const wins = new Map();
   for (const entry of current.regions.values()) {
-    if (entry.model && entry.enough) wins.set(entry.model, (wins.get(entry.model) ?? 0) + 1);
+    if (entry.model && entry.enough && entry.clear) wins.set(entry.model, (wins.get(entry.model) ?? 0) + 1);
   }
   const box = document.getElementById("legend");
   const title = element("div", t("legend.title"), "legend-title");
@@ -137,11 +139,15 @@ function renderLegend() {
       });
       return button;
     });
-  const rest = [[t("legend.tooFew"), TOO_FEW], [t("legend.noData"), NO_DATA]].map(([label, color]) => {
+  const noClear = t("legend.noClear", { pct: percent(current.pBestMin) });
+  const rest = [[noClear, NO_CLEAR], [t("legend.tooFew"), TOO_FEW], [t("legend.noData"), NO_DATA]].map(([label, color]) => {
     const row = element("div", null, "legend-item static");
     row.append(swatch(color), element("span", label));
     return row;
   });
+  const small = element("div", null, "legend-item static");
+  small.append(element("span", "", "swatch small-sample"), element("span", t("legend.small")));
+  rest.push(small);
   const hint = element("div", t("legend.hint"), "legend-hint");
   box.replaceChildren(title, ...items, ...rest, hint);
 }
@@ -155,9 +161,9 @@ function paintHighlight() {
     map.setPaintProperty("stations", "circle-stroke-opacity", 1);
     return;
   }
-  const codes = [...current.regions].filter(([, e]) => e.model === model && e.enough).map(([c]) => c);
+  const codes = [...current.regions].filter(([, e]) => e.model === model && e.enough && e.clear).map(([c]) => c);
   map.setPaintProperty("regions-fill", "fill-opacity", codes.length ? ["match", ["get", "code"], codes, 0.9, 0.12] : 0.12);
-  const stations = [...current.stations].filter(([, e]) => e.model === model).map(([c]) => c);
+  const stations = [...current.stations].filter(([, e]) => e.model === model && e.clear).map(([c]) => c);
   const dim = stations.length ? ["match", ["get", "code"], stations, 1, 0.15] : 0.15;
   map.setPaintProperty("stations", "circle-opacity", dim);
   map.setPaintProperty("stations", "circle-stroke-opacity", dim);
@@ -171,8 +177,11 @@ function showHover(event, entry, name) {
   if (!entry || entry.model == null) line.textContent = t("describe.noData");
   else if (!entry.enough) line.textContent = t("describe.tooFew");
   else {
+    if (!entry.clear) line.append(element("div", t("hover.noClear"), "muted"));
     line.append(swatch(current.colors[entry.model] ?? "#888888"), `${nameOf(entry.model)} · MAE ${entry.mae.toFixed(2)} ${unitOf(current.view.variable)}`);
+    if (entry.pBest != null) line.append(element("div", t("hover.pBest", { pct: percent(entry.pBest) }), "muted"));
     if (entry.tied.length) line.append(element("div", t("hover.tied", { n: entry.tied.length }), "muted"));
+    if (entry.small) line.append(element("div", t("legend.small"), "muted"));
   }
   box.replaceChildren(title, line, element("div", t("hover.click"), "muted"));
   box.hidden = false;
@@ -252,6 +261,7 @@ function stationPages(region) {
     const a = element("a", s.name);
     a.href = `measured.html#${s.id}`;
     line.append(a);
+    if (s.high) line.append(element("span", ` (${t("detail.highSite")})`, "muted"));
   });
   return line;
 }
@@ -268,7 +278,7 @@ function stationList(region) {
     const entry = current.stations.get(s.id);
     const b = element("button", null, "station");
     b.type = "button";
-    b.append(swatch(current.colors[entry?.model] ?? NO_DATA), element("span", s.name));
+    b.append(swatch(regionColor(entry, current.colors)), element("span", s.name));
     b.addEventListener("click", () => showStation(s.id, s.name, region));
     list.append(b);
   }
@@ -312,6 +322,11 @@ async function showRegion(region) {
   const why = element("ul", null, "why");
   for (const { key, params } of reasons(facts, fmt)) why.append(element("li", t(key, params)));
   const blocks = [...top, verdict];
+  const pBest = entry?.pBest;
+  if (pBest != null) {
+    const key = entry.clear ? "detail.pBest" : "detail.noClear";
+    blocks.push(element("p", t(key, { pct: percent(pBest), min: percent(current.pBestMin) }), "muted"));
+  }
   if (facts.preliminary) blocks.push(element("p", t("detail.preliminary", { days: facts.basis.days }), "warning"));
   blocks.push(element("h3", t("detail.why")), why);
   const chartBlock = element("div", null, "detail-block");
@@ -398,6 +413,11 @@ function addLayers(filled) {
   map.addLayer({ id: "regions-fill", type: "fill", source: filled, paint: { "fill-color": NO_DATA, "fill-opacity": 0.78 } });
   map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#ffffff", "line-width": 0.6 } });
   map.addLayer({ id: "kraje-line", type: "line", source: "kraje", paint: { "line-color": "#4b5863", "line-width": 1.2 } });
+  // rankings on fewer than 30 days (small_sample): a dashed outline
+  map.addLayer({
+    id: "small-sample", type: "line", source: filled, filter: ["in", ["get", "code"], ["literal", []]],
+    paint: { "line-color": "#1d2329", "line-width": 1.2, "line-dasharray": [2, 2] },
+  });
   map.addLayer({
     id: "selected", type: "line", source: filled, filter: ["==", ["get", "code"], ""],
     paint: { "line-color": "#1d2329", "line-width": 3 },
@@ -440,6 +460,7 @@ map.on("load", async () => {
   const meta = await getJson("data/scores/meta.json");
   document.getElementById("status").textContent = statusText(meta, t);
   current.names = { ...meta?.models, blend: t("model.blend") };
+  current.pBestMin = meta?.p_best_min ?? P_BEST_MIN;
   current.colors = modelColors(current.names);
   current.stationTable = await getJson("data/scores/stations.json");
 
@@ -462,11 +483,12 @@ map.on("load", async () => {
     const leadDays = availableLeadDays(current.rows);
     if (!leadDays.includes(view.leadDay)) view.leadDay = leadDays[0];
     fillSelect("lead", leadDays.map((d) => [d, `D+${d}`]), view.leadDay);
-    current.regions = bestByRegion(current.rows, view.leadDay);
+    current.regions = bestByRegion(current.rows, view.leadDay, current.pBestMin);
     const stationRows = await scores(view, "station");
     if (token !== renderToken) return;
-    current.stations = bestByRegion(stationRows, view.leadDay);
+    current.stations = bestByRegion(stationRows, view.leadDay, current.pBestMin);
     map.setPaintProperty("regions-fill", "fill-color", fillExpression(current.regions, current.colors));
+    map.setFilter("small-sample", ["in", ["get", "code"], ["literal", smallSampleCodes(current.regions)]]);
     map.getSource("stations").setData(stationFeatures(current.stationTable, current.stations, current.colors));
     if (current.highlight && ![...current.regions.values()].some((e) => e.model === current.highlight)) current.highlight = null;
     renderLegend();
