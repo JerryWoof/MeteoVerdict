@@ -3,7 +3,8 @@ import { test } from "node:test";
 
 import {
   heatBlend, heatColLon, heatColourLut, heatCompose, heatDayMarks, heatDecodeElev, heatDecodeGray, heatFieldValue, heatGrid, heatIdw,
-  heatModel, heatNearestHour, heatNeighbours, heatPixelValue, heatRowLat, heatSeriesAt, heatTimeAt, heatTimeText, heatValueAt, parseHeatIndex,
+  HEAT_RAMP, HIST_MIN, HIST_STEP, NO_TEMP, heatAllRange, heatFrostClass, heatHourRange, heatNiceRange, heatPaint, heatWholeRange, heatRampColour, heatRampLut,
+  heatRobustEnds, heatTemperatures, heatModel, heatNearestHour, heatNeighbours, heatPixelValue, heatRowLat, heatSeriesAt, heatTimeAt, heatTimeText, heatValueAt, parseHeatIndex,
 } from "./ai-heat.js";
 
 const DOC = {
@@ -180,4 +181,88 @@ test("the time: nearest hour, label in Prague, midnights", () => {
   const day = Array.from({ length: 30 }, (_, i) => ({ time: Date.parse("2026-10-20T00:00Z") + i * 3600e3 }));
   // Prague midnight is 22:00Z the day before (CEST)
   assert.deepEqual(heatDayMarks(day, "en"), [{ pos: 22, label: "Wed" }]);
+});
+
+const histOf = (values) => {
+  const hist = new Uint32Array(Math.round(90 / HIST_STEP) + 1);
+  for (const v of values) hist[Math.floor((v - HIST_MIN) / HIST_STEP + 1e-9)]++;
+  return hist;
+};
+
+test("the robust range of a histogram ignores the extreme tails and rounds outwards to 0.5", () => {
+  // 1000 values from 2.0 to 11.99, plus 5 outliers at -20 and 5 at 40 (0.5 % each side)
+  const values = [...Array.from({ length: 1000 }, (_, i) => 2 + i * 0.01), ...Array(5).fill(-20), ...Array(5).fill(40)];
+  const ends = heatRobustEnds(histOf(values));
+  assert.ok(ends.lo > 1.9 && ends.lo < 2.2, String(ends.lo));
+  assert.ok(ends.hi > 11.7 && ends.hi < 12.1, String(ends.hi));
+  const range = heatHourRange(histOf(values));
+  assert.equal(range.lo * 2, Math.round(range.lo * 2));
+  assert.equal(range.hi * 2, Math.round(range.hi * 2));
+  assert.ok(range.lo <= ends.lo && range.hi >= ends.hi);
+  assert.equal(heatHourRange(histOf([])), null);
+  assert.deepEqual(heatNiceRange(1.2, 7.6), { lo: 1, hi: 8 });
+  // a narrow hour is widened to 4 °C, evenly
+  assert.deepEqual(heatNiceRange(5.1, 5.9), { lo: 3.5, hi: 7.5 });
+  const flat = heatHourRange(histOf(Array(100).fill(6.04)));
+  assert.ok(flat.hi - flat.lo >= 4 && flat.lo < 6 && flat.hi > 6.1);
+});
+
+test("the ramp: end colours, the middle stop at the middle, linear between, clamped", () => {
+  assert.deepEqual(heatRampColour(-3, -3, 7), [0x31, 0x36, 0x95]);
+  assert.deepEqual(heatRampColour(7, -3, 7), [0xa5, 0x00, 0x26]);
+  assert.deepEqual(heatRampColour(2, -3, 7), [0xff, 0xff, 0xbf]);
+  assert.deepEqual(heatRampColour(-99, -3, 7), heatRampColour(-3, -3, 7));
+  assert.deepEqual(heatRampColour(99, -3, 7), heatRampColour(7, -3, 7));
+  const quarter = heatRampColour(-0.5, -3, 7, ["#000000", "#646464", "#c8c8c8"]);
+  assert.deepEqual(quarter, [50, 50, 50]);
+  const lut = heatRampLut(0, 10, 11);
+  assert.equal(lut.step, 1);
+  assert.deepEqual(Array.from(lut.rgb.slice(15, 18)), [0xff, 0xff, 0xbf]);
+  assert.equal(HEAT_RAMP.length, 11);
+});
+
+test("frost classes: 0 °C and below frost, up to 3 °C ground frost, above none", () => {
+  assert.equal(heatFrostClass(-5), 1);
+  assert.equal(heatFrostClass(0), 1);
+  assert.equal(heatFrostClass(0.01), 2);
+  assert.equal(heatFrostClass(3), 2);
+  assert.equal(heatFrostClass(3.01), 0);
+});
+
+test("the paint: the overlays only touch their classes, outside stays transparent", () => {
+  const values = Int16Array.from([-200, 150, 800, NO_TEMP]);
+  const lut = { rgb: Uint8ClampedArray.from([10, 20, 30]), min: 0, step: 1 };
+  const px = (opts) => heatPaint({ values, width: 4, height: 1 }, lut, opts).data;
+  const plain = px({});
+  assert.deepEqual(Array.from(plain.slice(0, 12)), [10, 20, 30, 255, 10, 20, 30, 255, 10, 20, 30, 255]);
+  assert.equal(plain[15], 0);
+  const frost = px({ frost: true });
+  assert.ok(frost[0] > 100 && frost[1] > 100);
+  assert.deepEqual(Array.from(frost.slice(4, 12)), Array.from(plain.slice(4, 12)));
+  const ground = px({ ground: true });
+  assert.deepEqual(Array.from(ground.slice(0, 4)), Array.from(plain.slice(0, 4)));
+  assert.ok(ground[4] > 100); // x = 1, y = 0 is in a dot
+  assert.deepEqual(Array.from(ground.slice(8, 12)), Array.from(plain.slice(8, 12)));
+});
+
+test("temperatures in hundredths with a histogram, matching the exact series; the all-hours range covers every hour", async () => {
+  const m = model();
+  const t = heatTemperatures(m, 0);
+  assert.equal(t.values[0], NO_TEMP);
+  const [t0] = heatSeriesAt(m, heatColLon(2, m.index.bounds, 4), heatRowLat(1, m.index.bounds, 3));
+  assert.ok(Math.abs(t.values[1 * 4 + 2] / 100 - t0) < 0.01);
+  assert.equal(t.hist.reduce((a, b) => a + b, 0), 11);
+  const half = heatTemperatures(m, 0.5);
+  assert.ok(half.values[6] > Math.min(t.values[6], heatTemperatures(m, 1).values[6]) - 1);
+  const all = await heatAllRange(m, 1, 2);
+  const one = heatHourRange(t.hist);
+  assert.ok(all.lo <= one.lo && all.hi >= one.hi);
+  assert.ok(all.lo <= 0 && all.hi >= 10);
+});
+
+test("the all-days range is at least 0 to 10 and widens to the data", () => {
+  assert.deepEqual(heatWholeRange(-3, 14), { lo: -3, hi: 14 });
+  assert.deepEqual(heatWholeRange(-2.9, 13.2), { lo: -3, hi: 13.5 });
+  assert.deepEqual(heatWholeRange(2, 8), { lo: 0, hi: 10 });
+  assert.deepEqual(heatWholeRange(2, 12), { lo: 0, hi: 12 });
 });
