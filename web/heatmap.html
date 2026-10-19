@@ -35,8 +35,11 @@
             <label class="heat-pick">
               <span class="sr-only" data-i18n="heat.when">Forecast time</span>
               <select id="heat-time"></select>
+              <!-- with the hourly map: a slider in half hours and the time in words -->
+              <input type="range" id="heat-range" min="0" max="0" step="1" value="0" hidden />
             </label>
             <button type="button" id="heat-next" class="play" data-i18n-title="heat.next">›</button>
+            <span id="heat-label" class="heat-label" hidden></span>
             <!-- find a village (place-search.js): the map goes there and the panel opens -->
             <div id="obce-search"></div>
           </div>
