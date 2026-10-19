@@ -4,6 +4,27 @@
 import { records } from "./data.js";
 import { BEYOND, NEUTRAL, RAMPS, colorFor, rampKey } from "./palette.js";
 
+/** Whether the part's corrected gust reaches MeteoVerdict's threshold (outlook files from
+ * before the rename only have the old name ``gust_warning``). */
+export const GUST_THRESHOLD = 13.5;
+export const gustOver = (row) => row?.gust_over_threshold ?? row?.gust_warning ?? null;
+
+/** "Gusts over 13.5 m/s (MeteoVerdict threshold, not an ČHMÚ warning)" (the same threshold as
+ * ``gusts.GUST_THRESHOLD`` in the pipeline). */
+export const gustOverText = (t, language) => t("tv.gustOverThreshold", { gust: GUST_THRESHOLD.toLocaleString(language) });
+
+/** "Not an official ČHMÚ warning; official warnings: chmi.cz", shown wherever a threshold
+ * flag is (only ČHMÚ may issue weather warnings, Act 262/2024 Sb.). */
+export function chmiNotice(t, tag = "p") {
+  const notice = document.createElement(tag);
+  notice.className = "note small chmi-notice";
+  const link = document.createElement("a");
+  link.href = "https://www.chmi.cz/";
+  link.textContent = "chmi.cz";
+  notice.append(`${t("tv.notChmi")} `, link);
+  return notice;
+}
+
 export const PARTS = ["night", "morning", "afternoon", "evening", "day"];
 // the four forecast values; any of them can be shown at the okres markers, and one
 // colours the map
