@@ -2,8 +2,8 @@
 import * as Plot from "@observablehq/plot";
 
 import {
-  SOURCES, LEADS, VARIABLES, aiStatus, aiVerdict, dailyRows, defaultSeries, entryKey, formatView, hasAi, headline,
-  parseView, regionGroups, tableRows,
+  SOURCES, LEADS, VARIABLES, aiStatus, aiVerdict, compareRows, dailyRows, defaultSeries, entryKey, formatView, hasAi,
+  parseView, regionGroups,
 } from "./compare-ai.js";
 import { displayName } from "./tv.js";
 
@@ -71,7 +71,8 @@ export async function setUpAiCompare(t, names, language) {
   const view = parseView(query, valIndex?.regions);
   if (view.sample === "live" && !liveIndex) view.sample = "validation";
   const label = (id, kind) =>
-    kind === "ai" ? t("aic.ai") : kind === "outlook" ? t("aic.outlook") : kind === "mean" ? t("model.blend") : (names[id] ?? valIndex?.models?.[id] ?? id);
+    kind === "ai" ? t("aic.ai") : kind === "outlook" ? t("aic.outlook") : kind === "mean" ? t("model.blend")
+      : t("aic.bestModel", { name: names[id] ?? valIndex?.models?.[id] ?? id });
 
   function fillRegions(index) {
     const groups = regionGroups(index, language);
@@ -85,7 +86,7 @@ export async function setUpAiCompare(t, names, language) {
     select.replaceChildren(
       Object.assign(el("option", t("region.cz")), { value: "cz", selected: view.region === "cz" }),
       ...(groups.kraje.length ? [group(t("compare.kraje"), groups.kraje)] : []),
-      ...(groups.okresy.length ? [group(t("compare.okresy"), groups.okresy)] : []),
+
     );
   }
 
@@ -113,6 +114,7 @@ export async function setUpAiCompare(t, names, language) {
     ], view.sample);
     document.getElementById("aic-sample").querySelector('[value="live"]').disabled = !liveIndex;
     banner(index);
+    document.getElementById("aic-region-note").hidden = false;
     const doc = await load(view.sample, `${view.region}.json`);
     const entry = doc?.entries?.[entryKey(view.variable, view.lead)];
     const unit = valIndex?.units?.[view.variable] ?? "";
@@ -126,27 +128,33 @@ export async function setUpAiCompare(t, names, language) {
 
   function renderVerdict(entry, unit) {
     const node = document.getElementById("aic-verdict");
-    if (!entry) {
+    const note = document.getElementById("aic-sample-note");
+    if (!entry || !hasAi(entry)) {
       node.className = "aic-verdict";
-      node.replaceChildren(el("p", t("aic.noData")));
-      document.getElementById("aic-sample-note").textContent = "";
+      node.replaceChildren(el("p", t(entry ? "aic.noVs" : "aic.noData")));
+      note.textContent = "";
       return;
     }
     const v = aiVerdict(entry);
-    const small = entry.small_sample || view.sample === "validation" || !status.verified;
+    const provisional = entry.small_sample || view.sample === "validation" || !status.verified;
     node.className = `aic-verdict ${v?.verdict ?? "none"}`;
-    const lines = [];
+    const head = el("div", null, "aic-headline");
+    head.append(el("strong", t(v ? `aic.verdict.${v.verdict}` : "aic.noVs")));
+    const lines = [head];
     if (v) {
-      lines.push(el("strong", t(`aic.verdict.${v.verdict}`)));
-      lines.push(el("span", " " + t("aic.verdictDetail", {
-        ai: fmt(v.mae), diff: fmt(v.diff, true), low: fmt(v.low, true), high: fmt(v.high, true), unit,
-      })));
-    } else {
-      lines.push(el("strong", t(hasAi(entry) ? "aic.noVs" : "aic.noAi")));
+      const blend = entry.series.find((s) => s.kind === "outlook");
+      const numbers = el("div", null, "aic-numbers");
+      for (const [name, value] of [[t("aic.ai"), v.mae], [t("aic.outlook"), blend?.mae]]) {
+        const box = el("div");
+        box.append(el("span", fmt(value), "big"), el("span", `${unit} · ${name}`, "label"));
+        numbers.append(box);
+      }
+      lines.push(numbers);
+      lines.push(el("div", t("aic.verdictDetail", { diff: fmt(v.diff, true), low: fmt(v.low, true), high: fmt(v.high, true), unit }), "detail"));
     }
-    if (small) lines.push(el("span", " " + t("aic.provisionalTag"), "tag"));
+    if (provisional) lines.push(el("div", t("aic.provisionalTag"), "tag"));
     node.replaceChildren(...lines);
-    document.getElementById("aic-sample-note").textContent = t("aic.sampleNote", {
+    note.textContent = t("aic.sampleNote", {
       days: entry.days, hours: entry.hours, stations: entry.stations ?? "?", from: entry.dates[0], to: entry.dates[1],
       block: valIndex?.block_days ?? 4,
     }) + (entry.small_sample ? " " + t("aic.smallSample", { days: valIndex?.small_sample_days ?? 30 }) : "")
@@ -155,32 +163,23 @@ export async function setUpAiCompare(t, names, language) {
 
   function renderTable(entry, unit) {
     const table = document.getElementById("aic-table");
-    const note = document.getElementById("aic-headline");
-    if (!entry) {
+    if (!entry || !hasAi(entry)) {
       table.replaceChildren();
-      note.textContent = "";
       return;
     }
-    const h = headline(entry);
-    note.textContent = h.kind === "winner"
-      ? t("aic.winner", { name: label(h.leaders[0].id, h.leaders[0].kind) })
-      : t("aic.noWinner", { names: h.leaders.map((r) => label(r.id, r.kind)).join(", ") });
     const head = el("tr");
-    for (const key of ["aic.col.rank", "aic.col.name", "aic.col.mae", "aic.col.diff", "aic.col.pbest"]) head.append(el("th", t(key, { unit })));
-    const body = tableRows(entry).map((r) => {
-      const tr = el("tr", null, `${r.kind} ${r.leader ? "leader" : ""}`);
+    for (const key of ["aic.col.name", "aic.col.mae", "aic.col.diff"]) head.append(el("th", t(key, { unit })));
+    const body = compareRows(entry).map((r) => {
+      const tr = el("tr", null, r.kind);
       const name = el("td");
       name.append(el("strong", label(r.id, r.kind)));
       if (r.kind === "ai") name.append(el("span", t("aic.badge.ai"), "badge provisional"));
-      if (r.kind === "outlook") name.append(el("span", t("aic.badge.outlook"), "badge"));
-      if (r.kind === "mean") name.append(el("span", t("aic.badge.mean"), "badge"));
-      tr.append(
-        el("td", r.leader && !r.best ? "≈" : String(r.rank)),
-        name,
-        el("td", fmt(r.mae)),
-        el("td", r.best ? "–" : `${fmt(r.diff, true)} [${fmt(r.low, true)}; ${fmt(r.high, true)}]`),
-        el("td", r.p_best == null ? "–" : `${Math.round(r.p_best * 100)} %`),
-      );
+      let diff = "–";
+      if (r.relation) {
+        const { diff: d, low, high, verdict } = r.relation;
+        diff = `${t(`aic.rel.${verdict}`)}: ${fmt(d, true)} [${fmt(low, true)}; ${fmt(high, true)}]`;
+      }
+      tr.append(name, el("td", fmt(r.mae)), el("td", r.kind === "outlook" ? t("aic.reference") : diff));
       return tr;
     });
     table.replaceChildren(el("thead"), el("tbody"));
@@ -207,7 +206,7 @@ export async function setUpAiCompare(t, names, language) {
       y: { label: `MAE (${unit})`, grid: true, zero: true },
       color: { domain: names2, range: ids.map((id) => COLORS[kinds[id]]), legend: true },
       marks: [
-        Plot.lineY(data, { x: "date", y: "mae", stroke: (r) => label(r.id, r.kind), strokeWidth: (r) => (r.kind === "model" ? 1.5 : 2.5), strokeDasharray: (r) => (r.kind === "mean" ? "5,4" : null), tip: true }),
+        Plot.lineY(data, { x: "date", y: "mae", z: (r) => `${r.id}${r.segment}`, stroke: (r) => label(r.id, r.kind), strokeWidth: (r) => (r.kind === "model" ? 1.5 : 2.5), strokeDasharray: (r) => (r.kind === "mean" ? "5,4" : null), tip: true }),
         Plot.dot(data.filter((r) => r.mae != null), { x: "date", y: "mae", fill: (r) => label(r.id, r.kind), r: 2.5 }),
       ],
     }));

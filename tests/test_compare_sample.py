@@ -77,3 +77,17 @@ def test_same_okresy_keeps_the_candidate_in_the_sum():
         == 3
     )
     assert compare_sample.same_okresy(days, set()).height == days.height
+
+
+def test_has_ai_needs_enough_stations():
+    def doc(stations):
+        return {
+            "entries": {
+                "t/1": {"stations": stations, "series": [{"kind": "ai"}, {"kind": "model"}]}
+            }
+        }
+
+    assert compare_sample.has_ai(doc(5)) and not compare_sample.has_ai(doc(2))
+    assert not compare_sample.has_ai(
+        {"entries": {"t/1": {"stations": 9, "series": [{"kind": "model"}]}}}
+    )
