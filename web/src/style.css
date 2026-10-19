@@ -2074,7 +2074,10 @@ body.radar #show-box {
     gap: 0.35rem 0.5rem;
   }
   .radar-when .now-row {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+  }
+  .radar-when .segmented.speed {
+    flex: 0 0 auto;
   }
   .radar-when .segmented {
     flex: 0 1 auto;

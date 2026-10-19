@@ -155,7 +155,7 @@ export function parseView(hash) {
   const layerList = shown.includes("sat") && shown.includes("wv") ? shown.filter((l) => l !== "wv") : shown;
   return {
     day: /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day : "live",
-    hours: HOURS.includes(Number(hours)) ? Number(hours) : 3,
+    hours: HOURS.includes(Number(hours)) ? Number(hours) : 24,
     layers: layers === undefined ? ["radar"] : layerList,
     time: parseStamp(time) != null ? time : null,
     filter: FILTERS.includes(filter) ? filter : null,
