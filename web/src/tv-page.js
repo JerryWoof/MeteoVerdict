@@ -25,6 +25,7 @@ import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 import { AI_FILES, aiPath, aiText } from "./ai-source.js";
 import { renderAiExtras } from "./ai-extras.js";
 import { renderAiVerify } from "./ai-verify-view.js";
+import { TEMP100M_JSON, parseTemp100m, temp100mGradient, temp100mTimeText } from "./ai-temp100m.js";
 
 setWorkerUrl(workerUrl);
 // the AI forecast tab (ai.html) is this page on MeteoVerdict AI's forecast: its own
@@ -122,6 +123,11 @@ let modelNames = {}; // meta.json models
 const modelViews = new Map(); // model → parsed file (loaded once)
 let mapReady = false; // the selector works once the map has its layers
 
+// the AI tab: MeteoVerdict AI's temperature at 100 m from the terrain (ai-temp100m.js), one
+// more choice of the map colour, drawn over the okres colours. Not remembered (not in the URL).
+let temp100m = null; // parseTemp100m of its file, null without one
+let temp100mOn = false;
+
 /** What the map draws: the chosen model's view, or our combination. */
 const shownView = () => (mapModel !== COMBINED && mapView ? mapView : outlook);
 const modelName = (model) => (model === COMBINED ? t("forecast.pickCombined") : modelNames[model] ?? model);
@@ -212,16 +218,44 @@ function renderShow() {
       const radio = document.createElement("input");
       radio.type = "radio";
       radio.name = "colour";
-      radio.checked = colour === state.colour;
-      radio.addEventListener("change", () => update({ colour }));
+      radio.checked = colour === state.colour && !temp100mOn;
+      radio.addEventListener("change", () => {
+        temp100mOn = false;
+        update({ colour });
+      });
       label.append(radio, element("span", t(`layer.${colour}`)));
       return label;
     }),
   );
+  if (temp100m) {
+    const label = element("label", null, "check");
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "colour";
+    radio.checked = temp100mOn;
+    radio.addEventListener("change", () => {
+      temp100mOn = true;
+      update();
+    });
+    label.append(radio, element("span", t("ai.temp100m.layer")));
+    colours.append(label);
+  }
   renderLegend();
 }
 
 function renderLegend() {
+  if (temp100mOn) {
+    const box = document.getElementById("scale");
+    const bar = element("div", null, "bar");
+    bar.style.background = temp100mGradient(temp100m);
+    const { min, max, unit } = temp100m;
+    box.replaceChildren(
+      element("div", t("ai.temp100m.scale", { time: temp100mTimeText(temp100m.time, Date.now(), language, t) }), "scale-title"),
+      bar,
+      element("div", `${min} ${unit} … ${max} ${unit}`, "scale-ends"),
+    );
+    return;
+  }
   // a single model: rain in mm (no probability), its raw cloud cover
   const single = Boolean(shownView()?.single);
   const key = rampKey(state.colour, single);
@@ -715,6 +749,7 @@ function update(change = {}, fromPlay = false) {
   renderWhen(outlook);
   renderShow();
   paintFill(okresColours(view, state.day, state.part, state.colour));
+  if (temp100m) showTemp100m();
   map.setFilter("okres-selected", ["==", ["get", "code"], state.okres ?? ""]);
   if (mapReady || obceDocs.length) paintObce(map, mapModel === COMBINED ? obceDocs : [], state, panelObec);
   paintMarkers(view);
@@ -899,6 +934,16 @@ function addLayers() {
   map.on("moveend", declutter);
 }
 
+/** The AI tab's 100 m image over the okres colours (its source added when first chosen). */
+function showTemp100m() {
+  if (!temp100mOn && !map.getLayer("temp100m")) return;
+  if (!map.getLayer("temp100m")) {
+    map.addSource("temp100m", { type: "image", url: temp100m.url, coordinates: temp100m.coordinates });
+    map.addLayer({ id: "temp100m", type: "raster", source: "temp100m", paint: { "raster-opacity": ["step", ["zoom"], 0.85, BASE_ZOOM, 0.6] } }, "okresy-line");
+  }
+  map.setLayoutProperty("temp100m", "visibility", temp100mOn ? "visible" : "none");
+}
+
 // --- test: the obce (obce-map.js) ------------------------------------------------------
 const loadPlaces = placesLoader(placesUrl);
 
@@ -985,6 +1030,11 @@ async function main() {
   loadObceInView();
   // the AI tab: forecast vs measured, MeteoVerdict AI's scores and its experiments below the map
   if (AI) {
+    // the temperature at 100 m: offered only with a valid file
+    fetchJson(TEMP100M_JSON).then((doc) => {
+      temp100m = parseTemp100m(doc);
+      if (temp100m) renderShow();
+    });
     renderAiVerify(t, fetchJson, state.okres);
     renderAiExtras(t, fetchJson);
   }
