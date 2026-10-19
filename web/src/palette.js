@@ -16,6 +16,13 @@ export const RAMPS = {
     [10, [254, 224, 144]], [15, [253, 174, 97]], [20, [244, 109, 67]], [25, [215, 48, 39]],
     [32, [165, 0, 38]],
   ],
+  // the AI heatmap's own vivid scale (turbo-like, purples and blues below 0, reds above 25),
+  // fixed so a value has the same colour every day; closely spaced stops in -5…20 °C
+  heat: [
+    [-15, [72, 20, 120]], [-10, [88, 56, 170]], [-5, [44, 100, 212]], [0, [38, 164, 238]],
+    [4, [30, 206, 205]], [8, [96, 214, 108]], [12, [196, 232, 64]], [16, [252, 208, 44]],
+    [20, [250, 140, 36]], [25, [226, 52, 40]], [30, [172, 12, 52]], [35, [112, 0, 64]],
+  ],
   precipitation: [[0, [244, 241, 234]], [0.3, [198, 219, 239]], [0.6, [107, 174, 214]], [1, [8, 81, 156]]],
   wind: WIND,
   cloud: CLOUD,
@@ -57,7 +64,7 @@ export function colorFor(value, layer) {
 
 /** A value at the ends of a scale: "-15°", "100 %" (rain probability 0–1), "10 mm". */
 export function scaleValue(key, v) {
-  if (key === "temperature") return `${v}°`;
+  if (key === "temperature" || key === "heat") return `${v}°`;
   if (key === "precipitation") return `${Math.round(v * 100)} %`;
   const unit = { precipitationMm: "mm", wind: "m/s", gust: "m/s", sunshine: "h", cloud: "%" }[key];
   return `${v} ${unit}`;

@@ -62,10 +62,30 @@ const loadPlaces = placesLoader(placesUrl);
 const partName = (part) => t(`part.${part}`).toLowerCase();
 const slotLabel = (slot) => temp100mSlotText(slot.time, language, partName(slot.part));
 
+// The base map for this page: the relief over the temperature image (shadows only, so the
+// colours stay clean), water and rivers over it, the roads light.
+function heatBase() {
+  return baseLayers().map((layer) => {
+    const paint = { ...layer.paint };
+    if (layer.id === "hillshade") {
+      Object.assign(paint, {
+        "hillshade-exaggeration": ["interpolate", ["linear"], ["zoom"], 5, 0.95, 10, 0.75],
+        "hillshade-shadow-color": "rgba(20,20,50,1)",
+        "hillshade-highlight-color": "rgba(255,255,255,0.25)",
+        "hillshade-accent-color": "rgba(60,60,90,0.4)",
+      });
+    }
+    if (layer.id === "water") paint["fill-color"] = "#2f6fbd";
+    if (layer.id === "waterway") paint["line-color"] = "#15509f";
+    if (layer.id === "roads") Object.assign(paint, { "line-color": "#ffffff", "line-opacity": 0.55 });
+    return { ...layer, paint };
+  });
+}
+
 function makeMap() {
   const m = new MapLibreMap({
     container: "map",
-    style: { version: 8, glyphs: GLYPHS, sources: basemapSources(), layers: baseLayers() },
+    style: { version: 8, glyphs: GLYPHS, sources: basemapSources(), layers: heatBase() },
     bounds: BOUNDS,
     fitBoundsOptions: { padding: 20 },
     attributionControl: { compact: true, customAttribution: `Boundaries: ČÚZK (CC BY 4.0) · ${BASEMAP_ATTRIBUTION}` },
@@ -85,7 +105,7 @@ function makeMap() {
 
 function addLayers() {
   map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
-  map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#ffffff", "line-opacity": 0.7, "line-width": 0.5 } });
+  map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#ffffff", "line-opacity": 0.75, "line-width": 0.6 } });
   for (const layer of topLayers(language)) map.addLayer(layer);
   map.on("click", (event) => setPoint(event.lngLat.lng, event.lngLat.lat));
   map.on("mousemove", showTip);
@@ -105,7 +125,7 @@ async function showImage() {
     if (!map.getSource("heat")) map.addSource("heat", { type: "image", ...image });
     else map.getSource("heat").updateImage(image);
     if (!map.getLayer("heat")) {
-      map.addLayer({ id: "heat", type: "raster", source: "heat", paint: { "raster-opacity": 0.8, "raster-fade-duration": 0 } }, "okresy-line");
+      map.addLayer({ id: "heat", type: "raster", source: "heat", paint: { "raster-opacity": 0.85, "raster-fade-duration": 0 } }, "hillshade");
     }
   }
   if (map.getLayer("heat")) map.setLayoutProperty("heat", "visibility", image ? "visible" : "none");
@@ -122,7 +142,7 @@ function showTip(event) {
 
 function renderLegend() {
   const box = $("scale");
-  if (!source.single) return renderScale(box, "temperature", t("heat.legend"));
+  if (!source.single) return renderScale(box, "heat", t("heat.legend"));
   // the old single image has its own colours: its own legend
   const { min, max } = source.single;
   const bar = element("div", null, "bar");
@@ -239,7 +259,7 @@ async function main() {
     $("heat-empty").hidden = false;
     return;
   }
-  loader = temp100mLoader(source, (v) => colorFor(v, "temperature"));
+  loader = temp100mLoader(source, (v) => colorFor(v, "heat"));
   if (index) {
     unit = index.unit;
     slots = index.maps.map((m) => ({ day: m.day, part: m.part, time: m.time })).sort((a, b) => a.time - b.time);
