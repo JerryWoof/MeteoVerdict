@@ -3020,3 +3020,69 @@ body.station [hidden] {
   stroke: var(--box-bg);
   stroke-width: 1.5;
 }
+
+/* the hourly heatmap's display options above the map, the legend's frost swatches, the chart's frost band */
+.heat-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 1rem;
+  margin-top: 0.4rem;
+}
+.heat-options .seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.heat-options .seg-buttons {
+  display: inline-flex;
+  flex-wrap: wrap;
+}
+.heat-options .seg-buttons button {
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--strip-edge);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  margin-left: -1px;
+}
+.heat-options .seg-buttons button:first-child {
+  border-radius: 4px 0 0 4px;
+  margin-left: 0;
+}
+.heat-options .seg-buttons button:last-child {
+  border-radius: 0 4px 4px 0;
+}
+.heat-options .seg-buttons button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--box-bg);
+}
+#scale .scale-key {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+}
+#scale .swatch {
+  flex: none;
+  width: 1.1rem;
+  height: 0.7rem;
+  border: 1px solid var(--muted);
+  background-color: #8fb4d8;
+}
+#scale .swatch.frost {
+  background-image: repeating-linear-gradient(135deg, #f2faff 0 3px, rgba(226, 244, 255, 0.35) 3px 6px);
+}
+#scale .swatch.ground {
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.9) 1px, transparent 1.5px);
+  background-size: 4px 4px;
+}
+#heat-panel .heat-chart .frost {
+  fill: #74add1;
+  fill-opacity: 0.18;
+}
+.heat-options[hidden] {
+  display: none;
+}
