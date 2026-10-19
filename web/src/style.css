@@ -1403,6 +1403,15 @@ pre.code {
   cursor: default;
   color: var(--muted);
 }
+/* the white "no clear winner" swatch needs an edge; small samples are outlined dashed */
+.legend-item.static .swatch {
+  outline: 1px solid rgba(0, 0, 0, 0.12);
+}
+.legend-item .swatch.small-sample {
+  outline: none;
+  border: 1px dashed var(--ink);
+  background: none;
+}
 .legend-item .count {
   margin-left: auto;
   padding-left: 0.6rem;
