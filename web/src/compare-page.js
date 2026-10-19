@@ -15,7 +15,6 @@ import {
 } from "./compare.js";
 import { binLabel, count, etsColor, etsTextColor, farmChoices, farmGrid, plain, score } from "./farm.js";
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
-import { setUpAiCompare } from "./compare-ai-view.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
@@ -953,7 +952,6 @@ async function main() {
     view.blendVariable = blendView.variable;
     writeView(view);
   };
-  setUpAiCompare(t, names, document.documentElement.lang);
   renderBlendTest(names).then(() => (view.blendVariable = blendView.variable));
   // bands of hours ahead: offered once the files exist; the page opens at the band the
   // data suggests (enough days, `default_band`) unless the link names a lead

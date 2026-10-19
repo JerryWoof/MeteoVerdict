@@ -207,15 +207,32 @@ def documents(
     return docs
 
 
+#: a region is offered for the AI comparison only with this many stations in its sample
+#: (an okres usually has one or two AI stations: too few to say anything)
+MIN_AI_STATIONS = 3
+
+
+def has_ai(doc: dict) -> bool:
+    """Does the region have the AI (a candidate) with enough stations in its temperature
+    or wind comparison?"""
+    return any(
+        any(s["kind"] == "ai" for s in e["series"]) and (e.get("stations") or 0) >= MIN_AI_STATIONS
+        for e in doc["entries"].values()
+    )
+
+
 def write(docs: dict[str, dict], out_dir: Path, info: dict) -> Path:
     """``<out_dir>/<region>.json`` per region and ``index.json`` (``info`` plus the
-    regions: code → [level, name])."""
+    regions: code → [level, name, has_ai])."""
     out_dir.mkdir(parents=True, exist_ok=True)
     for region, doc in docs.items():
         (out_dir / f"{region}.json").write_text(
             json.dumps(doc, ensure_ascii=False, separators=(",", ":")), "utf-8"
         )
-    index = {**info, "regions": {r: [d["level"], d["name"]] for r, d in docs.items()}}
+    index = {
+        **info,
+        "regions": {r: [d["level"], d["name"], has_ai(d)] for r, d in docs.items()},
+    }
     (out_dir / INDEX).write_text(
         json.dumps(index, ensure_ascii=False, separators=(",", ":")), "utf-8"
     )
