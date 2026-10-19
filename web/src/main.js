@@ -9,6 +9,7 @@ import {
   NO_DATA, TOO_FEW, bestByRegion, fillExpression, modelColors, records, stationFeatures, stationsIn,
 } from "./data.js";
 import { HOURS, explainRegion, reasons } from "./explain.js";
+import { setUpHomeSearch } from "./home-search.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
@@ -17,6 +18,7 @@ import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
+setUpHomeSearch(t);
 
 // Czechia, with a little margin
 const BOUNDS = [
