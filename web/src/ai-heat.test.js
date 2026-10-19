@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import {
   heatBlend, heatColLon, heatColourLut, heatCompose, heatDayMarks, heatDecodeElev, heatDecodeGray, heatFieldValue, heatGrid, heatIdw,
-  HEAT_RAMP, HIST_MIN, HIST_STEP, NO_TEMP, heatAllRange, heatFrostClass, heatHourRange, heatNiceRange, heatPaint, heatWholeRange, heatRampColour, heatRampLut,
+  HEAT_RAMP, HIST_MIN, HIST_STEP, NO_TEMP, heatAllRange, FROST_RISK_C, heatFrostLevel, heatReadOptions, heatRiskRuns, heatRiskText, heatHourRange, heatNiceRange, heatPaint, heatWholeRange, heatRampColour, heatRampLut,
   heatRobustEnds, heatTemperatures, heatModel, heatNearestHour, heatNeighbours, heatPixelValue, heatRowLat, heatSeriesAt, heatTimeAt, heatTimeText, heatValueAt, parseHeatIndex,
 } from "./ai-heat.js";
 
@@ -221,28 +221,53 @@ test("the ramp: end colours, the middle stop at the middle, linear between, clam
   assert.equal(HEAT_RAMP.length, 11);
 });
 
-test("frost classes: 0 °C and below frost, up to 3 °C ground frost, above none", () => {
-  assert.equal(heatFrostClass(-5), 1);
-  assert.equal(heatFrostClass(0), 1);
-  assert.equal(heatFrostClass(0.01), 2);
-  assert.equal(heatFrostClass(3), 2);
-  assert.equal(heatFrostClass(3.01), 0);
+test("frost level: below 0 frost, up to the 3 °C threshold possible, above none", () => {
+  assert.equal(FROST_RISK_C, 3);
+  assert.equal(heatFrostLevel(-5), 2);
+  assert.equal(heatFrostLevel(-0.01), 2);
+  assert.equal(heatFrostLevel(0), 1);
+  assert.equal(heatFrostLevel(3), 1);
+  assert.equal(heatFrostLevel(3.01), 0);
 });
 
-test("the paint: the overlays only touch their classes, outside stays transparent", () => {
-  const values = Int16Array.from([-200, 150, 800, NO_TEMP]);
+test("merged risk runs and their text in Prague time", () => {
+  assert.deepEqual(heatRiskRuns([5, 3, 2, 4, NaN, 1, 0, 9, 3]), [{ from: 1, to: 2 }, { from: 5, to: 6 }, { from: 8, to: 8 }]);
+  assert.deepEqual(heatRiskRuns([5, 6]), []);
+  assert.deepEqual(heatRiskRuns([1, 2]), [{ from: 0, to: 1 }]);
+  // hours from Tue 20/10 00:00 Prague (22:00Z the day before)
+  const hours = Array.from({ length: 48 }, (_, i) => ({ time: Date.parse("2026-10-19T22:00Z") + i * 3600e3 }));
+  const runs = [{ from: 3, to: 8 }, { from: 26, to: 33 }];
+  assert.equal(heatRiskText(runs, hours, "cs"), "út 03:00–08:00, st 02:00–09:00");
+  assert.equal(heatRiskText(runs, hours, "en"), "Tue 03:00–08:00, Wed 02:00–09:00");
+  assert.equal(heatRiskText([{ from: 20, to: 27 }, { from: 40, to: 40 }], hours, "en"), "Tue 20:00–Wed 03:00, Wed 16:00");
+  assert.equal(heatRiskText([], hours, "en"), "");
+});
+
+test("stored options: defaults, current, and the older versions migrate", () => {
+  assert.deepEqual(heatReadOptions(null), { colours: "all", frost: true });
+  assert.deepEqual(heatReadOptions("junk"), { colours: "all", frost: true });
+  assert.deepEqual(heatReadOptions({ v: 3, colours: "fixed", frost: false }), { colours: "fixed", frost: false });
+  // before version 2 the colour choice was the old default
+  assert.deepEqual(heatReadOptions({ colours: "hour", frost: true, ground: false }), { colours: "all", frost: true });
+  // version 2: frost and ground frost merge, on when either was
+  assert.deepEqual(heatReadOptions({ v: 2, colours: "hour", frost: false, ground: false }), { colours: "hour", frost: false });
+  assert.deepEqual(heatReadOptions({ v: 2, colours: "hour", frost: false, ground: true }), { colours: "hour", frost: true });
+  assert.deepEqual(heatReadOptions({ v: 2, colours: "bad", frost: true, ground: false }), { colours: "all", frost: true });
+  assert.deepEqual(heatReadOptions({ v: 3, colours: "hour", frost: "yes" }), { colours: "hour", frost: true });
+});
+
+test("the paint: the overlay touches pixels up to 3 °C only, outside stays transparent", () => {
+  const values = Int16Array.from([-200, 300, 301, NO_TEMP]);
   const lut = { rgb: Uint8ClampedArray.from([10, 20, 30]), min: 0, step: 1 };
   const px = (opts) => heatPaint({ values, width: 4, height: 1 }, lut, opts).data;
   const plain = px({});
   assert.deepEqual(Array.from(plain.slice(0, 12)), [10, 20, 30, 255, 10, 20, 30, 255, 10, 20, 30, 255]);
   assert.equal(plain[15], 0);
   const frost = px({ frost: true });
-  assert.ok(frost[0] > 100 && frost[1] > 100);
-  assert.deepEqual(Array.from(frost.slice(4, 12)), Array.from(plain.slice(4, 12)));
-  const ground = px({ ground: true });
-  assert.deepEqual(Array.from(ground.slice(0, 4)), Array.from(plain.slice(0, 4)));
-  assert.ok(ground[4] > 100); // x = 1, y = 0 is in a dot
-  assert.deepEqual(Array.from(ground.slice(8, 12)), Array.from(plain.slice(8, 12)));
+  assert.ok(frost[0] > 100 && frost[1] > 100); // -2 °C
+  assert.ok(frost[4] > 100); // exactly 3 °C
+  assert.deepEqual(Array.from(frost.slice(8, 12)), Array.from(plain.slice(8, 12))); // 3.01 °C
+  assert.equal(frost[15], 0);
 });
 
 test("temperatures in hundredths with a histogram, matching the exact series; the all-hours range covers every hour", async () => {
