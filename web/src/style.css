@@ -2899,3 +2899,17 @@ body.station [hidden] {
 @media (max-width: 700px) {
   .ai-verify-compare { margin-left: 0; }
 }
+
+#scale .scale-note {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  margin-top: 0.3rem;
+}
+.temp-tip {
+  pointer-events: none;
+}
+.temp-tip .maplibregl-popup-content {
+  font-size: 0.82rem;
+  padding: 0.25rem 0.5rem;
+  white-space: nowrap;
+}
