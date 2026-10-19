@@ -877,9 +877,9 @@ body.tv > * {
   margin: 0.3rem 0 0.6rem;
   padding-left: 1.1rem;
 }
-/* strong-gust warning (outlook.json gust_warning), also in the forecast page's table */
-#okres-panel .gust-warning,
-#days .gust-warning {
+/* gust over MeteoVerdict's threshold (outlook.json gust_over_threshold), also in the forecast page's table */
+#okres-panel .gust-over-threshold,
+#days .gust-over-threshold {
   color: var(--danger);
   font-weight: 600;
 }

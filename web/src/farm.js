@@ -88,8 +88,8 @@ export function binLabel(bin) {
 }
 
 /**
- * Plain-language reading of one cell: {caught, events, falseWarnings, warnings}, i.e.
- * "caught 8 of 10 frosts, 3 of 11 warnings were false".
+ * Plain-language reading of one cell: {caught, events, falseWarnings, warnings (event forecasts)}, i.e.
+ * "caught 8 of 10 frosts, 3 of 11 event forecasts were false".
  */
 export function plain(row) {
   return {
