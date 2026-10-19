@@ -3334,22 +3334,3 @@ footer .site-links {
     white-space: nowrap;
   }
 }
-@media (prefers-color-scheme: dark) {
-  .aic-status {
-    background: #3a3220;
-  }
-  .aic-status.verified,
-  .aic-verdict.better {
-    background: #1f3321;
-  }
-  .aic-verdict.worse {
-    background: #3a2220;
-  }
-  .aic-verdict.same,
-  .aic-table tr.leader td {
-    background: #2a2d30;
-  }
-  .aic-table tr.ai td {
-    background: #3a2220;
-  }
-}
