@@ -1,6 +1,6 @@
-// The AI tab's extra map colour: MeteoVerdict AI's temperature at 100 m from the terrain
-// (data/scores/ai/fc/temp100m.json and the image it names, transparent outside Czechia,
-// its rows already in the map's spacing). Without a valid file the choice is not offered.
+// The AI heatmap tab (heatmap.html): MeteoVerdict AI's temperature at 100 m from the terrain,
+// a grayscale image per time (data/scores/ai/fc/temp100m/index.json), or, until that exists,
+// the old single coloured image (temp100m.json). Rows are in the map's (Web-Mercator) spacing.
 
 export const TEMP100M_JSON = "data/scores/ai/fc/temp100m.json";
 
@@ -54,28 +54,48 @@ const pragueParts = (ms) => {
   return { day: `${get("year")}-${get("month")}-${get("day")}`, hour: Number(get("hour")), clock: `${get("hour")}:${get("minute")}` };
 };
 
-/**
- * When the image is for, Prague time: `key` "tonight" (this evening, the night after
- * today until 06:00, or after midnight the night still going on), "today", "tomorrow" or null (another day: `day` its date), and `clock`.
- */
-export function temp100mWhen(time, now) {
-  const at = pragueParts(time);
-  const today = pragueParts(now).day;
-  const offset = Math.round((Date.parse(`${at.day}T12:00Z`) - Date.parse(`${today}T12:00Z`)) / 86400000);
-  let key = null;
-  if ((offset === 0 && (at.hour >= 18 || at.hour < 6)) || (offset === 1 && at.hour < 6)) key = "tonight";
-  else if (offset === 0) key = "today";
-  else if (offset === 1) key = "tomorrow";
-  return { key, day: at.day, clock: at.clock };
+const PARTS = ["night", "morning", "afternoon", "evening"];
+
+/** Day (Prague date), part of day and clock of a time (ms): { day, part, clock }. */
+export function temp100mSlot(ms) {
+  const at = pragueParts(ms);
+  return { day: at.day, part: PARTS[Math.floor(at.hour / 6)], clock: at.clock };
 }
 
-/** "dnes v noci 02:00", "tomorrow 14:00", "St 21. 10. 14:00" (`t` the translator). */
-export function temp100mTimeText(time, now, language, t) {
-  const when = temp100mWhen(time, now);
-  if (when.key) return t(`ai.temp100m.${when.key}`, { time: when.clock });
-  const date = new Intl.DateTimeFormat(language, { timeZone: "UTC", weekday: "short", day: "numeric", month: "numeric" })
-    .format(Date.parse(`${when.day}T12:00Z`));
-  return `${date} ${when.clock}`;
+/** "út 20. 10. noc 04:00" (cs) / "Tue 20/10 night 04:00" (en): weekday, date, the part's name (`partName`) and the clock. */
+export function temp100mSlotText(ms, language, partName) {
+  const at = pragueParts(ms);
+  const noon = Date.parse(`${at.day}T12:00Z`);
+  const weekday = new Intl.DateTimeFormat(language === "cs" ? "cs" : "en-GB", { timeZone: "UTC", weekday: "short" }).format(noon);
+  const [, month, day] = at.day.split("-").map(Number);
+  const date = language === "cs" ? `${day}. ${month}.` : `${day}/${month}`;
+  return `${weekday} ${date} ${partName} ${at.clock}`;
+}
+
+/** The index of the first time not before `now` (the nearest future one), else the last; -1 for none. */
+export function temp100mDefaultIndex(maps, now) {
+  if (!maps.length) return -1;
+  const k = maps.findIndex((m) => m.time >= now);
+  return k >= 0 ? k : maps.length - 1;
+}
+
+/** "2,9 °C" (cs) / "2.9 °C" (en). */
+export function temp100mFormat(value, language, unit = "°C") {
+  return `${new Intl.NumberFormat(language, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)} ${unit}`;
+}
+
+/** The place of `places` ({lat, lon, ...}) nearest to lat/lon with its distance in km, or null. */
+export function nearestPlaceOf(places, lat, lon) {
+  const cos = Math.cos((lat * Math.PI) / 180);
+  let best = null;
+  let bestD = Infinity;
+  for (const place of places) {
+    const dy = place.lat - lat;
+    const dx = (place.lon - lon) * cos;
+    const d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; best = place; }
+  }
+  return best ? { place: best, km: Math.sqrt(bestD) * 111.2 } : null;
 }
 
 // --- reading the value under the pointer from the image itself ---------------------------
@@ -132,13 +152,6 @@ export function temp100mValue(lookup, r, g, b, a = 255) {
     if (d < bestD) { bestD = d; best = value; }
   }
   return best;
-}
-
-/** "2,9 °C · po 02:00" (cs) / "2.9 °C · at 02:00" (en): value and the layer's Prague clock. */
-export function temp100mTipText(value, time, language, unit = "°C") {
-  const num = new Intl.NumberFormat(language, { minimumFractionDigits: 1, maximumFractionDigits: 2 }).format(value);
-  const clock = new Intl.DateTimeFormat("en-GB", { timeZone: TIME_ZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(time);
-  return `${num} ${unit} · ${language === "cs" ? "po" : "at"} ${clock}`;
 }
 
 // --- the time series: grayscale PNGs per day and part of day ------------------------------
@@ -231,28 +244,34 @@ const loadImageData = async (url) => {
 };
 
 /**
- * What the map needs for one selection, loaded once and cached: `{ url, coordinates, time,
- * at(lng, lat) }` or null. `source` is {index} (the series) or {single} (the old coloured
- * file); `colour(value)` is the okres fills' temperature ramp, `key(day, part)` picks.
+ * What the map needs for one time, loaded once and cached: `{ time, at(lng, lat), image() }`
+ * or null (no such map, or it failed to load); `image()` gives the coloured image's `{ url,
+ * coordinates }` (made only when asked, the values alone are cheap). `source` is {index} (the
+ * series) or {single} (the old coloured file); `colour(value)` is the okres temperature ramp.
  */
 export function temp100mLoader(source, colour) {
   const cache = new Map();
+  const done = new Map(); // id -> the loaded map or null, once settled
   const series = async (m) => {
     const { index } = source;
     const data = await loadImageData(m.url);
     const lut = temp100mGrayLut(m, colour);
-    const { out, gray } = temp100mColourise(data.data, lut);
-    const canvas = document.createElement("canvas");
-    canvas.width = data.width;
-    canvas.height = data.height;
-    canvas.getContext("2d").putImageData(new ImageData(out, data.width, data.height), 0, 0);
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    const gray = new Uint8Array(data.width * data.height);
+    for (let i = 0; i < gray.length; i++) gray[i] = data.data[i * 4 + 3] ? data.data[i * 4] : 0;
     const img = { gray, width: data.width, height: data.height };
+    let image = null;
     return {
-      url: URL.createObjectURL(blob),
-      coordinates: index.coordinates,
       time: m.time,
       at: (lng, lat) => temp100mGrayAt(img, lng, lat, index.bounds, m),
+      image: () => (image ??= (async () => {
+        const { out } = temp100mColourise(data.data, lut);
+        const canvas = document.createElement("canvas");
+        canvas.width = data.width;
+        canvas.height = data.height;
+        canvas.getContext("2d").putImageData(new ImageData(out, data.width, data.height), 0, 0);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+        return { url: URL.createObjectURL(blob), coordinates: index.coordinates };
+      })()),
     };
   };
   const single = async () => {
@@ -260,28 +279,30 @@ export function temp100mLoader(source, colour) {
     const data = await loadImageData(s.url);
     const lookup = temp100mLookup(s);
     return {
-      url: s.url,
-      coordinates: s.coordinates,
       time: s.time,
       at: (lng, lat) => temp100mColourAt(data, lng, lat, s.bounds, lookup),
+      image: async () => ({ url: s.url, coordinates: s.coordinates }),
     };
   };
+  const idOf = (day, part) => {
+    if (!source.index) return "single";
+    return temp100mMapFor(source.index, day, part)?.url ?? null;
+  };
   return {
-    /** The selection's map or null (no map for that day and part, or it failed to load). */
+    /** The map of a day and part (or, for the single file, its one map) or null. */
     load(day, part) {
-      let job;
-      let id;
-      if (source.index) {
-        const m = temp100mMapFor(source.index, day, part);
-        if (!m) return Promise.resolve(null);
-        id = m.url;
-        job = () => series(m);
-      } else {
-        id = "single";
-        job = single;
+      const id = idOf(day, part);
+      if (id == null) return Promise.resolve(null);
+      if (!cache.has(id)) {
+        const job = source.index ? series(temp100mMapFor(source.index, day, part)) : single();
+        cache.set(id, job.catch(() => null).then((m) => { done.set(id, m); return m; }));
       }
-      if (!cache.has(id)) cache.set(id, job().catch(() => null));
       return cache.get(id);
+    },
+    /** The map if it has settled (null: none or failed), `undefined` while it is still loading or not asked for. */
+    peek(day, part) {
+      const id = idOf(day, part);
+      return id == null ? null : done.get(id);
     },
   };
 }
