@@ -61,3 +61,15 @@ describe("status and view", () => {
     assert.deepEqual(g, { cz: true, kraje: [["CZ010", "Praha"]], okresy: [["CZ0201", "Benešov"]] });
   });
 });
+
+import { rankingTable } from "./compare.js";
+
+describe("ranking table", () => {
+  it("carries p_best (null in older files)", () => {
+    const rows = [
+      { region: "cz", lead_day: 1, model: "a", rank: 1, mae: 1, p_best: 0.7 },
+      { region: "cz", lead_day: 1, model: "b", rank: 2, mae: 1.1 },
+    ];
+    assert.deepEqual(rankingTable(rows, 1).map((r) => r.pBest), [0.7, null]);
+  });
+});

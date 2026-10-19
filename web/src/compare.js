@@ -39,6 +39,7 @@ export function rankingTable(rows, leadDay, region = "cz") {
       diff: best ? r.mae - best.mae : null,
       ci: r.diff_ci_low == null ? null : [r.diff_ci_low, r.diff_ci_high],
       tied: Boolean(r.tied_with_best),
+      pBest: r.p_best ?? null,
       short: isShort(r),
       coverage: r.coverage ?? null,
       skill: blend && r.model !== "blend" && blend.mae > 0 ? 1 - r.mae / blend.mae : null,

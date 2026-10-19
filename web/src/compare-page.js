@@ -365,7 +365,7 @@ function renderTable(rows, view, names, region, onChange) {
   const bc = hasValues(data, "maeBc") ? ["maeBc"] : [];
   const keys = byEts
     ? ["rank", "model", choice.shown, ...events.filter((k) => k !== choice.shown), "mae", "bias", "stations", "days"]
-    : ["rank", "model", "mae", ...bc, "diff", ...(band ? [] : ["skill"]), "bias", "rmse", ...(rain ? events : []),
+    : ["rank", "model", "mae", ...bc, "diff", ...(hasValues(data, "pBest") ? ["pbest"] : []), ...(band ? [] : ["skill"]), "bias", "rmse", ...(rain ? events : []),
       "stations", "days"];
   const label = (key) => {
     if (key === pod || key === far) return t(`table.${key.slice(0, 3)}At`, { mm });
@@ -385,6 +385,7 @@ function renderTable(rows, view, names, region, onChange) {
       model: r.model === "blend" ? t("model.blend") : (names[r.model] ?? r.model) + (r.short ? ` (${t("compare.shortRecord")})` : ""),
       mae: fmt(r.mae),
       diff: r.rank === 1 ? t("compare.best") : r.diff == null || r.short ? "–" : `${fmt(r.diff, true)}${ci}`,
+      pbest: r.pBest == null || r.short ? "–" : `${Math.round(r.pBest * 100)} %`,
       skill: r.short ? "–" : pct(r.skill),
       bias: fmt(r.bias, true),
       rmse: fmt(r.rmse),
