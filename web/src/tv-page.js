@@ -575,6 +575,11 @@ function renderObecPanel(panel, { doc, rows }) {
     update({ okres: state.okres });
   });
   const note = element("p", t("tv.obecNote", { okres: displayName(info?.name ?? state.okres) }), "model-note");
+  // how good the obec forecast is away from the stations (not the AI's, a different method)
+  const accuracy = element("p", null, "model-note");
+  const link = element("a", t("forecast.obecAccuracy"));
+  link.href = "methodology.html#obce-loso";
+  accuracy.append(link);
   const detail = element("a", t("tv.detail"));
   detail.href = `${DETAIL}#${state.okres}/${encodeURIComponent(panelObec)}`;
   panel.replaceChildren(
@@ -585,6 +590,7 @@ function renderObecPanel(panel, { doc, rows }) {
       : []),
     element("p", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`, "when"),
     note,
+    ...(AI ? [] : [accuracy]),
     back,
     big,
     facts,
