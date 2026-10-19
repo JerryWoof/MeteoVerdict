@@ -8,7 +8,7 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: ["web/**", "src/meteoverdict/data/*.geojson", ".github/workflows/pages.yml"]
+    paths: ["web/**", "site/reports/**", "src/meteoverdict/data/*.geojson", ".github/workflows/pages.yml"]
   workflow_run:
     workflows: [Daily, Outlook, CHMI archive]
     types: [completed]
