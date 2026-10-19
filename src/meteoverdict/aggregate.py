@@ -2,12 +2,13 @@
 
 Levels: ``station``, ``okres``, ``kraj``, ``elevation`` (lowland/upland/mountain),
 ``network`` (``main``: the main WMO stations, open sites with the wind sensor at 10 m;
-``other``: all other stations, mostly automatic climate stations, often more sheltered)
-and ``cz`` (all stations). Windows, all ending at ``as_of`` (the last scored day): ``90d``
-(the last 90 days), ``season`` (the meteorological season so far: DJF, MAM, JJA, SON)
-and ``all``; and per season over all years (roadmap 5.1): ``djf``, ``mam``, ``jja`` and
-``son``, every day of that season up to ``as_of`` (their ``from``/``to``: the first and
-last scored day inside the season's months).
+``other``: all other stations, mostly automatic climate stations, often more sheltered),
+``high_sites`` (the high sites below, together) and ``cz`` (all stations). Windows, all
+ending at ``as_of`` (the last scored day): ``90d`` (the last 90 days), ``season`` (the
+meteorological season so far: DJF, MAM, JJA, SON) and ``all``; and per season over all
+years (roadmap 5.1): ``djf``, ``mam``, ``jja`` and ``son``, every day of that season up
+to ``as_of`` (their ``from``/``to``: the first and last scored day inside the season's
+months).
 
 Fair comparison: for each window, variable, lead day and region, only the station-days
 that **every** compared model present in that region has scores for are used. So a
@@ -25,6 +26,15 @@ Such a model gets its own rows with ``short_record`` true, aggregated on its own
 station-days among the fair ones of the compared models (so its ``days`` and ``n`` are
 smaller); it is not ranked and gets no combination weight until it reaches the
 coverage. Where no model reaches it (all records equally patchy), all are compared.
+High sites: a station more than ``HIGH_SITE_ABOVE_M`` (300 m) above the median
+elevation of its okres's stations (``high_site``: Milešovka 620 m above Litoměřice's,
+Lysá hora, Praděd, Sněžka, Klínovec, 47 of 782 stations in October 2026) is left out of
+every okres, its own and those that would borrow it: 300 m is about 2 °C of
+temperature, more than the models differ by, and a summit's wind is another climate
+(August-October 2026, D+1: Milešovka had 35 % of Litoměřice's pairs, but 40 % of its
+temperature error and 70 % of its wind error). It keeps its own ``station`` rows, is
+ranked with the other high sites in ``high_sites`` and stays in the kraj, elevation,
+network and Czechia levels, which describe the whole area including its mountains.
 A region needs at least ``MIN_STATIONS`` stations; otherwise ``enough_stations`` is
 false and it must not be ranked. An okres with too few stations of its own borrows the
 nearest ones of its neighbours (``meteoverdict.neighbours``, roadmap 6.1); ``borrowed``
@@ -52,11 +62,15 @@ import polars as pl
 from meteoverdict import metrics, neighbours, scoring
 from meteoverdict.stations import MAIN_PREFIX
 
-LEVELS = ("station", "okres", "kraj", "elevation", "network", "cz")
+LEVELS = ("station", "okres", "kraj", "elevation", "network", "high_sites", "cz")
 #: meteorological seasons and their months
 SEASONS = {"djf": (12, 1, 2), "mam": (3, 4, 5), "jja": (6, 7, 8), "son": (9, 10, 11)}
 WINDOWS = ("90d", "season", "all", *SEASONS)
 MIN_STATIONS = 3
+#: a station this far above the median elevation of its okres's stations is a high site:
+#: not in any okres's pool, ranked on its own and in the level ``high_sites``
+HIGH_SITE_ABOVE_M = 300.0
+HIGH_SITES = ("high_sites", "Stanice vysoko nad okresem")
 #: a model is compared in a window when it has scores on at least this share of the days
 #: the window has scores for (per variable and lead day)
 MIN_COVERAGE = 0.8
@@ -179,17 +193,33 @@ def network_class(station_id: pl.Expr) -> pl.Expr:
     )
 
 
+def with_high_sites(stations: pl.DataFrame) -> pl.DataFrame:
+    """``stations`` with ``high_site``: more than ``HIGH_SITE_ABOVE_M`` above the median
+    elevation of the stations of its okres (all stations of the table there); false
+    without an elevation."""
+    if not {"elevation", "okres_code"} <= set(stations.columns):
+        return stations.with_columns(pl.lit(False).alias("high_site"))
+    elevation = pl.col("elevation").cast(pl.Float64)
+    above = elevation - elevation.median().over("okres_code")
+    return stations.with_columns((above > HIGH_SITE_ABOVE_M).fill_null(False).alias("high_site"))
+
+
 def station_info(stations: pl.DataFrame) -> pl.LazyFrame:
-    return stations.select(
-        pl.col("id").alias("station_id"),
-        pl.col("name").alias("station_name"),
-        "okres_code",
-        "okres",
-        "kraj_code",
-        "kraj",
-        "elevation_class",
-        network_class(pl.col("id")).alias("network"),
-    ).lazy()
+    return (
+        with_high_sites(stations)
+        .select(
+            pl.col("id").alias("station_id"),
+            pl.col("name").alias("station_name"),
+            "okres_code",
+            "okres",
+            "kraj_code",
+            "kraj",
+            "elevation_class",
+            network_class(pl.col("id")).alias("network"),
+            "high_site",
+        )
+        .lazy()
+    )
 
 
 def region_columns(level: str) -> list[pl.Expr]:
@@ -197,6 +227,8 @@ def region_columns(level: str) -> list[pl.Expr]:
     code, name = _REGION.get(level, (None, None))
     if code:
         return [pl.col(code).alias("region"), pl.col(name).alias("region_name")]
+    if level == "high_sites":
+        return [pl.lit(HIGH_SITES[0]).alias("region"), pl.lit(HIGH_SITES[1]).alias("region_name")]
     return [pl.lit("cz").alias("region"), pl.lit("Česko").alias("region_name")]
 
 
@@ -252,13 +284,26 @@ def okres_pools(in_window: pl.LazyFrame, distance: pl.DataFrame) -> pl.DataFrame
 
 
 def with_regions(
-    in_window: pl.LazyFrame, level: str, distance: pl.DataFrame | None
+    in_window: pl.LazyFrame,
+    level: str,
+    distance: pl.DataFrame | None,
+    high_sites_in_okres: bool = False,
 ) -> pl.LazyFrame:
     """Rows of ``in_window`` with ``region``, ``region_name`` and ``borrowed``.
 
     At the okres level with ``distance`` (from ``okres_distances``), a station's rows
-    appear once for every okres whose pool it is in (``neighbours.pools``).
+    appear once for every okres whose pool it is in (``neighbours.pools``). The high
+    sites (``high_site``) are in no okres, unless ``high_sites_in_okres`` (the training
+    of our forecast's regression, ``mos.pools``, which keeps them); the level
+    ``high_sites`` has only them.
     """
+    if "high_site" in in_window.collect_schema().names():
+        if level == "okres" and not high_sites_in_okres:
+            in_window = in_window.filter(~pl.col("high_site"))
+        elif level == "high_sites":
+            in_window = in_window.filter(pl.col("high_site"))
+    elif level == "high_sites":
+        in_window = in_window.filter(pl.lit(False))
     if level == "okres" and distance is not None:
         pool = okres_pools(in_window, distance)
         return in_window.drop("okres_code", "okres").join(
@@ -522,6 +567,11 @@ JSON_COLUMNS = (
     "far_10",
     "ets_10",
     "mae_bc",
+    # added with the block bootstrap (October 2026): the probability of being the best
+    # model, the Diebold-Mariano p-value against the best one and the small-sample flag
+    "p_best",
+    "dm_p",
+    "small_sample",
 )
 
 
@@ -598,6 +648,8 @@ def excluded(table: pl.DataFrame) -> dict[str, dict[str, dict]]:
 
 
 def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -> dict:
+    from meteoverdict import ranking  # ranking imports this module
+
     windows = table.select("window", "from", "to").unique().sort("window").rows(named=True)
     return {
         "generated": generated.isoformat(timespec="seconds"),
@@ -628,11 +680,25 @@ def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -
         ),
         "short_record": excluded(table),
         "ranking": (
-            "by MAE; tied_with_best when the 95 % bootstrap interval (days resampled) of the "
-            "MAE difference to the best model contains 0; clear_winner when nobody is tied; "
-            "the blend (mean of all models) is not ranked, its difference and interval are "
-            "relative to the best single model"
+            "by MAE; 95 % moving-block bootstrap interval of the MAE difference to the best "
+            f"model (blocks of {ranking.BLOCK_DAYS} consecutive days); tied_with_best unless "
+            "that interval excludes 0 and the Diebold-Mariano test (Newey-West variance, "
+            f"{ranking.DM_LAGS} lags) gives dm_p < {ranking.DM_ALPHA}; clear_winner when "
+            "nobody is tied; p_best: share of the resamples in which the model has the "
+            f"lowest MAE, the map names a winner only from {ranking.P_BEST_MIN}; "
+            f"small_sample: fewer than {ranking.SMALL_SAMPLE_DAYS} days; the blend (mean of "
+            "all models) is not ranked, its difference and interval are relative to the "
+            "best single model"
         ),
+        "p_best_min": ranking.P_BEST_MIN,
+        "small_sample_days": ranking.SMALL_SAMPLE_DAYS,
+        "block_days": ranking.BLOCK_DAYS,
+        "high_sites": (
+            f"stations more than {HIGH_SITE_ABOVE_M:.0f} m above the median elevation of "
+            "their okres's stations: in no okres's ranking, ranked on their own (station "
+            "level) and together (level high_sites); still in kraj, elevation, network, cz"
+        ),
+        "high_site_above_m": HIGH_SITE_ABOVE_M,
         "licence": "CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/",
         "attribution": (
             "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com "
@@ -644,12 +710,16 @@ def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -
     }
 
 
-#: Station columns for the web map's dots (``stations.json``).
-STATION_COLUMNS = ("id", "name", "lat", "lon", "elevation", "okres_code", "kraj_code", "active")
+#: Station columns for the web map's dots (``stations.json``); ``high_site`` (added in
+#: October 2026) marks the stations left out of the okresy
+STATION_COLUMNS = (
+    "id", "name", "lat", "lon", "elevation", "okres_code", "kraj_code", "active", "high_site",
+)  # fmt: skip
 
 
 def write_stations(stations: pl.DataFrame, out_dir: Path) -> Path:
     """``out_dir/stations.json``: position and region of every station, same layout."""
+    stations = with_high_sites(stations)
     columns = [c for c in STATION_COLUMNS if c in stations.columns]
     rows = stations.select(
         pl.col(c).round(5) if stations.schema[c].is_float() else pl.col(c) for c in columns

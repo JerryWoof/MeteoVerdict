@@ -135,11 +135,13 @@ def pairs(
 
 def pools(scores: pl.LazyFrame | pl.DataFrame, stations: pl.DataFrame) -> pl.DataFrame:
     """The stations of every okres per variable (``variable``, ``region``,
-    ``region_name``, ``station_id``): its own and borrowed ones, as in the ranking."""
+    ``region_name``, ``station_id``): its own and borrowed ones, as in the ranking, but
+    with the high sites (``aggregate.with_high_sites``), on which the regression was
+    tested and which the elevation term helps most."""
     in_period = scores.lazy().join(aggregate.station_info(stations), on="station_id")
     distance = aggregate.okres_distances(stations)
     return (
-        aggregate.with_regions(in_period, "okres", distance)
+        aggregate.with_regions(in_period, "okres", distance, high_sites_in_okres=True)
         .select("variable", "region", "region_name", "station_id")
         .unique()
         .collect()

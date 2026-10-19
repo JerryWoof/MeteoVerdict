@@ -260,8 +260,10 @@ def test_station_positions_for_the_map(tmp_path):
     )
     path = agg.write_stations(stations, tmp_path)
     doc = json.loads(path.read_text(encoding="utf-8"))
-    assert doc["columns"] == ["id", "name", "lat", "lon", "okres_code", "kraj_code", "active"]
-    assert doc["rows"][0] == ["s1", "One", 50.00778, 14.4, "CZ0201", "CZ020", True]
+    assert doc["columns"] == [
+        "id", "name", "lat", "lon", "okres_code", "kraj_code", "active", "high_site",
+    ]  # fmt: skip
+    assert doc["rows"][0] == ["s1", "One", 50.00778, 14.4, "CZ0201", "CZ020", True, False]
 
 
 def test_daily_error_series_per_station(tmp_path):
@@ -450,3 +452,44 @@ def test_event_skill_at_the_new_thresholds_is_published(tmp_path):
     assert "ets_10" not in doc["columns"]  # no counts at 10 mm in these rows
     station = json.loads((tmp_path / "all" / "station" / "precipitation_daily.json").read_text())
     assert "ets_1" not in station["columns"] and "mae" in station["columns"]  # file size
+
+
+HILLS = pl.DataFrame(
+    {
+        "id": ["low1", "low2", "low3", "summit"],
+        "name": ["Low 1", "Low 2", "Low 3", "Summit"],
+        "okres_code": ["CZ0423"] * 4,
+        "okres": ["Litoměřice"] * 4,
+        "kraj_code": ["CZ042"] * 4,
+        "kraj": ["Ústecký kraj"] * 4,
+        "elevation_class": ["lowland", "lowland", "lowland", "mountain"],
+        "elevation": [180.0, 210.0, 240.0, 830.0],
+    }
+)
+
+
+def test_high_sites_are_more_than_300_m_above_their_okres():
+    flags = agg.with_high_sites(HILLS)["high_site"].to_list()
+    assert flags == [False, False, False, True]  # median 225 m, the summit 605 m above
+    assert not agg.with_high_sites(STATIONS)["high_site"].any()  # no elevation: none
+
+
+def test_high_sites_are_left_out_of_the_okres_and_ranked_on_their_own():
+    days = [DAY - timedelta(days=i) for i in range(3)]
+    rows = []
+    for d in days:
+        for station in ("low1", "low2", "low3"):
+            rows += [(d, station, "a", 1, 1.0), (d, station, "b", 1, 1.5)]
+        rows += [(d, "summit", "a", 1, 6.0), (d, "summit", "b", 1, 2.0)]
+    table = agg.aggregate(score_rows(rows), HILLS, windows=("all",), corrected=False)
+
+    def mae(level):
+        here = table.filter(pl.col("level") == level).sort("model")
+        return dict(zip(here["model"], here["mae"], strict=True)), here["stations"].max()
+
+    # without the summit, a wins the okres; with it (kraj, Czechia) b does
+    assert mae("okres") == ({"a": 1.0, "b": 1.5}, 3)
+    assert mae("kraj") == ({"a": 2.25, "b": 1.625}, 4)
+    assert mae("high_sites") == ({"a": 6.0, "b": 2.0}, 1)
+    station = table.filter(pl.col("level") == "station", pl.col("region") == "summit")
+    assert station.height == 2

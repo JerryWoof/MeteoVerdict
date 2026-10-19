@@ -47,8 +47,8 @@ the models:
 
    Czechia sums the okresy (a station borrowed by two okresy counts for both, with
    each okres's own weights); a series counts on a day only if it is compared in every
-   okres tested that day. Intervals: ``ranking.bootstrap_group`` (whole days
-   resampled) of the MAE difference to ``best_oos`` and to ``best_cz_oos``, and of
+   okres tested that day. Intervals: ``ranking.bootstrap_group`` (blocks of
+   consecutive days resampled) of the MAE difference to ``best_oos`` and to ``best_cz_oos``, and of
    ours minus each single model; negative = ours (or the series) better.
 
 Output (``write``): ``site/data/blend-test.json``, see ``document``.
@@ -434,7 +434,7 @@ def _differences(
     reference: str,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """MAE difference of every column to ``reference`` with its 95 % interval
-    (``ranking.bootstrap_group``, whole days resampled); no interval with one day. The
+    (``ranking.bootstrap_group``, blocks of days resampled); no interval with one day. The
     generator is copied, so every reference sees the same resamples."""
     if a.shape[0] >= 2:
         ranked = np.array([c == reference for c in columns])
@@ -685,7 +685,7 @@ METHOD = (
     "Czechia sums all okresy. diff = MAE minus the MAE of best_oos, *_vs_cz = MAE minus "
     "the MAE of best_cz_oos, single models: diff_combined = our MAE minus the model's "
     "(negative = better), each with a 95 % interval from {resamples} bootstrap resamples "
-    "of whole days."
+    "of blocks of {block} consecutive days."
 )
 
 
@@ -720,6 +720,7 @@ def document(
             window=window,
             min_days=min_training_days,
             resamples=resamples,
+            block=ranking.BLOCK_DAYS,
             coverage=MIN_MODEL_COVERAGE,
         ),
         "min_model_coverage": MIN_MODEL_COVERAGE,

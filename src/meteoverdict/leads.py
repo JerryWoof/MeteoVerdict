@@ -34,7 +34,7 @@ and variable that every model in the data has a pair for. The archive also recor
 **Ranking by lead band** (``band_rankings``, ``leads-bands-<window>[-kraj].json``): the
 same single runs pooled over H+1-6, H+7-12, H+13-24, H+25-48 and H+49-72, on two fair
 sets per band (``band_required``), with bias-corrected MAE, hourly precipitation ETS,
-gusts and bootstrap intervals over days, for Czechia, the station kinds and kraje.
+gusts and block-bootstrap intervals over days, for Czechia, the station kinds and kraje.
 
 Lead 0 (the analysis) is not scored. Sums are kept additive (``metrics``), so MAE, bias
 and RMSE come from the sums of each group.
@@ -964,9 +964,10 @@ def band_scores(
 ) -> pl.DataFrame:
     """Scores and ranking of every level, region, band, set and variable from the
     station-day sums of one window (``BAND_COLUMNS``). Models are ranked by MAE; the 95 %
-    interval of each model's MAE minus the best one's comes from resampling whole days
-    (``ranking.bootstrap_group``); ``tied``: that interval contains 0."""
-    from meteoverdict.ranking import bootstrap_group
+    interval of each model's MAE minus the best one's comes from resampling blocks of
+    consecutive days (``ranking.bootstrap_group``); ``tied``: that interval contains 0
+    or the Diebold-Mariano test does not find the model worse (``ranking.ties``)."""
+    from meteoverdict import ranking
 
     frames = []
     groups = ["region", "set", "band", "variable"]
@@ -1018,8 +1019,8 @@ def band_scores(
             else:
                 text = "|".join(map(str, (level, *key))).encode()
                 rng = np.random.default_rng([seed, zlib.crc32(text)])
-                order, diff, bounds = bootstrap_group(a, m, rng, resamples)
-            tied = (bounds[0] <= 0) & (bounds[1] >= 0) & (order.argsort() > 0)
+                order, diff, bounds = ranking.bootstrap_group(a, m, rng, resamples)
+            tied, _, _ = ranking.ties(a, m, order, bounds)
             clear = len(ids) > 1 and not tied.any()
             for position, index in enumerate(order):
                 ranks.append(
@@ -1129,6 +1130,8 @@ def band_documents(
 ) -> dict[str, dict]:
     """``{file name: document}``: ``leads-bands-<window>.json`` (Czechia and the station
     kinds) and ``leads-bands-<window>-kraj.json`` (kraje), ``{"columns", "rows"}``."""
+    from meteoverdict import ranking
+
     stamp = "%Y-%m-%dT%H:%MZ"
     required_ = facts["required"]
     members: dict = {}
@@ -1170,9 +1173,10 @@ def band_documents(
         ),
         "ranking": (
             "Rank by MAE. diff, diff_low, diff_high: MAE minus the best model's MAE and its "
-            "95 % interval from resampling whole days of runs (1000 times); tied: the "
-            "interval contains 0 (not significantly worse than the best); clear: the best "
-            "model with no model tied."
+            f"95 % interval from resampling blocks of {ranking.BLOCK_DAYS} consecutive days "
+            "of runs (1000 times); tied: the interval contains 0 or the Diebold-Mariano test "
+            f"(Newey-West variance) gives p >= {ranking.DM_ALPHA} (not significantly worse "
+            "than the best); clear: the best model with no model tied."
         ),
         "bias_corrected": (
             "mae_bc (temperature, wind): each model's own mean error at the station, band "
