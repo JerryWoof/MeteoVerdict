@@ -32,6 +32,7 @@ from meteoverdict import (
     leads,
     mos,
     obce_forecast,
+    obce_loso,
     observations,
     observed_map,
     outlook,
@@ -1042,6 +1043,127 @@ def blend_test_cmd(
         f"({doc['warm_up_days']} scored days before them left out as warm-up)"
     )
     for line in blendtest.summary(groups):
+        typer.echo(line)
+    typer.echo(f"→ {path}")
+
+
+@app.command("obce-loso")
+def obce_loso_cmd(
+    data_dir: Annotated[Path, typer.Option(help="Folder with obs/, gauges/, fc/ and scores/.")] = (
+        Path("data")
+    ),
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    out: Annotated[Path, typer.Option(help="The JSON file.")] = Path("site/data") / obce_loso.ASSET,
+    days: Annotated[
+        int, typer.Option(help="Test the last N scored days (training uses the window before).")
+    ] = 180,
+    variant: Annotated[
+        list[str] | None,
+        typer.Option(help="loso (the station held out) and/or buffer (also its neighbours)."),
+    ] = None,
+    buffer_km: Annotated[
+        float, typer.Option(help="The buffer variant also holds out stations this close (km).")
+    ] = obce_loso.BUFFER_KM,
+    block_days: Annotated[
+        int, typer.Option(help="Moving-block bootstrap: days per block.")
+    ] = obce_loso.BLOCK_DAYS,
+    resamples: Annotated[int, typer.Option(help="Bootstrap resamples.")] = obce_loso.RESAMPLES,
+    scored_out: Annotated[
+        Path | None,
+        typer.Option(
+            help="Keep the daily scores of every series here (Parquet, per variant; also "
+            "per batch, so that a stopped run carries on)."
+        ),
+    ] = None,
+    reuse: Annotated[
+        bool,
+        typer.Option(
+            "--reuse", help="Read the daily scores from --scored-out instead of recomputing."
+        ),
+    ] = False,
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Download the months' observations, forecasts, scores and single runs "
+            "from GitHub Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+        ),
+    ] = False,
+    publish: Annotated[
+        bool, typer.Option("--publish", help="Put the JSON file into the release data-latest.")
+    ] = False,
+) -> None:
+    """Leave one station out: how good is the obec forecast at a place without a station?"""
+    if publish and not github_release:
+        raise typer.BadParameter("--publish needs --github-release")
+    if reuse and scored_out is None:
+        raise typer.BadParameter("--reuse needs --scored-out")
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    variants = variant or list(obce_loso.VARIANTS)
+    for v in variants:
+        if v not in obce_loso.VARIANTS:
+            raise typer.BadParameter(f"variant must be one of {obce_loso.VARIANTS}, not {v!r}")
+    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+        releases = _release_store(client) if github_release else None
+        if releases:
+            remote = store.remote_months(releases)
+            store.download(releases, data_dir, remote, typer.echo, kinds=("scores",))
+        files = sorted((data_dir / "scores").glob("*.parquet"))
+        if not files:
+            typer.echo(f"mvd obce-loso: no scores in {data_dir / 'scores'}", err=True)
+            raise typer.Exit(code=1)
+        variables = list(blendtest.SCORE_VARIABLES.values())
+        scores = (
+            pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
+            .filter(pl.col("variable").is_in(variables))
+            .collect()
+        )
+        last = scores["date"].max()
+        first = max(scores["date"].min(), last - timedelta(days=days - 1))
+        oldest = scores["date"].min()
+        if releases:
+            months = partitions.months(oldest, last + timedelta(days=1))
+            store.download(releases, data_dir, months, typer.echo, kinds=("obs", "gauges", "fc"))
+            since = last - timedelta(days=fresh.DAYS + catalogue.MAX_LEAD_DAY + 1)
+            runs.RunsSync(releases, data_dir, typer.echo).pull(partitions.months(since, last))
+        obs = observations.scan(data_dir, oldest, last + timedelta(days=1))
+        fc = partitions.scan_months(data_dir / "fc", oldest, last + timedelta(days=1))
+        enabled = [m for m in catalogue.load_models() if m.enabled]
+        fc, _ = daily_mod.add_fresh(data_dir, enabled, last, obs, fc, typer.echo)
+        if obs is None or fc is None:
+            typer.echo("mvd obce-loso: no observations or forecasts", err=True)
+            raise typer.Exit(code=1)
+        table = pl.read_parquet(stations_path)
+        scored = {}
+        for v in variants:
+            kept = scored_out / f"obce-loso-{v}.parquet" if scored_out is not None else None
+            if reuse and kept is not None and kept.exists():
+                scored[v] = pl.read_parquet(kept)
+                continue
+            scored[v] = obce_loso.run(
+                scores, fc, obs, table, first, last, v, buffer_km, log=typer.echo,
+                checkpoint=scored_out / "batches" if scored_out is not None else None,
+            )  # fmt: skip
+            if scored_out is not None and scored[v].height:
+                scored_out.mkdir(parents=True, exist_ok=True)
+                scored[v].write_parquet(scored_out / f"obce-loso-{v}.parquet")
+        groups = obce_loso.results(scored, table, block_days, resamples)
+        if not groups:
+            typer.echo("mvd obce-loso: nothing to test yet (warm-up)", err=True)
+            raise typer.Exit(code=1)
+        doc = obce_loso.document(
+            scored, groups, table, datetime.now(UTC), buffer_km, block=block_days,
+            resamples=resamples,
+        )  # fmt: skip
+        path = obce_loso.write(doc, out)
+        if publish:
+            releases.put(store.LATEST_TAG, path.name, path)
+    typer.echo(f"{doc['test_days']} test days {doc['from']} … {doc['to']}")
+    typer.echo(f"stations: {doc['stations']}")
+    for line in obce_loso.summary(groups):
         typer.echo(line)
     typer.echo(f"→ {path}")
 
