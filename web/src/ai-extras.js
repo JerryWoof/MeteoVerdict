@@ -1,5 +1,5 @@
-// The AI forecast tab below the map (data/scores/ai/ai.json, computed daily on the DGX
-// Spark): MeteoVerdict AI against the best public model per lead day since its launch, and the cards of
+// The AI forecast tab below the map (data/scores/ai/ai.json, computed
+// daily): MeteoVerdict AI against the best public model per lead day since its launch, and the cards of
 // the experiments that work and of those still under evaluation. Nothing here compares with our combined forecast.
 
 const VARIABLES = ["temperature_2m", "wind_speed_10m"];
