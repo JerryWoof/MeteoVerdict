@@ -23,20 +23,15 @@ const nullable = (v) => (finite(v) ? v : NaN);
  * The index's parts the browser needs, or null when unusable: `bounds`, `coordinates` (the
  * image's corners for a MapLibre image source), `width`, `height`, `lapse`, `cosLat`,
  * `neighbours`, `files` ({elev, fields: [{url, offset, scale, bytes}]}), `points` {lon, lat},
- * `hours` [{time (ms), w, coef}] and `sea`/`a`/`b` [hour][point] with null as NaN.
+ * `hours` [{time (ms), w, coef}] and `sea`/`a`/`b` [hour][point] with null as NaN. When the index
+ * lists a coarser set of the same images (`lo`), `lo` is the same object for that set (own
+ * `bounds`, `width`, `height`, `files`, and `factor`: its pixels' size in the full ones').
  */
 export function parseHeatIndex(doc, indexPath = HEAT_INDEX) {
   if (!doc || typeof doc !== "object") return null;
-  const b = doc.bounds;
-  if (!Array.isArray(b) || b.length !== 4 || !b.every(finite) || !(b[0] < b[2] && b[1] < b[3])) return null;
-  if (!(doc.width > 1) || !(doc.height > 1) || !finite(doc.lapse) || !(doc.cos_lat > 0)) return null;
-  const file = (name) => indexPath.replace(/[^/]*$/, name);
-  if (!PNG.test(doc.elev?.file ?? "")) return null;
-  if (!Array.isArray(doc.fields) || doc.fields.length !== FIELDS) return null;
-  const fields = doc.fields.map((f) =>
-    PNG.test(f?.file ?? "") && finite(f.offset) && finite(f.scale) ? { url: file(f.file), offset: f.offset, scale: f.scale, bytes: f.bytes ?? 0 } : null,
-  );
-  if (fields.includes(null)) return null;
+  if (!finite(doc.lapse) || !(doc.cos_lat > 0)) return null;
+  const level = parseLevel(doc, indexPath, doc);
+  if (!level) return null;
   const { lon, lat } = doc.okresy ?? {};
   if (!Array.isArray(lon) || !Array.isArray(lat) || lon.length !== lat.length || !lon.length) return null;
   if (!lon.every(finite) || !lat.every(finite)) return null;
@@ -55,21 +50,42 @@ export function parseHeatIndex(doc, indexPath = HEAT_INDEX) {
   const a = table(doc.a);
   const bb = table(doc.b);
   if (!sea || !a || !bb) return null;
-  return {
-    bounds: b,
-    coordinates: [[b[0], b[3]], [b[2], b[3]], [b[2], b[1]], [b[0], b[1]]],
-    width: doc.width,
-    height: doc.height,
+  const index = {
+    ...level,
     lapse: doc.lapse,
     cosLat: doc.cos_lat,
     neighbours: Math.max(1, Math.min(n, Math.round(doc.neighbours) || 8)),
-    files: { elev: { url: file(doc.elev.file), bytes: doc.elev.bytes ?? 0 }, fields },
     points: { lon: Float64Array.from(lon), lat: Float64Array.from(lat) },
     hours,
     sea,
     a,
     b: bb,
     issued: Date.parse(doc.issued),
+  };
+  // the coarse set, when the index lists a usable one: an index-like object of its own (same hours and points)
+  const lo = doc.lo && typeof doc.lo === "object" ? parseLevel(doc.lo, indexPath, doc.lo) : null;
+  if (lo && doc.lo.factor > 1) index.lo = { ...index, ...lo, factor: doc.lo.factor };
+  return index;
+}
+
+/** One image set's geometry and files: `bounds`, `coordinates`, `width`, `height`, `files`; null when unusable. */
+function parseLevel(doc, indexPath, set) {
+  const b = set.bounds;
+  if (!Array.isArray(b) || b.length !== 4 || !b.every(finite) || !(b[0] < b[2] && b[1] < b[3])) return null;
+  if (!(set.width > 1) || !(set.height > 1)) return null;
+  const file = (name) => indexPath.replace(/[^/]*$/, name);
+  if (!PNG.test(set.elev?.file ?? "")) return null;
+  if (!Array.isArray(set.fields) || set.fields.length !== FIELDS) return null;
+  const fields = set.fields.map((f) =>
+    PNG.test(f?.file ?? "") && finite(f.offset) && finite(f.scale) ? { url: file(f.file), offset: f.offset, scale: f.scale, bytes: f.bytes ?? 0 } : null,
+  );
+  if (fields.includes(null)) return null;
+  return {
+    bounds: b,
+    coordinates: [[b[0], b[3]], [b[2], b[3]], [b[2], b[1]], [b[0], b[1]]],
+    width: set.width,
+    height: set.height,
+    files: { elev: { url: file(set.elev.file), bytes: set.elev.bytes ?? 0 }, fields },
   };
 }
 
@@ -133,7 +149,7 @@ export function heatIdw(values, idx, w, offset = 0, k = idx.length - offset) {
 }
 
 /** The coarse grid: its size and, per node, the neighbours (flat `idx`, `w` of length nodes·k). */
-export function heatGrid(index, step = GRID_STEP) {
+export function heatGrid(index, step = Math.max(1, Math.round(GRID_STEP / (index.factor ?? 1)))) {
   const { width, height, bounds, points, cosLat, neighbours: k } = index;
   const gw = Math.ceil((width - 1) / step) + 1;
   const gh = Math.ceil((height - 1) / step) + 1;
@@ -435,6 +451,9 @@ export function heatHourRange(hist) {
  * the page breathe between hours.
  */
 export async function heatAllRange(model, shrink = 16, gridStep = 64, onStep = () => {}) {
+  const factor = model.index.factor ?? 1; // a coarse set's pixels are that many full ones wide
+  shrink = Math.max(1, Math.round(shrink / factor));
+  gridStep = Math.max(1, Math.round(gridStep / factor));
   const coarse = heatModel(model.index, model.elev, model.gray, heatGrid(model.index, gridStep));
   const n = model.index.hours.length;
   let lo = Infinity;
