@@ -82,7 +82,8 @@ let days = [];
 let shownMs = null; // the data time on the map (a whole minute)
 let playing = false;
 let clockState = { ms: 0, hold: 0 };
-let speed = SPEEDS.includes(Number(stored("speed", 1))) ? Number(stored("speed", 1)) : 1;
+const DEFAULT_SPEED = 4;
+let speed = SPEEDS.includes(Number(stored("speed2", DEFAULT_SPEED))) ? Number(stored("speed2", DEFAULT_SPEED)) : DEFAULT_SPEED;
 // half strength by default: the clouds under the radar, not over it
 let satOpacity = Math.min(1, Math.max(0.2, Number(stored("satOpacity", 0.5)) || 0.5));
 let point = null; // {lon, lat, name?} of the rain-at-my-place panel
@@ -377,6 +378,15 @@ function preload(url) {
   image.src = url;
 }
 
+/** Fetch the images of the shown window into the browser cache so a frame change does not blink. */
+function preloadSatellite(product, meta) {
+  const first = firstTime() - 40 * MINUTE;
+  for (const s of meta?.frames ?? []) {
+    const ms = parseStamp(s);
+    if (ms != null && ms >= first) preload(satUrl(product, meta, s));
+  }
+}
+
 // satellite: the two frames around the time, cross-faded
 function satelliteInfo() {
   const mode = has("wv") ? "wv" : has("sat") ? "sat" : "off";
@@ -384,8 +394,13 @@ function satelliteInfo() {
   if (!product) return null;
   const meta = index.satellite[product];
   const around = bracket(meta?.frames, shownMs, 30);
-  if (!around) return { product, meta, around: null };
-  return { product, meta, around };
+  if (around) return { product, meta, around };
+  // no image near this time (a gap, or past "now" in the nowcast): keep the latest earlier
+  // one on screen, or the earliest one before the first image, so the clouds never blink
+  const times = (meta?.frames ?? []).map((s) => [s, parseStamp(s)]).filter(([, t]) => t != null).sort((a, b) => a[1] - b[1]);
+  if (!times.length) return { product, meta, around: null };
+  const before = times.filter(([, t]) => t <= shownMs).at(-1) ?? times[0];
+  return { product, meta, around: { a: before[0], b: null, tau: 0 } };
 }
 function satUrl(product, meta, stamp) {
   return `${base}satellite/${product}/${stamp}.${meta?.ext ?? "jpg"}`;
@@ -407,6 +422,7 @@ function drawSatellite() {
   showImage("sat-a", satUrl(product, meta, nearest), satOpacity, coordinates, "okresy-line-under");
   showImage("sat-b", null);
   if (around.b) preload(satUrl(product, meta, around.b));
+  preloadSatellite(product, meta);
   return info;
 }
 
@@ -811,15 +827,21 @@ function renderSource() {
 }
 
 function renderSpeed() {
-  const select = document.getElementById("speed");
-  select.setAttribute("aria-label", t("radar.speed"));
-  select.title = t("radar.speed");
-  select.replaceChildren(
+  const group = document.getElementById("speed");
+  group.setAttribute("aria-label", t("radar.speed"));
+  group.replaceChildren(
     ...SPEEDS.map((s) => {
-      const option = element("option", `${s}×`);
-      option.value = String(s);
-      option.selected = s === speed;
-      return option;
+      const button = element("button", ">".repeat(SPEEDS.indexOf(s) + 1));
+      button.type = "button";
+      button.title = `${t("radar.speed")} ${s}×`;
+      button.setAttribute("aria-label", `${t("radar.speed")} ${s}×`);
+      button.setAttribute("aria-pressed", String(s === speed));
+      button.addEventListener("click", () => {
+        speed = s;
+        store("speed2", speed);
+        renderSpeed();
+      });
+      return button;
     }),
   );
 }
@@ -1183,10 +1205,6 @@ async function update(change) {
 }
 
 document.getElementById("play").addEventListener("click", play);
-document.getElementById("speed").addEventListener("change", (event) => {
-  speed = Number(event.target.value);
-  store("speed", speed);
-});
 const slider = document.getElementById("time");
 slider.addEventListener("input", () => goTo(firstTime() + Number(slider.value) * MINUTE));
 slider.addEventListener("change", () => refreshPoint());
