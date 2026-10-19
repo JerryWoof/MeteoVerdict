@@ -3253,3 +3253,103 @@ footer .site-links {
     break-inside: avoid;
   }
 }
+
+/* Compare: MeteoVerdict AI against our blend and the models (same sample) */
+.ai-compare {
+  margin-bottom: 1.2rem;
+}
+.aic-status {
+  padding: 0.5rem 0.7rem;
+  margin: 0.4rem 0;
+  border-left: 4px solid #c28a00;
+  background: #fbf4df;
+  font-size: 0.88rem;
+}
+.aic-status.verified {
+  border-color: #2e7d32;
+  background: #e8f3e8;
+}
+.aic-verdict {
+  margin: 0.6rem 0 0.3rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid #ddd8cc;
+  font-size: 0.98rem;
+}
+.aic-verdict.better {
+  border-color: #2e7d32;
+  background: #e8f3e8;
+}
+.aic-verdict.worse {
+  border-color: #c0392b;
+  background: #fbeae8;
+}
+.aic-verdict.same {
+  background: #f1eee6;
+}
+.aic-verdict .tag {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: #8a5a00;
+}
+.aic-table td,
+.aic-table th {
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+  white-space: nowrap;
+}
+.aic-table td:first-child {
+  text-align: center;
+}
+.aic-table tr.leader td {
+  background: #f6f2e8;
+}
+.aic-table tr.ai td {
+  background: #fbeae8;
+}
+.aic-table .badge {
+  margin-left: 0.4rem;
+  padding: 0 0.35rem;
+  border-radius: 8px;
+  border: 1px solid #c9c2b2;
+  font-size: 0.7rem;
+  color: #5b6770;
+}
+.aic-table .badge.provisional {
+  border-color: #c28a00;
+  color: #8a5a00;
+}
+.aic-more {
+  margin-top: 1.6rem;
+}
+@media (max-width: 700px) {
+  .aic-table td,
+  .aic-table th {
+    padding: 0.25rem 0.3rem;
+    font-size: 0.78rem;
+    white-space: normal;
+  }
+  .aic-table td:nth-child(4) {
+    white-space: nowrap;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  .aic-status {
+    background: #3a3220;
+  }
+  .aic-status.verified,
+  .aic-verdict.better {
+    background: #1f3321;
+  }
+  .aic-verdict.worse {
+    background: #3a2220;
+  }
+  .aic-verdict.same,
+  .aic-table tr.leader td {
+    background: #2a2d30;
+  }
+  .aic-table tr.ai td {
+    background: #3a2220;
+  }
+}
