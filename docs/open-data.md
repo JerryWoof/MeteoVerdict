@@ -9,7 +9,14 @@ and CSV files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
 |---|---|
 | `api/v1/index.json` | all 77 okresy: `code`, `name`, `lat`, `lon` and the URLs of their files |
 | `api/v1/okresy/{code}.json` | everything for one okres (below) |
-| `api/v1/okresy/{code}.csv` | the hourly forecast: `time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover` |
+| `api/v1/okresy/{code}.csv` | the hourly forecast: `time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration` |
+
+The CSV files are plain CSV: one header row, no comment line, so that Google Sheets'
+`=IMPORTDATA`, Excel and `pandas.read_csv` read them as they are. They hold the hourly
+series only and **no threshold flags** (`gust_over_threshold`, `frost`, `ground_frost`,
+`heavy_rain` are in the JSON files only), so they need no "not a ČHMÚ warning" notice;
+the notice is in `index.json` and in every JSON file (`notice`). A CSV that gets a flag
+must carry the notice too; a test (`web/src/api.test.js`) fails when one does.
 
 Base URL: `https://jerrywoof.github.io/MeteoVerdict/`. Codes are LAU 1 (`CZ0201`
 Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).

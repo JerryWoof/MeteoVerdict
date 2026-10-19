@@ -14,6 +14,7 @@ export const DOCS = `${SITE}/data.html`;
 export const LICENCE = "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)";
 // the scores published per okres, and which weights of the combination belong to them
 // the threshold flags are ours: only ČHMÚ issues weather warnings (Act 262/2024 Sb.)
+export const FLAGS = ["gust_over_threshold", "gust_warning", "frost", "ground_frost", "heavy_rain"];
 export const NOTICE =
   "Threshold flags (gust_over_threshold, frost, ground_frost, heavy_rain) are MeteoVerdict thresholds, not official ČHMÚ warnings; official warnings: https://www.chmi.cz/";
 export const DEPRECATED = {
@@ -118,7 +119,12 @@ export function okresDoc({ okres, outlook, hourly, weightsDoc, scores, meta }) {
   };
 }
 
-/** The hourly forecast of an okres as CSV (UTC times; empty cells where missing). */
+/**
+ * The hourly forecast of an okres as CSV (UTC times; empty cells where missing). Plain
+ * CSV, one header row and no comment line, so that =IMPORTDATA, Excel and pandas read it
+ * as it is. It has none of the threshold FLAGS, so it needs no NOTICE (index.json and
+ * every JSON file carry it); a CSV with a flag would need one (docs/open-data.md).
+ */
 export function okresCsv(doc) {
   const h = doc.forecast.hourly;
   const header = ["time_utc", ...HOURLY].join(",");
