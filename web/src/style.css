@@ -2844,6 +2844,7 @@ body.station [hidden] {
 .ai-status.testing { background: #fff1c7; color: #7a5a00; }
 .ai-status.works { background: #d7f0de; color: #1e7a3c; }
 .ai-status.no_gain { background: #f6dcd8; color: #842a22; }
+.ai-status.unverified { background: #e3e8f4; color: #2f4a7a; }
 .ai-result { font-variant-numeric: tabular-nums; }
 .ai-tech { color: var(--ink-soft); font-size: var(--fs-ui); }
 #ai-scores { margin-bottom: 1rem; }
