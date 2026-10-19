@@ -53,6 +53,7 @@ from meteoverdict import (
 from meteoverdict import backfill as backfill_mod
 from meteoverdict import daily as daily_mod
 from meteoverdict import models as catalogue
+from meteoverdict import monthly as monthly_mod
 from meteoverdict import report as report_mod
 from meteoverdict.chmi import BASE_URL as CHMI_BASE_URL
 from meteoverdict.chmi import ChmiFormatError, fetch_current_meta, parse_collection
@@ -2180,6 +2181,41 @@ def aggregate_cmd(
         raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
     day = as_of.date() if as_of else None
     _publish_aggregates(files, pl.read_parquet(stations_path), data_dir, out, day, resamples)
+
+
+@app.command("monthly-report")
+def monthly_report_cmd(
+    month: Annotated[str, typer.Argument(help="The month, YYYY-MM (a finished one).")],
+    data_dir: Annotated[Path, typer.Option(help="Folder with scores/YYYY-MM.parquet.")] = Path(
+        "data"
+    ),
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    out: Annotated[Path, typer.Option(help="Folder for the JSON files.")] = Path("site/reports"),
+    resamples: Annotated[int, typer.Option(help="Bootstrap resamples for the ties.")] = 1000,
+) -> None:
+    """Accuracy report of one month: who forecast best, from the existing scores (JSON for
+    web/report.html). Nothing is sent anywhere."""
+    try:
+        first, last = monthly_mod.month_bounds(month)
+    except ValueError as exc:
+        raise typer.BadParameter("use YYYY-MM") from exc
+    scores = partitions.scan_months(data_dir / "scores", first, last)
+    if scores is None:
+        typer.echo(f"mvd monthly-report: no scores for {month} in {data_dir / 'scores'}", err=True)
+        raise typer.Exit(code=1)
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    try:
+        result = monthly_mod.build(
+            scores, pl.read_parquet(stations_path), month, _model_names(), resamples
+        )
+    except ValueError as exc:
+        typer.echo(f"mvd monthly-report: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    for path in monthly_mod.write(result, out):
+        typer.echo(f"wrote {path}")
 
 
 @app.command("station-check")
