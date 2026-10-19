@@ -27,7 +27,7 @@ export const quantize = (ms, stepMs = 60000) => Math.floor(ms / stepMs) * stepMs
 
 /** Real milliseconds per data minute at a speed (1× = a 5-minute frame in 0.6 s). */
 export const msPerDataMinute = (speed = 1) => 120 / speed;
-export const SPEEDS = [0.5, 1, 2, 4];
+export const SPEEDS = [2, 4, 8];
 
 /**
  * Advance the animation clock by `dt` real milliseconds. Data time runs at `rate` data
