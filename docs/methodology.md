@@ -1097,6 +1097,36 @@ last 10 days, fitted on the days before (from 31 days, about mid-November 2026).
 outlook then shows the plain mean. It starts switched off (`apply: false` in the bootstrap), so
 the outlook shows the plain mean until that check on the runs turns it on.
 
+## The same-sample comparison with MeteoVerdict AI (Compare page)
+
+The top of the comparison page ranks, on one sample, the plain models, the mean of all
+models (`blend`), our combined forecast (the Outlook blend, `combined`) and, when its
+run supplies them, experimental candidates such as MeteoVerdict AI.
+`mvd blend-test --compare-zip` writes one small JSON file per region (Czechia, each kraj,
+each okres): for every variable and lead day the ranking and the daily MAE of every
+series. The series come from `blendtest.series`, which scores the candidates like the
+combination and puts them through `aggregate.common_days` together with the models:
+within one region, variable and lead day every series has the same stations and the same
+hours (temperature and wind at 00, 06, 12 and 18 UTC, precipitation as UTC-day sums),
+and only a series that has a value on every day of the group is ranked. A kraj sums its
+okresy and Czechia sums all of them, a series counting only on days it is compared in
+every okres.
+
+The ranking uses the rules of the honest-scoring review: block bootstrap of
+`ranking.BLOCK_DAYS` days, Diebold-Mariano test, `p_best`, "tied with the best" unless the
+interval and the test both show a model is worse, and "no clear winner" unless the best
+series has `p_best` of at least `ranking.P_BEST_MIN` and no tie. Every series also carries
+its difference to our combination (`vs_outlook`) with the same interval and test: the AI
+is "better" or "worse" than our blend only when both agree, otherwise "≈".
+
+Two samples exist and are never mixed. The **validation sample** is the AI's out-of-sample
+hindcast: it was trained on what was known at each issue day, but the model was chosen on
+the same days (about 9 experiments), so its numbers are optimistic and the page says so.
+The **live sample** (since the launch on 2026-10-19) is the AI's real forecasts at the okres
+point against the okres mean of the stations, hourly, D+1 to D+3, with every series on the
+same okres-hours; it counts as verified only from 28 measured days. Until then the AI is
+marked provisional, with the number of verified hours shown.
+
 ## Limitations
 
 - **Which stations.** All stations are ČHMÚ's official network (40 main WMO stations,

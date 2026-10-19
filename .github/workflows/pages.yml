@@ -81,6 +81,16 @@ jobs:
           else
             echo "no ai.zip yet; the AI forecast tab says so"
           fi
+          # the Compare page's same-sample ranking without the AI (`mvd blend-test
+          # --compare-zip`; the AI's own run publishes the one with MeteoVerdict AI)
+          if gh release download data-latest --pattern compare.zip --dir /tmp --clobber 2>/dev/null; then
+            rm -rf site/data/compare
+            mkdir -p site/data/compare
+            unzip -o -q /tmp/compare.zip -d site/data/compare
+            echo "compare files from data-latest ($(ls site/data/compare | wc -l) files)"
+          else
+            echo "no compare.zip yet; the Compare page uses only the AI's files"
+          fi
           # every model's own hourly forecast per okres (`mvd outlook`): the forecast
           # pages read these instead of asking Open-Meteo from the visitor's browser
           if gh release download data-latest --pattern outlook-models.zip --dir /tmp 2>/dev/null; then
