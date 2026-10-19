@@ -40,8 +40,8 @@ describe("ranking helpers", () => {
     assert.equal(bestModel(e).id, "dwd_icon_d2");
     assert.deepEqual(defaultSeries(e), ["meteoverdict_ai", "combined", "dwd_icon_d2"]);
   });
-  it("skips missing days in the daily rows", () => {
-    assert.equal(dailyRows(e, ["dwd_icon_d2"]).length, 1);
+  it("keeps missing days as nulls so the line breaks", () => {
+    assert.deepEqual(dailyRows(e, ["dwd_icon_d2"]).map((r) => r.mae), [1.2, null]);
   });
 });
 
