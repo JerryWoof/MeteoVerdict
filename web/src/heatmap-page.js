@@ -15,7 +15,7 @@ import {
   temp100mFormat, temp100mGradient, temp100mLoader, temp100mSlot, temp100mSlotText,
 } from "./ai-temp100m.js";
 import {
-  HEAT_INDEX, heatAllRange, heatBlend, heatColourLut, heatDayMarks, heatFixedLut, heatHourRange, heatNearestHour, heatPaint,
+  FROST_RISK_C, HEAT_INDEX, heatAllRange, heatFrostLevel, heatReadOptions, heatRiskRuns, heatRiskText, heatBlend, heatColourLut, heatDayMarks, heatFixedLut, heatHourRange, heatNearestHour, heatPaint,
   heatRampGradient, heatRampLut, heatSeriesAt, heatTemperatures, heatTimeAt, heatTimeText, heatValueAt, loadHeatModel, parseHeatIndex,
 } from "./ai-heat.js";
 
@@ -69,20 +69,16 @@ let source = null; // { index } or { single }
 let heat = null; // the hourly map: { index, model, fixedLut, shrink, temps, allRange } once its images are loaded
 const OPTIONS_KEY = "heat-options";
 const COLOUR_MODES = ["hour", "all", "fixed"];
-// the display options (remembered in the browser): colours, frost overlay, ground frost overlay
-const options = { colours: "all", frost: true, ground: false };
+// the display options (remembered in the browser): colours and the frost risk overlay
+const options = { colours: "all", frost: true };
 try {
-  const saved = JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? "null");
-  // v 2: "All 5 days" became the default; an older stored colour choice was the old default
-  if (saved?.v === 2 && COLOUR_MODES.includes(saved.colours)) options.colours = saved.colours;
-  if (typeof saved?.frost === "boolean") options.frost = saved.frost;
-  if (typeof saved?.ground === "boolean") options.ground = saved.ground;
+  Object.assign(options, heatReadOptions(JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? "null")));
 } catch {
   // no storage: the defaults
 }
 const saveOptions = () => {
   try {
-    localStorage.setItem(OPTIONS_KEY, JSON.stringify({ v: 2, ...options }));
+    localStorage.setItem(OPTIONS_KEY, JSON.stringify({ v: 3, ...options }));
   } catch {
     // not remembered
   }
@@ -201,10 +197,9 @@ function renderHourlyLegend(range) {
     bar.style.background = heatRampGradient();
     box.replaceChildren(element("div", t("heat.legend"), "scale-title"), bar, element("div", `${range.lo}° … ${range.hi}°`, "scale-ends"));
   }
-  for (const [on, kind, key] of [[options.frost, "frost", "heat.legendFrost"], [options.ground, "ground", "heat.legendGround"]]) {
-    if (!on) continue;
+  if (options.frost) {
     const row = element("div", null, "scale-key");
-    row.append(element("span", null, `swatch ${kind}`), element("span", t(key)));
+    row.append(element("span", null, "swatch frost"), element("span", t("heat.legendFrost")));
     box.append(row);
   }
 }
@@ -311,8 +306,9 @@ function seriesChart(series) {
   const top = 6;
   const bottom = 16;
   const finiteValues = Array.from(series).filter(Number.isFinite);
-  const lo = Math.floor(Math.min(...finiteValues));
-  const hi = Math.max(Math.ceil(Math.max(...finiteValues)), lo + 1);
+  // the range always holds the frost risk line
+  const lo = Math.floor(Math.min(...finiteValues, FROST_RISK_C));
+  const hi = Math.max(Math.ceil(Math.max(...finiteValues)), FROST_RISK_C, lo + 1);
   const last = series.length - 1;
   const x = (pos) => left + (pos / last) * (W - left - right);
   const y = (v) => top + ((hi - v) / (hi - lo)) * (H - top - bottom);
@@ -321,9 +317,11 @@ function seriesChart(series) {
     svg.append(svgElement("line", { x1: x(mark.pos), x2: x(mark.pos), y1: top, y2: H - bottom, class: "grid" }));
     svg.append(svgElement("text", { x: x(mark.pos) + 2, y: H - 4, class: "tick" }, mark.label));
   }
-  // the band below 0 °C, shaded lightly so that frost hours stand out
-  if (lo < 0) svg.append(svgElement("rect", { x: left, y: y(Math.min(0, hi)), width: W - left - right, height: y(lo) - y(Math.min(0, hi)), class: "frost" }));
+  // the area below the frost risk line, shaded lightly
+  if (lo < FROST_RISK_C) svg.append(svgElement("rect", { x: left, y: y(FROST_RISK_C), width: W - left - right, height: y(lo) - y(FROST_RISK_C), class: "frost" }));
   if (lo < 0 && hi > 0) svg.append(svgElement("line", { x1: left, x2: W - right, y1: y(0), y2: y(0), class: "zero" }));
+  svg.append(svgElement("line", { x1: left, x2: W - right, y1: y(FROST_RISK_C), y2: y(FROST_RISK_C), class: "risk" }));
+  svg.append(svgElement("text", { x: W - right - 2, y: y(FROST_RISK_C) - 2, class: "tick end risk-label" }, `${FROST_RISK_C} °C`));
   svg.append(svgElement("text", { x: left - 3, y: y(hi) + 3, class: "tick end" }, `${hi}°`));
   svg.append(svgElement("text", { x: left - 3, y: y(lo) + 3, class: "tick end" }, `${lo}°`));
   const points = Array.from(series, (v, i) => (Number.isFinite(v) ? `${x(i).toFixed(1)},${y(v).toFixed(1)}` : null)).filter(Boolean);
@@ -358,6 +356,10 @@ async function renderHourlyPanel() {
     element("div", Number.isFinite(value) ? temp100mFormat(value, language, unit) : "–", "heat-big"),
     element("div", heatTimeText(heatTimeAt(heatIndex.hours, step / 2), language), "heat-when-label"),
   ];
+  const level = heatFrostLevel(value);
+  if (level) lines.splice(2, 0, element("div", t(level === 2 ? "heat.frostNow" : "heat.risk"), "heat-risk"));
+  const runs = heatRiskRuns(at.series);
+  if (runs.length) lines.push(element("div", t("heat.riskTimes", { times: heatRiskText(runs, heatIndex.hours, language) }), "heat-risk-times"));
   if (!at.series.some(Number.isFinite)) lines.push(element("p", t("heat.outside"), "muted"));
   else lines.push(element("div", t("heat.series"), "box-label"), seriesChart(at.series));
   panel.replaceChildren(...lines);
@@ -451,7 +453,7 @@ function renderOptions() {
     wrap.append(input, element("span", label));
     return wrap;
   };
-  box.replaceChildren(seg, check("frost", t("heat.frost")), check("ground", t("heat.ground")));
+  box.replaceChildren(seg, check("frost", t("heat.frost")));
   box.hidden = false;
 }
 
