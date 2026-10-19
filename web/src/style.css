@@ -2973,3 +2973,50 @@ body.station [hidden] {
 #heat-panel .heat-list button:hover {
   background: var(--theme-bg);
 }
+
+/* the hourly heatmap: the time slider with its label, the chart in a click's panel */
+.heat-when .heat-pick input[type="range"] {
+  width: min(32rem, 60vw);
+  margin: 0;
+  accent-color: var(--ink);
+}
+.heat-when .heat-label {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#heat-panel .heat-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 0.2rem;
+  cursor: pointer;
+}
+#heat-panel .heat-chart text {
+  font-size: 9px;
+  fill: var(--muted);
+}
+#heat-panel .heat-chart text.end {
+  text-anchor: end;
+}
+#heat-panel .heat-chart .grid {
+  stroke: var(--muted);
+  stroke-opacity: 0.3;
+}
+#heat-panel .heat-chart .zero {
+  stroke: var(--muted);
+  stroke-dasharray: 2 2;
+}
+#heat-panel .heat-chart .line {
+  fill: none;
+  stroke: var(--theme-ink);
+  stroke-width: 1.5;
+}
+#heat-panel .heat-chart .now {
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+#heat-panel .heat-chart .dot {
+  fill: var(--theme-ink);
+  stroke: var(--box-bg);
+  stroke-width: 1.5;
+}
