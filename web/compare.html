@@ -27,6 +27,27 @@
         <h2 class="page-title" data-i18n="page.compareTitle">Model comparison</h2>
       </div>
       <p class="page-intro" data-i18n="page.compareIntro">Which model forecasts best in Czechia.</p>
+      <section id="ai-compare" class="ai-compare card" aria-labelledby="aic-title">
+        <h2 id="aic-title" data-i18n="aic.title">MeteoVerdict AI against our blend and the models</h2>
+        <p class="note" data-i18n="aic.intro"></p>
+        <div id="aic-status" class="aic-status" role="status"></div>
+        <form id="aic-controls" class="ranking-controls strip standalone" aria-labelledby="aic-title" onsubmit="return false">
+          <label class="field"><span data-i18n="aic.control.region">Region</span> <select id="aic-region"></select></label>
+          <label class="field"><span data-i18n="control.variable">Variable</span> <select id="aic-variable"></select></label>
+          <label class="field"><span data-i18n="control.lead">Lead time</span> <select id="aic-lead"></select></label>
+          <label class="field"><span data-i18n="aic.control.sample">Sample</span> <select id="aic-sample"></select></label>
+        </form>
+        <div id="aic-verdict" class="aic-verdict" aria-live="polite"></div>
+        <p class="note" id="aic-sample-note"></p>
+        <h3 data-i18n="aic.ranking">Ranking</h3>
+        <p class="note" id="aic-headline"></p>
+        <div class="scroll"><table id="aic-table" class="data-table aic-table"></table></div>
+        <h3 data-i18n="aic.errorTime">Error over time</h3>
+        <p class="note" data-i18n="aic.errorTimeNote"></p>
+        <div id="aic-chart" class="chart-card"></div>
+      </section>
+      <h2 class="section-title aic-more" data-i18n="aic.more">Details: all models at all stations</h2>
+      <p class="note" data-i18n="aic.moreNote"></p>
       <section id="blend-test-section" class="blend-test card" hidden aria-labelledby="blend-test-title">
         <h2 id="blend-test-title" data-i18n="blendTest.title">Is our forecast better than one model for all of Czechia?</h2>
         <p class="scope" id="blend-test-scope"></p>
