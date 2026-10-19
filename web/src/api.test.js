@@ -85,6 +85,17 @@ test("model ranking per variable and lead day, with the weights of our forecast"
   assert.ok(DOC.models.variables.precipitation_24h.lead_days[1].every((r) => r.weight === null));
   assert.equal(DOC.models.from, META.windows["90d"].from);
   assert.deepEqual(okresModels("CZ9999", SCORES, WEIGHTS, {}), {});
+  // score files written before the block bootstrap have no p_best
+  assert.ok(d1.every((r) => r.p_best === null && r.small_sample === false));
+});
+
+test("the probability of being best and the small-sample flag are passed on", () => {
+  const rows = [
+    { region: "CZ0201", model: "icon", lead_day: 1, rank: 1, mae: 1.1, p_best: 0.7234, small_sample: true },
+    { region: "CZ0201", model: "ifs", lead_day: 1, rank: 2, mae: 1.2, p_best: 0.2766, small_sample: true },
+  ];
+  const lead = okresModels("CZ0201", { temperature_2m: rows }, null, {}).temperature_2m.lead_days[1];
+  assert.deepEqual(lead.map((r) => [r.model, r.p_best, r.small_sample]), [["icon", 0.723, true], ["ifs", 0.277, true]]);
 });
 
 test("CSV of the hourly forecast", () => {

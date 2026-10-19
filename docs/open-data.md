@@ -53,7 +53,7 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
 - `models.variables.<variable>` for `temperature_2m`, `wind_speed_10m`,
   `precipitation_daily` and `precipitation_24h`: `stations`, `borrowed`, `days`, and
   `lead_days."1"…"5"`: the models in rank order with `rank`, `mae`, `bias`, `rmse`,
-  `tied_with_best`, and `weight`/`correction` as used in our forecast (`null` for the
+  `tied_with_best`, `p_best` (the probability of being the best model: the share of the block-bootstrap resamples in which it has the lowest MAE; below 0.6 for the leader, the map shows no clear winner; `null` in files written before October 2026), `small_sample` (the ranking rests on fewer than 30 days), and `weight`/`correction` as used in our forecast (`null` for the
   06–06 precipitation, which is ranked but not combined). Window: the last 90 days
   (`models.from`, `models.to`).
 - `licence`, `attribution`, `docs`.

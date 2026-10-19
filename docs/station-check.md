@@ -67,9 +67,11 @@ manual gauges); lead days 1-5; all days of the window.
 
 **Ranking.** Exactly as on the site (`meteoverdict.ranking`): per region, variable and
 lead day only the station-days that every model of the region has, MAE per model, and
-1,000 bootstrap resamples of whole days. A model is *tied with the best* when the 95 %
-interval of its MAE minus the best model's contains 0. Regions with fewer than three
-stations are left out. We compare each subset with (a) by:
+1,000 bootstrap resamples of blocks of 4 consecutive days. A model is *tied with the
+best* unless the 95 % interval of its MAE minus the best model's excludes 0 and the
+Diebold–Mariano test agrees (since October 2026; the results below were computed with
+single days and the interval alone). Regions with fewer than three stations are left
+out. We compare each subset with (a) by:
 
 - **Spearman** rank correlation of the models' MAEs (1: same order);
 - **same best model**;

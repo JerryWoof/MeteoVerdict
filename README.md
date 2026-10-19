@@ -15,7 +15,7 @@ of the 6,258 obce.
 |---|---|
 | [Forecast](https://jerrywoof.github.io/MeteoVerdict/forecast.html) | TV-style weather map for the next six days: temperature, rain, wind and cloud in every okres, by night, morning, afternoon and evening, with sunrise and sunset and play buttons. Zoom in for relief, rivers and town names, and (test) the forecast for every obec, biggest places first; "Find a place" goes to any obec and opens its panel |
 | [On an e-ink display](https://github.com/JerryWoof/MeteoVerdict-TRMNL) | today and tomorrow, the next 24 hours or five days for your okres on a TRMNL display, in Czech or English |
-| [Score map](https://jerrywoof.github.io/MeteoVerdict/) | the most accurate model in every okres; click an okres to see why it wins |
+| [Score map](https://jerrywoof.github.io/MeteoVerdict/) | the most accurate model in every okres, or "no clear winner" where the data cannot tell; click an okres to see why it wins |
 | [Compare](https://jerrywoof.github.io/MeteoVerdict/compare.html) | all models ranked for Czechia, a kraj or an okres, with confidence intervals, and every model's error hour by hour after each run (H+1 to H+120) |
 | [Forecast per okres](https://jerrywoof.github.io/MeteoVerdict/forecast-detail.html) | the hourly combined forecast for one okres (or, as a test, one obec of it) next to the best single model, with sunrise, sunset and the nights shaded |
 | [Measured](https://jerrywoof.github.io/MeteoVerdict/measured.html) | what ČHMÚ's stations measured, as a map like the forecast's: each station (or each okres, next to what our forecast had said) by day and part of day for the last 30 days, the whole day for 60; and for one station what the weather was like there, day by day back to the start of its records (weather symbol, max/min, precipitation, snow, sunshine, gusts, phenomena; week and month views with a summary; the course of recent days), and every element it measures, with its history. Zoomed in, the map shows the stations by name over relief and rivers |
@@ -32,8 +32,11 @@ of the 6,258 obce.
    (Open-Meteo Previous Runs API, at the station's elevation).
 3. **Score.** Errors for 2 m temperature, precipitation and 10 m wind (MAE, bias, RMSE,
    hit rates for rain and heat days), compared only on the days every model covers.
-4. **Rank.** Per okres, kraj, elevation class and Czechia, with bootstrap confidence
-   intervals, so a near tie is shown as a tie. Okresy with fewer than three stations
+4. **Rank.** Per okres, kraj, elevation class and Czechia, with block-bootstrap
+   confidence intervals and Diebold–Mariano tests, so a near tie is shown as a tie, and
+   the probability that each model is the best: the map shows "no clear winner" where
+   no model reaches 60 %. Summits and other stations more than 300 m above their okres
+   are ranked on their own, not in the okres. Okresy with fewer than three stations
    borrow the nearest stations of their neighbours, so every okres is ranked.
 5. **Combine.** Our forecast mixes all models for each okres and lead day, weighted by
    how well each did there over the last 90 days (temperature and wind also corrected
