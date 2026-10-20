@@ -306,6 +306,7 @@ async function openStationPanel(id, change = null) {
   if (!station) {
     stationPanelState = null;
     stationPanel.replaceChildren();
+    kindsMap().fitBeside(false);
     return;
   }
   const start = startView();
@@ -326,6 +327,7 @@ async function openStationPanel(id, change = null) {
     close.addEventListener("click", () => openStationPanel(null));
     stationPanel.replaceChildren(close, el("h2", station.name ?? station.id), stationInfo(station));
   }
+  kindsMap().fitBeside(true);
   // phones: the panel is under the map; bring it into view
   if (window.innerWidth <= 700) stationPanel.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
