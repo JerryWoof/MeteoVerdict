@@ -28,13 +28,32 @@ def write_monthly(
         path = out_dir / f"{month}.parquet"
         part = part.drop("_month")
         if path.exists():
-            old = pl.read_parquet(path)
-            on = replace or keys
-            kept = old.join(part.select(on).unique(), on=on, how="anti")
-            part = pl.concat([kept, part], how="diagonal_relaxed")
-        part.sort(keys).write_parquet(path, compression="zstd")
+            _merge_into(path, part, keys, replace or keys)
+        else:
+            part.sort(keys).write_parquet(path, compression="zstd")
         written.append(path)
     return written
+
+
+def _merge_into(path: Path, part: pl.DataFrame, keys: list[str], on: list[str]) -> None:
+    """Merge ``part`` into the stored file, streamed: the stored rows (sorted by
+    ``keys``, as written here) outside the range of ``part``'s first key are copied as
+    they are and only those inside it are sorted again with ``part``. Reading the whole
+    month and sorting it needed ~25 GB for runs-2026-09 (42 M rows), more than the
+    16 GB of a GitHub runner; this needs ~3 GB."""
+    first = pl.col(keys[0])
+    lo, hi = pl.lit(part[keys[0]].min()), pl.lit(part[keys[0]].max())
+    kept = pl.scan_parquet(path).join(
+        part.lazy().select(on).unique(), on=on, how="anti", maintain_order="left"
+    )
+    middle = pl.concat([kept.filter(first.is_between(lo, hi)), part.lazy()], how="diagonal_relaxed")
+    merged = pl.concat(
+        [kept.filter(first < lo), middle.sort(keys), kept.filter(first > hi)],
+        how="diagonal_relaxed",
+    )
+    tmp = path.with_name(path.name + ".tmp")
+    merged.sink_parquet(tmp, compression="zstd")
+    tmp.replace(path)
 
 
 def months(first: date, last: date) -> list[str]:
