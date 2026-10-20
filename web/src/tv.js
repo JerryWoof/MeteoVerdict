@@ -272,7 +272,7 @@ export function parseView(hash, outlook, fallback) {
   // outlook.days: every day offered (the measured page passes its measured days)
   let parts = hash.replace(/^#/, "").split("/");
   // "#CZ0423/Obec": an okres and an obec, the rest as default
-  if (/^CZ\d{4}$/.test(parts[0]) && parts.length === 2) parts = ["", "", "", "", parts[0], parts[1]];
+  if (/^CZ\d{4}$/.test(parts[0]) && parts.length === 2) parts = ["", "", "", undefined, parts[0], parts[1]];
   const [day, part, colour] = parts;
   let [, , , values, okres] = parts;
   let obec = parts[5];
