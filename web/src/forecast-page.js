@@ -57,11 +57,13 @@ const pragueHour = (date) =>
     10,
   );
 
-function timeTick(date) {
+function timeTick(date, narrow = false) {
   const language = document.documentElement.lang;
   const hour = pragueHour(date);
   if (hour !== 0) return `${hour}:00`;
-  return new Intl.DateTimeFormat(language, { weekday: "short", day: "numeric", month: "numeric", timeZone: TIME_ZONE }).format(date);
+  // a phone: the date alone, so that seven days fit
+  const weekday = narrow ? {} : { weekday: "short" };
+  return new Intl.DateTimeFormat(language, { ...weekday, day: "numeric", month: "numeric", timeZone: TIME_ZONE }).format(date);
 }
 
 // in the page language: "7,4" in Czech
@@ -176,16 +178,18 @@ function chart(forecast, combined, table, variable, colors, names, nights, selec
   figure.append(cell("figcaption", `${t(`forecast.${variable}`)} (${UNITS[variable]})`));
   const step = variable === "precipitation";
   const curve = step ? "step-before" : "linear";
+  const width = Math.min(900, document.body.clientWidth - 32);
   figure.append(
     Plot.plot({
-      width: Math.min(900, document.body.clientWidth - 32),
+      width,
       height: 220,
       marginLeft: 40,
       x: {
         label: null,
         type: "time",
-        ticks: forecast.times.map((time) => new Date(time)).filter((d) => pragueHour(d) % 12 === 0),
-        tickFormat: timeTick,
+        // noon and midnight; on a phone only midnight (the day), or the labels overlap
+        ticks: forecast.times.map((time) => new Date(time)).filter((d) => pragueHour(d) % (width < 600 ? 24 : 12) === 0),
+        tickFormat: (date) => timeTick(date, width < 600),
       },
       y: { label: null, grid: true, zero: step },
       marks: [
