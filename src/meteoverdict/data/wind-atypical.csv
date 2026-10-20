@@ -1,0 +1,20 @@
+station_id,name,okres,w_logratio,w_mad,kind
+0-20000-0-11423,"Přimda","Tachov",1.05,1.07,exposed
+0-20000-0-11643,"Pec pod Sněžkou","Trutnov",-1.00,1.03,sheltered
+0-203-0-11461,"Teplice","Teplice",-1.00,1.00,sheltered
+0-203-0-11503,"Ústí nad Labem, Vaňov","Ústí nad Labem",-0.94,0.95,sheltered
+0-203-0-11410,"Dyleň","Cheb",0.87,0.95,exposed
+0-203-0-11655,"Libice nad Doubravou","Havlíčkův Brod",-0.90,0.92,sheltered
+0-203-0-11685,"Nedvězí","Svitavy",0.89,0.90,exposed
+0-203-0-11713,"Jevíčko","Svitavy",-0.87,0.88,sheltered
+0-203-0-11510,"Kralupy nad Vltavou","Mělník",-0.82,0.83,sheltered
+0-203-0-11413,"Mariánské Lázně, vodárna","Cheb",-0.76,0.80,sheltered
+0-203-0-11468,"Žatec","Louny",-0.77,0.80,sheltered
+0-203-0-11737,"Rýmařov","Bruntál",-0.64,0.80,sheltered
+0-203-0-11639,"Lázně Bělohrad","Jičín",-0.71,0.77,sheltered
+0-203-0-11785,"Frenštát pod Radhoštěm","Nový Jičín",-0.72,0.77,sheltered
+0-203-0-11432,"Nová Ves v Horách","Most",0.68,0.75,exposed
+0-20000-0-11723,"Brno, Tuřany","Brno-město",0.71,0.75,exposed
+0-203-0-10202005001,"Králíky","Ústí nad Orlicí",-0.57,0.74,sheltered
+0-20000-0-11538,"Temelín","České Budějovice",0.70,0.74,exposed
+0-203-0-11491,"Strakonice, Nové Strakonice","Strakonice",-0.68,0.73,sheltered
