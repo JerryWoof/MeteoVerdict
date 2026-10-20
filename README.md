@@ -14,7 +14,7 @@ of the 6,258 obce.
 | Page | What you get |
 |---|---|
 | [Forecast](https://jerrywoof.github.io/MeteoVerdict/forecast.html) (the experimental MeteoVerdict AI forecast is its default model, with its verification and experiments below the map) | TV-style weather map for the next six days: temperature, rain, wind and cloud in every okres, by night, morning, afternoon and evening, with sunrise and sunset and play buttons. Zoom in for relief, rivers and town names, and (test) the forecast for every obec, biggest places first; "Find a place" goes to any obec and opens its panel |
-| [On an e-ink display](https://github.com/JerryWoof/MeteoVerdict-TRMNL) | today and tomorrow, the next 24 hours or five days for your okres on a TRMNL display, in Czech or English |
+| [On an e-ink display](https://github.com/JerryWoof/MeteoVerdict-TRMNL) | today and tomorrow, the next 24 hours, five days or the weekend on a TRMNL display, in Czech or English; combined or AI forecast |
 | [Score map](https://jerrywoof.github.io/MeteoVerdict/) | the most accurate model in every okres, or "no clear winner" where the data cannot tell; click an okres to see why it wins |
 | [Compare](https://jerrywoof.github.io/MeteoVerdict/compare.html) | all models ranked for Czechia, a kraj or an okres, with confidence intervals, and every model's error hour by hour after each run (H+1 to H+120) |
 | [Forecast per okres](https://jerrywoof.github.io/MeteoVerdict/forecast-detail.html) | the hourly combined forecast for one okres (or, as a test, one obec of it) next to the best single model, with sunrise, sunset and the nights shaded |

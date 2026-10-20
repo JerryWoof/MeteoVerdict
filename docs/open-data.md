@@ -160,8 +160,8 @@ every file, release, schedule and licence.
 ## On an e-ink display
 
 [MeteoVerdict for TRMNL](https://github.com/JerryWoof/MeteoVerdict-TRMNL) is built on
-these files: today and tomorrow, the next 24 hours or five days for one okres on a TRMNL
-e-ink display. It uses `forecast.hourly` and `forecast.parts`, including `sunrise`,
+these files: today and tomorrow, the next 24 hours, five days or the weekend for one okres on a TRMNL
+e-ink display, from the combined forecast (`okresy`) or the MeteoVerdict AI (`ai/okresy`, experimental), and a test with one obec file (`obce/{okres}/{id}.json`). It uses `forecast.hourly` and `forecast.parts`, including `sunrise`,
 `sunset` and `sunshine`, so changes to those fields should keep it in mind.
 
 ## How they are made

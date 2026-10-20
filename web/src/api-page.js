@@ -5,6 +5,7 @@ import { setUpLanguage } from "./i18n.js";
 import { renderBlocks } from "./info-page.js";
 import { SCHEDULE, pragueClocks } from "./schedule.js";
 import { displayName } from "./tv.js";
+import { setUpBuilder } from "./trmnl.js";
 
 const t = setUpLanguage();
 
@@ -103,6 +104,7 @@ async function main() {
   }
   const wanted = window.location.hash.slice(1);
   select.value = okresy.some((o) => o.code === wanted) ? wanted : (okresy.find((o) => o.code === "CZ0100") ?? okresy[0]).code;
+  setUpBuilder(select, t);
   select.addEventListener("change", () => show(select.value));
   model.addEventListener("change", () => show(select.value));
   // a link to a section (#releases) keeps its address
