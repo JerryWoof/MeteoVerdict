@@ -22,7 +22,7 @@ import { createDiary } from "./diary-view.js";
 import { parseDiaryQuery } from "./diary.js";
 import { glyph } from "./icons.js";
 import {
-  DEFAULT_LAYER, KINDS_HASH, dayTabs, defaultDay, landingHash, okresRows, pageMode, parseLanding, stationHref, stationRows,
+  DEFAULT_LAYER, KINDS_HASH, dayTabs, defaultDay, kindsStation, landingHash, okresRows, pageMode, parseLanding, stationHref, stationRows,
   stationSummary,
 } from "./measured.js";
 import { createMeasuredMap } from "./measured-map-view.js";
@@ -265,6 +265,10 @@ function kindsMap() {
     t,
     describe,
     onPick: (station) => {
+      if (mode === "kinds") {
+        openStationPanel(station.id);
+        return;
+      }
       const measure = $("map-measure").value;
       const element = measure ? elementFor(station, measure) : null;
       window.location.hash = element ? `${station.id}/${element}` : station.id;
@@ -272,6 +276,32 @@ function kindsMap() {
   });
   fillMapTools();
   return stationMap;
+}
+
+// the Stations view's panel: the Weather view's panel (#okres-panel's look), the map stays put
+const stationPanel = $("station-panel");
+keepRoomForPanels($("station-map-wrap"), $("station-map"), [stationPanel]);
+
+/** Open (or, with null, close) a station's panel in the Stations view; the hash follows ("#kinds/<id>"). */
+function openStationPanel(id) {
+  const station = id && placed.find((s) => s.id === id);
+  window.history.replaceState(null, "", station ? `${KINDS_HASH}/${encodeURIComponent(id)}` : KINDS_HASH);
+  kindsMap().select(station ? id : null, { move: false });
+  if (!station) {
+    stationPanel.replaceChildren();
+    return;
+  }
+  const close = el("button", "×", "close");
+  close.type = "button";
+  close.setAttribute("aria-label", t("map.closePanel"));
+  close.addEventListener("click", () => openStationPanel(null));
+  const measure = $("map-measure").value;
+  const element = measure ? elementFor(station, measure) : null;
+  const open = el("a", t("map.openStation"));
+  open.href = `#${station.id}${element ? `/${element}` : ""}`;
+  stationPanel.replaceChildren(close, el("h2", station.name ?? station.id), el("p", describe(station), "when"), el("p", facts(station), "model-note"), open);
+  // phones: the panel is under the map; bring it into view
+  if (window.innerWidth <= 700) stationPanel.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 function legendItem(swatch, label) {
@@ -371,6 +401,7 @@ function setMode(next) {
   panel.hidden = station && !mapOpen;
   toggle.textContent = t(mapOpen ? "map.hide" : "map.show");
   toggle.setAttribute("aria-expanded", String(!panel.hidden));
+  if (next !== "kinds") stationPanel.replaceChildren();
   if (!station) {
     doc = null;
     $("pick").hidden = true;
@@ -728,10 +759,10 @@ function browseMeasured() {
 
 function browseKinds() {
   setMode("kinds");
-  document.title = `MeteoVerdict: ${t("map.heading")}`;
+  document.title = `MeteoVerdict: ${t("measured.mode.kinds")}`;
   const map = kindsMap();
-  map.select(null);
   map.fitAll();
+  openStationPanel(kindsStation(window.location.hash));
 }
 
 // --- one station ----------------------------------------------------------------------------

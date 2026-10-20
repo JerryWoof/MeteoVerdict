@@ -210,13 +210,13 @@ export function createStationMap({ container, t, onPick, describe }) {
       colourBy = by;
       if (loaded) paint();
     },
-    /** Highlight a station (null: none) and bring it into view. */
-    select(id, { animate = true } = {}) {
+    /** Highlight a station (null: none) and bring it into view (`move: false`: only highlight). */
+    select(id, { animate = true, move = true } = {}) {
       selected = id;
-      if (id) keepFit = false;
+      if (id && move) keepFit = false;
       if (loaded) setSelectedData();
       const s = id && byId.get(id);
-      if (!s) return;
+      if (!s || !move) return;
       map.resize(); // the map's size in the new layout, so the station ends up in the middle
       const zoom = Math.max(map.getZoom(), 7.5);
       const visible = container.offsetParent !== null;

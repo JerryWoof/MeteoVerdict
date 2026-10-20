@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  DEFAULT_LAYER, KINDS_HASH, dayTabs, defaultDay, hasLabel, labelPriority, labelSize, landingHash, okresRows, pageMode,
+  DEFAULT_LAYER, KINDS_HASH, dayTabs, defaultDay, hasLabel, labelPriority, labelSize, landingHash, kindsStation, okresRows, pageMode,
   parseLanding, partDaylight, pickLabels, pragueOffset, stationHref, stationRows, stationSummary, sunTimes,
 } from "./measured.js";
 import { parseObservedDay, parseObservedIndex } from "./observed.js";
@@ -20,6 +20,9 @@ const INDEX = parseObservedIndex({
 const FALLBACK = { day: "2026-10-16", part: "day", colour: "temperature", shown: ["temperature", "precipitation"], layer: "okresy", okres: null };
 
 test("which view a hash opens", () => {
+  assert.equal(pageMode("#kinds/0-20000-0-11518"), "kinds");
+  assert.equal(kindsStation("#kinds/0-20000-0-11518"), "0-20000-0-11518");
+  assert.equal(kindsStation("#kinds"), null);
   assert.equal(pageMode(""), "measured");
   assert.equal(pageMode("#"), "measured");
   assert.equal(pageMode("#2026-10-16/afternoon/temperature/tp"), "measured");

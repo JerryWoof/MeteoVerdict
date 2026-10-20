@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MeteoVerdict: measured weather</title>
+    <title>MeteoVerdict: weather</title>
     <meta name="description" content="What ČHMÚ's stations measured, on a map by day and part of day, and what the weather was like at each station, day by day back to the start of its records, and every element it measures: the last days every 10 minutes, the last month hourly, recent years daily and decades monthly." />
   </head>
   <body class="page station theme-measured">
@@ -31,10 +31,10 @@
       <!-- the landing: what the stations measured, as the forecast map (measured.js) -->
       <section id="measured" class="measured" aria-labelledby="measured-title">
         <div class="page-head measured-head">
-          <h2 id="measured-title" class="page-title" data-i18n="measured.heading">Measured weather</h2>
+          <h2 id="measured-title" class="page-title" data-i18n="measured.heading">Weather</h2>
           <div id="mode" class="segmented measured-mode" role="group" data-i18n-aria="measured.mode">
-            <button type="button" data-mode="measured" data-i18n="measured.mode.weather">Measured weather</button>
-            <button type="button" data-mode="kinds" data-i18n="measured.mode.kinds">Kinds of station</button>
+            <button type="button" data-mode="measured" data-i18n="measured.mode.weather">Weather</button>
+            <button type="button" data-mode="kinds" data-i18n="measured.mode.kinds">Stations</button>
           </div>
         </div>
         <p id="measured-intro" class="page-intro" data-i18n="measured.intro">What ČHMÚ's stations measured.</p>
@@ -127,7 +127,10 @@
               <select id="map-measure"></select></label>
             <span id="map-count" class="muted" aria-live="polite"></span>
           </form>
-          <div id="station-map" class="map-frame station-map"></div>
+          <div id="station-map-wrap" class="map-wrap">
+            <div id="station-map" class="map-frame station-map"></div>
+            <aside id="station-panel" class="map-box panel past" aria-live="polite"></aside>
+          </div>
           <div id="map-legend" class="station-map-legend legend-card"></div>
           <p class="muted small station-map-network" data-i18n="map.network">All are ČHMÚ's official network (no amateur stations).</p>
           <p class="muted small station-map-keys" data-i18n="map.keys">Keyboard: focus the map, move it with the arrow keys, zoom with + and −; Enter opens the station in the middle.</p>
