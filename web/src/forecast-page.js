@@ -376,7 +376,12 @@ async function show(point, names, colors, outlook) {
     : null;
   state = { point, table, parsed, forecast, combined, days, sunOf, gustOf, range };
   // test: an obec of the okres instead of the okres's point
-  const obceDoc = await obceFor(point.code, getJson);
+  // with MeteoVerdict AI chosen (the default) the obec has the AI's own forecast, else ours
+  const aiObce = !AI && preferred === AI_MODEL
+    ? await getJson(aiPath(`data/scores/forecast/obce-${point.code}.json`)).catch(() => null)
+    : null;
+  const obceDoc = aiObce?.places ? aiObce : await obceFor(point.code, getJson);
+  const obceAi = obceDoc === aiObce;
   if (token !== showToken) return;
   const obecPick = document.getElementById("obec-pick");
   obecPick.hidden = !obceDoc;
@@ -385,7 +390,7 @@ async function show(point, names, colors, outlook) {
   const obecNote = document.getElementById("obec-note");
   obecNote.hidden = !place;
   // how good the obec forecast is away from the stations (not the AI's, a different method)
-  document.getElementById("obec-accuracy").hidden = !place || AI;
+  document.getElementById("obec-accuracy").hidden = !place || AI || obceAi;
   document.getElementById("model-pick").hidden = Boolean(place);
   if (place) {
     const series = obecSeries(obceDoc, place);
@@ -393,7 +398,7 @@ async function show(point, names, colors, outlook) {
     state = { ...state, ...series, days, gustOf: () => null, range: null, parsed: { ...parsed, generated: obceDoc.generated } };
     selected = COMBINED;
     document.getElementById("title").textContent = t("forecast.titleForObec", { obec: place.name });
-    obecNote.textContent = t("forecast.obecNote", {
+    obecNote.textContent = t(obceAi ? "ai.detailObecNote" : "forecast.obecNote", {
       obec: place.name, elevation: Math.round(place.elevation), okres: point.name, time: issuedText(obceDoc.generated) ?? "",
     });
   }
