@@ -95,7 +95,8 @@ export async function setUpAiCompare(t, names, language) {
       option("outlook", t("aic.outlook")), option("mean", t("model.blend")),
       option("best", t("aic.opp.best") + (best ? ` (${modelName(best.id)})` : ""), !best),
     ];
-    const all = [...new Set([...Object.keys(valIndex?.models ?? {}), ...have])]
+    // the index lists the mean ("blend") and our blend ("combined") among the models: not single models
+    const all = [...new Set([...Object.keys(valIndex?.models ?? {}), ...have])].filter((id) => !["blend", "combined"].includes(id))
       .sort((x, y) => modelName(x).localeCompare(modelName(y), language));
     const models = all.map((id) => option(id, have.has(id) ? modelName(id) : `${modelName(id)} (${t("aic.opp.few")})`, !have.has(id)));
     document.getElementById("aic-opponent").replaceChildren(group(t("aic.opp.group"), summaries), group(t("aic.opp.models"), models));
