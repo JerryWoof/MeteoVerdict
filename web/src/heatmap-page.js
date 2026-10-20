@@ -19,7 +19,7 @@ import {
   heatRampGradient, heatRampLut, heatSeriesAt, heatTemperatures, heatTimeAt, heatTimeText, heatValueAt, loadHeatModel, parseHeatIndex,
 } from "./ai-heat.js";
 
-// The AI heatmap tab: MeteoVerdict AI's 100 m temperature over the radar page's base map,
+// The heatmap tab: MeteoVerdict AI's 100 m temperature over the radar page's base map,
 // a time control above it, and a click's panel with the temperature at that place at every time.
 // With the hourly map (data/scores/ai/fc/heat/) the time control is a slider in half hours and
 // the panel has an hourly chart; without it the page shows the day-part maps (or the one old image).

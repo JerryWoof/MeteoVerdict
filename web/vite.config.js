@@ -8,7 +8,7 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     chunkSizeWarningLimit: 1200,
-    // one page per tab (Map, Forecast, Radar, Measured, Compare, AI forecast, AI heatmap, Data) and the detailed
+    // one page per tab (Map, Forecast, Radar, Measured, Compare, AI forecast, Heatmap, Data) and the detailed
     // forecast per okres; the old names (tv, station, api) redirect from public/
     rollupOptions: {
       input: {
