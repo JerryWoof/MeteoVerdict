@@ -26,14 +26,14 @@ import {
   stationSummary,
 } from "./measured.js";
 import { createMeasuredMap } from "./measured-map-view.js";
-import { renderScale } from "./palette.js";
+import { errorRampKey, renderScale } from "./palette.js";
 import { createOkresPanel } from "./measured-okres.js";
 import { OBSERVED_LAYERS, nearestDay, observedSummary, parseObservedDay, parseObservedIndex } from "./observed.js";
 import {
   DEFAULT_SHOWN, dayLabel, displayName, labelFor, okresColours, rampKey, today, valueFor,
 } from "./tv.js";
 import { keepRoomForPanels } from "./panel-room.js";
-import { DEFAULT_MODEL, LEADS, createModelCompare, splitModelHash, withModelHash } from "./station-model.js";
+import { DEFAULT_MODEL, ERROR_VARS, LEADS, AI, createModelCompare, errorLookup, modelOptions, splitModelHash, withModelHash } from "./station-model.js";
 
 const t = setUpLanguage();
 const language = document.documentElement.lang;
@@ -72,10 +72,11 @@ const models = createModelCompare({ getJson, t, language });
 /** The hash of the page without the model choice (";m=…;l=…", station-model.js); a choice in it
  * becomes the page's. */
 function cleanHash() {
-  const { hash, model, lead } = splitModelHash(window.location.hash);
+  const { hash, model, lead, err } = splitModelHash(window.location.hash);
   if (model) {
     models.state.model = model;
     models.state.lead = lead;
+    models.state.err = err ?? null;
   }
   return hash;
 }
@@ -534,6 +535,7 @@ const okresPanel = createOkresPanel({
 /** One line of a station's (or okres's) values, for its tooltip and its label's name. */
 function describeRow(row, part) {
   const parts = [];
+  if (errView) parts.push(errorText(row));
   if (row.symbol) parts.push(t(`diary.symbol.${row.symbol}`));
   if (row.tmax != null || row.tmin != null) {
     parts.push(part === "night" ? `min ${fmt(row.tmin)} °C` : `max ${fmt(row.tmax)} °C, min ${fmt(row.tmin)} °C`);
@@ -542,6 +544,52 @@ function describeRow(row, part) {
     if (valueFor(row, layer, part) != null) parts.push(`${t(`layer.${layer}`).toLowerCase()} ${labelFor(row, layer, part)}`);
   }
   return parts.join(" · ");
+}
+
+// --- the dots coloured by a model's error (models.state.err) --------------------------------
+let errView = null; // {key, ramp, byId, hasModel, noFile, name, day} for the day shown, or null
+
+/** "Model error: +1.2 °C" for a station in the tooltip, or why it has none. */
+function errorText(row) {
+  const v = errView;
+  const e = v.byId.get(row.id);
+  if (e != null) return t("measured.err.tip", { model: v.name, lead: models.state.lead, value: v.label(e) });
+  if (v.noFile || !v.hasModel) return t("measured.err.tipNone");
+  return t(v.byId.has(row.id) ? "measured.err.tipGap" : "measured.err.tipOutside");
+}
+
+/** The error view for a day, from the per-day error file: null when the colour is the measured values. */
+async function buildErrView(day) {
+  const key = models.state.err;
+  if (!key) return null;
+  const [doc, index] = await Promise.all([models.loadErrors(day), models.loadIndex()]);
+  const { model, lead } = models.state;
+  const lookup = errorLookup(doc, model, lead, key);
+  const name = modelOptions(index, t).find((o) => o.id === model)?.name ?? model;
+  const variable = key === "r" ? "mm" : key === "wind" ? "m/s" : "°C";
+  const label = (e) => `${e > 0 ? "+" : e < 0 ? "−" : ""}${fmt1(Math.abs(e))} ${variable}`;
+  return { key, ramp: errorRampKey(key), unit: variable, name, noFile: !doc, day, label, ...lookup };
+}
+
+/** The note under the colour choices: what the colours mean, and where they are missing. */
+function renderErrNote(rows) {
+  const note = $("err-note");
+  const v = errView;
+  note.hidden = !models.state.err;
+  if (!v) return;
+  const value = t(`fc.var.${v.key}`).toLowerCase();
+  const text = [];
+  if (v.noFile) text.push(t("measured.err.noFile"));
+  else if (models.state.model === AI) text.push(t("fc.noAi"));
+  else if (!v.hasModel) text.push(t("fc.noModelValue", { model: v.name, value }));
+  else {
+    const have = rows.filter((r) => v.byId.get(r.id) != null).length;
+    text.push(t("measured.err.note", { model: v.name, lead: models.state.lead, value, unit: v.unit, n: formatNumber(have), of: formatNumber(rows.length) }));
+  }
+  if (landing.layer === "okresy") text.push(t("measured.err.okresy"));
+  if (landing.part !== "day" && !isDaily(landing.day)) text.push(t("measured.err.wholeDay"));
+  note.classList.toggle("missing", v.noFile || !v.hasModel);
+  note.textContent = text.join(" ");
 }
 
 const measuredMap = createMeasuredMap({
@@ -675,21 +723,39 @@ function renderShow() {
       return label;
     }),
   );
+  const err = models.state.err;
+  const radioFor = (checked, text, change) => {
+    const label = el("label", null, "check");
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "colour";
+    radio.checked = checked;
+    radio.addEventListener("change", change);
+    label.append(radio, el("span", text));
+    return label;
+  };
   $("colours").replaceChildren(
-    ...OBSERVED_LAYERS.map((colour) => {
-      const label = el("label", null, "check");
-      const radio = document.createElement("input");
-      radio.type = "radio";
-      radio.name = "colour";
-      radio.checked = colour === landing.colour;
-      radio.addEventListener("change", () => updateLanding({ colour }));
-      label.append(radio, el("span", t(`layer.${colour}`)));
-      return label;
-    }),
+    ...OBSERVED_LAYERS.map((colour) =>
+      radioFor(!err && colour === landing.colour, t(`layer.${colour}`), () => {
+        models.state.err = null;
+        updateLanding({ colour });
+      }),
+    ),
+    // the chosen model's error (model minus measured) at the stations that have stored forecasts
+    ...ERROR_VARS.map((value) =>
+      radioFor(err === value, t(`measured.err.${value}`), () => {
+        models.state.err = value;
+        syncModelHash();
+        renderLanding();
+      }),
+    ),
   );
   // the forecast map's scales and legend (palette.js); rain in mm
-  const key = rampKey(landing.colour, true);
-  renderScale($("scale"), key, t(`${okresy ? "obs" : "measured"}.scale.${key}`));
+  if (err) renderScale($("scale"), errorRampKey(err), t(`measured.scale.${errorRampKey(err)}`));
+  else {
+    const key = rampKey(landing.colour, true);
+    renderScale($("scale"), key, t(`${okresy ? "obs" : "measured"}.scale.${key}`));
+  }
 }
 
 function headlineStart() {
@@ -787,19 +853,27 @@ async function renderLanding() {
   }
   const data = await dayData(layer, day);
   if (token !== landingToken || mode !== "measured") return;
-  const view = { part, shown: landing.shown, colour: landing.colour, layer, okres: landing.okres, fill: null };
+  const view = { part, shown: landing.shown, colour: landing.colour, layer, okres: landing.okres, fill: null, err: null };
+  const nextErr = await buildErrView(day);
+  if (token !== landingToken || mode !== "measured") return;
+  errView = nextErr;
+  view.err = errView;
   if (layer === "stations") {
     const rows = stationRows(data, stationIndexDoc, part);
+    renderErrNote(rows);
     measuredMap.set(rows, view);
     renderStationHeadline(rows, !data);
     okresPanel.render(null, landing);
   } else {
     const rows = okresRows(data, part);
-    view.fill = data ? okresColours(data, day, part, landing.colour) : null;
+    // the okres colours are of the measured values: with the model's error on, the dots (zoomed in) carry it
+    view.fill = data && !errView ? okresColours(data, day, part, landing.colour) : null;
     // zoomed in, the map shows the stations themselves (their measured values at real places)
     const stationData = await dayData("stations", day);
     if (token !== landingToken || mode !== "measured") return;
-    measuredMap.set(rows, view, stationRows(stationData, stationIndexDoc, part));
+    const stationList = stationRows(stationData, stationIndexDoc, part);
+    renderErrNote(stationList);
+    measuredMap.set(rows, view, stationList);
     renderOkresHeadline(data);
     okresPanel.render(data, landing);
   }

@@ -2545,7 +2545,11 @@ observations are aggregated the same way (days with at least 20 hourly values).
 Output: `station-fc/<station>.json` (`{"from", "to", "obs": {value: [per day]}, "series": {value:
 {lead day: {model: [per day]}}}}`, null = no value) and `station-fc/index.json` (model names,
 stations), zipped as `station-fc.zip` in the release `data-latest` by the Daily workflow (an
-optional step) and unpacked by the Pages build into `data/scores/station-fc/`. About 7 MB
+optional step) and unpacked by the Pages build into `data/scores/station-fc/`. Beside them one
+file per day, `station-fc/err-<day>.json` (`{"day", "scale": 10, "stations": [ids], "e": {value:
+{lead day: {model: [error per station in tenths, null = no value]}}}}`, model minus measured, for
+`tmax`, `tmin`, `r`, `wind`): one request for the whole map of the model-error colouring of the
+Measured page (about 140 kB a day, 5 MB for the 35 days; gzipped by the server). About 12 MB
 unpacked: the site is near its size budget, which is why the window is 35 days and the leads 1
 and 2. The page limits the models to these stations and says so for any other. MeteoVerdict AI
 has no values here yet: the page reads the same layout for the model `ai` from

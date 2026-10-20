@@ -10,6 +10,13 @@ export const GUST_FACTOR = 1.4;
 /** Hours of sunshine for the clear end of the sunshine scale (a whole part of the day). */
 export const SUNNY_HOURS = 6;
 
+/** A diverging scale for a model's error (model minus measured), white-ish at 0, blue below
+ * (the model too low), red above (too high), saturated at `max` (in the value's unit). */
+const diverging = (max) => [
+  [-max, [33, 102, 172]], [-max / 2, [103, 169, 207]], [-max / 6, [209, 229, 240]], [0, [240, 238, 232]],
+  [max / 6, [253, 219, 199]], [max / 2, [239, 138, 98]], [max, [178, 24, 43]],
+];
+
 export const RAMPS = {
   temperature: [
     [-15, [49, 54, 149]], [-5, [69, 117, 180]], [0, [171, 217, 233]], [5, [224, 243, 248]],
@@ -26,11 +33,18 @@ export const RAMPS = {
   gust: WIND.map(([v, rgb]) => [Math.round(v * GUST_FACTOR), rgb]),
   // sunshine the cloud scale turned round: no sun the overcast grey, SUNNY_HOURS and
   // more the clear sky's pale yellow (the sun symbols stay readable on it)
+  // a model's error at a station: temperature (°C), rain (mm), wind (m/s)
+  errTemp: diverging(4),
+  errRain: diverging(8),
+  errWind: diverging(4),
   sunshine: CLOUD.map(([v, rgb]) => [((100 - v) / 100) * SUNNY_HOURS, rgb]).reverse(),
 };
 
 /** The colour ramp of a layer: rain in mm for a single model's view and what was measured. */
 export const rampKey = (layer, mm) => (layer === "precipitation" && mm ? "precipitationMm" : layer);
+
+/** The error scale of a value of the per-day error files ("tmax", "tmin", "r", "wind"). */
+export const errorRampKey = (value) => ({ r: "errRain", wind: "errWind" })[value] ?? "errTemp";
 
 /** Fill of an okres without a value (beyond a single model's horizon; nothing measured). */
 export const BEYOND = "#c9c9c9";
@@ -59,6 +73,10 @@ export function colorFor(value, layer) {
 export function scaleValue(key, v) {
   if (key === "temperature") return `${v}°`;
   if (key === "precipitation") return `${Math.round(v * 100)} %`;
+  if (key.startsWith("err")) {
+    const unit = { errTemp: "°C", errRain: "mm", errWind: "m/s" }[key];
+    return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(Math.round(v))} ${unit}`;
+  }
   const unit = { precipitationMm: "mm", wind: "m/s", gust: "m/s", sunshine: "h", cloud: "%" }[key];
   return `${v} ${unit}`;
 }

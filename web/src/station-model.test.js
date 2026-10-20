@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { compareSeries, errorSummary, modelOptions, sizeClass, splitModelHash, withModelHash } from "./station-model.js";
+import { compareSeries, errorLookup, errorSummary, modelOptions, sizeClass, splitModelHash, withModelHash } from "./station-model.js";
 
 const t = (key) => key;
 
@@ -57,4 +57,30 @@ test("size of a difference", () => {
   assert.equal(sizeClass(-2.5, "°C"), "medium");
   assert.equal(sizeClass(3.1, "m/s"), "large");
   assert.equal(sizeClass(4, "mm"), "medium");
+});
+
+test("the error choice rides in the hash after the model and lead", () => {
+  assert.deepEqual(splitModelHash("#2026-10-19/day/temperature/tp/stations;m=blend;l=2;e=tmax"), {
+    hash: "#2026-10-19/day/temperature/tp/stations", model: "blend", lead: 2, err: "tmax",
+  });
+  assert.deepEqual(splitModelHash("#x;m=ai;e=r"), { hash: "#x", model: "ai", lead: 1, err: "r" });
+  assert.equal(splitModelHash("#x;m=ai;e=gust").err, undefined); // only the mapped values
+  assert.equal(withModelHash("#x", { model: "ai", lead: 1, err: "wind" }), "#x;m=ai;e=wind");
+  assert.equal(withModelHash("#x", { model: "blend", lead: 2, err: "tmin" }), "#x;m=blend;l=2;e=tmin");
+  assert.equal(withModelHash("#x;m=blend;e=r", { model: "ai", lead: 1, err: null }), "#x");
+});
+
+test("the day's errors per station, in the unit (the file has tenths), null where missing", () => {
+  const file = {
+    scale: 10,
+    stations: ["A", "B", "C"],
+    e: { tmax: { 1: { blend: [12, null, -5] } }, r: { 1: { blend: [null, null, null] } } },
+  };
+  const { byId, hasModel } = errorLookup(file, "blend", 1, "tmax");
+  assert.equal(hasModel, true);
+  assert.deepEqual([...byId], [["A", 1.2], ["B", null], ["C", -0.5]]);
+  assert.equal(byId.has("D"), false); // not among the stations with stored forecasts
+  assert.equal(errorLookup(file, "ai", 1, "tmax").hasModel, false);
+  assert.equal(errorLookup(file, "blend", 2, "tmax").hasModel, false);
+  assert.equal(errorLookup(null, "blend", 1, "tmax").hasModel, false);
 });
