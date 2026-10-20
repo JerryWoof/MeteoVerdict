@@ -3,8 +3,8 @@ import { test } from "node:test";
 
 import {
   stationsIn,
-  NO_CLEAR, NO_DATA, P_BEST_MIN, TOO_FEW, bestByRegion, fillExpression, modelColors, records,
-  regionColor, smallSampleCodes, stationFeatures,
+  NO_DATA, P_BEST_MIN, TOO_FEW, bestByRegion, fillExpression, modelColors, records,
+  closeCodes, regionColor, smallSampleCodes, stationFeatures, withKrajFallback,
 } from "./data.js";
 
 
@@ -115,7 +115,7 @@ test("station pages of an okres: all its stations by name, also by kraj", () => 
   assert.deepEqual(stationsIn(null, "CZ0423"), []);
 });
 
-test("no clear winner below P_BEST_MIN, and the small-sample regions", () => {
+test("a close win keeps its model colour (hatched), and the small-sample regions", () => {
   const rows = [
     { region: "a", region_name: "A", lead_day: 1, model: "icon", mae: 1, rank: 1, enough_stations: true, p_best: 0.9 },
     { region: "b", region_name: "B", lead_day: 1, model: "icon", mae: 1, rank: 1, enough_stations: true, p_best: 0.45, small_sample: true },
@@ -128,7 +128,18 @@ test("no clear winner below P_BEST_MIN, and the small-sample regions", () => {
   assert.equal(regionColor(best.get("a"), colors), colors.icon);
   // the rank-1 model leads on MAE but is best in fewer than 60 % of the resamples
   assert.deepEqual([best.get("b").model, best.get("b").clear, best.get("b").small], ["icon", false, true]);
-  assert.equal(regionColor(best.get("b"), colors), NO_CLEAR);
+  assert.equal(regionColor(best.get("b"), colors), colors.icon);
+  assert.deepEqual(closeCodes(best), ["b"]);
   assert.equal(regionColor(bestByRegion(rows, 1, 0.4).get("b"), colors), colors.icon);
   assert.deepEqual(smallSampleCodes(best), ["b"]);
+});
+
+test("an okres without a ranking takes its kraj's best model", () => {
+  const row = (region, model, enough = true) => ({ region, region_name: region, lead_day: 1, model, mae: 1, rank: 1, enough_stations: enough, p_best: 0.9 });
+  const okres = bestByRegion([row("CZ0201", "icon"), row("CZ0202", "ifs", false)], 1);
+  okres.set("CZ0203", { name: "X", model: null, enough: true, tied: [] });
+  const merged = withKrajFallback(okres, bestByRegion([row("CZ020", "aladin")], 1));
+  assert.equal(merged.get("CZ0201").model, "icon");
+  assert.deepEqual([merged.get("CZ0202").model, merged.get("CZ0202").fallback], ["aladin", true]);
+  assert.deepEqual([merged.get("CZ0203").model, merged.get("CZ0203").name], ["aladin", "X"]);
 });
