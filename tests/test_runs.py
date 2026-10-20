@@ -686,3 +686,21 @@ def test_summary_states_the_budget(tmp_path):
     assert "- Budget: 100 calls" in text
     assert "runs complete since 2024-03-14" in text
     assert "the history since 2026-07-01)" in text and "left to the D+N backfill" in text
+
+
+def test_a_fixed_model_s_stored_runs_are_read_again_once(tmp_path):
+    arpege, icon = BY_ID["meteofrance_arpege_europe"], BY_ID["dwd_icon_eu"]
+    state = runs.State(tmp_path / runs.STATE_NAME)
+    k = runs.key(RUN)
+    state.fetched[k] = {arpege.id, icon.id}
+    state.extra[k] = {arpege.id, icon.id}  # settled before the fix
+    assert arpege.id in runs.EXTRA_FIXES
+    assert state.extra_todo(RUN, [arpege, icon]) == [arpege]
+    state.settle(k, arpege.id)
+    assert state.extra_todo(RUN, [arpege, icon]) == []
+    state.save()
+    # another workflow's older state merged in does not undo it (the union only grows)
+    older = runs.State(tmp_path / "other.json", fetched={k: {arpege.id}}, extra={k: {arpege.id}})
+    again = runs.State.load(state.path)
+    again.merge(older)
+    assert again.extra_fixed == {k: {arpege.id}} and again.extra_todo(RUN, [arpege]) == []
