@@ -260,24 +260,36 @@ export function dayLabel(day, todayIso, language) {
 
 /**
  * The view in the URL: "#day/part/colour/values/okres", values as letters
- * ("tp" = temperature and rain). Older links "#day/part/layer/okres" still work, and
+ * ("tp" = temperature and rain), and "/obec" after it opens that obec's panel; the short
+ * "#okres/obec" (the home page's links) means the same with the defaults. Older links "#day/part/layer/okres" still work, and
  * the colour "none" offered earlier becomes temperature.
  * Unknown parts fall back to `fallback` ({day, part}).
  */
 export function parseView(hash, outlook, fallback) {
   // outlook.days: every day offered (the measured page passes its measured days)
-  const parts = hash.replace(/^#/, "").split("/");
+  let parts = hash.replace(/^#/, "").split("/");
+  // "#CZ0423/Obec": an okres and an obec, the rest as default
+  if (/^CZ\d{4}$/.test(parts[0]) && parts.length === 2) parts = ["", "", "", "", parts[0], parts[1]];
   const [day, part, colour] = parts;
   let [, , , values, okres] = parts;
+  let obec = parts[5];
   if (values && /^CZ/.test(values)) [values, okres] = [undefined, values];
   const letters = Object.fromEntries(Object.entries(SHORT).map(([k, v]) => [v, k]));
   const shown = values === undefined ? DEFAULT_SHOWN : [...values].map((c) => letters[c]).filter(Boolean);
+  const known = outlook.okresy.some((o) => o.code === okres);
+  let decoded = "";
+  try {
+    decoded = known && obec ? decodeURIComponent(obec) : "";
+  } catch {
+    // a broken link: no obec
+  }
   return {
     day: outlook.days.includes(day) ? day : fallback.day,
     part: PARTS.includes(part) ? part : fallback.part,
     colour: ALL_LAYERS.includes(colour) ? colour : "temperature",
     shown: ALL_LAYERS.filter((l) => shown.includes(l)),
-    okres: outlook.okresy.some((o) => o.code === okres) ? okres : null,
+    okres: known ? okres : null,
+    ...(decoded ? { obec: decoded } : {}),
   };
 }
 
@@ -298,7 +310,7 @@ export function measuredRedirect(hash, todayIso) {
 
 export function viewHash(view) {
   const values = ALL_LAYERS.filter((l) => view.shown.includes(l)).map((l) => SHORT[l]).join("") || "-";
-  return `#${[view.day, view.part, view.colour, values, view.okres].filter(Boolean).join("/")}`;
+  return `#${[view.day, view.part, view.colour, values, view.okres, view.okres && view.obec ? encodeURIComponent(view.obec) : null].filter(Boolean).join("/")}`;
 }
 
 // --- "play": a TV-style run through the next days ------------------------------------
