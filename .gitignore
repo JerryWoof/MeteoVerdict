@@ -27,7 +27,7 @@ site/data/*
 !site/data/meta.json
 
 # Web app (phase 4)
-node_modules/
+node_modules
 web/dist/
 web/public/data/
 
