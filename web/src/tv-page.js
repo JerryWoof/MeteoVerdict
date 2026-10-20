@@ -23,7 +23,7 @@ import {
 } from "./tv.js";
 import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 import { AI_FILES, aiPath, aiText } from "./ai-source.js";
-import { AI_MODEL, aiMapView, hasAi, loadAi, withAi } from "./ai-model.js";
+import { AI_MODEL, aiMapView, aiPeriods, hasAi, loadAi, withAi } from "./ai-model.js";
 import { renderAiExtras } from "./ai-extras.js";
 import { renderAiVerify } from "./ai-verify-view.js";
 setWorkerUrl(workerUrl);
@@ -422,6 +422,7 @@ function okresData(code) {
     ]).then(([weights, models, meta, ai]) => {
       entry.table = weightTable(weights);
       entry.parsed = withAi(parseModels(models), ai, code);
+      entry.ai = ai;
       entry.names = { ...meta?.models };
       entry.status = entry.parsed ? "ready" : "missing";
       if (state.okres === code) renderPanel(outlook);
@@ -453,7 +454,10 @@ function panelRows(data) {
       rowOf: (day, part) => periods.get(`${day}|${part}`),
     };
   }
-  if (!data.periods.has(panelModel)) data.periods.set(panelModel, modelPeriods(data.parsed, panelModel));
+  if (!data.periods.has(panelModel)) {
+    const own = modelPeriods(data.parsed, panelModel);
+    data.periods.set(panelModel, panelModel === AI_MODEL ? aiPeriods(own, data.ai, state.okres) : own);
+  }
   const periods = data.periods.get(panelModel);
   return {
     single: true,

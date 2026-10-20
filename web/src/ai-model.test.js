@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { aiMapView, parseAi, withAi, AI_MODEL } from "./ai-model.js";
+import { aiMapView, aiPeriods, parseAi, parseSky, skyRow, withAi, AI_MODEL } from "./ai-model.js";
 
 const NOW = Date.parse("2026-10-20T12:00:00Z");
 const hours = (n) => Array.from({ length: n }, (_, i) => new Date(Date.parse("2026-10-20T00:00:00Z") + i * 3600e3).toISOString());
@@ -80,4 +80,29 @@ test("aiMapView takes rain, cloud, sunshine and symbol from the blend's outlook 
   assert.equal(row.cloud, 80);
   assert.equal(row.symbol, "rain");
   assert.notEqual(row.tmax, 99);
+});
+
+const skyDoc = () => ({
+  issued: "2026-10-20T06:00:00Z",
+  okresy: { A: { rows: [{ day: "2026-10-20", part: "day", cloud: 20, sunshine: 6.5, gust: 9.1 }, { day: "2026-10-20", part: "night", cloud: null, sunshine: 0, gust: 3 }] } },
+});
+
+test("parseSky: rows by okres and part; stale or malformed gives null", () => {
+  const sky = parseSky(skyDoc(), NOW);
+  assert.deepEqual(sky.get("A").get("2026-10-20|day"), { cloud: 20, sunshine: 6.5, gust: 9.1 });
+  assert.equal(parseSky(skyDoc(), NOW + 80 * 3600e3), null);
+  assert.equal(parseSky({ okresy: {} }, NOW), null);
+});
+
+test("skyRow: the AI's cloud, sunshine and gust win where present, the symbol follows the cloud", () => {
+  const ai = { sky: parseSky(skyDoc(), NOW) };
+  const row = { tmin: 5, tmax: 12, precipitation: 0, cloud: 90, sunshine: 1, gust: null, symbol: "cloudy" };
+  const next = skyRow(row, ai, "A", "2026-10-20|day");
+  assert.deepEqual([next.cloud, next.sunshine, next.gust, next.symbol], [20, 6.5, 9.1, "clear"]);
+  assert.equal(next.gust_over_threshold, false);
+  // night: no cloud from the AI, the blend's stays
+  assert.equal(skyRow(row, ai, "A", "2026-10-20|night").cloud, 90);
+  // an okres or part the AI has not: untouched
+  assert.equal(skyRow(row, ai, "B", "2026-10-20|day"), row);
+  assert.equal(aiPeriods(new Map([["2026-10-20|day", row]]), ai, "A").get("2026-10-20|day").cloud, 20);
 });
