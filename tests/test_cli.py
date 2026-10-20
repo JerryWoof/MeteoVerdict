@@ -19,7 +19,10 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def plain(text: str) -> str:
-    return ANSI.sub("", text)
+    """Strip colour codes and the rich error box, and undo line wrapping at narrow widths."""
+    text = ANSI.sub("", text)
+    text = re.sub(r"[│╭╮╰╯─]", " ", text)
+    return re.sub(r"\s+", " ", text)
 
 
 COMMANDS = [
