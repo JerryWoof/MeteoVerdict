@@ -1347,6 +1347,8 @@ def fetch_runs(
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="--run") from exc
     stations_table = runs.load_stations(stations_path)
+    # the bucket at every station of the subset, the API at the rule's 100 only
+    api_table = runs.api_stations(stations_table)
     models = [m for m in catalogue.load_models() if m.enabled]
     now = datetime.now(UTC)
     modes = ("recent", "history") if mode == "all" else (mode,)
@@ -1404,10 +1406,11 @@ def fetch_runs(
                 for r in todo
             ]
             pending = [(r, m) for r, m in pending if m]
-            cost = sum(runs.run_cost(stations_table.height, len(m)) for _, m in pending)
+            n_api = api_table.height
+            cost = sum(runs.run_cost(n_api, len(m)) for _, m in pending)
             typer.echo(
-                f"API: {len(pending)} runs to fetch at {stations_table.height} stations, about "
-                f"{cost:g} Open-Meteo calls ({runs.run_cost(stations_table.height, len(models)):g}"
+                f"API: {len(pending)} runs to fetch at {n_api} stations, about "
+                f"{cost:g} Open-Meteo calls ({runs.run_cost(n_api, len(models)):g}"
                 f" per run of all {len(models)} models; budget {max_calls:g})"
             )
             return
@@ -1417,7 +1420,7 @@ def fetch_runs(
         if source in ("api", "all") and max_calls > 0:
             result = runs.collect(
                 client,
-                stations_table,
+                api_table,
                 models,
                 data_dir,
                 budget,
@@ -1480,6 +1483,55 @@ def bucket_cells(
         )
     bucket.write_cells(cells, out)
     typer.echo(f"{cells.height} cells of {cells['bucket_model'].n_unique()} models → {out}")
+
+
+@app.command("runs-add-stations")
+def runs_add_stations(
+    data_dir: Annotated[Path, typer.Option(help="Folder for runs/YYYY-MM.parquet.")] = Path("data"),
+    first: Annotated[
+        str | None,
+        typer.Option(help="Oldest run to fill in (YYYY-MM-DDTHH). Default: the bucket's window."),
+    ] = None,
+    max_minutes: Annotated[float, typer.Option(help="Stop after this many minutes.")] = 330,
+    github_release: Annotated[
+        bool, typer.Option(help="Pull and push the month files of the releases runs-YYYY-MM.")
+    ] = False,
+) -> None:
+    """Fill in the stations of the subset that stored model-runs lack (after the subset
+    grew), from Open-Meteo's open-data bucket, newest month first; no API calls
+    (docs/data-sources.md#the-station-subset). Resumable."""
+    stations = runs.load_stations()
+    models = [m for m in catalogue.load_models() if m.enabled]
+    since = runs.parse_run(first) if first else None
+    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+        sync = None
+        if github_release:
+            notes_store = GitHubReleaseStore(
+                client, *_github_credentials(), notes=runs.RELEASE_NOTES
+            )
+            sync = runs.RunsSync(notes_store, data_dir, log=typer.echo)
+        limits = httpx.Limits(max_connections=192, max_keepalive_connections=192)
+        with httpx.Client(timeout=60, limits=limits) as s3:
+            result = bucket.add_stations(
+                bucket.Bucket(s3),
+                stations,
+                models,
+                data_dir,
+                datetime.now(UTC),
+                sync=sync,
+                first=since,
+                max_minutes=max_minutes,
+                log=typer.echo,
+            )
+    for month in sorted(result.filled, reverse=True):
+        typer.echo(
+            f"{month}: {result.filled[month]} model-runs, {result.rows[month]:,} rows, "
+            f"{result.skipped.get(month, 0)} not in the bucket any more"
+        )
+    for failed, why in sorted(result.failed.items()):
+        typer.echo(f"bucket error ({failed}): {why}", err=True)
+    if result.stopped:
+        typer.echo(f"stopped: {result.stopped} (run again to continue)")
 
 
 @app.command("import-runs")
@@ -2722,7 +2774,9 @@ def backfill(
                 )
                 runs_sync = runs.RunsSync(notes_store, data_dir, log=typer.echo)
                 runs_sync.pull_state()
-            history = backfill_mod.RunsHistory(runs.load_stations(runs_stations), now, runs_sync)
+            history = backfill_mod.RunsHistory(
+                runs.api_stations(runs.load_stations(runs_stations)), now, runs_sync
+            )
             typer.echo(
                 f"single runs: with each window, runs before {runs.history_edge(now):%Y-%m-%d} "
                 f"at {history.stations.height} stations"
