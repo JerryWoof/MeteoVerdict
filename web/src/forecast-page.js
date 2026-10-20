@@ -301,8 +301,9 @@ function render(names, colors) {
       }).format(end);
       note += ` ${t("forecast.modelHorizon", { end: when })}`;
     }
-    modelNote.textContent = note;
-    modelNote.title = selected === AI_MODEL ? t("ai.modelTip") : "";
+    // MeteoVerdict AI: only its name says "experimental", no note
+    modelNote.textContent = selected === AI_MODEL ? "" : note;
+    modelNote.hidden = selected === AI_MODEL;
     // the gusts come from our corrected outlook: not shown for a single model
     renderDays(rows.map(dayRow), sunOf, () => null);
   } else {
