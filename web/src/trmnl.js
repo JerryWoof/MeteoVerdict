@@ -9,9 +9,9 @@ export function forecastUrl(forecast, okres) {
   return `${SITE}/${FORECASTS.includes(forecast) ? forecast : "okresy"}/${okres}.json`;
 }
 
-/** The obec file of one obec ([okres, id, name, lat, lon] from obce/index.json). */
-export function obecUrl(okres, id) {
-  return `${SITE}/obce/${okres}/${id}.json`;
+/** The obec file of one obec: from the AI (forecast "ai/okresy") or the combination. */
+export function obecUrl(okres, id, forecast = "okresy") {
+  return `${SITE}/${forecast === "ai/okresy" ? "ai/obce" : "obce"}/${okres}/${id}.json`;
 }
 
 /** The obce of one okres from the index, sorted by name; an obec is { id, name }. */
@@ -22,9 +22,10 @@ export function obceOf(index, okres) {
     .sort((a, b) => a.name.localeCompare(b.name, "cs"));
 }
 
-/** The lines to paste into TRMNL: the template, plus the obec file when one is chosen. */
-export function pollingLines(okres, obec) {
-  return obec ? [TEMPLATE_URL, obecUrl(okres, obec.id)] : [TEMPLATE_URL];
+/** The lines to paste into TRMNL: the template (the plugin's form picks okres and forecast),
+ * or with an obec both files written out, the okres's and the obec's, of the same forecast. */
+export function pollingLines(okres, obec, forecast = "okresy") {
+  return obec ? [forecastUrl(forecast, okres), obecUrl(okres, obec.id, forecast)] : [TEMPLATE_URL];
 }
 
 /** Wires the builder in the page: okresSelect is the page's okres select, t the translator. */
@@ -48,7 +49,7 @@ export function setUpBuilder(okresSelect, t, baseUrl = "") {
   const chosen = () => obce.find((o) => o.name === obecInput.value.trim());
 
   function render() {
-    output.textContent = pollingLines(okres(), chosen()).join("\n");
+    output.textContent = pollingLines(okres(), chosen(), forecast.value).join("\n");
     const url = forecastUrl(forecast.value, okres());
     test.href = url;
     test.textContent = url;
