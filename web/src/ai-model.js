@@ -1,8 +1,9 @@
 // MeteoVerdict AI as one more model of the forecast pages (forecast.html and
 // forecast-detail.html): its published forecast (data/scores/ai/ai-forecast.json, hourly
 // temperature and wind per okres at the station point) offered next to the public models.
-// It is experimental, so it is never the default, and when its file is missing, malformed
-// or stale (a failed daily run) it is simply not offered.
+// It is the default and listed first (experimental only in its name); when its file is
+// missing, malformed or stale (a failed daily run) it is not offered and the pages stay on our
+// combination, and an okres without AI data falls back to the combination too.
 
 import { modelPeriods } from "./models.js";
 
