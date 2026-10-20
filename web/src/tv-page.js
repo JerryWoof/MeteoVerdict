@@ -93,7 +93,9 @@ function element(tag, text, className) {
   return e;
 }
 
-const fmt = (v, digits = 0) => (v == null ? "–" : v.toFixed(digits));
+// in the page language: "7,4" in Czech
+const fmt = (v, digits = 0) =>
+  v == null ? "–" : v.toLocaleString(document.documentElement.lang || "en", { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false });
 const percent = (p) => (p == null ? "–" : `${Math.round(p * 100)} %`);
 const symbolText = (symbol) => (symbol ? t(`symbol.${symbol}`) : "");
 
