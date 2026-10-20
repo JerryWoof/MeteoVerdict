@@ -1775,7 +1775,7 @@ motion 0.6, cells 0.07, satellite 5.6 (vis-ir 2.9, night-M 2.2, wv062 0.5): 21 M
 `--github-release`) remakes a day's set while ČHMÚ still has the day. Days archived
 before this change have only `maxz` and `merge1h`.
 
-The Pages workflow unpacks the `web-YYYYMMDD.tar` of the last 60 days into
+The Pages workflow unpacks the `web-YYYYMMDD.tar` of the last 7 days into
 `radar/days/YYYYMMDD/` and lists them in `radar/days.json`. To stay well under the 1 GB
 Pages limit it keeps the satellite images only for the **last 7 days** and the echo tops
 for the **last 14** (deleting the files and emptying their lists in `index.json`), and
