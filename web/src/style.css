@@ -986,6 +986,17 @@ body.tv [hidden] {
   font-weight: 700;
   font-size: 1rem;
 }
+.wx-err {
+  display: block;
+  margin-top: 2px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+}
 .wx-chips {
   display: flex;
   flex-wrap: wrap;
@@ -3451,7 +3462,8 @@ footer .site-links {
   margin: 0.25rem 0 0.4rem;
   flex-wrap: wrap;
 }
-.model-compare .model-note.missing {
+.model-compare .model-note.missing,
+#err-note.missing {
   color: var(--danger);
 }
 .model-chart {

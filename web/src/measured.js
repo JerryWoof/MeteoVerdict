@@ -190,7 +190,7 @@ export function hasLabel(row, shown, part) {
  * out: the symbol (30 px) and the temperature in a row, the other values as chips
  * below, wrapped at 115 px. An estimate, for placing them without measuring each.
  */
-export function labelSize(row, shown, part) {
+export function labelSize(row, shown, part, hasError = false) {
   const temperature = shown.includes("temperature") && valueFor(row, "temperature", part) != null;
   const topWidth = (row.symbol ? 30 : 0) + (temperature ? 9 * labelFor(row, "temperature", part).length + 4 : 0);
   const topHeight = row.symbol ? 30 : temperature ? 20 : 0;
@@ -207,21 +207,25 @@ export function labelSize(row, shown, part) {
     } else line += w + 2;
     width = Math.max(width, Math.min(115, line));
   }
-  return { w: Math.max(topWidth, width, 12), h: Math.max(topHeight + rows * 15, 12) };
+  // the model's error under the label (a 17 px chip about 56 px wide)
+  const errHeight = hasError ? 17 : 0;
+  return { w: Math.max(topWidth, width, hasError ? 56 : 0, 12), h: Math.max(topHeight + rows * 15 + errHeight, 12) };
 }
 
 /**
  * Which stations get a label: the rows with something to show, by priority (main
  * stations first: at the country's zoom they are what is labelled), each placed only
  * where it overlaps no label placed before. `project(row)` → {x, y} on the screen;
- * `width`, `height` the map's size (labels off the map are left out). Returns the ids.
+ * `width`, `height` the map's size (labels off the map are left out). `errors` (station → a
+ * model's error, optional): a station with one gets a label for its chip. Returns the ids.
  */
-export function pickLabels(rows, { shown, part, project, width, height, selected = null, gap = 3 }) {
+export function pickLabels(rows, { shown, part, project, width, height, selected = null, gap = 3, errors = null }) {
+  const hasError = (r) => errors?.get(r.id) != null;
   const boxes = rows
-    .filter((r) => hasLabel(r, shown, part) || r.id === selected)
+    .filter((r) => hasLabel(r, shown, part) || hasError(r) || r.id === selected)
     .map((r) => {
       const { x, y } = project(r);
-      return { code: r.id, x, y, ...labelSize(r, shown, part), priority: labelPriority(r, selected) };
+      return { code: r.id, x, y, ...labelSize(r, shown, part, hasError(r)), priority: labelPriority(r, selected) };
     })
     .filter((b) => b.x >= -b.w / 2 && b.y >= -b.h / 2 && b.x <= width + b.w / 2 && b.y <= height + b.h / 2)
     .sort((a, b) => (a.code < b.code ? -1 : 1)); // the same stations win every time
