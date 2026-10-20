@@ -124,7 +124,6 @@ export async function setUpAiCompare(t, names, language) {
     node.className = `aic-status ${status.verified ? "verified" : "provisional"}`;
     node.replaceChildren(
       el("strong", t(status.verified ? "aic.verified" : "aic.provisional")),
-      document.createTextNode(" " + t("aic.hours", { hours: status.hours, days: status.days, need: status.need })),
       document.createTextNode(" " + t(live ? "aic.sampleLive" : "aic.sampleValidation", {
         from: index?.from, to: index?.to, days: index?.test_days ?? index?.days,
       })),
