@@ -170,6 +170,8 @@ test("the view in the URL, including old links", () => {
   assert.deepEqual(parseView("", OUTLOOK, fallback), {
     day: "2026-10-12", part: "morning", colour: "temperature", shown: DEFAULT_SHOWN, okres: null,
   });
+  // the home page's short link "#okres/obec": the default values on the map, not none
+  assert.deepEqual(parseView("#CZ0201/Benešov", OUTLOOK, fallback).shown, DEFAULT_SHOWN);
 });
 
 test("play: the four parts of one day, or of every day of the week", () => {
