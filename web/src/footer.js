@@ -110,7 +110,7 @@ export function footerParts(kind, t, { method, year = new Date().getUTCFullYear(
     map
       ? `${t("footer.processed")}; ${t(kind === "ai" ? "ai.footer" : "tv.combined")}. ${t("footer.ours")}: `
       : `${t("footer.processed")}. ${t("footer.scores")}: `;
-  // the forecast map: the base map when zoomed in, the obce's population (test)
+  // the forecast map: the base map when zoomed in, the obce's population
   const tvOnly = map
     ? [
       ...basemapCredits(t),
