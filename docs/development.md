@@ -31,7 +31,7 @@ data comes from recorded fixtures in `tests/fixtures/`. Dates are `YYYY-MM-DD` i
 | Single runs (all models) | `mvd fetch-runs` | `data/runs/YYYY-MM.parquet`, `data/runs-state.json` |
 | Error by lead hour | `mvd leads` | `site/data/leads.json`, `leads-aladin.json`, `leads-aladin-kraj.json`, `leads-bands-{90d,all}[-kraj].json` |
 | Event skill for farmers | `mvd farm` | `site/data/farm.json` |
-| Combined forecast | `mvd outlook` | `site/data/outlook.json`, `outlook-hourly.json` |
+| Combined forecast | `mvd outlook` | `site/data/outlook.json`, `outlook-hourly.json` (with the 80 % range of the temperature from `blend-interval.json`, `mvd blend-interval`, daily) |
 | Everything daily | `mvd daily` | all of the above from the stored data |
 | ČHMÚ archive (every element) | `mvd chmi-archive`, `mvd chmi-mirror DIR` | releases `chmi-*` ([format](data-sources.md#chmi-archive)) |
 | Station pages | `mvd station-pages` | `site/data/station/<WSI>.json` |

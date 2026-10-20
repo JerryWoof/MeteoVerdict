@@ -23,7 +23,9 @@ export const DEPRECATED = {
 
 export const SCORE_VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitation_daily", "precipitation_24h"];
 const WEIGHTS_OF = { temperature_2m: "temperature_2m", wind_speed_10m: "wind_speed_10m", precipitation_daily: "precipitation" };
-export const HOURLY = ["temperature_2m", "precipitation", "wind_speed_10m", "cloud_cover", "sunshine_duration"];
+// the 80 % range of the temperature (`mvd blend-interval`): absent from older outlook files
+const RANGE = ["temperature_2m_lo", "temperature_2m_hi"];
+export const HOURLY = ["temperature_2m", "precipitation", "wind_speed_10m", "cloud_cover", "sunshine_duration", "temperature_2m_lo", "temperature_2m_hi"];
 const PART_FIELDS = [
   "day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol",
   "sunrise", "sunset",
@@ -127,9 +129,11 @@ export function okresDoc({ okres, outlook, hourly, weightsDoc, scores, meta }) {
  */
 export function okresCsv(doc) {
   const h = doc.forecast.hourly;
-  const header = ["time_utc", ...HOURLY].join(",");
+  // the 80 % range columns only while the forecast has them
+  const columns = HOURLY.filter((v) => !RANGE.includes(v) || h?.[v]);
+  const header = ["time_utc", ...columns].join(",");
   if (!h) return `${header}\n`;
-  const lines = h.time.map((time, i) => [time, ...HOURLY.map((v) => h[v]?.[i] ?? "")].join(","));
+  const lines = h.time.map((time, i) => [time, ...columns.map((v) => h[v]?.[i] ?? "")].join(","));
   return `${[header, ...lines].join("\n")}\n`;
 }
 
