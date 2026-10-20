@@ -1,11 +1,11 @@
 """How good is the obec forecast where there is no station? Leave one station out.
 
 The forecast for every obec (``meteoverdict.obce_forecast``) reads each model at the
-obec's own place and height and combines the models with the weights and corrections
-of the obec's okres, taken at the okres's forecast point. Nobody can check it at an
-obec, but every ČHMÚ station is a place too. So for each station ``s`` (the target) the
-same forecast is rebuilt at ``s`` as if ``s`` did not exist, and scored against what
-``s`` measured:
+obec's own place and height and combines the models with the weights and corrections of
+the obec's okres, the corrections' elevation term taken at the obec's height. Nobody can
+check it at an obec, but every ČHMÚ station is a place too. So for each station ``s``
+(the target) the same forecast is rebuilt at ``s`` as if ``s`` did not exist, and scored
+against what ``s`` measured:
 
 1. **Held out.** ``s`` (``loso``), or ``s`` and every station within ``BUFFER_KM``
    of it (``buffer``, the stricter variant: no close neighbour helps either), is
@@ -21,10 +21,10 @@ same forecast is rebuilt at ``s`` as if ``s`` did not exist, and scored against 
    (temperature and wind at 00/06/12/18 UTC, precipitation as UTC-day totals):
 
    - ``obec``: the models at ``s`` combined with the weights of ``s``'s okres, the slot
-     corrections at the okres's point (``combine.POINT_LAPSE_FACTOR``), exactly as
-     ``obce_forecast`` does for an obec;
-   - ``obec_dz``: the same with the corrections' elevation term at ``s``'s own height
-     instead of the point's (a candidate change, not what the site does);
+     corrections' elevation term at ``s``'s own height (``combine.POINT_LAPSE_FACTOR``),
+     exactly as ``obce_forecast`` does for an obec;
+   - ``obec_point``: the same with the slot corrections at the okres's point (what
+     ``obce_forecast`` did until 20 October 2026);
    - ``okres``: the okres's forecast without the downscaling: the same weights applied
      at the okres's other stations (its pool) and averaged over them, as
      ``hindcast`` rebuilds the okres forecast (the okres point itself has no stored D+N);
@@ -57,13 +57,13 @@ import polars as pl
 from meteoverdict import blend, blendtest, combine, forecasts, hindcast, mos, neighbours
 
 OBEC = "obec"
-OBEC_DZ = "obec_dz"
+OBEC_POINT = "obec_point"
 OKRES = "okres"
 NEAREST = "nearest"
 MEDIAN = "median"
-SERIES = (OBEC, OBEC_DZ, OKRES, NEAREST, MEDIAN)
+SERIES = (OBEC, OBEC_POINT, OKRES, NEAREST, MEDIAN)
 #: ``obec`` minus each of these, with an interval
-COMPARED = (OKRES, NEAREST, MEDIAN, OBEC_DZ)
+COMPARED = (OKRES, NEAREST, MEDIAN, OBEC_POINT)
 LEADS = (1, 2, 3, 4, 5)
 VARIANTS = ("loso", "buffer")
 #: the stricter variant also holds out every station this close to the target
@@ -314,9 +314,9 @@ def combined(
     (``variable`` = score variable, ``region``, ``station_id``) with the weights of their
     ``region`` of the day: ``region``, ``station_id``, ``time``, ``lead_day`` and the
     three variables. With the regression's coefficients the slot corrections are taken
-    at ``elevation`` (an expression over the weight columns and ``_elevation``, the
-    station's height; default: the okres's point, ``_point``) with the point's
-    elevation factor."""
+    at ``elevation`` (an expression over the weight columns, ``_elevation``, the
+    station's height, and ``_point``, the okres's point; default: the point) with the
+    point's elevation factor."""
     keys = ["region", "station_id", "time", "lead_day"]
     raw = fc.lazy().filter(pl.col("model") != blend.ID)
     regression = "bias_00" in weights.columns
@@ -384,7 +384,7 @@ def batch_series(
     pools: pl.DataFrame,
     points: dict[str, float],
 ) -> list[pl.DataFrame]:
-    """``obec``, ``obec_dz`` and ``okres`` at the targets of one batch."""
+    """``obec``, ``obec_point`` and ``okres`` at the targets of one batch."""
     info = stations.filter(pl.col("id").is_in(batch)).select(
         pl.col("id").alias("station_id"),
         pl.col("okres_code").alias("region"),
@@ -398,8 +398,8 @@ def batch_series(
     variables = list(blendtest.SCORE_VARIABLES.values())
     at_targets = info.join(pl.DataFrame({"variable": variables}), how="cross")
     at_fc = fc.filter(pl.col("station_id").is_in(batch))
-    obec = combined(at_fc, at_targets, weights)
-    obec_dz = combined(at_fc, at_targets, weights, elevation=pl.col("_elevation"))
+    obec = combined(at_fc, at_targets, weights, elevation=pl.col("_elevation"))
+    obec_point = combined(at_fc, at_targets, weights)
     # the okres's forecast: its pool (the targets are not in it) and its point's height
     okresy = info["region"].unique().to_list()
     members = pools.filter(pl.col("region").is_in(okresy)).select(
@@ -421,7 +421,11 @@ def batch_series(
             .agg(pl.col(v).mean() for v in names)
         )
     okres = pl.concat(parts).join(info.select("region", "station_id"), on="region")
-    return [as_forecasts(obec, OBEC), as_forecasts(obec_dz, OBEC_DZ), as_forecasts(okres, OKRES)]
+    return [
+        as_forecasts(obec, OBEC),
+        as_forecasts(obec_point, OBEC_POINT),
+        as_forecasts(okres, OKRES),
+    ]
 
 
 # --- the whole run ---------------------------------------------------------------------------
@@ -703,20 +707,20 @@ def station_rows(scored: dict[str, pl.DataFrame]) -> list[list]:
 
 METHOD = (
     "Leave one station out: for every ČHMÚ station the obec forecast (the models at the "
-    "place combined with the weights and corrections of its okres, the corrections at the "
-    "okres's forecast point, as mvd obce-forecast) is rebuilt at the station with the "
-    "station removed from the scores, okres pools, regression pairs and nearest-station "
-    "baseline it would feed (variant buffer: also every station within {buffer:.0f} km), "
-    "trained out of sample (the D+N for day d on the {window} window of scores up to "
-    "d - N - 1, at least {min_days} scored days) and scored against the station: "
-    "temperature and wind at 00/06/12/18 UTC, precipitation as UTC-day totals, on the "
-    "station-days all series have. Series: obec (as the site), obec_dz (the corrections' "
-    "elevation term at the place's own height), okres (the same weights at the okres's "
-    "other stations, averaged: the okres forecast without downscaling), nearest (the "
-    "models at the place weighted and bias-corrected at the nearest remaining station "
-    "only), median (the plain median of the models). diff = MAE of obec minus the "
-    "series (negative: obec better), 95 % interval from {resamples} circular "
-    "moving-block bootstrap resamples of {block}-day blocks."
+    "place combined with the weights and corrections of its okres, the corrections' "
+    "elevation term at the place's own height, as mvd obce-forecast) is rebuilt at the "
+    "station with the station removed from the scores, okres pools, regression pairs and "
+    "nearest-station baseline it would feed (variant buffer: also every station within "
+    "{buffer:.0f} km), trained out of sample (the D+N for day d on the {window} window of "
+    "scores up to d - N - 1, at least {min_days} scored days) and scored against the "
+    "station: temperature and wind at 00/06/12/18 UTC, precipitation as UTC-day totals, "
+    "on the station-days all series have. Series: obec (as the site), obec_point (the "
+    "corrections at the okres's forecast point, as the site until 20 Oct 2026), okres "
+    "(the same weights at the okres's other stations, averaged: the okres forecast "
+    "without downscaling), nearest (the models at the place weighted and bias-corrected "
+    "at the nearest remaining station only), median (the plain median of the models). "
+    "diff = MAE of obec minus the series (negative: obec better), 95 % interval from "
+    "{resamples} circular moving-block bootstrap resamples of {block}-day blocks."
 )
 
 

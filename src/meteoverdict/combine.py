@@ -78,6 +78,15 @@ WEIGHT_COLUMNS = ("variable", "lead_day", "model", "weight", "correction", "mae"
 SLOT_CORRECTIONS = tuple(f"correction_{s}" for s in mos.SLOT_NAMES)
 #: the published weight files: WEIGHT_COLUMNS plus the regression blend (null without)
 FORECAST_COLUMNS = (*WEIGHT_COLUMNS, "mos_weight", "mos_models", *SLOT_CORRECTIONS)
+#: the regression's elevation term, kept in ``FORECAST_WEIGHTS_FILE`` (not in the page's
+#: files) so that ``obce_forecast`` can take the slot corrections at an obec's own height
+ELEVATION_TERM_COLUMNS = (
+    *mos.BIAS_COLUMNS,
+    *mos.LAPSE_COLUMNS,
+    "station_elevation",
+    "dz_min",
+    "dz_max",
+)
 #: elevation of the forecast point of every okres (scripts/build_okres_elevations.py)
 ELEVATIONS_FILE = "okres-elevations.csv"
 #: the elevation term at the okres's forecast point at half strength: checked against
@@ -328,7 +337,8 @@ def forecast_weights(table: pl.DataFrame, coefficients: pl.DataFrame | None = No
     """The weight table of the forecast (``region``, ``region_name`` and
     ``FORECAST_COLUMNS``): ``weights`` of the okres scores and, where ``coefficients``
     (``mos.Fit.frame`` rows) cover a group, the regression weights and the slot
-    corrections at the okres's forecast point (``correction`` then is their mean)."""
+    corrections at the okres's forecast point (``correction`` then is their mean), with
+    the ``ELEVATION_TERM_COLUMNS`` they come from."""
     w = with_mos(weights(table), coefficients)
     points = point_elevations().select(
         pl.col("code").alias("region"), pl.col("elevation").alias("_point")
@@ -343,7 +353,7 @@ def forecast_weights(table: pl.DataFrame, coefficients: pl.DataFrame | None = No
             .otherwise(pl.col("correction"))
             .alias("correction")
         )
-        .select("region", "region_name", *FORECAST_COLUMNS)
+        .select("region", "region_name", *FORECAST_COLUMNS, *ELEVATION_TERM_COLUMNS)
     )
 
 

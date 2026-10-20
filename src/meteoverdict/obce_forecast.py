@@ -6,8 +6,11 @@ then combined with the weights and corrections of the obec's okres
 (``outlook.combine_hourly``), exactly as the okres's own point. No Open-Meteo calls.
 
 The obce of ``ELEVATIONS_FILE`` (all, about 6,250), read in one pass over the models
-(row segments, ``bucket.segments``); one file per okres. The corrections are those at
-the okres's forecast point (their elevation term is not moved to the obec).
+(row segments, ``bucket.segments``); one file per okres. The temperature and wind
+corrections take the regression's elevation term at the obec's own height (at the
+point's half strength, ``combine.POINT_LAPSE_FACTOR``), not at the okres's forecast
+point: left out one station at a time this was better for every kind of station,
+most in the mountains (docs/methodology.md, ``mvd obce-loso``).
 """
 
 from __future__ import annotations
@@ -23,7 +26,7 @@ from zoneinfo import ZoneInfo
 
 import polars as pl
 
-from meteoverdict import bucket, models, outlook
+from meteoverdict import bucket, combine, models, outlook
 
 ELEVATIONS_FILE = "obce-elevations.csv"
 #: how far back to look for a model's newest complete run in the bucket
@@ -107,11 +110,34 @@ def start_of_day(now: datetime) -> datetime:
     return local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
 
 
+def at_obec_height(weights: pl.DataFrame) -> pl.DataFrame:
+    """``weights`` (one okres's rows per obec, ``_elevation`` = the obec's height) with
+    the slot corrections and ``correction`` taken at the obec's height. Unchanged where
+    the regression's elevation term is missing (a weight file from before it was kept,
+    no regression, precipitation, an obec without a height): the okres point's."""
+    if not set(combine.ELEVATION_TERM_COLUMNS) <= set(weights.columns):
+        return weights
+    if "_elevation" not in weights.columns:
+        return weights
+    moved = pl.col("bias_00").is_not_null() & pl.col("_elevation").is_not_null()
+    at = combine.slot_corrections(pl.col("_elevation"), combine.POINT_LAPSE_FACTOR)
+    return weights.with_columns(
+        pl.when(moved).then(expr).otherwise(pl.col(name)).alias(name)
+        for expr, name in zip(at, combine.SLOT_CORRECTIONS, strict=True)
+    ).with_columns(
+        pl.when(moved)
+        .then(pl.mean_horizontal(*combine.SLOT_CORRECTIONS))
+        .otherwise(pl.col("correction"))
+        .alias("correction")
+    )
+
+
 def combined(
     rows: pl.DataFrame, weights: pl.DataFrame, points: pl.DataFrame, now: datetime
 ) -> pl.DataFrame:
     """One row per obec (``okres`` column = the obec's id) and hour, as
-    ``outlook.combine_hourly``, every obec with the weights of its okres (``points``)."""
+    ``outlook.combine_hourly``, every obec with the weights of its okres (``points``),
+    the corrections at the obec's ``elevation`` (``at_obec_height``)."""
     fc = rows.select(
         pl.col("station_id").alias("okres"),
         pl.col("valid_time").alias("time"),
@@ -119,10 +145,19 @@ def combined(
         *outlook.COMBINED,
         *[pl.lit(None, pl.Float64).alias(v) for v in outlook.MEANS],
     ).filter(pl.col("time") >= start_of_day(now))
+    height = [pl.col("elevation").cast(pl.Float64).alias("_elevation")]
     shared = (
-        points.select(pl.col("id").alias("region"), "okres")
+        points.select(
+            pl.col("id").alias("region"),
+            "okres",
+            *(height if "elevation" in points.columns else []),
+        )
         .join(weights.rename({"region": "okres"}), on="okres")
         .drop("okres")
+    )
+    # the elevation term is in the corrections now: no need to carry it per obec and hour
+    shared = at_obec_height(shared).drop(
+        "_elevation", *combine.ELEVATION_TERM_COLUMNS, strict=False
     )
     return outlook.combine_hourly(fc, shared, now)
 
