@@ -100,6 +100,10 @@ export function valueFor(row, layer, part) {
   return row.cloud;
 }
 
+/** "1.2" with one decimal, in the page language ("1,2" in Czech; English without a page). */
+const oneDecimal = (v) =>
+  v.toLocaleString(globalThis.document?.documentElement.lang || "en", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
 /**
  * Text next to the symbol on the map: "12°", "60 %", "4 m/s"; a single model's rain
  * "1.2 mm"; "–" beyond a single model's horizon.
@@ -110,8 +114,8 @@ export function labelFor(row, layer, part) {
   // measured: "–" where no station of the okres measures it
   if (v == null) return row?.measured ? "–" : "";
   if (layer === "temperature") return `${Math.round(v)}°`;
-  if (layer === "precipitation" && inMm(row)) return `${v.toFixed(1)} mm`;
-  if (layer === "sunshine") return `${v.toFixed(1)} h`;
+  if (layer === "precipitation" && inMm(row)) return `${oneDecimal(v)} mm`;
+  if (layer === "sunshine") return `${oneDecimal(v)} h`;
   if (layer === "precipitation" || layer === "cloud") {
     return `${Math.round(layer === "precipitation" ? v * 100 : v)} %`;
   }
