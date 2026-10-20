@@ -183,6 +183,9 @@ export function summary(outlook, day, part) {
       ? (row.precipitation ?? 0) >= MODEL_RAIN_MM
       : (row.rain_probability ?? 0) >= 0.5)).length,
     single,
+    // a single model may lack a variable (MeteoVerdict AI: no rain or cloud): no line then
+    hasRain: !single || rows.some(({ row }) => row.precipitation != null),
+    hasCloud: !single || rows.some(({ row }) => row.cloud != null),
     windiest: (() => {
       const w = rows.reduce((a, b) => ((b.row.wind ?? -1) > (a.row.wind ?? -1) ? b : a));
       return { name: w.o.name, value: w.row.wind };
