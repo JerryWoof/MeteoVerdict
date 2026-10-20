@@ -99,3 +99,4 @@ id,name,lat,lon,elevation,okres_code,okres,kraj_code,elevation_class,elements,re
 0-203-0-11526,"Nedrahovice, Rudolec",49.631723,14.440088,348.0,CZ020B,Příbram,CZ020,lowland,3,spread
 0-203-0-11432,Nová Ves v Horách,50.59244,13.48561,725.0,CZ0425,Most,CZ042,upland,3,spread
 0-203-0-11671,Broumov,50.569966,16.343617,373.0,CZ0523,Náchod,CZ052,lowland,3,spread
+0-203-0-41501115001,"Tišnov, Hájek",49.3731,16.4725,409.0,CZ0643,Brno-venkov,CZ064,upland,3,temperature
