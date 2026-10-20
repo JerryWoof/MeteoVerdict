@@ -1,4 +1,4 @@
-// The AI heatmap tab (heatmap.html): MeteoVerdict AI's temperature at 100 m from the terrain,
+// The heatmap tab (heatmap.html): MeteoVerdict AI's temperature at 100 m from the terrain,
 // a grayscale image per time (data/scores/ai/fc/temp100m/index.json), or, until that exists,
 // the old single coloured image (temp100m.json). Rows are in the map's (Web-Mercator) spacing.
 
