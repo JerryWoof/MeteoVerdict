@@ -14,6 +14,7 @@ import { fillPicker, issuedText } from "./picker.js";
 import { statusText } from "./status.js";
 import { chmiNotice, dayLabel, gustOver, gustOverText, parseOutlook, rowFor, sunFor, today } from "./tv.js";
 import { AI_FILES, aiPath, aiText } from "./ai-source.js";
+import { AI_MODEL, loadAi, withAi } from "./ai-model.js";
 
 // ?source=ai: MeteoVerdict AI's forecast (the AI forecast tab's detail, ai-source.js): its
 // own outlook.json and obce files, "MeteoVerdict AI" wherever ours is named, no weights
@@ -290,6 +291,7 @@ function render(names, colors) {
     });
     const end = modelHorizon(parsed, selected);
     let note = t("forecast.modelNote", { model: name });
+    if (selected === AI_MODEL) note = t("ai.modelNote", { time: issuedText(parsed.aiIssued ?? parsed.generated) ?? "–" });
     if (end != null && rows.some((d) => d.beyond)) {
       const when = new Intl.DateTimeFormat(document.documentElement.lang, {
         weekday: "short", day: "numeric", month: "numeric", hour: "numeric", minute: "2-digit", timeZone: TIME_ZONE,
@@ -297,6 +299,13 @@ function render(names, colors) {
       note += ` ${t("forecast.modelHorizon", { end: when })}`;
     }
     modelNote.textContent = note;
+    modelNote.title = selected === AI_MODEL ? t("ai.modelTip") : "";
+    if (selected === AI_MODEL) {
+      const badge = document.createElement("span");
+      badge.className = "ai-badge";
+      badge.textContent = t("ai.badge");
+      modelNote.prepend(badge, " ");
+    }
     // the gusts come from our corrected outlook: not shown for a single model
     renderDays(rows.map(dayRow), sunOf, () => null);
   } else {
@@ -334,9 +343,10 @@ async function show(point, names, colors, outlook) {
   message.textContent = t("forecast.loading");
   // the weights (mvd aggregate) and every model's forecast with our combination (mvd
   // outlook): static files, no request to Open-Meteo
-  const [weightsDoc, modelsDoc] = await Promise.all([
+  const [weightsDoc, modelsDoc, ai] = await Promise.all([
     getJson(`data/scores/forecast/${point.code}.json`),
     getJson(`data/scores/forecast/models/${point.code}.json`),
+    AI ? null : loadAi(getJson),
   ]);
   if (token !== showToken) return;
   const table = weightTable(weightsDoc);
@@ -344,7 +354,7 @@ async function show(point, names, colors, outlook) {
     message.textContent = t("forecast.noWeights");
     return;
   }
-  const parsed = parseModels(modelsDoc);
+  const parsed = withAi(parseModels(modelsDoc), ai, point.code);
   if (!parsed) {
     message.textContent = t("forecast.unavailable");
     return;
@@ -411,7 +421,7 @@ async function main() {
   ]);
   const outlook = parseOutlook(outlookDoc);
   document.getElementById("status").textContent = statusText(meta, t);
-  const names = { ...meta?.models };
+  const names = { ...meta?.models, [AI_MODEL]: t("ai.modelName") };
   const colors = modelColors(names);
   const points = records(index).sort((a, b) => a.name.localeCompare(b.name, "cs"));
   if (points.length === 0) {

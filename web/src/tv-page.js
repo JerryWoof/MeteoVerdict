@@ -23,6 +23,7 @@ import {
 } from "./tv.js";
 import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 import { AI_FILES, aiPath, aiText } from "./ai-source.js";
+import { AI_MODEL, aiMapView, loadAi, withAi } from "./ai-model.js";
 import { renderAiExtras } from "./ai-extras.js";
 import { renderAiVerify } from "./ai-verify-view.js";
 setWorkerUrl(workerUrl);
@@ -118,12 +119,13 @@ let mapStatus = null; // null, {loading: model} or {failed: model}
 let mapToken = 0;
 let modelIndex = null; // forecast/models-parts/index.json
 let modelNames = {}; // meta.json models
+let aiData = null; // MeteoVerdict AI as one more model (ai-model.js); null: not offered
 const modelViews = new Map(); // model → parsed file (loaded once)
 let mapReady = false; // the selector works once the map has its layers
 
 /** What the map draws: the chosen model's view, or our combination. */
 const shownView = () => (mapModel !== COMBINED && mapView ? mapView : outlook);
-const modelName = (model) => (model === COMBINED ? t("forecast.pickCombined") : modelNames[model] ?? model);
+const modelName = (model) => (model === COMBINED ? t("forecast.pickCombined") : model === AI_MODEL ? t("ai.modelName") : modelNames[model] ?? model);
 
 /** "Sat 10/19, 12:00": the end of a model's run, Prague time. */
 function endText(ms) {
@@ -321,6 +323,7 @@ function modelBanner(view) {
   if (!view.single) return null;
   const banner = element("div", null, "model-banner");
   banner.append(element("p", t("tv.banner", { model: modelName(mapModel), time: issuedText(view.generated) ?? "–" })));
+  if (mapModel === AI_MODEL) banner.append(experimentalNote(view.generated));
   const cut = view.days.some((day) => view.okresy.some((o) => rowFor(view, o.code, day, "day")?.beyond));
   if (cut && view.lastHour != null) banner.append(element("p", t("tv.bannerHorizon", { end: endText(view.lastHour) }), "horizon"));
   const back = element("button", t("tv.bannerBack"), "back");
@@ -401,9 +404,10 @@ function okresData(code) {
       getJson(`data/scores/forecast/${code}.json`),
       getJson(`data/scores/forecast/models/${code}.json`),
       metaJson,
-    ]).then(([weights, models, meta]) => {
+      AI ? null : loadAi(getJson),
+    ]).then(([weights, models, meta, ai]) => {
       entry.table = weightTable(weights);
-      entry.parsed = parseModels(models);
+      entry.parsed = withAi(parseModels(models), ai, code);
       entry.names = { ...meta?.models };
       entry.status = entry.parsed ? "ready" : "missing";
       if (state.okres === code) renderPanel(outlook);
@@ -466,6 +470,14 @@ function partCell(row, part, single) {
   return cell;
 }
 
+/** The badge and the short explanation shown while MeteoVerdict AI is selected. */
+function experimentalNote(generated) {
+  const note = element("p", null, "model-note");
+  note.append(element("span", t("ai.badge"), "ai-badge"), " ", t("ai.modelNote", { time: issuedText(generated) ?? "–" }));
+  note.title = t("ai.modelTip");
+  return note;
+}
+
 // the "Forecast" selector and, for a single model, what it is and where it ends
 function modelPicker(data, rows) {
   const { single, periods } = rows;
@@ -480,7 +492,7 @@ function modelPicker(data, rows) {
   ]);
   const chosen = fillPicker(select, {
     table: data.table,
-    names: { ...modelNames, ...data.names },
+    names: { ...modelNames, ...data.names, [AI_MODEL]: t("ai.modelName") },
     available,
     selected: panelModel,
     t,
@@ -506,6 +518,7 @@ function modelPicker(data, rows) {
     note.title = t("tv.modelNoteMore");
     notes.push(note);
   }
+  if (single && panelModel === AI_MODEL) notes.push(experimentalNote(rows.generated));
   if (panelModel !== mapModel) notes.push(element("p", t("tv.panelOnly", { map: modelName(mapModel) }), "model-note"));
   return [label, ...notes];
 }
@@ -837,13 +850,16 @@ function renderMapPicker() {
   const ranked = options.filter((o) => o.rank != null)
     .map((o) => option(o.model, t("forecast.pickOption", { position: o.position, model: o.name, rank: rank(o.rank) })));
   const others = options.filter((o) => o.rank == null).map((o) => option(o.model, o.name));
+  // MeteoVerdict AI: experimental, in its own group at the end (never the default)
+  const experimental = aiData && !AI ? [group("tv.mapModelExperimental", [option(AI_MODEL, t("ai.modelName"))])] : [];
   select.replaceChildren(
     option(COMBINED, t("forecast.pickCombined")),
     ...(ranked.length ? [group("tv.mapModelRanked", ranked)] : []),
     ...(others.length ? [group("tv.mapModelOthers", others)] : []),
+    ...experimental,
   );
   select.value = mapModel;
-  select.disabled = !mapReady || options.length === 0;
+  select.disabled = !mapReady || (options.length === 0 && !experimental.length);
   document.getElementById("map-model").title = t(options.length ? "tv.mapModelHint" : "tv.mapModelsMissing");
 }
 
@@ -863,8 +879,9 @@ async function setMapModel(model) {
   if (!modelViews.has(model)) {
     mapStatus = { loading: model };
     renderHeadline(shownView());
-    const doc = await getJson(`data/scores/forecast/models-parts/${model}.json`);
-    const view = parseModelParts(doc, outlook);
+    const view = model === AI_MODEL
+      ? aiMapView(aiData, outlook)
+      : parseModelParts(await getJson(`data/scores/forecast/models-parts/${model}.json`), outlook);
     if (view) modelViews.set(model, view);
   }
   if (token !== mapToken) return;
@@ -983,8 +1000,9 @@ async function main() {
   picker.disabled = true; // until the map is there
   // the models offered for the whole map, by their mean rank over Czechia
   metaJson ??= getJson("data/scores/meta.json");
-  Promise.all([getJson("data/scores/forecast/models-parts/index.json"), metaJson]).then(([index, meta]) => {
+  Promise.all([getJson("data/scores/forecast/models-parts/index.json"), metaJson, AI ? null : loadAi(getJson)]).then(([index, meta, ai]) => {
     modelIndex = index;
+    aiData = ai;
     modelNames = { ...meta?.models };
     renderMapPicker();
     if (state.okres) renderPanel(outlook);
