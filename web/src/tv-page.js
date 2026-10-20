@@ -74,6 +74,10 @@ keepRoomForPanels(map.getContainer().parentElement, map.getContainer(), [documen
 map.addControl(new NavigationControl({ showCompass: false }));
 // registered at once: the map may finish loading while the forecast is still on its way
 const mapLoaded = new Promise((resolve) => map.on("load", resolve));
+// on a phone the attribution (compact there) starts open and covers half the map: fold it
+mapLoaded.then(() => {
+  if (window.innerWidth <= 700) map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
+});
 
 async function fetchJson(path) {
   try {
