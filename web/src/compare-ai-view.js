@@ -8,8 +8,11 @@ import {
 import { displayName } from "./tv.js";
 
 const COLORS = { ai: "#c0392b", outlook: "#1f78b4", mean: "#1d2329", model: "#6a3d9a" };
+// in the page language: "0,92" in Czech
 const fmt = (v, signed = false, digits = 2) =>
-  v == null ? "–" : `${signed && v > 0 ? "+" : ""}${v.toFixed(digits)}`.replace("-", "−");
+  v == null
+    ? "–"
+    : `${signed && v > 0 ? "+" : ""}${v.toLocaleString(document.documentElement.lang || "en", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`.replace("-", "−");
 
 async function getJson(path) {
   try {
