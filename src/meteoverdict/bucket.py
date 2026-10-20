@@ -1092,6 +1092,15 @@ def _present(path: Path) -> pl.DataFrame:
     )
 
 
+def _spill(frames: list[pl.DataFrame], spool: Path, parts: list[Path]) -> None:
+    """Write ``frames`` to the next part file in ``spool`` and empty the list."""
+    if frames:
+        part = spool / f"{len(parts):04d}.parquet"
+        pl.concat(frames, how="diagonal_relaxed").write_parquet(part)
+        parts.append(part)
+        frames.clear()
+
+
 def add_stations(
     bucket: Bucket,
     stations: pl.DataFrame,
@@ -1104,6 +1113,8 @@ def add_stations(
     max_minutes: float = 330,
     threads: int = 96,
     parallel_models: int = 8,
+    extra: bool = False,
+    flush_every: int = 200,
     log: Callable[[str], None] = lambda _: None,
     clock: Callable[[], float] = time.monotonic,
 ) -> Added:
@@ -1115,7 +1126,12 @@ def add_stations(
     month file is pulled again just before it is written and pushed, so a schedule of
     ``runs.yml`` that wrote it meanwhile is kept (the workflow shares its concurrency
     group anyway). Model-runs from the API are not in the bucket and stay without the
-    added stations. Resumable: a month already complete costs one scan."""
+    added stations. Without ``extra`` only the four main variables are read (the
+    further ones, four times the requests, come with the new runs). The rows read are
+    kept on disk every ``flush_every`` model-runs (a month at ~200 stations is tens of
+    millions of rows; on 2026-10-20 a runner holding them in memory was lost) and
+    merged into the month file once. Resumable: a month already complete costs one
+    scan."""
     cells = load_cells() if cells is None else cells
     catalogue = {m.id: m for m in models}
     wanted = set(stations["id"])
@@ -1140,7 +1156,10 @@ def add_stations(
                 if missing:
                     todo.append((run, model_id, missing))
             log(f"{month}: {len(todo)} model-runs lack some of the {len(wanted)} stations")
-            frames, done = [], 0
+            frames, done, parts = [], 0, []
+            spool = data_dir / "runs" / f".{month}.added"
+            spool.mkdir(parents=True, exist_ok=True)
+
             for i in range(0, len(todo), parallel_models * 4):
                 if clock() - start > max_minutes * 60:
                     result.stopped = f"time limit of {max_minutes:g} minutes reached"
@@ -1158,7 +1177,7 @@ def add_stations(
                             stations.filter(pl.col("id").is_in(missing)),
                             cells,
                             pool,
-                            extra=True,
+                            extra=extra,
                         ),
                     )
                     for run, model_id, missing in chunk
@@ -1176,10 +1195,13 @@ def add_stations(
                     else:
                         frames.append(fetched.rows)
                         done += 1
+                if sum(f.height > 0 for f in frames) >= flush_every:
+                    _spill(frames, spool, parts)
                 if (i // (parallel_models * 4)) % 25 == 0:
                     log(f"{month}: {done} of {len(todo)} model-runs read")
-            if frames:
-                table = pl.concat(frames, how="diagonal_relaxed")
+            _spill(frames, spool, parts)
+            if parts:
+                table = pl.read_parquet(parts)
                 if sync:
                     sync.pull([month])  # the newest release, if a schedule wrote it meanwhile
                 partitions.write_monthly(
@@ -1193,6 +1215,10 @@ def add_stations(
                     sync.push([month])
                 result.filled[month], result.rows[month] = done, table.height
                 log(f"{month}: {done} model-runs filled in, {table.height:,} rows")
+                del table
+            for part in parts:
+                part.unlink()
+            spool.rmdir()
             if result.stopped:
                 break
     return result
