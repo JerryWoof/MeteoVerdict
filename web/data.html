@@ -55,10 +55,34 @@ const best = okres.models.variables.temperature_2m.lead_days[1][0];
 console.log(`best model for tomorrow's temperature: ${best.name}`);</pre>
       <pre class="code">=IMPORTDATA("https://jerrywoof.github.io/MeteoVerdict/api/v1/okresy/CZ0201.csv")</pre>
 
-      <h2 data-i18n="api.eink">On an e-ink display</h2>
+      <h2 id="trmnl" data-i18n="api.eink">On an e-ink display</h2>
       <p data-i18n="api.einkText"></p>
-      <p><a href="https://github.com/JerryWoof/MeteoVerdict-TRMNL"><img class="eink" src="https://raw.githubusercontent.com/JerryWoof/MeteoVerdict-TRMNL/main/screenshots/today-tomorrow.png" width="800" height="480" alt="MeteoVerdict on a TRMNL e-ink display: today and tomorrow in Prague" loading="lazy" /></a></p>
+      <ul>
+        <li data-i18n="api.einkForecast"></li>
+        <li data-i18n="api.einkObec"></li>
+        <li data-i18n="api.einkBadges"></li>
+      </ul>
+      <div class="eink-grid">
+        <a href="https://github.com/JerryWoof/MeteoVerdict-TRMNL"><img class="eink" src="https://raw.githubusercontent.com/JerryWoof/MeteoVerdict-TRMNL/main/screenshots/today-tomorrow.png" width="800" height="480" alt="MeteoVerdict on a TRMNL e-ink display: today and tomorrow in Prague" loading="lazy" /></a>
+        <a href="https://github.com/JerryWoof/MeteoVerdict-TRMNL"><img class="eink" src="https://raw.githubusercontent.com/JerryWoof/MeteoVerdict-TRMNL/main/screenshots/five-days-cs.png" width="800" height="480" alt="MeteoVerdict on a TRMNL e-ink display: five days in Brno, in Czech" loading="lazy" /></a>
+        <a href="https://github.com/JerryWoof/MeteoVerdict-TRMNL"><img class="eink" src="https://raw.githubusercontent.com/JerryWoof/MeteoVerdict-TRMNL/main/screenshots/today-tomorrow-obec.png" width="800" height="480" alt="MeteoVerdict on a TRMNL e-ink display: today and tomorrow for an obec, Špindlerův Mlýn" loading="lazy" /></a>
+      </div>
       <p><a href="https://github.com/JerryWoof/MeteoVerdict-TRMNL" data-i18n="api.einkLink">MeteoVerdict for TRMNL</a></p>
+
+      <h3 data-i18n="api.einkUrl">Polling URL</h3>
+      <div id="trmnl-builder">
+        <div class="strip standalone">
+          <div class="strip-row">
+            <label class="field"><span data-i18n="api.einkForecastLabel">Forecast</span> <select id="trmnl-forecast"></select></label>
+            <label class="field" id="trmnl-obec-field"><span data-i18n="api.einkObecLabel">Obec (optional, test)</span> <input id="trmnl-obec" type="text" list="trmnl-obce" autocomplete="off" /></label>
+            <datalist id="trmnl-obce"></datalist>
+          </div>
+        </div>
+        <p id="trmnl-obec-note" data-i18n="api.einkObecNone" hidden></p>
+        <p data-i18n="api.einkPaste"></p>
+        <pre id="trmnl-lines" class="code"></pre>
+        <p><span data-i18n="api.einkTest">Test it:</span> <a id="trmnl-test" href="#trmnl"></a></p>
+      </div>
 
       <div id="doc-more"></div>
     </main>
