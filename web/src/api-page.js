@@ -1,6 +1,8 @@
 import "./style.css";
 
+import { dataBlocks } from "./data-text.js";
 import { setUpLanguage } from "./i18n.js";
+import { renderBlocks } from "./info-page.js";
 import { SCHEDULE, pragueClocks } from "./schedule.js";
 import { displayName } from "./tv.js";
 
@@ -16,18 +18,32 @@ async function get(path, as = "json") {
   }
 }
 
-/** "Updated daily at …": the workflows' schedule in Prague time (CET or CEST). */
+/** The schedule of the workflows in Prague time (CET or CEST), and the page's text below. */
 function showSchedule() {
-  const locale = document.documentElement.lang === "cs" ? "cs-CZ" : "en-GB";
+  const language = document.documentElement.lang;
+  const locale = language === "cs" ? "cs-CZ" : "en-GB";
   const now = new Date();
   const summer = new Intl.DateTimeFormat("en", { timeZone: "Europe/Prague", timeZoneName: "shortOffset" })
     .formatToParts(now).find((p) => p.type === "timeZoneName")?.value === "GMT+2";
-  const zone = document.documentElement.lang === "cs" ? (summer ? "SELČ" : "SEČ") : (summer ? "CEST" : "CET");
+  const zone = language === "cs" ? (summer ? "SELČ" : "SEČ") : (summer ? "CEST" : "CET");
+  const clocks = (times) => pragueClocks(times, now, locale);
   document.getElementById("updates").textContent = t("api.when", {
-    daily: pragueClocks(SCHEDULE.daily, now, locale),
-    outlook: pragueClocks(SCHEDULE.outlook, now, locale),
+    daily: clocks(SCHEDULE.daily),
+    outlook: clocks(SCHEDULE.outlook),
     zone,
   });
+  const blocks = dataBlocks(language, {
+    outlook: clocks(SCHEDULE.outlook),
+    daily: clocks(SCHEDULE.daily),
+    runs: clocks(SCHEDULE.runs),
+    chmi: clocks(SCHEDULE.chmi),
+    sun: clocks(SCHEDULE.sun),
+    zone,
+  });
+  renderBlocks(document.getElementById("doc-api"), blocks.api);
+  renderBlocks(document.getElementById("doc-more"), blocks.more);
+  const id = decodeURIComponent(window.location.hash.slice(1));
+  if (id && !/^CZ/.test(id)) document.getElementById(id)?.scrollIntoView();
 }
 
 async function main() {
@@ -49,7 +65,7 @@ async function main() {
   select.replaceChildren(
     ...okresy.map((o) => Object.assign(document.createElement("option"), { value: o.code, textContent: `${displayName(o.name)} (${o.code})` })),
   );
-  async function show(code) {
+  async function show(code, remember = true) {
     const okres = okresy.find((o) => o.code === code);
     const links = document.getElementById("links");
     links.replaceChildren(
@@ -62,12 +78,13 @@ async function main() {
     );
     const csv = await get(`api/v1/okresy/${code}.csv`, "text");
     document.getElementById("preview").textContent = csv ? `${csv.split("\n").slice(0, 8).join("\n")}\n…` : "";
-    window.history.replaceState(null, "", `#${code}`);
+    if (remember) window.history.replaceState(null, "", `#${code}`);
   }
   const wanted = window.location.hash.slice(1);
   select.value = okresy.some((o) => o.code === wanted) ? wanted : (okresy.find((o) => o.code === "CZ0100") ?? okresy[0]).code;
   select.addEventListener("change", () => show(select.value));
-  await show(select.value);
+  // a link to a section (#releases) keeps its address
+  await show(select.value, !wanted || okresy.some((o) => o.code === wanted));
 }
 
 main();
