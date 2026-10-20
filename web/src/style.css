@@ -3407,3 +3407,11 @@ footer .site-links {
 #station-panel .station-info .model-note {
   margin: 0.15rem 0;
 }
+
+/* Stations: a long panel scrolls inside the map's height instead of stretching the page */
+@media (min-width: 701px) {
+  #station-panel {
+    max-height: calc(var(--map-height) - 1.5rem);
+    overflow-y: auto;
+  }
+}
