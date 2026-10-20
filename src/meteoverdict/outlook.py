@@ -41,7 +41,7 @@ from zoneinfo import ZoneInfo
 import httpx
 import polars as pl
 
-from meteoverdict import frost, gusts, rain_calibration, sun_cloud_gust
+from meteoverdict import blend_interval, frost, gusts, rain_calibration, sun_cloud_gust
 from meteoverdict import runs as runs_mod
 from meteoverdict.combine import BLEND_COLUMNS, combine_values, okres_points, point_elevations
 from meteoverdict.forecasts import _reason, call_weight
@@ -571,6 +571,9 @@ def _frost_columns(table: pl.DataFrame) -> list[pl.Expr]:
 
 
 HOURLY = ("temperature_2m", "precipitation", "wind_speed_10m", "cloud_cover", "sunshine_duration")
+#: the 80 % range of the combined temperature (``meteoverdict.blend_interval``), written
+#: only when it is there
+RANGE = ("temperature_2m_lo", "temperature_2m_hi")
 
 
 def write_hourly(hourly: pl.DataFrame, path: Path, generated: datetime) -> Path:
@@ -583,6 +586,9 @@ def write_hourly(hourly: pl.DataFrame, path: Path, generated: datetime) -> Path:
     for (code,), part in sorted(hourly.partition_by("okres", as_dict=True).items()):
         full = grid.join(part, on="time", how="left").sort("time")
         okresy[code] = {v: full[v].round(1).to_list() for v in HOURLY}
+        for v in RANGE:
+            if v in full.columns and full[v].null_count() < full.height:
+                okresy[code][v] = full[v].round(1).to_list()
     doc = {
         "generated": generated.isoformat(timespec="minutes"),
         "time": [t.strftime("%Y-%m-%dT%H:%MZ") for t in times.to_list()],
@@ -594,6 +600,14 @@ def write_hourly(hourly: pl.DataFrame, path: Path, generated: datetime) -> Path:
             "sunshine_duration": (
                 "s of sunshine in the hour ending at the time, mean of the models scaled "
                 "so that each day adds up to the corrected daily sunshine"
+            ),
+            **(
+                {
+                    "temperature_2m_lo": "°C, lower end of the 80 % range of temperature_2m",
+                    "temperature_2m_hi": "°C, upper end of the 80 % range of temperature_2m",
+                }
+                if any(RANGE[0] in o for o in okresy.values())
+                else {}
             ),
         },
         "okresy": okresy,
@@ -617,6 +631,8 @@ MODEL_DIGITS = {
     "wind_speed_10m": 1,
     "cloud_cover": 0,
     "sunshine_duration": 0,
+    "temperature_2m_lo": 1,
+    "temperature_2m_hi": 1,
 }
 MODEL_UNITS = {
     "temperature_2m": "°C",
@@ -662,7 +678,10 @@ def models_doc(fc: pl.DataFrame, hourly: pl.DataFrame, code: str, generated: dat
     grid = pl.DataFrame({"time": times})
     combined_rows = grid.join(ours, on="time", how="left").sort("time")
     combined = {
-        v: _values(combined_rows[v], MODEL_DIGITS[v]) for v in HOURLY if v in combined_rows.columns
+        v: _values(combined_rows[v], MODEL_DIGITS[v])
+        for v in (*HOURLY, *RANGE)
+        if v in combined_rows.columns
+        and (v in HOURLY or combined_rows[v].null_count() < combined_rows.height)
     }
     models = {}
     for (model,), part in sorted(own.partition_by("model", as_dict=True).items()):
@@ -1064,6 +1083,7 @@ def outlook(
     nights: list[pl.DataFrame] | None = None,
     single_runs: pl.LazyFrame | pl.DataFrame | None = None,
     forecasts: list[pl.DataFrame] | None = None,
+    interval: dict | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Fetch, combine and summarise for all ``points`` (code, name, lat, lon) that have
     weights: the parts-of-day table and the combined hourly series (with the plain
@@ -1074,7 +1094,8 @@ def outlook(
     models' nights at the okres points are appended to ``nights`` for the archive. The
     gusts come from the newest of ``single_runs`` (``runs``; none: null). Every model's
     own hourly forecast (``parse``, as Open-Meteo gave it) is appended to ``forecasts``
-    (the per-model files and the archive; no extra calls)."""
+    (the per-model files and the archive; no extra calls). ``interval`` (``blend_interval``
+    file): adds ``temperature_2m_lo`` and ``temperature_2m_hi`` to the hourly series."""
     now = now or datetime.now(UTC)
     points = points.filter(pl.col("code").is_in(weights["region"].unique().to_list()))
     models = sorted(weights["model"].unique().to_list())
@@ -1086,6 +1107,7 @@ def outlook(
     hourly = sun_cloud_gust.correct_hourly(
         hourly, points, corrections or sun_cloud_gust.load(), now
     )
+    hourly = blend_interval.add_interval(hourly, interval, now)
     table = summarise(hourly, probability(fc, weights, now, calibration, points))
     night_rows = frost.point_nights(fc, payload, points["code"].to_list(), now)
     if nights is not None:

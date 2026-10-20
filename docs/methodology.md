@@ -762,6 +762,48 @@ every day as history grows. Not yet done: training windows of 30 and 45 days and
 decaying average (roadmap 6.4); with under 45 days of history they would be almost
 the same as 90 days.
 
+### The range around the temperature (`mvd blend-interval`)
+
+The combined temperature comes with an 80 % range (`temperature_2m_lo`, `temperature_2m_hi`
+in `outlook-hourly.json`, the open-data files and `forecast/models/<okres>.json`; a grey
+band and a "±" line in the tooltip of the hourly chart of `forecast-detail.html`). It is
+**the forecast's own recent errors, not the spread of the models**: an 80 % interval of the
+models' spread (AI experiment E5, October 2026) held the measurement in 56 % of cases.
+
+`mvd blend-interval` (daily, after `mvd hindcast`) rebuilds the combined temperature out of
+sample for past days at the okres's stations, as the hindcast does (weights, corrections and
+regression trained on the scores up to the day before the forecast was made), and keeps the
+error `observed - combined` at 00, 06, 12 and 18 UTC (`blend-errors.parquet` in the release
+`outlook-archive`, 100 days). For every okres, lead day (1-5) and hour the range is the 7th and
+93rd percentile of the errors of the last 30 target days; the okres's value is shrunk towards the
+one for the whole of Czechia by `n / (n + 200)` (`n` = its errors), the whole of Czechia is
+used where an okres has fewer than 20. Between the four hours the offsets are interpolated
+linearly in the hour of the day; the outlook adds them to the combined temperature of each
+hour (lead day as for the weights). The file `blend-interval.json` (release `data-latest`) is
+ignored by the outlook when older than a week.
+
+**Check, out of sample** (25 668-33 492 station-hours per lead; for each target day only
+errors of days up to the day before the forecast was made, at least 14 days of them; 26 target days,
+23 September - 18 October 2026, errors from 8 September):
+
+| lead | held (target 80 %) | mean width |
+|---|---|---|
+| D+1 | 81.6 % | 4.0 °C |
+| D+2 | 79.1 % | 4.5 °C |
+| D+3 | 76.8 % | 5.0 °C |
+| D+4 | 77.5 % | 5.6 °C |
+| D+5 | 78.9 % | 6.0 °C |
+
+Day (06, 12 UTC) 83 / 81 / 79 %, night (00, 18 UTC) 80 / 77 / 74 % at D+1-3; lowland 83 / 81 / 79 %,
+mountain (stations from 600 m) 79 / 75 / 72 %. The plain 10th-90th percentile held only
+70-75 %: the last 30 days' errors are smaller than those of the days ahead (the weather turned
+more changeable from late September). The 7th-93rd percentile is the one parameter chosen on
+this same sample (a window of 14, 30 or 60 days and the pooling made no difference), so the
+figures above are slightly flattering; the first half of the test (short, calm history) held
+70-80 %, the second 80-84 %. The range is the error of the combination at a station: the okres's
+point and a place between stations can be a little worse. A winter with inversions and a longer
+history will show whether the width needs adjusting.
+
 ### Frost: night minimum, frost and ground frost
 
 The models' night minima are too warm (by 1.4–2.3 °C at the stations in September

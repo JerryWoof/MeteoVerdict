@@ -125,7 +125,7 @@ function renderDays(days, sunOf, gustOf) {
 // `selected`: COMBINED (our forecast highlighted, with the best model per lead day) or a
 // model id (that model's raw forecast highlighted, ours thin for reference)
 // `issued`: when the forecast was made (ms): the lead days count from it, as in the outlook
-function chart(forecast, combined, table, variable, colors, names, nights, selected, issued) {
+function chart(forecast, combined, table, variable, colors, names, nights, selected, issued, range) {
   const single = selected !== COMBINED;
   const points = (values) => values
     .map((v, i) => ({ time: new Date(forecast.times[i]), value: v }))
@@ -138,6 +138,22 @@ function chart(forecast, combined, table, variable, colors, names, nights, selec
     });
   }
   const ours = points(combined);
+  // the 80 % range of our temperature (outlook-hourly, `mvd blend-interval`): a band behind
+  // the line and, in its tooltip, how far it reaches
+  const band = [];
+  if (variable === "temperature_2m" && range) {
+    combined.forEach((v, i) => {
+      const lo = range.lo[i];
+      const hi = range.hi[i];
+      if (v == null || lo == null || hi == null) return;
+      band.push({ time: new Date(forecast.times[i]), lo, hi });
+    });
+  }
+  const byTime = new Map(band.map((b) => [b.time.getTime(), b]));
+  const withRange = ours.map((o) => {
+    const b = byTime.get(o.time.getTime());
+    return { ...o, range: b ? offsetText(b.lo - o.value, b.hi - o.value) : "" };
+  });
   const picked = single ? points(forecast.values[variable][selected] ?? []) : [];
   // the best model of each lead day, as segments coloured by model
   let segment = 0;
@@ -175,6 +191,9 @@ function chart(forecast, combined, table, variable, colors, names, nights, selec
         Plot.rectX(nights, {
           x1: (n) => new Date(n.start), x2: (n) => new Date(n.end), fill: "#1d2329", fillOpacity: 0.06,
         }),
+        ...(band.length
+          ? [Plot.areaY(band, { x: "time", y1: "lo", y2: "hi", fill: "#1d2329", fillOpacity: 0.12, curve })]
+          : []),
         Plot.lineY(rows, { x: "time", y: "value", z: "model", stroke: "#b7bec4", strokeWidth: 0.8, curve }),
         ...(single
           ? [
@@ -187,7 +206,10 @@ function chart(forecast, combined, table, variable, colors, names, nights, selec
             Plot.lineY(best, {
               x: "time", y: "value", z: "segment", stroke: (r) => colors[r.model] ?? "#1f78b4", strokeWidth: 1.6, curve,
             }),
-            Plot.lineY(ours, { x: "time", y: "value", stroke: "#1d2329", strokeWidth: 2.5, curve, tip: true }),
+            Plot.lineY(withRange, {
+              x: "time", y: "value", stroke: "#1d2329", strokeWidth: 2.5, curve, tip: true,
+              channels: band.length ? { range: { value: "range", label: "±" } } : {},
+            }),
           ]),
         Plot.ruleX([new Date()], { stroke: "#c0392b", strokeDasharray: "3,3" }),
       ],
@@ -201,9 +223,16 @@ function chart(forecast, combined, table, variable, colors, names, nights, selec
   const text = single
     ? t("forecast.legendModel", { model: names[selected] ?? selected })
     : t(AI && ours.length === 0 ? "ai.legendOkres" : "forecast.legend", { best: winners || "–" });
-  legend.textContent = text + (nights.length ? ` ${t("forecast.night")}` : "");
+  legend.textContent = text + (nights.length ? ` ${t("forecast.night")}` : "")
+    + (band.length ? ` ${t("forecast.range")}` : "");
   figure.append(legend);
   return figure;
+}
+
+// "−1,4 / +1,2 °C": the 80 % range as offsets from our forecast
+function offsetText(lo, hi) {
+  const one = (v) => `${v < 0 ? "−" : "+"}${Math.abs(v).toLocaleString(document.documentElement.lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+  return `${one(lo)} / ${one(hi)} °C (80 %)`;
 }
 
 function renderWeights(table, names) {
@@ -245,7 +274,7 @@ const dayRow = (d) => ({ day: d.day, tmin: d.tmin, tmax: d.tmax, precipitation: 
 
 // the day table, the charts and the notes for the selected forecast
 function render(names, colors) {
-  const { parsed, forecast, combined, table, days, sunOf, gustOf } = state;
+  const { parsed, forecast, combined, table, days, sunOf, gustOf, range } = state;
   const single = selected !== COMBINED;
   const modelNote = document.getElementById("model-note");
   document.getElementById("combined-note").hidden = single;
@@ -277,7 +306,7 @@ function render(names, colors) {
   const nights = nightBands(sunOf, forecast.times[0], forecast.times.at(-1), TIME_ZONE);
   const issued = Date.parse(parsed.generated ?? "") || Date.now();
   document.getElementById("charts").replaceChildren(
-    ...VARIABLES.map((v) => chart(forecast, combined[v], table, v, colors, names, nights, selected, issued)),
+    ...VARIABLES.map((v) => chart(forecast, combined[v], table, v, colors, names, nights, selected, issued, range)),
   );
 }
 
@@ -333,7 +362,11 @@ async function show(point, names, colors, outlook) {
     .map((day) => ({ ...rowFor(outlook, point.code, day, "day"), day }))
     .filter((d) => d.tmin != null);
   let days = fromOutlook.length ? fromOutlook : dailySummary(parsed.times, combined, TIME_ZONE);
-  state = { point, table, parsed, forecast, combined, days, sunOf, gustOf };
+  // the range around our temperature (not for the AI view, which has no okres series)
+  const range = !AI && parsed.combined.temperature_2m_lo && parsed.combined.temperature_2m_hi
+    ? { lo: parsed.combined.temperature_2m_lo, hi: parsed.combined.temperature_2m_hi }
+    : null;
+  state = { point, table, parsed, forecast, combined, days, sunOf, gustOf, range };
   // test: an obec of the okres instead of the okres's point
   const obceDoc = await obceFor(point.code, getJson);
   if (token !== showToken) return;
@@ -349,7 +382,7 @@ async function show(point, names, colors, outlook) {
   if (place) {
     const series = obecSeries(obceDoc, place);
     days = dailySummary(obecTimes(obceDoc), series.combined, TIME_ZONE);
-    state = { ...state, ...series, days, gustOf: () => null, parsed: { ...parsed, generated: obceDoc.generated } };
+    state = { ...state, ...series, days, gustOf: () => null, range: null, parsed: { ...parsed, generated: obceDoc.generated } };
     selected = COMBINED;
     document.getElementById("title").textContent = t("forecast.titleForObec", { obec: place.name });
     obecNote.textContent = t("forecast.obecNote", {
