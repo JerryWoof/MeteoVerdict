@@ -23,6 +23,7 @@ import {
 } from "./tv.js";
 import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 import { aiPath } from "./ai-source.js";
+import { seatName, seatOkres } from "./seats.js";
 import { AI_MODEL, aiMapView, aiPeriods, hasAi, loadAi, withAi } from "./ai-model.js";
 import { renderAiExtras } from "./ai-extras.js";
 import { renderAiVerify } from "./ai-verify-view.js";
@@ -602,8 +603,8 @@ function renderObecPanel(panel, { doc, rows, ai: ownAi }) {
   const link = element("a", t("forecast.obecAccuracy"));
   link.href = "methodology.html#obce-loso";
   accuracy.append(link);
-  const detail = element("a", t("tv.detail"));
-  detail.href = `${DETAIL}#${state.okres}/${encodeURIComponent(panelObec)}`;
+  // the detail of the obec's okres town (seats.js), every model's lines there
+  const detail = townDetail(state.okres);
   panel.replaceChildren(
     close,
     element("h2", `${panelObec}${place ? ` (${Math.round(place.elevation)} m)` : ""}`),
@@ -695,8 +696,7 @@ function renderPanel(outlook) {
   }
   // the day table can flag a gust on another day than the one in the facts above
   const weekFlagged = outlook.days.some((day) => gustOver(rowOf(day, "day")));
-  const detail = element("a", t("tv.detail"));
-  detail.href = `${DETAIL}#${state.okres}`;
+  const detail = townDetail(state.okres);
   panel.replaceChildren(
     close,
     element("h2", displayName(info?.name ?? state.okres)),
@@ -713,6 +713,14 @@ function renderPanel(outlook) {
 
 // --- update loop ------------------------------------------------------------------
 let outlook = null;
+
+/** The link to the detail of an okres's town (seats.js): Praha for Praha-východ, … */
+function townDetail(code) {
+  const seat = seatOkres(code);
+  const detail = element("a", t("tv.detail", { town: seatName(seat, outlook?.okresy.find((o) => o.code === seat)?.name ?? seat) }));
+  detail.href = `${DETAIL}#${seat}`;
+  return detail;
+}
 let padding = null;
 
 /** Fit Czechia beside the okres panel on wide screens, and back when it closes. */
