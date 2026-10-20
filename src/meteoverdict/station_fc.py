@@ -24,6 +24,14 @@ Output (``write``), one file per station with at least one forecast day, in the 
 [per day]}}}}`` over the last ``DAYS`` days (null = no value; shorter than ``series/``,
 the site is near its size budget), plus ``index.json`` (the models' names and the
 stations). Published as ``station-fc.zip``.
+
+The model-error map (measured.html colours the station dots by what the chosen model got
+wrong) needs one day of all stations at once, which the per-station files cannot give
+without ~300 requests. So ``write`` also makes ``err-<day>.json`` per day: ``{"day",
+"scale": 10, "stations": [ids, the order of the lists], "e": {value: {lead day: {model:
+[per station]}}}}`` with the model's value minus the measured one in tenths (integers;
+null = the model or the station has no value that day), for ``ERROR_VALUES``: about
+140 kB a day, ~5 MB for the ``DAYS`` days.
 """
 
 from __future__ import annotations
@@ -52,6 +60,9 @@ VALUES = {
     "wind": ("wind_speed_10m", "mean"),
     "gust": ("wind_gusts_10m", "max"),
 }
+#: the values of the per-day error files (the dots of the map; gusts are not mapped)
+ERROR_VALUES = ("tmax", "tmin", "r", "wind")
+ERROR_SCALE = 10
 UNITS = {"tmax": "°C", "tmin": "°C", "r": "mm", "wind": "m/s", "gust": "m/s"}
 #: Open-Meteo's precipitation (and the observations') is the total of the preceding
 #: interval: a value at 00:00 belongs to the day before
@@ -187,13 +198,47 @@ def documents(
     return docs
 
 
+def error_documents(docs: dict[str, dict]) -> dict[str, dict]:
+    """``err-<day>`` documents (see the module doc) from the station documents: per day, the
+    model's value minus the measured one (tenths) for every station in ``docs``, in the
+    order of ``sorted(docs)``, which is the order of ``index.json``'s stations."""
+    stations = sorted(docs)
+    if not stations:
+        return {}
+    first = date.fromisoformat(docs[stations[0]]["from"])
+    n = (date.fromisoformat(docs[stations[0]]["to"]) - first).days + 1
+    out: dict[str, dict] = {}
+    for i in range(n):
+        errors: dict[str, dict[str, dict[str, list]]] = {}
+        for k, station in enumerate(stations):
+            doc = docs[station]
+            for value in ERROR_VALUES:
+                observed = doc["obs"].get(value)
+                if not observed or observed[i] is None:
+                    continue
+                for lead, models in doc["series"].get(value, {}).items():
+                    for model, column in models.items():
+                        if column[i] is None:
+                            continue
+                        row = (
+                            errors.setdefault(value, {})
+                            .setdefault(lead, {})
+                            .setdefault(model, [None] * len(stations))
+                        )
+                        row[k] = round((column[i] - observed[i]) * ERROR_SCALE)
+        if errors:
+            day = str(first + timedelta(days=i))
+            out[day] = {"day": day, "scale": ERROR_SCALE, "stations": stations, "e": errors}
+    return out
+
+
 def write(
     docs: dict[str, dict],
     out_dir: Path,
     names: dict[str, str],
     generated: datetime,
 ) -> list[Path]:
-    """``out_dir/<station>.json`` and ``out_dir/index.json``."""
+    """``out_dir/<station>.json``, ``err-<day>.json`` and ``out_dir/index.json``."""
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
     for station, doc in docs.items():
@@ -220,6 +265,10 @@ def write(
     }
     path = out_dir / "index.json"
     path.write_text(json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    for day, doc in error_documents(docs).items():
+        err = out_dir / f"err-{day}.json"
+        err.write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
+        written.append(err)
     return [*written, path]
 
 
