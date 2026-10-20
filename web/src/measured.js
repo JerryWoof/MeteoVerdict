@@ -25,8 +25,14 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
 export function pageMode(hash) {
   const h = (hash ?? "").replace(/^#/, "");
   if (!h || /^\d{4}-\d{2}-\d{2}(\/|$)/.test(h)) return "measured";
-  if (`#${h}` === KINDS_HASH) return "kinds";
+  if (`#${h}` === KINDS_HASH || h.startsWith("kinds/")) return "kinds";
   return "station";
+}
+
+/** The station open in the Stations view's panel ("#kinds/<id>"), or null. */
+export function kindsStation(hash) {
+  const m = /^#?kinds\/(.+)$/.exec(hash ?? "");
+  return m ? decodeURIComponent(m[1]) : null;
 }
 
 /** The layer the landing opens with: the okresy (the mean of each okres's stations). */

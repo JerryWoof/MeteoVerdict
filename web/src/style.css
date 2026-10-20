@@ -822,15 +822,21 @@ body.tv > * {
   color: var(--muted);
   font-size: 0.75rem;
 }
-#okres-panel h2 {
+#okres-panel h2,
+#station-panel h2 {
   font-size: 1.15rem;
   margin: 0 1.5rem 0 0;
 }
-#okres-panel .when {
+#okres-panel .when,
+#station-panel .when {
   margin: 0 0 0.3rem;
   color: var(--muted);
 }
-#okres-panel .close {
+#station-panel .model-note {
+  margin: 0.3rem 0 0.6rem;
+}
+#okres-panel .close,
+#station-panel .close {
   float: right;
   border: none;
   background: none;
@@ -1128,7 +1134,8 @@ body.tv.past #ribbon {
   cursor: not-allowed;
 }
 #headline.past,
-#okres-panel.past {
+#okres-panel.past,
+#station-panel.past {
   box-shadow:
     inset 4px 0 0 var(--measured),
     0 1px 4px rgba(29, 35, 41, 0.18);
