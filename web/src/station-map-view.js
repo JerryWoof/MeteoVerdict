@@ -29,7 +29,7 @@ const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce
  * @param {(station: object) => void} options.onPick
  * @param {(station: object) => string} options.describe one line under the name
  */
-export function createStationMap({ container, t, onPick, describe }) {
+export function createStationMap({ container, t, onPick, describe, extraFor = null }) {
   const map = new MapLibreMap({
     container,
     style: {
@@ -55,6 +55,8 @@ export function createStationMap({ container, t, onPick, describe }) {
   let byId = new Map();
   let selected = null;
   let colourBy = "kind";
+  let errors = null; // station → a model's error, for colouring by error
+  let errorRamp = "errTemp";
   let loaded = false;
   const ready = new Promise((resolve) => map.on("load", resolve));
 
@@ -96,7 +98,7 @@ export function createStationMap({ container, t, onPick, describe }) {
   }
 
   function paint() {
-    const color = colorExpression(colourBy);
+    const color = colorExpression(colourBy, errorRamp);
     const automatic = ["==", ["get", "automatic"], 1];
     map.setPaintProperty("stations", "circle-color", ["case", automatic, color, "#ffffff"]);
     map.setPaintProperty("stations", "circle-stroke-color", ["case", automatic, "#ffffff", color]);
@@ -110,7 +112,7 @@ export function createStationMap({ container, t, onPick, describe }) {
   ready.then(() => {
     map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
     map.addSource("kraje", { type: "geojson", data: "data/kraje.geojson" });
-    map.addSource("stations", { type: "geojson", data: stationFeatures(shown) });
+    map.addSource("stations", { type: "geojson", data: stationFeatures(shown, errors) });
     map.addSource("selected", { type: "geojson", data: EMPTY });
     map.addLayer({ id: "okresy-fill", type: "fill", source: "okresy", paint: { "fill-color": "#ececec", "fill-opacity": 0.85 } });
     map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#ffffff", "line-width": 0.6 } });
@@ -146,7 +148,7 @@ export function createStationMap({ container, t, onPick, describe }) {
     map.on("mousemove", (event) => {
       const station = stationAt(event.point, HIT_PX);
       canvas.style.cursor = station ? "pointer" : "";
-      if (station) popupFor(station);
+      if (station) popupFor(station, extraFor?.(station));
       else popup.remove();
     });
     map.on("mouseout", () => popup.remove());
@@ -205,13 +207,19 @@ export function createStationMap({ container, t, onPick, describe }) {
       shown = visible;
       byId = new Map(all.map((s) => [s.id, s]));
       if (loaded) {
-        map.getSource("stations").setData(stationFeatures(shown));
+        map.getSource("stations").setData(stationFeatures(shown, errors));
         setSelectedData();
       }
     },
-    setColour(by) {
+    /** "kind", "elevation" or "error" (with `errors`, station → error, on the palette ramp `ramp`). */
+    setColour(by, { errors: next = null, ramp = "errTemp" } = {}) {
       colourBy = by;
-      if (loaded) paint();
+      errors = next;
+      errorRamp = ramp;
+      if (loaded) {
+        map.getSource("stations").setData(stationFeatures(shown, errors));
+        paint();
+      }
     },
     /** Highlight a station (null: none) and bring it into view (`move: false`: only highlight). */
     select(id, { animate = true, move = true } = {}) {

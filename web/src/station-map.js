@@ -2,6 +2,7 @@
 // data/scores/station/index.json as map points, their kind, the "only stations
 // measuring …" filter and the station nearest a point. No MapLibre here, so the node
 // tests can run them.
+import { RAMPS, colorFor } from "./palette.js";
 
 /** Kinds of station, in legend order: those of `stations.NETWORKS` (index.json's
  * `network`, from ČHMÚ's metadata, docs/data-sources.md#kinds-of-station), then
@@ -125,7 +126,7 @@ export function kindCounts(stations) {
 }
 
 /** GeoJSON points of the stations; manual stations (no 10-minute data) drawn hollow. */
-export function stationFeatures(stations) {
+export function stationFeatures(stations, errors = null) {
   return {
     type: "FeatureCollection",
     features: stations.map((s) => {
@@ -139,6 +140,8 @@ export function stationFeatures(stations) {
           kind,
           automatic: automatic ? 1 : 0,
           elevation: s.elevation ?? null,
+          // a model's error at the station (colouring by error), null: none
+          err: errors?.get(s.id) ?? null,
         },
       };
     }),
@@ -155,8 +158,16 @@ export const ELEVATION_STOPS = [
   [1600, "#54278f"],
 ];
 
-/** MapLibre colour expression: by kind, or by elevation. */
-export function colorExpression(by) {
+/** The grey of a station without a model error (colouring by error). */
+export const NO_ERROR = "#bfc5ca";
+
+/** MapLibre colour expression: by kind, by elevation, or ("error") by a model's error on
+ * the palette ramp `ramp` (palette.js: errTemp, errRain, errWind). */
+export function colorExpression(by, ramp = "errTemp") {
+  if (by === "error") {
+    const stops = RAMPS[ramp].flatMap(([v]) => [v, colorFor(v, ramp)]);
+    return ["case", ["==", ["get", "err"], null], NO_ERROR, ["interpolate", ["linear"], ["get", "err"], ...stops]];
+  }
   if (by === "elevation") {
     return [
       "case",
