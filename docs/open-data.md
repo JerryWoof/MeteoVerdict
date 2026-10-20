@@ -97,7 +97,7 @@ Experimental, published daily with the release `ai-latest` (`ai.zip`, from about
 and served under `data/scores/ai/`: `ai.json` (status, verification rule, scores and validation,
 counted from the launch on 2026-10-19), `ai-forecast.json` (hourly forecast by okres), `fc/outlook.json`,
 `fc/verify/{code}.json`, `fc/compare/`, and the inputs of the 100 m heatmap (`fc/heat/`, `fc/temp100m/`;
-the browser composes the hour). They carry no `licence` or `attribution` field yet; their licence is not decided yet (treat as CC BY-SA derived data until it is)
+the browser composes the hour). They carry no `licence` or `attribution` field yet; they are CC BY-SA 4.0 like our other outputs
 ([licensing.md](licensing.md)). The [Data page](https://jerrywoof.github.io/MeteoVerdict/data.html) lists
 every file, release, schedule and licence.
 
