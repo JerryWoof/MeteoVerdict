@@ -94,6 +94,15 @@ jobs:
         run: uv run --frozen mvd hindcast --github-release --publish --redo 5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Range of the combined temperature (80 %, from its own recent errors)
+        # optional, like the hindcast (same method, reuses its downloads):
+        # blend-interval.json in data-latest (read by the outlook) and blend-errors.parquet
+        # in the release outlook-archive; the first run rebuilds 100 days, later ones 5
+        continue-on-error: true
+        timeout-minutes: 40
+        run: uv run --frozen mvd blend-interval --github-release --publish --redo 5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Frost calibration for the outlook (night minimum, frost, ground frost)
         # optional, like the lead hours; the outlook keeps the last frost.json. D+N
         # forecasts vs ČHMÚ TMInoc of the last 60 nights, no Open-Meteo calls
