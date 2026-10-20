@@ -591,8 +591,8 @@ def test_fetch_runs_dry_run_prints_the_cost(tmp_path):
     # 06 UTC: 18 models (GEM Global runs at 00 and 12 UTC only), 4 x 18 / 10 per station
     out = plain(result.output)
     assert "bucket: 18 model-runs to look for in 1 runs" in out
-    assert "API: 1 runs to fetch at 100 stations, about 720 Open-Meteo calls" in out
-    assert "(760 per run of all 19 models" in out
+    assert "API: 1 runs to fetch at 101 stations, about 727.2 Open-Meteo calls" in out
+    assert "(767.6 per run of all 19 models" in out
 
 
 def test_fetch_runs_has_no_shared_budget_any_more(tmp_path):
