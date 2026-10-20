@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  aiStatus, aiVerdict, bestModel, compareRows, dailyRows, defaultSeries, parseView, regionGroups,
+  aiStatus, aiVerdict, aiVersus, availableModels, opponentSeries, bestModel, compareRows, dailyRows, defaultSeries, parseView, regionGroups,
 } from "./compare-ai.js";
 
 const entry = (aiVs, clear = true) => ({
@@ -11,7 +11,9 @@ const entry = (aiVs, clear = true) => ({
   series: [
     { id: "meteoverdict_ai", kind: "ai", mae: 0.9, tied: false, daily: [0.8, 1.0], vs_outlook: aiVs },
     { id: "combined", kind: "outlook", mae: 1.0, tied: true, daily: [1, 1.1], vs_outlook: null },
-    { id: "dwd_icon_d2", kind: "model", mae: 1.2, tied: false, daily: [1.2, null], vs_outlook: { diff: 0.2, low: 0.1, high: 0.3, p: 0.001 } },
+    { id: "dwd_icon_d2", kind: "model", mae: 1.2, tied: false, daily: [1.2, null], vs_outlook: { diff: 0.2, low: 0.1, high: 0.3, p: 0.001 }, vs_ai: { diff: 0.3, low: 0.2, high: 0.4, p: 0.001, p_lower: 0 } },
+    { id: "icon_eu", kind: "model", mae: 1.0, tied: false, daily: [1, 1], vs_outlook: null, vs_ai: { diff: 0.1, low: -0.05, high: 0.25, p: 0.2, p_lower: 0.1 } },
+    { id: "old", kind: "model", mae: 1.3, tied: false, daily: [1, 1], vs_outlook: null },
   ],
 });
 
@@ -25,6 +27,29 @@ describe("aiVerdict", () => {
   it("is null without the AI or the comparison", () => {
     assert.equal(aiVerdict({ series: [{ id: "x", kind: "model" }] }), null);
     assert.equal(aiVerdict(entry(null)), null);
+  });
+});
+
+describe("the AI against a chosen opponent", () => {
+  const e = entry({ diff: -0.1, low: -0.15, high: -0.05, p: 0.001, p_lower: 0.99 });
+  it("uses the blend's interval for the blend and flips vs_ai for a model", () => {
+    assert.equal(aiVersus(e, "outlook").verdict, "better");
+    const m = aiVersus(e, "dwd_icon_d2");
+    assert.equal(m.verdict, "better");
+    assert.ok(Math.abs(m.low + 0.4) < 1e-9 && Math.abs(m.high + 0.2) < 1e-9 && m.pAiBetter === 1);
+  });
+  it("says no clear winner when the interval crosses zero", () => {
+    const m = aiVersus(e, "icon_eu");
+    assert.equal(m.verdict, "same");
+    assert.equal(m.pAiBetter, 0.9);
+  });
+  it("gives only the difference without an interval, and null for a missing opponent", () => {
+    const m = aiVersus(e, "old");
+    assert.equal(m.verdict, null);
+    assert.ok(Math.abs(m.diff - (0.9 - 1.3)) < 1e-9);
+    assert.equal(aiVersus(e, "nope"), null);
+    assert.equal(opponentSeries(e, "best").id, "dwd_icon_d2");
+    assert.deepEqual(availableModels(e), ["dwd_icon_d2", "icon_eu", "old"]);
   });
 });
 
@@ -52,10 +77,10 @@ describe("status and view", () => {
     assert.equal(aiStatus({ days: 28, measured_hours: 700 }).verified, true);
   });
   it("parses the view and falls back", () => {
-    assert.deepEqual(parseView("wind_speed_10m.3.live.CZ0100", { CZ0100: 1 }), {
-      variable: "wind_speed_10m", lead: 3, sample: "live", region: "CZ0100",
+    assert.deepEqual(parseView("wind_speed_10m.3.live.CZ0100.dwd_icon_d2", { CZ0100: 1 }), {
+      variable: "wind_speed_10m", lead: 3, sample: "live", region: "CZ0100", opponent: "dwd_icon_d2",
     });
-    assert.deepEqual(parseView("x.9.y.zz", { cz: 1 }), { variable: "temperature_2m", lead: 1, sample: "validation", region: "cz" });
+    assert.deepEqual(parseView("x.9.y.zz", { cz: 1 }), { variable: "temperature_2m", lead: 1, sample: "validation", region: "cz", opponent: "outlook" });
   });
   it("groups the regions by level", () => {
     const g = regionGroups({ regions: { cz: ["cz", "Česko", true], CZ010: ["kraj", "Praha", true], CZ0201: ["okres", "Benešov", false] } });

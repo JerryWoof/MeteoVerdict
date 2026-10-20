@@ -47,6 +47,46 @@ export function bestModel(entry) {
   return seriesOf(entry).find((s) => s.kind === "model") ?? null;
 }
 
+/** The opponents that are not one model: our blend, the mean of all models, the best model. */
+export const GROUP_OPPONENTS = ["outlook", "mean", "best"];
+
+/** The series the AI is compared against: "outlook", "mean", "best" (best plain model) or a model id. */
+export function opponentSeries(entry, opponent) {
+  const series = seriesOf(entry);
+  if (opponent === "best") return bestModel(entry);
+  if (opponent === "outlook" || opponent === "mean") return series.find((s) => s.kind === opponent) ?? null;
+  return series.find((s) => s.id === opponent && s.kind === "model") ?? null;
+}
+
+/** Model ids with a value on every day of the AI's sample (the rest overlap too little). */
+export const availableModels = (entry) => seriesOf(entry).filter((s) => s.kind === "model").map((s) => s.id);
+
+/**
+ * The AI against one opponent on the same sample. diff is AI minus opponent (negative: the
+ * AI is better) with its 95 % interval; verdict "better", "worse" or "same" (no clear
+ * winner: the interval crosses zero or the Diebold-Mariano test disagrees); pAiBetter is
+ * the share of bootstrap resamples where the AI has the lower MAE. Null `verdict` when an
+ * older file has no interval for this opponent (then only the MAE difference is given).
+ */
+export function aiVersus(entry, opponent) {
+  const ai = seriesOf(entry).find((s) => s.kind === "ai");
+  const opp = opponentSeries(entry, opponent);
+  if (!ai || !opp) return null;
+  const base = { ai, opponent: opp, diff: ai.mae - opp.mae, low: null, high: null, p: null, pAiBetter: null, verdict: null };
+  let v = null;
+  if (opp.kind === "outlook") {
+    const r = ai.vs_outlook;
+    if (r?.diff != null) v = { diff: r.diff, low: r.low, high: r.high, p: r.p ?? 1, pAiBetter: r.p_lower ?? null };
+  } else {
+    const r = opp.vs_ai;
+    if (r?.diff != null) v = { diff: -r.diff, low: -r.high, high: -r.low, p: r.p ?? 1, pAiBetter: r.p_lower != null ? 1 - r.p_lower : null };
+  }
+  if (!v || v.low == null || v.high == null) return base;
+  const significant = v.p < 0.05;
+  const verdict = significant && v.high < 0 ? "better" : significant && v.low > 0 ? "worse" : "same";
+  return { ...base, ...v, verdict };
+}
+
 /**
  * The AI's standing for the banner: "live" with enough days is verified; anything else
  * (no live days, few days, or only the validation sample) is provisional.
@@ -102,15 +142,17 @@ export function regionGroups(index, language = "cs") {
   return { cz: rows.some(([code]) => code === "cz"), kraje: pick("kraj"), okresy: pick("okres") };
 }
 
-/** "temperature_2m.1.validation.cz" (the URL's ?cmp=) → a view; unknown parts fall back. */
+/** "temperature_2m.1.validation.cz.outlook" (the URL's ?cmp=) → a view; unknown parts fall back. */
 export function parseView(text, regions) {
-  const [variable, lead, sample, region] = String(text ?? "").split(".");
+  const [variable, lead, sample, region, opponent] = String(text ?? "").split(".");
   return {
     variable: VARIABLES.includes(variable) ? variable : "temperature_2m",
     lead: LEADS.includes(Number(lead)) ? Number(lead) : 1,
     sample: sample === "live" ? "live" : "validation",
     region: region && region in (regions ?? { cz: 1 }) ? region : "cz",
+    // a model id is checked against the sample later (it may not be there): only its shape here
+    opponent: /^[a-z0-9_]+$/.test(opponent ?? "") ? opponent : "outlook",
   };
 }
 
-export const formatView = (v) => `${v.variable}.${v.lead}.${v.sample}.${v.region}`;
+export const formatView = (v) => `${v.variable}.${v.lead}.${v.sample}.${v.region}.${v.opponent}`;
