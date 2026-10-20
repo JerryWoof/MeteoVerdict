@@ -96,6 +96,9 @@ jobs:
             unzip -o -q /tmp/ai.zip -d site/data/ai
             # the old single 100 m image (now fc/temp100m/ per time): no page reads it
             rm -rf site/data/ai/downscale_100m
+            # the 100 m maps per part of the day: the heatmap's fallback from before the hourly
+            # heat/ maps, read only when heat/ is missing (both come in the same ai.zip)
+            rm -rf site/data/ai/fc/temp100m
             echo "AI results from ai-latest ($(ls site/data/ai | wc -l) files)"
           else
             echo "no ai.zip yet; the AI forecast tab says so"
