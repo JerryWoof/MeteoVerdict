@@ -13,6 +13,8 @@ export const AI_URL = "data/scores/ai/ai-forecast.json";
 export const MAX_AGE_HOURS = 36;
 /** The AI's cloud, sunshine and gusts per okres and part of day (a shadow file of the engine). */
 export const SKY_URL = "data/scores/ai/fc/sky/ai-sky.json";
+/** The AI's own outlook (same format as outlook.json) with its per-variable `sources` flag. */
+export const OUTLOOK_URL = "data/scores/ai/fc/outlook.json";
 const AI_VARIABLES = ["temperature_2m", "wind_speed_10m"];
 // what the AI does not forecast hourly: rain, taken from our blend (labelled "z blendu" on the
 // pages); cloud, sunshine and gusts come from its sky file per part of day when it has them
@@ -64,13 +66,39 @@ export function parseSky(doc, now = Date.now()) {
   return out;
 }
 
+// the outlook's columns as the layers the pages show them under
+const LAYER_OF = {
+  tmin: "temperature", tmax: "temperature", wind: "wind", cloud: "cloud", sunshine: "sunshine",
+  gust: "gust", precipitation: "precipitation",
+};
+const LAYER_ORDER = ["temperature", "precipitation", "wind", "cloud", "sunshine", "gust"];
+
+/**
+ * The AI outlook's `sources` ({column: "ai"|"blend"}) as layers: {ai: [layer], blend: [layer]}
+ * (a layer is the AI's when all its columns are), or null when the file has no flag (an older run).
+ */
+export function parseSources(doc) {
+  const sources = doc?.sources;
+  if (!sources || typeof sources !== "object") return null;
+  const byLayer = new Map();
+  for (const [column, source] of Object.entries(sources)) {
+    const layer = LAYER_OF[column];
+    if (!layer || (source !== "ai" && source !== "blend")) continue;
+    byLayer.set(layer, (byLayer.get(layer) ?? true) && source === "ai");
+  }
+  const layers = LAYER_ORDER.filter((l) => byLayer.has(l));
+  if (!layers.length) return null;
+  return { ai: layers.filter((l) => byLayer.get(l)), blend: layers.filter((l) => !byLayer.get(l)) };
+}
+
 /** Loads (once per `getJson` result promise) and parses the files; null when unusable. */
 let loaded = null;
 export function loadAi(getJson) {
   loaded ??= Promise.all([
     Promise.resolve(getJson(AI_URL)).then((doc) => parseAi(doc)).catch(() => null),
     Promise.resolve(getJson(SKY_URL)).then((doc) => parseSky(doc)).catch(() => null),
-  ]).then(([ai, sky]) => (ai ? { ...ai, sky } : null));
+    Promise.resolve(getJson(OUTLOOK_URL)).then((doc) => parseSources(doc)).catch(() => null),
+  ]).then(([ai, sky, sources]) => (ai ? { ...ai, sky, sources } : null));
   return loaded;
 }
 
