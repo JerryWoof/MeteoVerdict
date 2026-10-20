@@ -126,7 +126,7 @@ test("parsing a day: rows per okres and part, counts, every okres present", () =
   assert.equal(parseObservedDay(null, OKRESY), null);
 });
 
-test("the observed symbol comes from what was measured (diary.js rules)", () => {
+test("the observed symbol comes from what was measured (observed-symbol.js rules)", () => {
   const at = (code, part) => rowFor(VIEW, code, "2026-10-16", part).symbol;
   // 2.4 mm in the morning, with little sun (0.5 of 4.5 h): rain
   assert.equal(at("CZ0423", "morning"), "rain");

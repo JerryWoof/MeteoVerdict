@@ -1207,6 +1207,11 @@ files are then partial, so the state is not saved.
 
 ### Station pages
 
+> **Not shown on the website any more.** The site has no station page (nor a station diary or
+> a map of single stations' values): `measured.html` reads only `station/index.json` from this.
+> The Pages build deletes the other files (`.github/workflows/pages.yml`); the release
+> `station-data.zip` and the formats below stay for download and for a possible later use.
+
 `mvd station-pages` (module `meteoverdict.station_pages`) writes one JSON per station
 for `web/measured.html`, from the archive (`--github-release` first downloads the files it
 needs into `--archive`, default `data/chmi`; `--publish` uploads the folder as
@@ -1245,13 +1250,16 @@ and 2 GB of memory.
 
 ### Station diary
 
+> **Not shown on the website any more** (the station page is gone); the rules of its weather
+> symbol live on in `web/src/observed-symbol.js` (the okres symbols of the Weather tab).
+
 The top of a station's page, "Počasí na stanici / Weather at the station", shows what
 the station measured day by day, like the forecast but for the past: the last 14 days,
 or any week or month back to the station's first daily record (a date field and
 earlier/later buttons; `measured.html?view=month&day=2010-07-15#<WSI>` links to one),
 with a summary of the period and, for a clicked day, its course. Module
 `meteoverdict.station_diary`, written by `mvd station-pages` with the other station
-files; page logic in `web/src/diary.js`.
+files; the page that showed it is gone.
 
 **The day.** Every value is ČHMÚ's daily climate record (`daily` rows of the
 [archive](#chmi-archive), the history and then the recent months) on the date ČHMÚ
@@ -1286,7 +1294,7 @@ Manual stations' daily values arrive monthly (on 2026-10-17 Blatná's last day w
 31 August; September was all quality 4), so the page says when a station's newest day
 is more than three days old.
 
-**The weather symbol** (`daySymbol` in `web/src/diary.js`) comes only from what was
+**The weather symbol** (`daySymbol` in `web/src/observed-symbol.js`) comes only from what was
 measured, with the forecast's icons: at least 0.5 mm of precipitation gives rain, sleet
 or snow (from the recorded phenomena: rain and snow together sleet; else new snow
 ≥ 1 cm; else the daily mean temperature ≤ 0.5 °C snow, ≤ 2 °C sleet, as the forecast's
@@ -1331,10 +1339,10 @@ growing by about 1 MB a year. Each page view loads one or two decade files of
 
 The measured page (`web/measured.html`, "Naměřeno / Measured"; the forecast map shows
 the coming days only, and its old links to a past day open this page) shows what ČHMÚ's
-stations measured by day and part of day: each station with its own values
-("Stanice / Stations", `<day>-stations.json`, `web/src/measured.js`), or each okres with
-the mean of its stations next to what our forecast had said ("Okresy",
-`<day>.json`, `web/src/observed.js` and `measured-okres.js`). Module
+stations measured by day and part of day: each okres with the mean of its stations next to
+what our forecast had said (`<day>.json`, `web/src/observed.js` and `measured-okres.js`);
+single stations are not drawn on that map (they were dots once; `<day>-stations.json` is no
+longer published on Pages). The Stations tab is the map of the network. Module
 `meteoverdict.observed_map`.
 
 Zoomed in (from zoom 7.5), its map has the radar page's base map under the okres colours
@@ -1403,7 +1411,7 @@ sites beside the mean. The forecast is one point of the okres, the mean its stat
 without the high sites, so a small difference remains even for a perfect forecast.
 
 **The symbol** is computed in the browser with the station diary's rules
-(`daySymbol` in `web/src/diary.js`) from the okres values: at least 0.5 mm of
+(`daySymbol` in `web/src/observed-symbol.js`) from the okres values: at least 0.5 mm of
 precipitation gives rain, sleet or snow (phenomena, new snow, temperature), "rain and
 sun" with sunshine in at least 30 % of the daylight; otherwise the sky from the sunshine
 as a share of the period's daylight (`light`), or at night (no daylight) from the cloud
@@ -1461,7 +1469,7 @@ stations). About 2 minutes and 45,000 rows.
   "light", "st", "high"?, "near"?, "borrowed"?, "bst"?, "ph"?, "sno"?}}, "forecasts": [{"lead", "kind",
   "issued"?, "trained_to"?, "sky_issued"?, "columns", "okresy": {code: {column: [per
   period]}}}]}` (a forecast's columns without any value are left out);
-- `<YYYY-MM-DD>-stations.json`: the stations' own values (the measured page's station layer):
+- `<YYYY-MM-DD>-stations.json`: the stations' own values (no page reads it now; the Pages build deletes it):
   `{"parts", "columns": ["tmax", "tmin", "r", "wind", "gust", "ssv", "cloud"],
   "stations": {WSI: [value of each column, period by period]}}`; positions and names
   come from `station/index.json`.

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MeteoVerdict: weather</title>
-    <meta name="description" content="What ČHMÚ's stations measured, on a map by day and part of day, and what the weather was like at each station, day by day back to the start of its records, and every element it measures: the last days every 10 minutes, the last month hourly, recent years daily and decades monthly." />
+    <meta name="description" content="What ČHMÚ's stations measured, per okres on a map by day and part of day, and the map of all stations with the models' forecasts at them." />
   </head>
   <body class="page station theme-measured">
     <header>
@@ -27,7 +27,7 @@
       <button type="button" id="language">Česky</button>
     </header>
     <main class="content station-page">
-      <!-- the landing: what the stations measured, as the forecast map (measured.js) -->
+      <!-- the Weather tab: what the stations measured per okres, as the forecast map (measured.js) -->
       <section id="measured" class="measured" aria-labelledby="measured-title">
         <div class="page-head measured-head">
           <h2 id="measured-title" class="sr-only" data-i18n="measured.heading">Weather</h2>
@@ -52,10 +52,6 @@
               </div>
               <div class="when-row">
                 <div id="parts" class="segmented"></div>
-                <div id="layer" class="segmented measured-layer" role="group" data-i18n-aria="measured.layer">
-                  <button type="button" data-layer="okresy" data-i18n="measured.layer.okresy">Okresy</button>
-                  <button type="button" data-layer="stations" data-i18n="measured.layer.stations">Stations</button>
-                </div>
               </div>
             </div>
           </nav>
@@ -66,11 +62,11 @@
               <details id="show" open>
                 <summary data-i18n="tv.onMap">On the map</summary>
                 <fieldset>
-                  <legend id="values-legend" data-i18n="measured.values">Values at the stations</legend>
+                  <legend id="values-legend" data-i18n="measured.valuesOkresy">Values at each okres</legend>
                   <div id="values"></div>
                 </fieldset>
                 <fieldset>
-                  <legend id="colours-legend" data-i18n="measured.colour">Colour of the dots</legend>
+                  <legend id="colours-legend" data-i18n="tv.colour">Colour of the okresy</legend>
                   <div id="colours"></div>
                   <div id="scale"></div>
                 </fieldset>
@@ -78,49 +74,10 @@
             </aside>
             <aside id="okres-panel" class="map-box panel" aria-live="polite"></aside>
           </div>
-          <p id="measured-hint" class="muted small map-hint measured-hint" data-i18n="measured.hint">Zoom in for the values of more stations.</p>
-          <p id="err-note" class="muted small map-hint measured-hint" hidden></p>
+          <p id="measured-hint" class="muted small map-hint measured-hint" data-i18n="measured.hintOkresy">Click an okres: what was measured there.</p>
         </div>
       </section>
-      <div id="station-head" class="station-head">
-        <p id="back" class="measured-back" hidden><a id="back-link" href="#"></a></p>
-        <h2 id="title" class="page-title" data-i18n="station.title">ČHMÚ station</h2>
-        <p id="facts" class="page-intro"></p>
-        <p id="message" class="note"></p>
-      </div>
-      <section id="diary" class="diary" aria-labelledby="diary-title" hidden>
-        <h2 id="diary-title" data-i18n="diary.title">Weather at the station</h2>
-        <p class="note" data-i18n="diary.intro">What the station measured, day by day: like the forecast, but for the past.</p>
-        <form id="diary-controls" class="diary-controls strip standalone measured" autocomplete="off">
-          <div class="diary-views segmented" role="group" data-i18n-aria="diary.views">
-            <button type="button" data-view="days" data-i18n="diary.view.days">14 days</button>
-            <button type="button" data-view="week" data-i18n="diary.view.week">Week</button>
-            <button type="button" data-view="month" data-i18n="diary.view.month">Month</button>
-          </div>
-          <div class="diary-when">
-            <button type="button" id="diary-prev" class="btn diary-step" data-i18n-aria="diary.prev" aria-label="Earlier">‹</button>
-            <label><span class="sr-only" data-i18n="diary.date">Day</span><input type="date" id="diary-date" required /></label>
-            <button type="button" id="diary-next" class="btn diary-step" data-i18n-aria="diary.next" aria-label="Later">›</button>
-            <button type="button" id="diary-latest" class="btn" data-i18n="diary.latest">Latest</button>
-          </div>
-          <p id="diary-range" class="muted small"></p>
-        </form>
-        <h3 id="diary-period" class="diary-period"></h3>
-        <p id="diary-message" class="note" aria-live="polite"></p>
-        <div class="table-scroll"><table id="diary-table" class="diary-table data-table"></table></div>
-        <div id="diary-summary" class="diary-summary"></div>
-        <div id="diary-day" class="diary-day" aria-live="polite"></div>
-        <details class="diary-defs">
-          <summary data-i18n="diary.defs.title">How the daily values are defined</summary>
-          <ul id="diary-defs"></ul>
-        </details>
-      </section>
-      <h2 id="detail-title" data-i18n="station.detail" hidden>Detailed data</h2>
       <div id="station-top" class="station-top browse">
-        <p class="station-map-actions">
-          <button type="button" id="map-toggle" class="btn" aria-controls="map-panel" aria-expanded="true" hidden></button>
-          <a id="map-all" href="#kinds" data-i18n="map.all" hidden>All stations on a large map</a>
-        </p>
         <section id="map-panel" class="station-map-panel" aria-labelledby="map-title">
           <h3 id="map-title" class="sr-only" data-i18n="map.title">Map of stations</h3>
           <p id="map-hint" class="note" data-i18n="map.hint">Click a station on the map or search by name.</p>
@@ -147,14 +104,6 @@
           <p class="muted small station-map-keys" data-i18n="map.keys">Keyboard: focus the map, move it with the arrow keys, zoom with + and −; Enter opens the station in the middle.</p>
         </section>
       </div>
-      <form id="pick" class="strip standalone measured" hidden>
-        <label class="field"><span data-i18n="station.element">Element</span> <select id="element"></select></label>
-        <span id="how" class="muted small"></span>
-      </form>
-      <div id="charts"></div>
-      <h2 id="elements-title" data-i18n="station.elements" hidden>All elements of this station</h2>
-      <table id="elements" class="doc-table data-table station-elements"></table>
-      <p id="note" class="note" data-i18n="station.note"></p>
     </main>
     <footer data-footer="station" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/data-sources.md#chmi-archive">
       <!-- filled in by src/footer.js (the credits and licences of every page) -->
