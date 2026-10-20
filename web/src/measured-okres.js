@@ -44,6 +44,9 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
     return lent ? t("obs.nearby", { list: lent.map(borrowedName).join(", ") }) : stationsText(n);
   }
 
+  /** The fields of a station's line: name, height, its maximum and minimum. */
+  const stationFact = (s) => ({ name: s.name, height: s.elevation == null ? "–" : String(s.elevation), high: fmt(s.tmax), low: fmt(s.tmin) });
+
   /** The measured values of an okres's part of day, each with its number of stations. */
   function measuredFacts(row) {
     const facts = element("ul", null, "facts");
@@ -54,8 +57,15 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
     if (row.symbol) add(symbolMeasured(row.symbol));
     if (n.t) {
       let text = t("obs.temp", { high: fmt(row.tmax), low: fmt(row.tmin), stations: source(row, n.t, "t") });
-      if (n.t > 1) text += ` ${t("obs.tempRange", { low: fmt(row.tmin_lo), high: fmt(row.tmax_hi) })}`;
+      // the range over all stations, the high sites (out of the mean) included
+      const highs = (row.high ?? []).filter((s) => s.tmax != null && s.tmin != null);
+      const low = Math.min(row.tmin_lo ?? Infinity, ...highs.map((s) => s.tmin));
+      const top = Math.max(row.tmax_hi ?? -Infinity, ...highs.map((s) => s.tmax));
+      if (n.t + highs.length > 1 && Number.isFinite(low) && Number.isFinite(top)) text += ` ${t("obs.tempRange", { low: fmt(low), high: fmt(top) })}`;
       add(text, lentClass("t"));
+      // the station nearest the forecast point, with its height
+      if (row.near && row.near.tmax != null) add(t("obs.nearStation", stationFact(row.near)));
+      for (const s of highs) add(t("obs.highStation", stationFact(s)), "high-site");
     } else add(t("obs.noTemp"), "missing");
     if (n.r) {
       let text = t("obs.rain", { amount: fmt1(row.precipitation), stations: source(row, n.r, "r") });
@@ -257,7 +267,7 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
       element("div", row ? labelFor(row, "temperature", state.part) : "–", "big-temp"),
     );
     const children = [...head, big];
-    if (row) children.push(measuredFacts(row));
+    if (row) children.push(element("p", t("obs.meanNote"), "model-note mean-note"), measuredFacts(row));
     if (view.parts.length > 1) {
       const strip = element("div", null, "strip");
       strip.append(...PARTS.slice(0, 4).map((p) => partCell(rowFor(view, state.okres, state.day, p), p)));
