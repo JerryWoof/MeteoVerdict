@@ -58,22 +58,28 @@ jobs:
           if gh release download data-latest --pattern station-data.zip --dir /tmp 2>/dev/null; then
             mkdir -p site/data/station
             unzip -o -q /tmp/station-data.zip -d site/data/station
-            echo "station pages from data-latest ($(ls site/data/station | wc -l) files)"
+            # the site has no station page (measured.html shows only the station index: names,
+            # places, kinds): the per-station histories are not published on Pages
+            find site/data/station -type f ! -name index.json -delete
+            find site/data/station -mindepth 1 -type d -empty -delete
+            echo "station index from data-latest ($(ls site/data/station | wc -l) files)"
           else
-            echo "no station pages yet; measured.html says so"
+            echo "no station index yet; the Stations tab of measured.html says so"
           fi
           # the past days of the forecast map: what was measured per okres (`mvd observed-map`)
           if gh release download data-latest --pattern observed-data.zip --dir /tmp 2>/dev/null; then
             rm -rf site/data/observed
             mkdir -p site/data/observed
             unzip -o -q /tmp/observed-data.zip -d site/data/observed
+            # the map shows okresy only: no single stations' values per day
+            rm -f site/data/observed/*-stations.json
             echo "observed days from data-latest ($(ls site/data/observed | wc -l) files, $(du -sh site/data/observed | cut -f1))"
           else
             echo "no observed-data.zip yet; the forecast map offers no past days"
           fi
           # every model's forecast at the station point, by day, with the measured values
           # (`mvd station-fc`): the measured page's model selector, and the per-day error
-          # files (err-<day>.json) of its model-error dot colours
+          # files (err-<day>.json) of the Stations map's model-error colours
           if gh release download data-latest --pattern station-fc.zip --dir /tmp 2>/dev/null; then
             rm -rf site/data/station-fc
             mkdir -p site/data/station-fc

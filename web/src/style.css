@@ -341,8 +341,7 @@ input[type="text"] {
   font-weight: 600;
 }
 /* charts (Observable Plot): on white, as the station's charts */
-.chart-card svg,
-#charts svg {
+.chart-card svg {
   background: var(--surface);
   border-radius: var(--radius-sm);
   max-width: 100%;
@@ -499,13 +498,6 @@ table#days,
   #days .sun .glyph + span + .glyph {
     margin-left: 0;
   }
-}
-#charts figure {
-  margin: 1rem 0 0;
-}
-#charts figcaption {
-  font-weight: 600;
-  font-size: 0.9rem;
 }
 #ranking tr.baseline {
   color: var(--muted);
@@ -985,17 +977,6 @@ body.tv [hidden] {
 .wx-temp {
   font-weight: 700;
   font-size: 1rem;
-}
-.wx-err {
-  display: block;
-  margin-top: 2px;
-  padding: 1px 5px;
-  border-radius: 8px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  line-height: 1.3;
-  text-align: center;
-  white-space: nowrap;
 }
 .wx-chips {
   display: flex;
@@ -1638,37 +1619,8 @@ img.eink {
   margin-left: 0.3rem;
   min-width: 14rem;
 }
-#pick {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 1rem;
-  margin: 0.5rem 0 0.75rem;
-}
-#pick[hidden] {
-  display: none;
-}
-.station-chart h3 {
-  font-size: 0.95rem;
-  margin: 1rem 0 0.25rem;
-}
-.station-chart svg {
-  background: var(--surface);
-  border-radius: 4px;
-  max-width: 100%;
-}
-.station-elements {
-  font-size: 0.8rem;
-}
-.station-elements tr.muted td {
-  color: var(--faint);
-}
 /* wide tables scroll sideways on phones instead of widening the page */
-table.station-elements {
-  display: block;
-  overflow-x: auto;
-  max-width: 100%;
-}
+
 /* the station page never gets wider than the screen */
 body.station {
   grid-template-columns: minmax(0, 1fr);
@@ -2476,29 +2428,13 @@ body.radar #show-box {
 .station-map-network {
   margin: 0.3rem 0 0;
 }
-.station-map-actions {
-  margin: 0.25rem 0 0.5rem;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.4rem 1rem;
-  font-size: 0.85rem;
-}
-.station-map-actions:not(:has(:not([hidden]))) {
-  display: none;
-}
 .station-map-popup .maplibregl-popup-content {
   padding: 0.35rem 0.55rem;
   font-size: 0.8rem;
   line-height: 1.35;
 }
 /* compact: the map's tools stacked in the narrow column */
-.station-top:not(.browse) .station-map-tools label {
-  flex-basis: 100%;
-}
-.station-top:not(.browse) .station-map-keys {
-  display: none;
-}
+
 @media (max-width: 700px) {
   .station-top {
     grid-template-columns: minmax(0, 1fr);
@@ -2514,229 +2450,8 @@ body.radar #show-box {
     height: 15rem;
   }
 }
-
-/* the station page's diary ("Weather at the station"): the forecast table's look, for the past */
-.diary {
-  margin: 0.5rem 0 1.5rem;
-}
-.diary h2 {
-  margin-bottom: 0.2rem;
-}
-.diary-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 1rem;
-  margin: 0.4rem 0 0.2rem;
-}
-.diary-controls[hidden] {
-  display: none;
-}
-.diary-controls p {
-  flex-basis: 100%;
-  margin: 0;
-}
-.diary-when {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  flex-wrap: wrap;
-}
-.diary-when input[type="date"] {
-  font: inherit;
-  font-size: 1rem;
-  padding: 0.25rem 0.3rem;
-  min-width: 9.5rem;
-}
-.diary-when button {
-  font: inherit;
-  font-size: 0.9rem;
-  padding: 0.3rem 0.6rem;
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--ink);
-  cursor: pointer;
-}
-.diary-when .diary-step {
-  font-size: 1.1rem;
-  line-height: 1;
-  padding: 0.3rem 0.7rem;
-}
-.diary-when button:disabled {
-  color: var(--line-strong);
-  cursor: default;
-}
-.diary-period {
-  font-size: 1rem;
-  margin: 0.6rem 0 0.2rem;
-}
-.diary-table {
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-.diary-table th {
-  font-weight: 600;
-  color: var(--ink-soft);
-}
-.diary-table th,
-.diary-table td {
-  text-align: left;
-  padding: 0.2rem 0.45rem;
-  border-bottom: 1px solid var(--line);
-  vertical-align: middle;
-  white-space: nowrap;
-}
-.diary-table .num,
-.diary-table th.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.diary-table tbody tr {
-  cursor: pointer;
-}
-.diary-table tbody tr:hover {
-  background: #f8f6f1;
-}
-.diary-table tr.current {
-  background: var(--paper);
-  font-weight: 600;
-}
-.diary-table .muted {
-  color: var(--faint);
-}
-.diary-table .tmax {
-  color: #a3341f;
-}
-.diary-table .tmin {
-  color: #1f5f9e;
-}
-.diary-symbol {
-  width: 30px;
-  height: 30px;
-  line-height: 0;
-}
-.diary-daylink {
-  border: none;
-  background: none;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  text-decoration: underline dotted var(--line-strong);
-  text-underline-offset: 3px;
-}
-.diary-unchecked {
-  color: #b35c00;
-  margin-left: 0.1rem;
-}
-.diary-badges {
-  white-space: normal;
-  min-width: 6rem;
-}
-.diary-badges .badge {
-  display: inline-block;
-  margin: 0.05rem 0.2rem 0.05rem 0;
-  padding: 0 0.45rem;
-  border-radius: 999px;
-  background: #e9eef2;
-  color: var(--ink);
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-.diary-badges .badge-BO,
-.diary-badges .badge-KR {
-  background: #f6e3b4;
-}
-.diary-badges .badge-MS,
-.diary-badges .badge-LE,
-.diary-badges .badge-NA {
-  background: #dbe8f6;
-}
-.diary-summary h4,
-.diary-day h4 {
-  font-size: 0.95rem;
-  margin: 0.8rem 0 0.3rem;
-}
-.diary-summary dl {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-  gap: 0.15rem 1.2rem;
-  margin: 0;
-  font-size: 0.85rem;
-}
-.diary-summary dl > dt {
-  color: var(--muted);
-}
-.diary-summary dl > dd {
-  margin: 0 0 0.35rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.diary-day {
-  position: relative;
-}
 /* a day's detail: a card, as the okres panel */
-.diary-day:not(:empty) {
-  margin-top: 0.8rem;
-  padding: 0.2rem 0.8rem 0.6rem;
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow-soft);
-}
-.diary-day .close {
-  float: right;
-  border: none;
-  background: none;
-  font-size: 1.4rem;
-  cursor: pointer;
-}
-.diary-facts {
-  margin: 0.2rem 0 0.5rem;
-  padding-left: 1.1rem;
-  font-size: 0.85rem;
-}
-.diary-day svg {
-  display: block;
-  max-width: 100%;
-  background: var(--surface);
-}
-.diary-defs {
-  margin-top: 0.8rem;
-  font-size: 0.85rem;
-}
-.diary-defs summary {
-  cursor: pointer;
-  color: var(--ink-soft);
-}
-.diary-defs ul {
-  padding-left: 1.1rem;
-  color: var(--ink-soft);
-}
-.diary-table .head-unit {
-  display: none;
-}
-@media (max-width: 600px) {
-  .diary-table th,
-  .diary-table td {
-    padding: 0.2rem 0.25rem;
-  }
-  .diary-table .unit {
-    display: none;
-  }
-  .diary-table .head-unit {
-    display: inline;
-    font-weight: normal;
-    font-size: 0.75rem;
-  }
-  .diary-summary dl {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    column-gap: 0.6rem;
-  }
-  .diary-day:not(:empty) {
-    padding: 0.2rem 0.4rem 0.5rem;
-  }
-}
+
 
 /* the measured-weather page (measured.html without a station): the forecast map's look,
    marked as measured (teal, as the past days had on the forecast map) */
@@ -2767,34 +2482,13 @@ body.station [hidden] {
   order: -1;
 }
 /* a station's name over its values, zoomed in (measured-map-view.js STATION_ZOOM) */
-.measured-map .wx-name {
-  display: none;
-  font-size: 0.68rem;
-  color: #4b5863;
-  line-height: 1.1;
-  white-space: nowrap;
-}
-.measured-map.named .wx-name {
-  display: block;
-}
+
 .measured-map .station-label.selected .wx-top {
   text-decoration: underline;
 }
 #headline a {
   color: inherit;
   font-weight: 600;
-}
-/* a station: the way back to the measured map, then its weather */
-.measured-back {
-  margin: 0.6rem 0 0.2rem;
-  font-size: 0.9rem;
-}
-.station-top:not(.browse) {
-  display: block;
-}
-.station-top:not(.browse) .station-map-panel {
-  max-width: 40rem;
-  margin-top: 0.25rem;
 }
 @media (max-width: 700px) {
   .measured-map-wrap .past-banner span {
