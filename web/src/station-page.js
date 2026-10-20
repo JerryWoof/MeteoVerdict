@@ -33,6 +33,7 @@ import {
   DEFAULT_SHOWN, dayLabel, displayName, labelFor, okresColours, rampKey, today, valueFor,
 } from "./tv.js";
 import { keepRoomForPanels } from "./panel-room.js";
+import { DEFAULT_MODEL, LEADS, createModelCompare, splitModelHash, withModelHash } from "./station-model.js";
 
 const t = setUpLanguage();
 const language = document.documentElement.lang;
@@ -66,6 +67,20 @@ const updated = (generated) => {
 };
 
 const diary = createDiary({ dataPath: DATA, t, language });
+const models = createModelCompare({ getJson, t, language });
+
+/** The hash of the page without the model choice (";m=…;l=…", station-model.js); a choice in it
+ * becomes the page's. */
+function cleanHash() {
+  const { hash, model, lead } = splitModelHash(window.location.hash);
+  if (model) {
+    models.state.model = model;
+    models.state.lead = lead;
+  }
+  return hash;
+}
+/** A hash of the page with the model choice appended. */
+const hashWith = (hash) => withModelHash(hash, models.state);
 
 // --- search: the index of all stations ------------------------------------------------
 let index = [];
@@ -301,7 +316,7 @@ let stationPanelState = null; // {id, day, part, okres}: what the panel shows
 async function openStationPanel(id, change = null) {
   const station = id && placed.find((s) => s.id === id);
   const token = ++stationPanelToken;
-  window.history.replaceState(null, "", station ? `${KINDS_HASH}/${encodeURIComponent(id)}` : KINDS_HASH);
+  window.history.replaceState(null, "", hashWith(station ? `${KINDS_HASH}/${encodeURIComponent(id)}` : KINDS_HASH));
   kindsMap().select(station ? id : null, { move: false });
   if (!station) {
     stationPanelState = null;
@@ -320,12 +335,13 @@ async function openStationPanel(id, change = null) {
   if (data) {
     stationOkresPanel.render(data, { day, part, okres });
     stationPanel.querySelector(".when")?.after(stationInfo(station));
+    stationPanel.querySelector(".station-info")?.after(models.stationSection(station.id));
   } else {
     const close = el("button", "×", "close");
     close.type = "button";
     close.setAttribute("aria-label", t("map.closePanel"));
     close.addEventListener("click", () => openStationPanel(null));
-    stationPanel.replaceChildren(close, el("h2", station.name ?? station.id), stationInfo(station));
+    stationPanel.replaceChildren(close, el("h2", station.name ?? station.id), stationInfo(station), models.stationSection(station.id));
   }
   kindsMap().fitBeside(true);
   // phones: the panel is under the map; bring it into view
@@ -444,7 +460,7 @@ function setMode(next) {
 
 for (const button of document.querySelectorAll("#mode [data-mode]")) {
   button.addEventListener("click", () => {
-    window.location.hash = button.dataset.mode === "kinds" ? KINDS_HASH : landingHash(landing ?? startView());
+    window.location.hash = hashWith(button.dataset.mode === "kinds" ? KINDS_HASH : landingHash(landing ?? startView()));
   });
 }
 
@@ -505,6 +521,14 @@ const okresPanel = createOkresPanel({
   stationHref: (id) => stationHref(id, landing?.day),
   openStation: (id, event) => openStation(id, landing?.day, event),
   stationIndex: async () => stationIndexDoc,
+  // the selected model at the okres's own stations (not at the okres point)
+  modelSection: (view, state) => {
+    const row = view.rows.get(`${state.okres}|${state.day}|day`);
+    const where = new Map(placed.map((s) => [s.id, s]));
+    const ids = [...(row?.stations ?? []), ...(row?.high ?? []).map((h) => h.id)];
+    const stations = [...new Set(ids)].map((id) => where.get(id)).filter(Boolean);
+    return models.okresSection(stations, state.day, (id, event) => openStationFromOkres(id, event));
+  },
 });
 
 /** One line of a station's (or okres's) values, for its tooltip and its label's name. */
@@ -546,6 +570,12 @@ const stationOkresPanel = createOkresPanel({
   stationIndex: async () => stationIndexDoc,
 });
 
+/** From an okres's table of stations: the station's panel (Stations view, with its model chart). */
+function openStationFromOkres(id, event) {
+  event?.preventDefault();
+  window.location.hash = hashWith(`${KINDS_HASH}/${encodeURIComponent(id)}`);
+}
+
 /** Open an okres's panel (okres layer); on phones it is under the map: bring it into view. */
 async function openOkres(code) {
   await updateLanding({ okres: code });
@@ -556,7 +586,7 @@ function updateLanding(change) {
   landing = { ...landing, ...change };
   if (isDaily(landing.day)) landing.part = "day";
   if (landing.layer !== "okresy") landing.okres = null;
-  window.history.replaceState(null, "", landingHash(landing));
+  window.history.replaceState(null, "", hashWith(landingHash(landing)));
   return renderLanding();
 }
 
@@ -792,7 +822,7 @@ function browseMeasured() {
     return;
   }
   const past = observedIndex.days.map((d) => d.day).filter((d) => d < todayIso());
-  landing = parseLanding(window.location.hash, past, start);
+  landing = parseLanding(cleanHash(), past, start);
   if (isDaily(landing.day)) landing.part = "day";
   measuredMap.resize();
   renderLanding();
@@ -803,7 +833,7 @@ function browseKinds() {
   document.title = `MeteoVerdict: ${t("measured.mode.kinds")}`;
   const map = kindsMap();
   map.fitAll();
-  openStationPanel(kindsStation(window.location.hash));
+  openStationPanel(kindsStation(cleanHash()));
 }
 
 // --- one station ----------------------------------------------------------------------------
@@ -811,16 +841,62 @@ function backLink() {
   const query = parseDiaryQuery(window.location.search);
   const view = lastLanding ?? { ...startView(), ...(query.day && observedIndex.byDay.has(query.day) ? { day: query.day } : {}) };
   const link = $("back-link");
-  link.href = view.day ? landingHash(view) : "#";
+  link.href = view.day ? hashWith(landingHash(view)) : "#";
   link.textContent = view.day ? t("measured.back", { day: dayText(view.day) }) : t("measured.backPlain");
   $("back").hidden = false;
 }
+
+// --- the model selector (both views) ------------------------------------------------------------
+const modelSelect = $("model");
+const leadSelect = $("lead");
+
+async function fillModelPick() {
+  cleanHash(); // a choice in the address
+  const options = await models.options();
+  if (!options.some((o) => o.id === models.state.model)) models.state.model = DEFAULT_MODEL;
+  modelSelect.replaceChildren(
+    ...options.map((o) => {
+      const option = el("option", o.name);
+      option.value = o.id;
+      option.selected = o.id === models.state.model;
+      return option;
+    }),
+  );
+  leadSelect.replaceChildren(
+    ...LEADS.map((n) => {
+      const option = el("option", t(`fc.lead.${n}`));
+      option.value = String(n);
+      option.selected = n === models.state.lead;
+      return option;
+    }),
+  );
+}
+
+/** Keep the model choice in the address (nothing for the defaults). */
+function syncModelHash() {
+  const base = splitModelHash(window.location.hash).hash;
+  const next = hashWith(base);
+  if (next !== window.location.hash) window.history.replaceState(null, "", `${window.location.search}${next}`);
+}
+
+function modelChanged() {
+  models.state.model = modelSelect.value;
+  models.state.lead = Number(leadSelect.value);
+  syncModelHash();
+  if (mode === "measured") renderLanding();
+  else if (mode === "kinds" && stationPanelState?.id) openStationPanel(stationPanelState.id);
+}
+modelSelect.addEventListener("change", modelChanged);
+leadSelect.addEventListener("change", modelChanged);
+$("model-pick").addEventListener("submit", (event) => event.preventDefault());
 
 // only the latest navigation renders: a slow station file must not overwrite a newer one
 let showToken = 0;
 async function show() {
   const token = ++showToken;
-  const next = pageMode(window.location.hash);
+  const hashNow = cleanHash();
+  const next = pageMode(hashNow);
+  if (next !== "station") syncModelHash();
   if (next === "measured") {
     browseMeasured();
     return;
@@ -829,7 +905,7 @@ async function show() {
     browseKinds();
     return;
   }
-  const hash = parseStationHash(window.location.hash);
+  const hash = parseStationHash(hashNow);
   const id = hash.id;
   const was = mode;
   setMode("station");
@@ -891,5 +967,6 @@ Promise.all([getJson(`${DATA}/index.json`), getJson(`${OBSERVED}/index.json`)]).
   placed = withCoordinates(index, table);
   if (table) stationIndexDoc = { ...loadedIndex, stations: placed };
   fillSearch();
+  await fillModelPick();
   show();
 });

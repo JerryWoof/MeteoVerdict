@@ -37,6 +37,13 @@
           </div>
         </div>
         <p id="measured-intro" class="page-intro" data-i18n="measured.intro">What ČHMÚ's stations measured.</p>
+        <form id="model-pick" class="model-pick strip standalone measured" autocomplete="off">
+          <label class="field"><span data-i18n="fc.model">Compare with</span>
+            <select id="model"></select></label>
+          <label class="field"><span data-i18n="fc.lead">Lead time</span>
+            <select id="lead"></select></label>
+          <span id="model-hint" class="muted small" data-i18n="fc.hint">The model's forecast at the station's own point and height, next to what the station measured.</span>
+        </form>
         <div id="measured-panel">
           <nav id="ribbon" class="strip attached measured measured-ribbon" data-i18n-aria="tv.when">
             <div class="when">

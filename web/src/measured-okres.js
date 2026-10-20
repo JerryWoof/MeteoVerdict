@@ -24,8 +24,10 @@ function element(tag, text, className) {
  * @param {(id: string) => string} o.stationHref the link of a station on that day
  * @param {(id: string, event: Event) => void} o.openStation a click on a station
  * @param {() => Promise<object>} o.stationIndex the station index (names)
+ * @param {(view: object, state: object) => HTMLElement|null} [o.modelSection] the selected model's
+ *   forecast at the okres's stations (station-model.js), above the okres comparison
  */
-export function createOkresPanel({ panel, t, language, dayText, update, stationHref, openStation, stationIndex }) {
+export function createOkresPanel({ panel, t, language, dayText, update, stationHref, openStation, stationIndex, modelSection = null }) {
   const fmt = (v, digits = 0) => (v == null ? "–" : v.toFixed(digits));
   const fmt1 = (v) => (v == null ? "–" : v.toLocaleString(language, { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
   const symbolText = (symbol) => (symbol ? t(`symbol.${symbol}`) : "");
@@ -275,6 +277,8 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
     } else {
       children.push(element("p", t("obs.dailyNote"), "model-note"));
     }
+    const model = modelSection?.(view, state);
+    if (model) children.push(model);
     children.push(compareSection(view, state), stationsSection(view, state), element("p", t("obs.panelNote"), "model-note"));
     panel.replaceChildren(...children);
   }
