@@ -526,7 +526,6 @@ function modelPicker(data, rows) {
       notes.push(note);
     }
   }
-  if (panelModel === AI_MODEL && sourceText()) notes.push(element("p", sourceText(), "model-note"));
   if (mapModel === AI_MODEL && panelModel === COMBINED && !hasAi(aiData, state.okres)) {
     notes.push(element("p", t("tv.aiFallback"), "model-note"));
   } else if (panelModel !== mapModel) notes.push(element("p", t("tv.panelOnly", { map: modelName(mapModel) }), "model-note"));
