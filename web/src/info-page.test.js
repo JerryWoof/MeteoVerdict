@@ -21,3 +21,7 @@ test("every page has both languages with the same block kinds", () => {
     assert.equal(kinds("cs"), kinds("en"), name);
   }
 });
+
+test("parseInline: `code`", () => {
+  assert.deepEqual(parseInline("a `b.json` c"), [{ text: "a " }, { text: "b.json", code: true }, { text: " c" }]);
+});
