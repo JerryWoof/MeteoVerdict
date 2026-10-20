@@ -47,6 +47,8 @@ export function createStationMap({ container, t, onPick, describe, extraFor = nu
   map.touchZoomRotate.disableRotation();
   map.keyboard.disableRotation();
   map.addControl(new NavigationControl({ showCompass: false }));
+  // the compact attribution starts open and covers much of a small map: start it folded
+  map.once("load", () => map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show"));
   const canvas = map.getCanvas();
   canvas.setAttribute("aria-label", t("map.aria"));
 
