@@ -519,8 +519,10 @@ def test_committed_cells_cover_every_station_and_bucket_model():
     # a surface height everywhere (water cells replaced by land ones) except where a
     # model has no data at all: ICON-D2 at its domain's edge in the far east
     no_height = committed.filter(pl.col("grid_elevation").is_null())
-    assert no_height.select("bucket_model", "station_id").rows() == [
-        ("dwd_icon_d2", "0-203-0-11792")
+    assert sorted(no_height.select("bucket_model", "station_id").rows()) == [
+        ("dwd_icon_d2", "0-203-0-11792"),
+        ("dwd_icon_d2", "0-203-0-20303018003"),
+        ("dwd_icon_d2", "0-203-0-20303019001"),
     ]
     assert committed.select("bucket_model", "station_id").is_unique().all()
 
@@ -627,3 +629,48 @@ def test_points_are_read_in_row_segments():
     cells = [(3, 10), (3, 12), (3, 200), (1, 5), (3, 10)]
     assert bucket.segments(cells, gap=64) == [(1, 5, 5), (3, 10, 12), (3, 200, 200)]
     assert bucket.segments([(0, 0), (0, 64), (0, 129)], gap=64) == [(0, 0, 64), (0, 129, 129)]
+
+
+def test_add_stations_fills_in_only_the_missing_stations(tmp_path, monkeypatch):
+    now = datetime(2026, 10, 20, 12, tzinfo=UTC)
+    run = datetime(2026, 10, 19, 0, tzinfo=UTC)
+    model = next(m for m in load_models() if m.id in bucket.SOURCES)
+
+    def rows(stations, value, source="bucket", run=run, model_id=model.id):
+        return pl.DataFrame(
+            {
+                "run": [run] * len(stations),
+                "model": [model_id] * len(stations),
+                "station_id": stations,
+                "lead_h": [1] * len(stations),
+                "temperature_2m": [value] * len(stations),
+                "source": [source] * len(stations),
+            },
+            schema_overrides={"run": pl.Datetime("us", "UTC"), "lead_h": pl.Int16},
+        )
+
+    stored = pl.concat([rows(["s1"], 1.0), rows(["s1"], 5.0, "api", run=run - timedelta(hours=6))])
+    partitions.write_monthly(stored, tmp_path / "runs", runs.KEYS, "run")
+    asked = []
+
+    def fake_read(_bucket, m, r, stations, *_a, **_k):
+        asked.append((r, m.id, stations["id"].to_list()))
+        return bucket.Fetched(rows(stations["id"].to_list(), 2.0))
+
+    monkeypatch.setattr(bucket, "read_run", fake_read)
+    stations = pl.DataFrame({"id": ["s1", "s2", "s3"], "elevation": [200.0, 300.0, 400.0]})
+    out = bucket.add_stations(None, stations, [model], tmp_path, now, cells=pl.DataFrame())
+    # only the bucket's model-run, only at the stations it lacked; the API's run stays
+    assert asked == [(run, model.id, ["s2", "s3"])]
+    assert out.filled == {"2026-10": 1} and out.rows == {"2026-10": 2}
+    back = pl.read_parquet(tmp_path / "runs" / "2026-10.parquet").sort("run", "station_id")
+    assert back.select("station_id", "temperature_2m", "source").rows() == [
+        ("s1", 5.0, "api"),
+        ("s1", 1.0, "bucket"),
+        ("s2", 2.0, "bucket"),
+        ("s3", 2.0, "bucket"),
+    ]
+    # again: nothing left to read
+    asked.clear()
+    bucket.add_stations(None, stations, [model], tmp_path, now, cells=pl.DataFrame())
+    assert asked == []
