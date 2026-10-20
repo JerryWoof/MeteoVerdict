@@ -18,6 +18,7 @@ from meteoverdict import (
     aggregate,
     aladin,
     blend,
+    blend_interval,
     blendtest,
     bucket,
     chmi_archive,
@@ -718,6 +719,102 @@ def hindcast_cmd(
             releases.put(hindcast.TAG, hindcast.ASSET, path)
             typer.echo(f"published {hindcast.ASSET} to the release {hindcast.TAG}")
     typer.echo(f"wrote {path} ({rows['day'].n_unique()} days rebuilt)")
+
+
+@app.command("blend-interval")
+def blend_interval_cmd(
+    data_dir: Annotated[Path, typer.Option(help="Folder with obs/, gauges/, fc/ and scores/.")] = (
+        Path("data")
+    ),
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
+    errors_path: Annotated[
+        Path, typer.Option("--errors", help="The archive of the combined forecast's errors.")
+    ] = Path("data/outlook-archive") / blend_interval.ASSET,
+    out: Annotated[Path, typer.Option(help="The JSON file.")] = Path("data") / blend_interval.FILE,
+    days: Annotated[
+        int, typer.Option(help="Rebuild the errors of the last N days (the archive keeps more).")
+    ] = blend_interval.KEEP_DAYS,
+    redo: Annotated[
+        int,
+        typer.Option(help="Recompute only the newest N days of an existing archive (0: all)."),
+    ] = 0,
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Download the months' observations, forecasts, scores and the archive from "
+            "GitHub Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+        ),
+    ] = False,
+    publish: Annotated[
+        bool,
+        typer.Option(
+            "--publish",
+            help=f"Put {blend_interval.FILE} into the release data-latest and the archive "
+            f"({blend_interval.ASSET}) into {blend_interval.TAG}.",
+        ),
+    ] = False,
+) -> None:
+    """The range of the combined temperature forecast: the 10th and 90th percentile of its
+    own errors of the last 30 days (``meteoverdict.blend_interval``)."""
+    if publish and not github_release:
+        raise typer.BadParameter("--publish needs --github-release")
+    if not stations_path.exists():
+        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
+    now = datetime.now(UTC)
+    last_day = now.date() - timedelta(days=1)
+    first_day = last_day - timedelta(days=days - 1)
+    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+        releases = _release_store(client) if github_release else None
+        if releases:
+            if blend_interval.ASSET in releases.assets(blend_interval.TAG):
+                releases.download(blend_interval.TAG, blend_interval.ASSET, errors_path)
+            months = partitions.months(first_day - timedelta(days=100), last_day)
+            store.download(releases, data_dir, months, typer.echo, kinds=("scores",))
+            store.download(releases, data_dir, months, typer.echo, kinds=("obs", "gauges", "fc"))
+            oldest = last_day - timedelta(days=fresh.DAYS + catalogue.MAX_LEAD_DAY + 1)
+            runs.RunsSync(releases, data_dir, typer.echo).pull(partitions.months(oldest, last_day))
+        files = sorted((data_dir / "scores").glob("*.parquet"))
+        if not files:
+            typer.echo(f"mvd blend-interval: no scores in {data_dir / 'scores'}", err=True)
+            raise typer.Exit(code=1)
+        variables = list(blendtest.SCORE_VARIABLES.values())
+        scores = (
+            pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
+            .filter(pl.col("variable").is_in(variables))
+            .collect()
+        )
+        wanted = [first_day + timedelta(days=k) for k in range((last_day - first_day).days + 1)]
+        if redo and errors_path.exists():
+            done = set(pl.read_parquet(errors_path)["date"].unique().to_list())
+            wanted = [d for d in wanted if d not in done or d > last_day - timedelta(days=redo)]
+        start = first_day - timedelta(days=100)
+        obs = observations.scan(data_dir, start, last_day + timedelta(days=1))
+        fc = partitions.scan_months(data_dir / "fc", start, last_day + timedelta(days=1))
+        enabled = [m for m in catalogue.load_models() if m.enabled]
+        fc, _ = daily_mod.add_fresh(data_dir, enabled, last_day, obs, fc, typer.echo)
+        if fc is None or obs is None:
+            typer.echo("mvd blend-interval: no forecasts or observations", err=True)
+            raise typer.Exit(code=1)
+        rows = blend_interval.rebuild(
+            scores, fc, obs, pl.read_parquet(stations_path), wanted, log=typer.echo
+        )
+        path = blend_interval.merge(errors_path, rows, first_day)
+        errors = pl.read_parquet(path)
+        last = errors["date"].max() if errors.height else None
+        if last is None:
+            typer.echo("mvd blend-interval: no errors yet", err=True)
+            raise typer.Exit(code=1)
+        table = blend_interval.quantiles(errors, last)
+        doc = blend_interval.document(table, last, now)
+        written = blend_interval.write(doc, out)
+        if publish:
+            releases.put(blend_interval.TAG, blend_interval.ASSET, path)
+            releases.put(store.LATEST_TAG, blend_interval.FILE, written)
+            typer.echo(f"published {blend_interval.FILE} and {blend_interval.ASSET}")
+    typer.echo(f"{len(doc['okresy'])} okresy (with CZ), errors to {last} → {written}")
 
 
 @app.command("leads")
@@ -1616,6 +1713,14 @@ def outlook_cmd(
     data_dir: Annotated[
         Path, typer.Option(help="Folder for the archived nights (outlook-nights/).")
     ] = Path("data"),
+    interval_path: Annotated[
+        Path,
+        typer.Option(
+            "--interval",
+            help="blend-interval.json from `mvd blend-interval` (missing or older than a "
+            "week: no range).",
+        ),
+    ] = Path("data") / blend_interval.FILE,
     corrections_path: Annotated[
         Path,
         typer.Option(
@@ -1646,6 +1751,11 @@ def outlook_cmd(
             if sun_cloud_gust.NAME in releases.names(store.LATEST_TAG):
                 releases.download(store.LATEST_TAG, sun_cloud_gust.NAME, corrections_path)
         corrections = sun_cloud_gust.load(corrections_path)
+        if releases and blend_interval.FILE in releases.names(store.LATEST_TAG):
+            releases.download(store.LATEST_TAG, blend_interval.FILE, interval_path)
+        interval = blend_interval.load(interval_path)
+        if interval is None:
+            typer.echo(f"mvd outlook: no current {interval_path}, no temperature range", err=True)
         if not aggregates_path.exists():
             raise typer.BadParameter(f"{aggregates_path} not found; run `mvd aggregate`")
         # the forecast's weights with the temperature and wind regression (mvd daily),
@@ -1679,6 +1789,7 @@ def outlook_cmd(
                 nights=nights,
                 single_runs=single_runs,
                 forecasts=forecasts,
+                interval=interval,
             )
         finally:  # also when it fails: the calls count against the daily budget
             typer.echo(meter.line())

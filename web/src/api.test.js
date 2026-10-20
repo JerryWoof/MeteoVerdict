@@ -100,7 +100,7 @@ test("the probability of being best and the small-sample flag are passed on", ()
 
 test("CSV of the hourly forecast", () => {
   const lines = okresCsv(DOC).trim().split("\n");
-  assert.equal(lines[0], "time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration");
+  assert.equal(lines[0], "time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration,temperature_2m_lo,temperature_2m_hi");
   assert.equal(lines.length, 145);
   const first = lines[1].split(",");
   assert.equal(first[0], HOURLY_DOC.time[0]);
