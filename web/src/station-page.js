@@ -372,7 +372,7 @@ function kindsErrNote(v) {
   if (models.state.model === AI) return t("fc.noAi");
   if (!v.hasModel) return t("fc.noModelValue", { model: v.name, value });
   const have = placed.filter((s) => v.byId.get(s.id) != null).length;
-  return `${t("measured.err.note", { model: v.name, lead: models.state.lead, value, unit: v.unit, n: formatNumber(have), of: formatNumber(placed.length) })} ${t("map.err.day", { day: v.day })}`;
+  return t("map.err.note", { model: v.name, lead: models.state.lead, value, unit: v.unit, day: v.day, n: formatNumber(have), of: formatNumber(placed.length) });
 }
 
 function renderLegend(shown) {
@@ -420,16 +420,18 @@ async function applyKindsColour() {
   if (token !== kindsColourToken) return;
   kindsErr = next;
   stationMap.setColour(next ? "error" : plainColour, next ? { errors: next.byId, ramp: next.ramp } : {});
-  renderLegend(filterStations(placed, $("map-measure").value));
+  applyFilter();
 }
 
 function applyFilter() {
   const measure = $("map-measure").value;
-  const shown = filterStations(placed, measure);
+  let shown = filterStations(placed, measure);
+  // coloured by error: only the stations the model can be compared at (with a value that day)
+  const compared = kindsErr?.hasModel && !kindsErr.noFile;
+  if (compared) shown = shown.filter((s) => kindsErr.byId.get(s.id) != null);
   stationMap.setStations(placed, shown);
-  $("map-count").textContent = measure
-    ? t("map.count", { shown: formatNumber(shown.length), all: formatNumber(placed.length) })
-    : "";
+  $("map-count").textContent =
+    measure || compared ? t("map.count", { shown: formatNumber(shown.length), all: formatNumber(placed.length) }) : "";
   renderLegend(shown);
 }
 
