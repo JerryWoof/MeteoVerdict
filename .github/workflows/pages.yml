@@ -153,7 +153,7 @@ jobs:
           npm ci --no-audit --no-fund
           npm test
           npm run build
-      - name: Radar days (web-YYYYMMDD.tar of the last 60 days from the releases radar-YYYY-MM)
+      - name: Radar days (web-YYYYMMDD.tar of the last 7 days from the releases radar-YYYY-MM)
         # Satellite images only for the last 7 days and echo tops for the last 14 (size);
         # if the site would still pass PAGES_BUDGET_MB, the oldest days go first.
         env:
@@ -166,7 +166,7 @@ jobs:
             gh release download "$tag" --pattern 'web-*.tar' --dir /tmp/radar --skip-existing 2>/dev/null \
               || echo "no $tag yet"
           done
-          cutoff=$(date -u -d '60 days ago' +%Y%m%d)
+          cutoff=$(date -u -d '7 days ago' +%Y%m%d)
           satellite_cutoff=$(date -u -d '7 days ago' +%Y%m%d)
           echotop_cutoff=$(date -u -d '14 days ago' +%Y%m%d)
           : > /tmp/radar/days.txt
