@@ -29,7 +29,9 @@ coverage. Where no model reaches it (all records equally patchy), all are compar
 High sites: a station more than ``HIGH_SITE_ABOVE_M`` (300 m) above the median
 elevation of its okres's stations (``high_site``: Milešovka 620 m above Litoměřice's,
 Lysá hora, Praděd, Sněžka, Klínovec, 47 of 782 stations in October 2026) is left out of
-every okres, its own and those that would borrow it: 300 m is about 2 °C of
+its own okres, and of every okres that would borrow it where it is also that much above
+that okres's median (``high_pairs``: Protivanov, 675 m, is high for Prostějov but not
+for Blansko, whose stations lie at 300-540 m; since 2026-10-20): 300 m is about 2 °C of
 temperature, more than the models differ by, and a summit's wind is another climate
 (August-October 2026, D+1: Milešovka had 35 % of Litoměřice's pairs, but 40 % of its
 temperature error and 70 % of its wind error). It keeps its own ``station`` rows, is
@@ -216,27 +218,52 @@ def with_high_sites(stations: pl.DataFrame) -> pl.DataFrame:
     if not {"elevation", "okres_code"} <= set(stations.columns):
         return stations.with_columns(pl.lit(False).alias("high_site"))
     elevation = pl.col("elevation").cast(pl.Float64)
-    above = elevation - elevation.median().over("okres_code")
-    return stations.with_columns((above > HIGH_SITE_ABOVE_M).fill_null(False).alias("high_site"))
+    median = elevation.median().over("okres_code")
+    return stations.with_columns(
+        ((elevation - median) > HIGH_SITE_ABOVE_M).fill_null(False).alias("high_site"),
+        median.alias("okres_median_m"),
+    )
+
+
+def high_pairs(in_window: pl.LazyFrame, distance: pl.DataFrame) -> pl.DataFrame | None:
+    """``variable``, ``region``, ``station_id``: the stations more than
+    ``HIGH_SITE_ABOVE_M`` above the median elevation of an okres whose pool they could
+    join (its own, or one within reach that would borrow them), so they are left out of
+    that okres only. None without the elevations (``station_info``)."""
+    names = in_window.collect_schema().names()
+    if not {"elevation", "okres_median_m"} <= set(names):
+        return None
+    rows = in_window.select("variable", "station_id", "elevation", "okres_code", "okres_median_m")
+    rows = rows.unique().collect()
+    medians = rows.select(pl.col("okres_code").alias("region"), "okres_median_m").unique("region")
+    return (
+        rows.select("variable", "station_id", "elevation")
+        .unique()
+        .join(distance.select("station_id", "region").unique(), on="station_id")
+        .join(medians, on="region")
+        .filter((pl.col("elevation") - pl.col("okres_median_m")) > HIGH_SITE_ABOVE_M)
+        .select("variable", "region", "station_id")
+        .cast(pl.String)
+    )
 
 
 def station_info(stations: pl.DataFrame) -> pl.LazyFrame:
-    return (
-        with_high_sites(stations)
-        .select(
-            pl.col("id").alias("station_id"),
-            pl.col("name").alias("station_name"),
-            "okres_code",
-            "okres",
-            "kraj_code",
-            "kraj",
-            "elevation_class",
-            network_class(pl.col("id")).alias("network"),
-            "high_site",
-            pl.col("id").is_in(sorted(WIND_ATYPICAL)).alias("wind_atypical"),
-        )
-        .lazy()
-    )
+    info = with_high_sites(stations)
+    # the elevations ``high_pairs`` needs, where the table has them
+    heights = [pl.col("elevation").cast(pl.Float64), "okres_median_m"]
+    return info.select(
+        pl.col("id").alias("station_id"),
+        pl.col("name").alias("station_name"),
+        "okres_code",
+        "okres",
+        "kraj_code",
+        "kraj",
+        "elevation_class",
+        network_class(pl.col("id")).alias("network"),
+        "high_site",
+        pl.col("id").is_in(sorted(WIND_ATYPICAL)).alias("wind_atypical"),
+        *(heights if "okres_median_m" in info.columns else []),
+    ).lazy()
 
 
 def region_columns(level: str) -> list[pl.Expr]:
@@ -260,7 +287,9 @@ def okres_distances(stations: pl.DataFrame) -> pl.DataFrame | None:
 POOL_ROUNDS = 3
 
 
-def okres_pools(in_window: pl.LazyFrame, distance: pl.DataFrame) -> pl.DataFrame:
+def okres_pools(
+    in_window: pl.LazyFrame, distance: pl.DataFrame, exclude: pl.DataFrame | None = None
+) -> pl.DataFrame:
     """``neighbours.pools`` for the stations with scores in ``in_window``.
 
     A station counts only if it survives the fair comparison (``common_days``) of the
@@ -268,12 +297,15 @@ def okres_pools(in_window: pl.LazyFrame, distance: pl.DataFrame) -> pl.DataFrame
     station that some of the okres's models never reach (fewer models fetched for a rain
     gauge, ICON-D2 in the far east) would otherwise fill a place in the pool and then be
     dropped. Such stations are excluded from that okres and replaced by the next nearest
-    ones.
+    ones. ``exclude`` (``variable``, ``region``, ``station_id``) leaves stations out of
+    single okresy from the start (``high_pairs``).
     """
     available = in_window.select("variable", "station_id").unique().collect()
     keys = ["variable", "region", "station_id"]
     excluded = pl.DataFrame(schema={k: pl.String for k in keys})
-    pool = neighbours.pools(distance, available, MIN_STATIONS)
+    if exclude is not None:
+        excluded = pl.concat([excluded, exclude.select(keys).cast(pl.String)])
+    pool = neighbours.pools(distance, available, MIN_STATIONS, exclude=excluded)
     # the models compared (``covered_only``): a model with a short record must not drop
     # the stations it lacks from every okres
     first = covered_only(in_window.filter(pl.col("lead_day") == pl.col("lead_day").min()))
@@ -310,8 +342,9 @@ def with_regions(
 
     At the okres level with ``distance`` (from ``okres_distances``), a station's rows
     appear once for every okres whose pool it is in (``neighbours.pools``). The high
-    sites (``high_site``) are in no okres, unless ``high_sites_in_okres`` (the training
-    of our forecast's regression, ``mos.pools``, which keeps them); the level
+    sites are in no okres they stand that high above (``high_pairs``; ``high_site``,
+    their own okres, without borrowing or elevations), unless ``high_sites_in_okres``
+    (the training of our forecast's regression, ``mos.pools``, which keeps them); the level
     ``high_sites`` has only them. The wind-atypical stations (``wind_atypical``) are in no
     okres's wind pool, on the same terms (and they are in the pools of other variables).
     """
@@ -322,15 +355,18 @@ def with_regions(
     ):
         wind = pl.col("variable").str.starts_with("wind_speed_10m")
         in_window = in_window.filter(~(wind & pl.col("wind_atypical")))
+    pairs = None
+    if level == "okres" and not high_sites_in_okres and distance is not None:
+        pairs = high_pairs(in_window, distance)
     if "high_site" in in_window.collect_schema().names():
-        if level == "okres" and not high_sites_in_okres:
+        if level == "okres" and not high_sites_in_okres and pairs is None:
             in_window = in_window.filter(~pl.col("high_site"))
         elif level == "high_sites":
             in_window = in_window.filter(pl.col("high_site"))
     elif level == "high_sites":
         in_window = in_window.filter(pl.lit(False))
     if level == "okres" and distance is not None:
-        pool = okres_pools(in_window, distance)
+        pool = okres_pools(in_window, distance, pairs)
         return in_window.drop("okres_code", "okres").join(
             pool.lazy(), on=["variable", "station_id"], how="inner"
         )

@@ -495,6 +495,38 @@ def test_high_sites_are_left_out_of_the_okres_and_ranked_on_their_own():
     assert station.height == 2
 
 
+def test_a_high_site_is_left_out_only_of_okresy_it_stands_high_above():
+    # Prostějov (low, 200-230 m) and Blansko (300-540 m); Protivanov, 675 m, in Prostějov
+    stations = pl.DataFrame(
+        {
+            "id": ["p1", "p2", "p3", "protivanov", "b1", "b2", "b3"],
+            "name": ["P1", "P2", "P3", "Protivanov", "B1", "B2", "B3"],
+            "okres_code": ["CZ0713"] * 4 + ["CZ0641"] * 3,
+            "okres": ["Prostějov"] * 4 + ["Blansko"] * 3,
+            "kraj_code": ["CZ071"] * 4 + ["CZ064"] * 3,
+            "kraj": ["Olomoucký kraj"] * 4 + ["Jihomoravský kraj"] * 3,
+            "elevation_class": ["lowland"] * 3 + ["upland"] + ["upland"] * 3,
+            "elevation": [200.0, 220.0, 230.0, 675.0, 300.0, 430.0, 540.0],
+        }
+    )
+    info = agg.station_info(stations).collect()
+    in_window = pl.DataFrame({"variable": "temperature_2m", "station_id": info["station_id"]})
+    in_window = in_window.join(info, on="station_id").lazy()
+    own = {"p": "CZ0713", "b": "CZ0641"}
+    distance = pl.DataFrame(
+        [(s, r, 0.0 if own[s[0]] == r else 20.0) for s in info["station_id"] for r in own.values()],
+        schema=["station_id", "region", "distance_km"], orient="row",
+    )  # fmt: skip
+    pairs = agg.high_pairs(in_window, distance)
+    # Protivanov: 450 m above Prostějov's median (225 m), 245 m above Blansko's (430 m);
+    # B3 (540 m) would be too high for Prostějov if it borrowed it
+    assert sorted(pairs.rows()) == [
+        ("temperature_2m", "CZ0713", "b3"),
+        ("temperature_2m", "CZ0713", "protivanov"),
+    ]
+    assert info.filter(pl.col("station_id") == "protivanov")["high_site"].item()
+
+
 def test_wind_atypical_stations_are_left_out_of_okres_wind_only(monkeypatch):
     monkeypatch.setattr(agg, "WIND_ATYPICAL", frozenset({"low3"}))
     ids = ["low1", "low2", "low3", "low4"]
