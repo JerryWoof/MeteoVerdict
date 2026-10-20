@@ -67,6 +67,8 @@ test("number format", () => {
   assert.equal(fmt(0.5, true), "+0.50");
   assert.equal(fmt(-0.5, true), "-0.50");
   assert.equal(fmt(null), "–");
+  assert.equal(fmt(1.234, false, "cs"), "1,23");
+  assert.equal(fmt(1234.5, true, "cs"), "+1234,50");
 });
 
 // real okres scores: 06-06 precipitation, last 90 days, Litoměřice and Benešov

@@ -146,10 +146,10 @@ export function biasByElevation(rows, leadDay) {
     .map((r) => ({ elevation: r.region, model: r.model, bias: r.bias }));
 }
 
-/** "1.23", "+0.45", "–" */
-export function fmt(value, signed = false) {
+/** "1.23", "+0.45", "–" (in `language`: "1,23" in Czech) */
+export function fmt(value, signed = false, language = "en") {
   if (value == null || Number.isNaN(value)) return "–";
-  const text = value.toFixed(2);
+  const text = value.toLocaleString(language, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
   return signed && value > 0 ? `+${text}` : text;
 }
 
