@@ -79,13 +79,16 @@ export function parseOutlook(doc) {
 
 export const rowFor = (outlook, okres, day, part) => outlook.rows.get(`${okres}|${day}|${part}`);
 
-/** Rain in mm rather than as a probability: a single model's row and a measured one. */
-const inMm = (row) => Boolean(row?.single || row?.measured);
+/**
+ * Rain in mm, like every single model and the measurements: our combination too (its
+ * weighted amount); the probability only where an old file has no amount.
+ */
+const inMm = (row) => Boolean(row?.single || row?.measured || row?.precipitation != null);
 
 /**
- * The number a layer shows: the night's low, otherwise the high; rain as probability
- * (our combination) or as the total in mm (a single model's row, `row.single`, which
- * has no probability, and a measured row, `row.measured`).
+ * The number a layer shows: the night's low, otherwise the high; rain as the total in mm (a single
+ * model, a measured row and our combination alike; the combination's probability is
+ * `row.rain_probability`, shown beside it).
  */
 export function valueFor(row, layer, part) {
   if (!row) return null;
@@ -121,8 +124,8 @@ export { BEYOND, NEUTRAL, RAMPS, colorFor, rampKey } from "./palette.js";
 /** A single model's rain threshold (mm), as its rain symbol (models.js RAIN_MM). */
 export const MODEL_RAIN_MM = 0.3;
 
-/** A view whose rain is in mm: a single model's, or a measured day's. */
-export const mmView = (view) => Boolean(view?.single || view?.observed);
+/** Every view shows rain in mm (the combination's probability is a second value). */
+export const mmView = () => true;
 
 // the hours of each part of the day, Prague time
 const PART_HOURS = { night: [0, 6], morning: [6, 12], afternoon: [12, 18], evening: [18, 24] };
