@@ -89,6 +89,15 @@ export function pickWindow(current, available) {
   return available.includes(DEFAULT_VIEW.window) ? DEFAULT_VIEW.window : available[0];
 }
 
+/**
+ * The folder holding a window's score files: the Pages build leaves out a window with the
+ * same days as an earlier one (e.g. "all" while the history is under 90 days) and names
+ * it in meta.json's `aliases` ({"all": "90d"}).
+ */
+export function filesWindow(key, meta) {
+  return meta?.aliases?.[key] ?? key;
+}
+
 /** True if the window covers exactly the days of the 90-day window (short history). */
 export function sameAs90d(key, windows) {
   if (key === "90d") return false;

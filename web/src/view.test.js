@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { translator } from "./i18n.js";
 import {
-  DEFAULT_VIEW, availableLeadDays, availableWindows, pickWindow, availableVariables, dayCount, formatRange, parseHash, sameAs90d,
+  DEFAULT_VIEW, availableLeadDays, availableWindows, filesWindow, pickWindow, availableVariables, dayCount, formatRange, parseHash, sameAs90d,
   toHash, windowLabel, windowSpan,
 } from "./view.js";
 
@@ -103,4 +103,13 @@ test("only windows with scored days are offered, never an empty default", () => 
   assert.equal(pickWindow("mam", availableWindows(SHORT)), "90d");
   assert.equal(pickWindow("jja", availableWindows(SHORT)), "jja");
   assert.equal(pickWindow("mam", ["all", "son"]), "all");
+});
+
+test("filesWindow reads a left-out window from the one meta.json names", () => {
+  const meta = { windows: SHORT, aliases: { all: "90d", son: "season" } };
+  assert.equal(filesWindow("all", meta), "90d");
+  assert.equal(filesWindow("son", meta), "season");
+  assert.equal(filesWindow("90d", meta), "90d");
+  assert.equal(filesWindow("jja", { windows: SHORT }), "jja");
+  assert.equal(filesWindow("all", null), "all");
 });

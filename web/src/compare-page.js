@@ -19,7 +19,7 @@ import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
 import {
-  availableLeadDays, availableVariables, availableWindows, dayCount, formatRange, parseHash, pickWindow, windowLabel,
+  availableLeadDays, availableVariables, availableWindows, dayCount, filesWindow, formatRange, parseHash, pickWindow, windowLabel,
 } from "./view.js";
 
 setWorkerUrl(workerUrl);
@@ -35,8 +35,9 @@ async function getJson(path) {
 }
 
 const cache = new Map();
+let scoresMeta = null;
 function load(view, level) {
-  const path = `data/scores/${view.window}/${level}/${view.variable}.json`;
+  const path = `data/scores/${filesWindow(view.window, scoresMeta)}/${level}/${view.variable}.json`;
   if (!cache.has(path)) {
     // a failed fetch is not remembered: the next view tries again
     cache.set(path, getJson(path).then((doc) => {
@@ -938,6 +939,7 @@ function renderBandSet(view, sets, shown, rows, onChange) {
 
 async function main() {
   const meta = await getJson("data/scores/meta.json");
+  scoresMeta = meta;
   document.getElementById("status").textContent = statusText(meta, t);
   const names = { ...meta?.models, blend: t("model.blend") };
   const colors = modelColors(names);
