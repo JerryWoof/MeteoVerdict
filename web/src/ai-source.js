@@ -22,9 +22,7 @@ export const AI_KEYS = {
   "forecast.note": "ai.detailNote",
   "forecast.legend": "ai.legend",
   "forecast.legendModel": "ai.legendModel",
-  "forecast.obecNote": "ai.detailObecNote",
   "forecast.titleFor": "ai.titleFor",
-  "forecast.titleForObec": "ai.titleForObec",
 };
 
 /** A translator that says "MeteoVerdict AI" where `t` names our combination. */

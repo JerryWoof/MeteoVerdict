@@ -147,6 +147,25 @@ jobs:
           else
             echo "no obce forecast yet"
           fi
+      - name: Obce files without every model's lines
+        # The obce files keep every model's temperature per obec (the AI's input, kept in
+        # the releases); no page draws them since the detail is per okres town (seats.js),
+        # so the site gets each obec's own forecast only (~140 MB less).
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          paths = [*pathlib.Path("site/data/forecast").glob("obce-*.json"),
+                   *pathlib.Path("site/data/ai/fc/forecast").glob("obce-*.json")]
+          before = after = 0
+          for path in paths:
+              before += path.stat().st_size
+              doc = json.loads(path.read_text())
+              for place in doc.get("places", []):
+                  place.pop("models", None)
+              path.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
+              after += path.stat().st_size
+          print(f"{len(paths)} obce files: {before / 1e6:.0f} MB -> {after / 1e6:.0f} MB")
+          PY
       - uses: actions/setup-node@v7
         with:
           node-version: 22
