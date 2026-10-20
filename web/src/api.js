@@ -159,6 +159,7 @@ export function indexDoc(okresy, meta, generated) {
       okres_csv: `${SITE}/api/${VERSION}/okresy/{code}.csv`,
       ai_okres_json: `${SITE}/api/${VERSION}/ai/okresy/{code}.json`,
       obec_json: `${SITE}/api/${VERSION}/obce/{okres}/{id}.json`,
+      ai_obec_json: `${SITE}/api/${VERSION}/ai/obce/{okres}/{id}.json`,
       obce_index: `${SITE}/api/${VERSION}/obce/index.json`,
     },
     okresy: okresy.map((o) => ({
