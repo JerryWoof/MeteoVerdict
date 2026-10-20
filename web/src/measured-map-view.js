@@ -63,6 +63,8 @@ export function createMeasuredMap({ container, t, onPick, describe }) {
   map.keyboard.disableRotation();
   map.addControl(new NavigationControl({ showCompass: false }));
   map.getCanvas().setAttribute("aria-label", t("measured.mapAria"));
+  // the compact attribution starts open and covers much of a small map: start it folded
+  map.once("load", () => map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show"));
 
   let rows = [];
   let byId = new Map();
