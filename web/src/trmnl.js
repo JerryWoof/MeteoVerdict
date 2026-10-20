@@ -39,7 +39,7 @@ export function setUpBuilder(okresSelect, t, baseUrl = "") {
   const output = document.getElementById("trmnl-lines");
   const test = document.getElementById("trmnl-test");
   forecast.replaceChildren(
-    ...[["okresy", "api.modelBlend"], ["ai/okresy", "api.modelAi"]].map(([value, key]) =>
+    ...[["ai/okresy", "api.modelAi"], ["okresy", "api.modelBlend"]].map(([value, key]) =>
       Object.assign(document.createElement("option"), { value, textContent: t(key) })),
   );
   let index; // undefined: not fetched, null: failed
