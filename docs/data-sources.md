@@ -2530,6 +2530,27 @@ domain; observations from `now/` for 2026-10-10 00 UTC to 2026-10-13 12 UTC, as
 
 Four days of one October spell: an illustration that the pipeline works, not a result.
 
+## Every model at the station point (`mvd station-fc`)
+
+The measured page's model selector (measured.html). `meteoverdict.station_fc`. From the
+[single runs](#single-runs-mvd-fetch-runs) (every model at the ~300 run stations, at the
+station's own elevation) and the hourly observations, per station and Prague calendar day
+for the last 35 days: `tmax`, `tmin`, `r` (precipitation total), `wind` (mean), `gust`
+(highest), for **D+1** (the 00 UTC run of the day before) and **D+2** (two days before), per
+model, plus `blend` (the mean of the models that have the day, at least 3). A model-day counts
+only when the run's steps cover the day (first step in the first six hours, last in the last six,
+at least four steps), so 3- and 6-hourly models take their extremes from fewer points. The
+observations are aggregated the same way (days with at least 20 hourly values).
+
+Output: `station-fc/<station>.json` (`{"from", "to", "obs": {value: [per day]}, "series": {value:
+{lead day: {model: [per day]}}}}`, null = no value) and `station-fc/index.json` (model names,
+stations), zipped as `station-fc.zip` in the release `data-latest` by the Daily workflow (an
+optional step) and unpacked by the Pages build into `data/scores/station-fc/`. About 7 MB
+unpacked: the site is near its size budget, which is why the window is 35 days and the leads 1
+and 2. The page limits the models to these stations and says so for any other. MeteoVerdict AI
+has no values here yet: the page reads the same layout for the model `ai` from
+`data/scores/ai/fc/stations/fc/<station>.json` and says so while it is absent.
+
 ## Event skill for farmers (`mvd farm`)
 
 What it means: [methodology](methodology.md#event-skill-for-farmers). `meteoverdict.farm`

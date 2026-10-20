@@ -48,6 +48,7 @@ from meteoverdict import (
     satellite,
     scoring,
     station_check,
+    station_fc,
     station_pages,
     stations,
     store,
@@ -1037,6 +1038,56 @@ def farm_cmd(
     for line in farm.summary(table):
         typer.echo(line)
     typer.echo(f"{info['runs']} runs, {info['stations']} stations → {path}")
+
+
+@app.command("station-fc")
+def station_fc_cmd(
+    data_dir: Annotated[Path, typer.Option(help="Folder with obs/ and runs/.")] = Path("data"),
+    out: Annotated[Path, typer.Option(help="Folder for the station files.")] = Path(
+        "site/data/station-fc"
+    ),
+    zip_path: Annotated[
+        Path, typer.Option("--zip", help="Also write the files as one zip.")
+    ] = Path("station-fc.zip"),
+    github_release: Annotated[
+        bool,
+        typer.Option(
+            "--github-release",
+            help="Download the single runs (runs-YYYY-MM) and observations (data-YYYY-MM) "
+            "from GitHub Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
+        ),
+    ] = False,
+    publish: Annotated[
+        bool,
+        typer.Option("--publish", help="Put station-fc.zip into the release data-latest."),
+    ] = False,
+) -> None:
+    """Every model's forecast at the station point, by day, with the measured values: the
+    measured page's model selector (``meteoverdict.station_fc``)."""
+    if publish and not github_release:
+        raise typer.BadParameter("--publish needs --github-release")
+    last = datetime.now(UTC).date() - timedelta(days=1)
+    first = last - timedelta(days=station_fc.DAYS - 1)
+    since = datetime.combine(first - timedelta(days=max(station_fc.LEADS)), datetime.min.time())
+    months = partitions.months(since.date(), last + timedelta(days=1))
+    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
+        releases = _release_store(client) if github_release else None
+        if releases:
+            runs.RunsSync(releases, data_dir, typer.echo).pull(months)
+            store.download(releases, data_dir, months, typer.echo, kinds=("obs",))
+        single = partitions.scan_months(data_dir / "runs", since.date(), last + timedelta(days=1))
+        obs = partitions.scan_months(data_dir / "obs", first, last + timedelta(days=1))
+        if single is None or obs is None:
+            typer.echo("mvd station-fc: no single runs or observations", err=True)
+            raise typer.Exit(code=1)
+        forecasts_ = station_fc.daily_forecasts(single, first, last)
+        measured = station_fc.daily_observations(obs, first, last)
+        docs = station_fc.documents(forecasts_, measured, first, last)
+        paths = station_fc.write(docs, out, _model_names(), datetime.now(UTC))
+        zipped = station_fc.write_zip(paths, zip_path)
+        if publish:
+            releases.put(store.LATEST_TAG, zipped.name, zipped)
+    typer.echo(f"{len(docs)} stations, {first} … {last} → {out}, {zipped}")
 
 
 @app.command("blend-test")

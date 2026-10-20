@@ -71,6 +71,16 @@ jobs:
           else
             echo "no observed-data.zip yet; the forecast map offers no past days"
           fi
+          # every model's forecast at the station point, by day, with the measured values
+          # (`mvd station-fc`): the measured page's model selector
+          if gh release download data-latest --pattern station-fc.zip --dir /tmp 2>/dev/null; then
+            rm -rf site/data/station-fc
+            mkdir -p site/data/station-fc
+            unzip -o -q /tmp/station-fc.zip -d site/data/station-fc
+            echo "station forecasts from data-latest ($(ls site/data/station-fc | wc -l) files, $(du -sh site/data/station-fc | cut -f1))"
+          else
+            echo "no station-fc.zip yet; the measured page's model selector says so"
+          fi
           # the AI forecast tab (experimental): MeteoVerdict AI's scores and the
           # experiments, computed daily and published as release ai-latest
           if gh release download ai-latest --pattern ai.zip --dir /tmp 2>/dev/null; then
