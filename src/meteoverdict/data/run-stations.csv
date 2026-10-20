@@ -99,4 +99,200 @@ id,name,lat,lon,elevation,okres_code,okres,kraj_code,elevation_class,elements,re
 0-203-0-11526,"Nedrahovice, Rudolec",49.631723,14.440088,348.0,CZ020B,Příbram,CZ020,lowland,3,spread
 0-203-0-11432,Nová Ves v Horách,50.59244,13.48561,725.0,CZ0425,Most,CZ042,upland,3,spread
 0-203-0-11671,Broumov,50.569966,16.343617,373.0,CZ0523,Náchod,CZ052,lowland,3,spread
+0-20000-0-11487,Kocelovice,49.467222,13.838611,519.0,CZ0316,Strakonice,CZ031,upland,3,temperature
+0-20000-0-11518,"Praha, Ruzyně",50.100278,14.255556,364.0,CZ020A,Praha-západ,CZ020,lowland,3,temperature
+0-20000-0-11519,"Praha, Karlov",50.069167,14.427778,260.5,CZ0100,území Hlavního města Prahy,CZ010,lowland,3,temperature
+0-20000-0-11520,"Praha, Libuš",50.007778,14.446944,302.04,CZ0100,území Hlavního města Prahy,CZ010,lowland,3,temperature
+0-20000-0-11538,Temelín,49.197778,14.342222,500.0,CZ0311,České Budějovice,CZ031,upland,3,temperature
+0-20000-0-11567,"Praha, Kbely",50.123333,14.538056,284.5,CZ0100,území Hlavního města Prahy,CZ010,lowland,3,temperature
+0-20000-0-11628,"Košetice, Křešín, Kramolín",49.573504,15.08046,532.29,CZ0633,Pelhřimov,CZ063,upland,3,temperature
+0-20000-0-11636,Kostelní Myslová,49.159167,15.439167,569.0,CZ0632,Jihlava,CZ063,upland,3,temperature
+0-20000-0-11653,"Sněžka, Poštovna",50.735833,15.740278,1602.0,CZ0525,Trutnov,CZ052,mountain,2,temperature
+0-20000-0-11659,"Přibyslav, Hřiště",49.582785,15.7625,532.5,CZ0631,Havlíčkův Brod,CZ063,upland,3,temperature
+0-20000-0-11683,Svratouch,49.735,16.034167,734.0,CZ0531,Chrudim,CZ053,upland,3,temperature
+0-20000-0-11692,Sedlec,49.170833,16.120556,474.0,CZ0634,Třebíč,CZ063,upland,3,temperature
+0-20000-0-11693,Dukovany,49.095556,16.134444,400.15,CZ0634,Třebíč,CZ063,upland,3,temperature
+0-20000-0-11723,"Brno, Tuřany",49.153056,16.688889,241.0,CZ0642,Brno-město,CZ064,lowland,3,temperature
+0-20000-0-11730,Šerák,50.1875,17.108333,1328.0,CZ0711,Jeseník,CZ071,mountain,2,temperature
+0-20000-0-11774,Holešov,49.320556,17.57,222.25,CZ0721,Kroměříž,CZ072,lowland,3,temperature
+0-20000-0-11791,"Hošťálková, Maruška",49.3653,17.8286,664.1,CZ0723,Vsetín,CZ072,upland,3,temperature
+0-203-0-10101019002,"Dolní Dvůr, Hanapetrova paseka",50.676074,15.654731,875.0,CZ0525,Trutnov,CZ052,mountain,1,temperature
+0-203-0-10102001101,Obří důl,50.725796,15.727022,950.0,CZ0525,Trutnov,CZ052,mountain,1,temperature
+0-203-0-10102002001,Richterovy Boudy,50.712041,15.692463,1222.0,CZ0525,Trutnov,CZ052,mountain,1,temperature
+0-203-0-10102004001,Černá hora,50.653113,15.741325,1297.0,CZ0525,Trutnov,CZ052,mountain,1,temperature
+0-203-0-10103004001,Teplice nad Metují Zdoňov,50.641075,16.147362,531.0,CZ0523,Náchod,CZ052,upland,3,temperature
+0-203-0-10201001001,Orlické Záhoří - vodárna,50.271475,16.478884,665.0,CZ0524,Rychnov nad Kněžnou,CZ052,upland,2,temperature
+0-203-0-10201037002,"Luisino údolí, Deštné v Orlických horách",50.287003,16.38829,875.0,CZ0524,Rychnov nad Kněžnou,CZ052,mountain,1,temperature
+0-203-0-10201053001,Velká Deštná,50.3031217,16.3964594,1105.0,CZ0524,Rychnov nad Kněžnou,CZ052,mountain,1,temperature
+0-203-0-10202005001,Králíky,50.08289,16.73475,538.0,CZ0534,Ústí nad Orlicí,CZ053,upland,3,temperature
+0-203-0-10202014002,Suchý vrch,50.049859,16.693368,995.0,CZ0534,Ústí nad Orlicí,CZ053,mountain,1,temperature
+0-203-0-10202083001,Borohrádek,50.105254,16.086691,254.0,CZ0524,Rychnov nad Kněžnou,CZ052,lowland,3,temperature
+0-203-0-10302040001,Hrušová,49.916667,16.19522,291.0,CZ0534,Ústí nad Orlicí,CZ053,lowland,3,temperature
+0-203-0-10501021001,Dvoračky,50.748172,15.514525,1115.0,CZ0514,Semily,CZ051,mountain,2,temperature
+0-203-0-10501059001,"Bedřichov, Nová louka",50.81445,15.158215,780.0,CZ0512,Jablonec nad Nisou,CZ051,upland,2,temperature
+0-203-0-10501061001,"Josefův Důl, Rozmezí",50.82287,15.22405,993.0,CZ0512,Jablonec nad Nisou,CZ051,mountain,2,temperature
+0-203-0-10501066001,Příchovice,50.74645,15.35358,830.0,CZ0512,Jablonec nad Nisou,CZ051,mountain,1,temperature
+0-203-0-10502008001,Kozákov,50.594605,15.262881,744.0,CZ0514,Semily,CZ051,upland,1,temperature
+0-203-0-10502085001,Dolní Bousov,50.437897,15.141737,244.0,CZ0207,Mladá Boleslav,CZ020,lowland,2,temperature
+0-203-0-10503002001,Katusice,50.444653,14.779398,312.0,CZ0207,Mladá Boleslav,CZ020,lowland,3,temperature
+0-203-0-10601011001,Borová Lada,48.99055,13.661958,898.0,CZ0315,Prachatice,CZ031,mountain,2,temperature
+0-203-0-10601022001,Větřín,48.978611,13.836944,1157.0,CZ0315,Prachatice,CZ031,mountain,1,temperature
+0-203-0-10601195001,"Ktiš, Tisovka",48.9035069,14.1059625,758.0,CZ0315,Prachatice,CZ031,upland,3,temperature
+0-203-0-10601205001,"Křemže, Mříč",48.9073039,14.3301158,533.0,CZ0312,Český Krumlov,CZ031,upland,2,temperature
+0-203-0-10602027002,Staré Hutě,48.71085,14.706464,780.0,CZ0311,České Budějovice,CZ031,upland,1,temperature
+0-203-0-10801007001,Rokytská slať,49.014559,13.418165,1098.0,CZ0322,Klatovy,CZ032,mountain,1,temperature
+0-203-0-10801019001,Kepelské Zhůří,49.183611,13.316389,928.0,CZ0322,Klatovy,CZ032,mountain,1,temperature
+0-203-0-10801024001,Zlatý stoleček,49.104444,13.336389,1197.0,CZ0322,Klatovy,CZ032,mountain,1,temperature
+0-203-0-10802004001,Kubova Huť,48.986168,13.771537,997.0,CZ0315,Prachatice,CZ031,mountain,2,temperature
+0-203-0-10802009001,Vimperk,49.0657822,13.7824278,637.0,CZ0315,Prachatice,CZ031,upland,2,temperature
+0-203-0-10802073001,Sedlice,49.3756828,13.9416925,511.0,CZ0316,Strakonice,CZ031,upland,2,temperature
+0-203-0-10803007001,"Zbytiny, Spálenec",48.925833,13.969167,792.0,CZ0315,Prachatice,CZ031,upland,1,temperature
+0-203-0-10902036001,"Chotčiny, Polánka",49.455925,14.844278,680.0,CZ0317,Tábor,CZ031,upland,1,temperature
+0-203-0-10904013001,"Praha, Komořany",49.9886,14.40636,213.0,CZ0100,území Hlavního města Prahy,CZ010,lowland,2,temperature
+0-203-0-11001016001,Tachov,49.798357,12.623135,487.0,CZ0327,Tachov,CZ032,upland,2,temperature
+0-203-0-11001055001,"Lázně Kynžvart, Královka",50.011397,12.641703,835.0,CZ0411,Cheb,CZ041,mountain,1,temperature
+0-203-0-11002001002,Rybník,49.515385,12.69832,710.0,CZ0321,Domažlice,CZ032,upland,1,temperature
+0-203-0-11101006001,"Věšín, Teslíny",49.619132,13.761819,720.0,CZ020B,Příbram,CZ020,upland,1,temperature
+0-203-0-11101007001,"Praha, Brdy",49.65889,13.81838,862.0,CZ020B,Příbram,CZ020,mountain,1,temperature
+0-203-0-11201018001,Průhonice,50.007829,14.561121,312.0,CZ020A,Praha-západ,CZ020,lowland,3,temperature
+0-203-0-11301106001,Přebuz,50.37246,12.615467,904.0,CZ0413,Sokolov,CZ041,mountain,2,temperature
+0-203-0-11301161001,Nejdek,50.335684,12.715486,609.0,CZ0412,Karlovy Vary,CZ041,upland,2,temperature
+0-203-0-11302058001,Pernink,50.363232,12.779285,842.0,CZ0412,Karlovy Vary,CZ041,mountain,1,temperature
+0-203-0-11303001001,Pustý zámek,50.23489,13.10992,798.0,CZ0412,Karlovy Vary,CZ041,upland,1,temperature
+0-203-0-11401,Aš,50.220602,12.179572,675.0,CZ0411,Cheb,CZ041,upland,3,temperature
+0-203-0-11401001001,Zákoutí,50.549858,13.354974,828.0,CZ0422,Chomutov,CZ042,mountain,1,temperature
+0-203-0-11403042001,"Mařenice, Pěnkavčí vrch",50.848906,14.616827,711.0,CZ0511,Česká Lípa,CZ051,upland,1,temperature
+0-203-0-11405002001,Malý Javorník,50.8297481,14.4648386,612.0,CZ0421,Děčín,CZ042,upland,1,temperature
+0-203-0-11408,"Šindelová, Obora",50.317449,12.597466,589.0,CZ0413,Sokolov,CZ041,upland,3,temperature
+0-203-0-11413,"Mariánské Lázně, vodárna",49.990619,12.695966,696.0,CZ0411,Cheb,CZ041,upland,3,temperature
+0-203-0-11415,Karlovy Vary,50.227229,12.878151,377.0,CZ0412,Karlovy Vary,CZ041,lowland,2,temperature
+0-203-0-11417,Krásné Údolí,50.071286,12.920958,650.0,CZ0412,Karlovy Vary,CZ041,upland,3,temperature
+0-203-0-11439,Strojetice,50.17378,13.47694,372.0,CZ0424,Louny,CZ042,lowland,3,temperature
+0-203-0-11446,"Plzeň, Bolevec",49.788378,13.386411,331.0,CZ0323,Plzeň-město,CZ032,lowland,2,temperature
+0-203-0-11447,Stříbro,49.752524,12.981105,438.0,CZ0327,Tachov,CZ032,upland,3,temperature
+0-203-0-11451,Staňkov,49.552537,13.067369,362.0,CZ0321,Domažlice,CZ032,lowland,3,temperature
+0-203-0-11455,Klatovy,49.39042,13.303016,421.0,CZ0322,Klatovy,CZ032,upland,3,temperature
+0-203-0-11465,Smolnice,50.30872,13.85617,345.0,CZ0424,Louny,CZ042,lowland,3,temperature
+0-203-0-11478,"Zbiroh, Švabín",49.853987,13.751748,476.0,CZ0326,Rokycany,CZ032,upland,3,temperature
+0-203-0-11483,Rožmitál pod Třemšínem,49.605,13.8664,524.0,CZ020B,Příbram,CZ020,upland,3,temperature
+0-203-0-11493,Kašperské Hory,49.145556,13.55,728.0,CZ0322,Klatovy,CZ032,upland,3,temperature
+0-203-0-11494,Horská Kvilda,49.0533197,13.5652533,1052.0,CZ0322,Klatovy,CZ032,mountain,1,temperature
+0-203-0-11497,Husinec,49.0522,13.9883,483.0,CZ0315,Prachatice,CZ031,upland,3,temperature
+0-203-0-11503,"Ústí nad Labem, Vaňov",50.62556,14.05831,150.0,CZ0427,Ústí nad Labem,CZ042,lowland,3,temperature
+0-203-0-11504,Sněžník,50.79683,14.08536,569.0,CZ0421,Děčín,CZ042,upland,3,temperature
+0-203-0-11510,Kralupy nad Vltavou,50.241923,14.289786,220.0,CZ0206,Mělník,CZ020,lowland,3,temperature
+0-203-0-11514,"Praha, Klementinum",50.086634,14.416923,190.7,CZ0100,území Hlavního města Prahy,CZ010,lowland,3,temperature
+0-203-0-11515,"Praha, Klementinum",50.086341,14.416436,190.7,CZ0100,území Hlavního města Prahy,CZ010,lowland,1,temperature
+0-203-0-11528,"Nadějkov, Větrov",49.5169,14.4653,616.0,CZ0317,Tábor,CZ031,upland,3,temperature
+0-203-0-11547,Černá v Pošumaví,48.7355761,14.1073211,740.0,CZ0312,Český Krumlov,CZ031,upland,3,temperature
+0-203-0-11549,Vyšší Brod,48.6177092,14.3141131,559.0,CZ0312,Český Krumlov,CZ031,upland,3,temperature
+0-203-0-11551,Varnsdorf,50.90556,14.60222,367.0,CZ0421,Děčín,CZ042,lowland,3,temperature
+0-203-0-11552,Jablonné v Podještědí,50.77206,14.77375,320.0,CZ0513,Liberec,CZ051,lowland,3,temperature
+0-203-0-11556,"Český Dub, Modlibohov",50.683677,14.981635,355.0,CZ0513,Liberec,CZ051,lowland,3,temperature
+0-203-0-11557,Stráž pod Ralskem,50.70361,14.80739,310.0,CZ0511,Česká Lípa,CZ051,lowland,3,temperature
+0-203-0-11558,Doksy,50.56811,14.66731,284.0,CZ0511,Česká Lípa,CZ051,lowland,3,temperature
+0-203-0-11572,"Ondřejov, Pecný",49.913822,14.786716,543.0,CZ0209,Praha-východ,CZ020,upland,3,temperature
+0-203-0-11574,Netvořice,49.818411,14.521178,365.0,CZ0201,Benešov,CZ020,lowland,3,temperature
+0-203-0-11578,"Vavřinec, Žíšov",49.902888,15.067741,415.0,CZ0205,Kutná Hora,CZ020,upland,3,temperature
+0-203-0-11581,Hlasivo,49.4981,14.7561,547.0,CZ0317,Tábor,CZ031,upland,3,temperature
+0-203-0-11583,"Černovice, Dobešov",49.3575,14.9625,580.0,CZ0633,Pelhřimov,CZ063,upland,3,temperature
+0-203-0-11585,Borkovice,49.207925,14.636825,419.0,CZ0317,Tábor,CZ031,upland,3,temperature
+0-203-0-11589,"Třeboň, Lužnice",49.0617575,14.7585975,428.0,CZ0313,Jindřichův Hradec,CZ031,upland,3,temperature
+0-203-0-11593,Byňov,48.816603,14.799947,475.0,CZ0311,České Budějovice,CZ031,upland,3,temperature
+0-203-0-11601,Frýdlant,50.91785,15.09015,337.0,CZ0513,Liberec,CZ051,lowland,3,temperature
+0-203-0-11602,Bedřichov,50.81511,15.13708,777.0,CZ0512,Jablonec nad Nisou,CZ051,upland,3,temperature
+0-203-0-11606,Harrachov,50.781746,15.420036,675.0,CZ0512,Jablonec nad Nisou,CZ051,upland,3,temperature
+0-203-0-11608,Hejnice,50.88456,15.18317,396.0,CZ0513,Liberec,CZ051,lowland,3,temperature
+0-203-0-11610,Turnov,50.589631,15.154434,253.0,CZ0514,Semily,CZ051,lowland,3,temperature
+0-203-0-11612,Holovousy,50.375735,15.5810108,321.0,CZ0522,Jičín,CZ052,lowland,3,temperature
+0-203-0-11620,Seč,49.844725,15.6479,529.0,CZ0531,Chrudim,CZ053,upland,3,temperature
+0-203-0-11621,Radovesnice II.,50.106526,15.368164,227.0,CZ0204,Kolín,CZ020,lowland,3,temperature
+0-203-0-11622,"Čáslav, Nové město",49.901695,15.3942797,251.0,CZ0205,Kutná Hora,CZ020,lowland,2,temperature
+0-203-0-11623,Mokošín,50.016395,15.56668,255.0,CZ0532,Pardubice,CZ053,lowland,3,temperature
+0-203-0-11625,Nový Bydžov,50.237553,15.497443,232.0,CZ0521,Hradec Králové,CZ052,lowland,3,temperature
+0-203-0-11626,Hulice,49.721111,15.086667,375.0,CZ0201,Benešov,CZ020,lowland,3,temperature
+0-203-0-11634,Počátky,49.2605217,15.2340794,618.0,CZ0633,Pelhřimov,CZ063,upland,3,temperature
+0-203-0-11637,Vrchlabí,50.622778,15.646389,482.0,CZ0525,Trutnov,CZ052,upland,3,temperature
+0-203-0-11639,Lázně Bělohrad,50.427437,15.588567,299.0,CZ0522,Jičín,CZ052,lowland,3,temperature
+0-203-0-11645,Trutnov,50.558597,15.898311,437.0,CZ0525,Trutnov,CZ052,upland,2,temperature
+0-203-0-11649,"Hradec Králové, Nový Hradec Králové",50.177649,15.838452,278.0,CZ0521,Hradec Králové,CZ052,lowland,3,temperature
+0-203-0-11655,Libice nad Doubravou,49.744164,15.704862,425.0,CZ0631,Havlíčkův Brod,CZ063,upland,3,temperature
+0-203-0-11670,Žamberk,50.069195,16.45477,405.0,CZ0534,Ústí nad Orlicí,CZ053,upland,3,temperature
+0-203-0-11674,Deštné v Orlic. horách,50.306667,16.351959,656.0,CZ0524,Rychnov nad Kněžnou,CZ052,upland,3,temperature
+0-203-0-11675,Úpice,50.506419,16.011618,413.0,CZ0525,Trutnov,CZ052,upland,3,temperature
+0-203-0-11676,Rokytnice v Orlic.horách,50.164432,16.460258,577.0,CZ0524,Rychnov nad Kněžnou,CZ052,upland,3,temperature
+0-203-0-11678,Velichovky,50.356612,15.832503,299.0,CZ0523,Náchod,CZ052,lowland,3,temperature
+0-203-0-11685,Nedvězí,49.6344,16.3097,722.0,CZ0533,Svitavy,CZ053,upland,3,temperature
+0-203-0-11686,Bystřice nad Pernštejnem,49.52416,16.25401,553.0,CZ0635,Žďár nad Sázavou,CZ063,upland,3,temperature
+0-203-0-11687,Velké Meziříčí,49.3528,16.0086,452.0,CZ0635,Žďár nad Sázavou,CZ063,upland,3,temperature
+0-203-0-11696,Dyjákovice,48.769,16.2925,187.0,CZ0647,Znojmo,CZ064,lowland,3,temperature
+0-203-0-11701,Javorník,50.3956,17.0075,284.0,CZ0711,Jeseník,CZ071,lowland,3,temperature
+0-203-0-11704,"Staré Město pod Sněžníkem, Paprsek",50.209444,16.988889,1001.0,CZ0715,Šumperk,CZ071,mountain,2,temperature
+0-203-0-11709,Dubicko,49.8269,16.9662,282.0,CZ0715,Šumperk,CZ071,lowland,2,temperature
+0-203-0-11711,Třebařov,49.8158,16.6969,375.0,CZ0533,Svitavy,CZ053,lowland,3,temperature
+0-203-0-11713,Jevíčko,49.6309,16.7055,362.0,CZ0533,Svitavy,CZ053,lowland,3,temperature
+0-203-0-11716,Protivanov,49.47782,16.83105,675.0,CZ0713,Prostějov,CZ071,upland,3,temperature
+0-203-0-11724,Pohořelice,48.9844,16.5283,180.0,CZ0643,Brno-venkov,CZ064,lowland,3,temperature
+0-203-0-11725,Kobylí,48.9394,16.8814,175.0,CZ0644,Břeclav,CZ064,lowland,3,temperature
+0-203-0-11729,Brod nad Dyjí,48.8733,16.5358,177.0,CZ0644,Břeclav,CZ064,lowland,3,temperature
+0-203-0-11733,Karlova Studánka,50.074053,17.306832,795.0,CZ0801,Bruntál,CZ080,upland,2,temperature
+0-203-0-11737,Rýmařov,49.931389,17.296111,578.0,CZ0801,Bruntál,CZ080,upland,3,temperature
+0-203-0-11741,Paseka,49.7776,17.2345,271.0,CZ0712,Olomouc,CZ071,lowland,2,temperature
+0-203-0-11742,"Olomouc, Holice",49.5757644,17.2839678,210.0,CZ0712,Olomouc,CZ071,lowland,3,temperature
+0-203-0-11761,"Město Albrechtice, Žáry",50.154167,17.560556,498.0,CZ0801,Bruntál,CZ080,upland,2,temperature
+0-203-0-11762,Krnov,50.078,17.6922,360.0,CZ0801,Bruntál,CZ080,lowland,3,temperature
+0-203-0-11765,Bělotín,49.5869186,17.8040922,306.0,CZ0714,Přerov,CZ071,lowland,3,temperature
+0-203-0-11767,Vítkov,49.778037,17.757308,490.0,CZ0805,Opava,CZ080,upland,3,temperature
+0-203-0-11769,Valašské Meziříčí,49.4636,17.9742,334.0,CZ0723,Vsetín,CZ072,lowland,3,temperature
+0-203-0-11770,Hošťálková,49.3514,17.8683,385.0,CZ0723,Vsetín,CZ072,lowland,2,temperature
+0-203-0-11771,Bystřice pod Hostýnem,49.3964,17.6706,314.0,CZ0721,Kroměříž,CZ072,lowland,3,temperature
+0-203-0-11775,Zlín,49.236667,17.643333,283.0,CZ0724,Zlín,CZ072,lowland,2,temperature
+0-203-0-11778,"Luhačovice, Kladná-Žilín",49.0842,17.7925,329.0,CZ0724,Zlín,CZ072,lowland,3,temperature
+0-203-0-11779,Strání,48.9033,17.7086,383.0,CZ0722,Uherské Hradiště,CZ072,lowland,3,temperature
+0-203-0-11780,Štítná nad Vláří - Popov,49.0728,17.9711,315.0,CZ0724,Zlín,CZ072,lowland,3,temperature
+0-203-0-11781,"Bohumín, Záblatí",49.882,18.3692,237.0,CZ0803,Karviná,CZ080,lowland,3,temperature
+0-203-0-11784,Lučina,49.7308,18.4425,300.0,CZ0802,Frýdek-Místek,CZ080,lowland,3,temperature
+0-203-0-11785,Frenštát pod Radhoštěm,49.541055,18.240568,436.0,CZ0804,Nový Jičín,CZ080,upland,3,temperature
+0-203-0-11786,Rožnov pod Radhoštěm,49.461251,18.138224,375.0,CZ0723,Vsetín,CZ072,lowland,2,temperature
+0-203-0-11794,Horní Bečva,49.4312817,18.2984836,565.0,CZ0723,Vsetín,CZ072,upland,3,temperature
+0-203-0-11797,Ropice,49.6975011,18.6127428,327.0,CZ0802,Frýdek-Místek,CZ080,lowland,2,temperature
+0-203-0-11798,Mořkov,49.5414,18.057778,345.0,CZ0804,Nový Jičín,CZ080,lowland,2,temperature
+0-203-0-20101095001,Hladké Životice,49.690556,17.949444,256.0,CZ0804,Nový Jičín,CZ080,lowland,2,temperature
+0-203-0-20101156002,"Ostrava, Zábřeh",49.787786,18.24341,238.0,CZ0806,Ostrava-město,CZ080,lowland,2,temperature
+0-203-0-20201004002,Malý Děd,50.1025847,17.2207511,1367.0,CZ0711,Jeseník,CZ071,mountain,1,temperature
+0-203-0-20201031001,Nové Heřminovy,50.037435,17.558457,395.0,CZ0801,Bruntál,CZ080,lowland,3,temperature
+0-203-0-20202006001,"Suchá Rudná, Hubertka",50.0674553,17.3243789,956.0,CZ0801,Bruntál,CZ080,mountain,1,temperature
+0-203-0-20202012001,Jelení studánka,50.0317225,17.2007144,1238.0,CZ0801,Bruntál,CZ080,mountain,1,temperature
+0-203-0-20202055001,Slezská Harta,49.888611,17.575278,516.0,CZ0801,Bruntál,CZ080,upland,2,temperature
+0-203-0-20301004002,"Bílá, Kavalčanky",49.4238778,18.4659831,711.0,CZ0802,Frýdek-Místek,CZ080,upland,1,temperature
+0-203-0-20301006001,"Bílý Kříž, ÚVGZ",49.5026078,18.5385761,892.0,CZ0802,Frýdek-Místek,CZ080,mountain,1,temperature
+0-203-0-20301006002,"Bílá, Polaň",49.45053,18.4913758,613.0,CZ0802,Frýdek-Místek,CZ080,upland,1,temperature
+0-203-0-20301053301,"Frýdek-Místek, Sviadnov",49.7012208,18.32057,270.0,CZ0802,Frýdek-Místek,CZ080,lowland,3,temperature
+0-203-0-20302008201,"Ostrava, Slezská Ostrava",49.844977,18.317553,269.0,CZ0806,Ostrava-město,CZ080,lowland,2,temperature
+0-203-0-20303008001,Horní Lomná,49.5341342,18.6376314,582.0,CZ0802,Frýdek-Místek,CZ080,upland,2,temperature
+0-203-0-20303018003,"Nýdek, Filipka",49.616676,18.788599,745.0,CZ0802,Frýdek-Místek,CZ080,upland,2,temperature
+0-203-0-20303019001,"Nýdek, Velká Čantoryje",49.678896,18.794802,952.0,CZ0802,Frýdek-Místek,CZ080,mountain,1,temperature
+0-203-0-20303032003,"Třinec, Oldřichovice, Javorový ",49.628333,18.627222,930.0,CZ0802,Frýdek-Místek,CZ080,mountain,2,temperature
+0-203-0-20401014001,Chuchelná,49.991679,18.119769,258.0,CZ0805,Opava,CZ080,lowland,2,temperature
+0-203-0-20402025002,Zlaté Hory,50.252778,17.3926,444.0,CZ0711,Jeseník,CZ071,upland,2,temperature
+0-203-0-20404027002,"Uhelná, Nové Vilémovice",50.332069,16.984708,615.0,CZ0711,Jeseník,CZ071,upland,2,temperature
+0-203-0-20404057002,Vidnava,50.3776347,17.1916369,228.0,CZ0711,Jeseník,CZ071,lowland,2,temperature
+0-203-0-20410008001,Krásná Máří,50.8518,15.17433,910.0,CZ0513,Liberec,CZ051,mountain,1,temperature
+0-203-0-40102028001,Knížecí strom,49.7641169,12.4838522,812.0,CZ0327,Tachov,CZ032,mountain,1,temperature
+0-203-0-40201003001,Špičák,49.169506,13.215816,973.0,CZ0322,Klatovy,CZ032,mountain,2,temperature
+0-203-0-41001017002,"Staré Město pod Sněžníkem, Paprsek",50.209659,16.990306,999.0,CZ0715,Šumperk,CZ071,mountain,1,temperature
+0-203-0-41001042001,Hanušovice,50.0819,16.940556,432.0,CZ0715,Šumperk,CZ071,upland,2,temperature
+0-203-0-41002010001,Lanškroun,49.9028,16.625,362.0,CZ0534,Ústí nad Orlicí,CZ053,lowland,2,temperature
+0-203-0-41002039001,Štíty,49.9564964,16.7647122,432.0,CZ0715,Šumperk,CZ071,upland,2,temperature
+0-203-0-41101014001,Velké Karlovice,49.359444,18.286944,518.0,CZ0723,Vsetín,CZ072,upland,2,temperature
+0-203-0-41101024001,"Nový Hrozenkov, Kohútka",49.295467,18.222954,868.0,CZ0723,Vsetín,CZ072,mountain,1,temperature
+0-203-0-41101042002,Valašská Senice,49.2400942,18.1269842,615.0,CZ0723,Vsetín,CZ072,upland,3,temperature
+0-203-0-41101075001,"Kateřinice, Ojičná",49.400762,17.873311,585.0,CZ0723,Vsetín,CZ072,upland,3,temperature
+0-203-0-41101078002,"Kateřinice, Ojičná",49.401124,17.873155,586.0,CZ0723,Vsetín,CZ072,upland,1,temperature
+0-203-0-41101095001,"Horní Bečva, Kudlačena",49.431801,18.325566,656.0,CZ0723,Vsetín,CZ072,upland,1,temperature
+0-203-0-41102037001,"Potštát, Boškov",49.6238,17.6142,545.0,CZ0714,Přerov,CZ071,upland,2,temperature
+0-203-0-41301088002,Bojkovice,49.0402,17.81,310.0,CZ0722,Uherské Hradiště,CZ072,lowland,2,temperature
 0-203-0-41501115001,"Tišnov, Hájek",49.3731,16.4725,409.0,CZ0643,Brno-venkov,CZ064,upland,3,temperature
+0-203-0-41503035001,Nemochovice,49.1808,17.1361,283.0,CZ0646,Vyškov,CZ064,lowland,3,temperature
+0-203-0-41601049001,"Jihlava, Hruškové Dvory",49.4064,15.6164,468.0,CZ0632,Jihlava,CZ063,upland,2,temperature
+0-203-0-41701013001,Ždánice,49.071944,17.025556,238.0,CZ0645,Hodonín,CZ064,lowland,2,temperature
