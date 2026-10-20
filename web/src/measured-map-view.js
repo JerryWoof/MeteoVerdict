@@ -78,7 +78,8 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
   const zoomedIn = () => view.layer === "okresy" && stations.length > 0 && map.getZoom() >= STATION_ZOOM;
   // the rows on the map now: the okresy's, or zoomed in their stations
   const active = () => (zoomedIn() ? stations : rows);
-  // part, shown, colour; layer "stations" or "okresy" with fill (okres → colour) and okres
+  // part, shown, colour; layer "stations" or "okresy" with fill (okres → colour) and okres;
+  // `err` ({byId: Map(station → model error | null), ramp}) colours the dots by a model's error
   let view = { part: "day", shown: [], colour: "temperature", layer: "stations", fill: null, okres: null };
   let loaded = false;
   const ready = new Promise((resolve) => map.on("load", resolve));
@@ -112,7 +113,10 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
       chipBox.append(chip);
       chips[layer] = { chip, text };
     }
-    el.append(top, chipBox);
+    // the model's error at the station (error colouring): the dot's colour, readable under the label
+    const errChip = element("span", null, "wx-err");
+    errChip.hidden = true;
+    el.append(top, chipBox, errChip);
     el.addEventListener("click", (event) => {
       event.stopPropagation();
       const current = byId.get(row.id);
@@ -124,7 +128,7 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
     });
     el.addEventListener("mouseleave", () => popup.remove());
     const marker = new Marker({ element: el }).setLngLat([row.lon, row.lat]);
-    entry = { marker, el, canvas, temp, chips, chipBox, icon: null, onMap: false };
+    entry = { marker, el, canvas, temp, chips, chipBox, errChip, icon: null, onMap: false };
     markers.set(row.id, entry);
     return entry;
   }
@@ -149,6 +153,16 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
       text.textContent = labelFor(row, layer, part);
     }
     entry.chipBox.hidden = !any;
+    const e = view.err ? view.err.byId.get(row.id) ?? null : null;
+    entry.errChip.hidden = e == null;
+    if (e != null) {
+      const fill = colorFor(e, view.err.ramp);
+      entry.errChip.textContent = view.err.label(e);
+      entry.errChip.style.background = fill;
+      // dark text on the pale middle of the scale, white on the saturated ends
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(fill.slice(i, i + 2), 16));
+      entry.errChip.style.color = 0.299 * r + 0.587 * g + 0.114 * b > 150 ? "#1d2329" : "#fff";
+    }
     entry.el.setAttribute("aria-label", `${row.name}: ${describe(row, part)}`);
   }
 
@@ -160,6 +174,7 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
       shown: view.shown,
       part: view.part,
       selected: view.okres,
+      errors: view.err?.byId ?? null,
       project: (r) => map.project([r.lon, r.lat]),
       width,
       height,
@@ -189,13 +204,15 @@ export function createMeasuredMap({ container, t, onPick, onOkres, describe }) {
     return {
       type: "FeatureCollection",
       features: active().map((r) => {
-        const value = valueFor(r, view.colour, view.part);
+        // a station without an error (outside the stations with stored forecasts, or the model has no value) stays grey
+        const value = view.err ? view.err.byId.get(r.id) ?? null : valueFor(r, view.colour, view.part);
+        const ramp = view.err ? view.err.ramp : key;
         return {
           type: "Feature",
           geometry: { type: "Point", coordinates: [r.lon, r.lat] },
           properties: {
             id: r.id,
-            color: value != null && RAMPS[key] ? colorFor(value, key) : GREY,
+            color: value != null && RAMPS[ramp] ? colorFor(value, ramp) : GREY,
             has: value != null ? 1 : 0,
             main: r.kind === "main" ? 1 : 0,
           },

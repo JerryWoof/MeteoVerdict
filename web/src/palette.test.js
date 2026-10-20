@@ -13,7 +13,7 @@ test("the forecast map and the measured page share one palette", () => {
   // both pages draw the legend with palette.renderScale, and neither builds its own
   for (const file of ["tv-page.js", "station-page.js"]) {
     const code = source(file);
-    assert.match(code, /import \{ renderScale \} from "\.\/palette\.js"/, file);
+    assert.match(code, /import \{[^}]*\brenderScale\b[^}]*\} from "\.\/palette\.js"/, file);
     assert.doesNotMatch(code, /linear-gradient/, file);
   }
   // the measured map's okres fills and station dots take the palette's colours
@@ -43,4 +43,19 @@ test("the legend: bar and ends", () => {
   assert.equal(palette.scale("sunshine").ends, "0 h … 6 h");
   assert.match(palette.scale("wind").gradient, /^linear-gradient\(to right, #f4f1ea 0%/);
   assert.equal(palette.scale("nothing"), null);
+});
+
+test("the error scale is diverging: blue below zero, red above, labelled with a sign", () => {
+  assert.equal(palette.errorRampKey("tmax"), "errTemp");
+  assert.equal(palette.errorRampKey("r"), "errRain");
+  assert.equal(palette.errorRampKey("wind"), "errWind");
+  const [low, mid, high] = [-4, 0, 4].map((v) => palette.colorFor(v, "errTemp"));
+  const channel = (hex, i) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+  assert.ok(channel(low, 2) > channel(low, 0), "blue end");
+  assert.ok(channel(high, 0) > channel(high, 2), "red end");
+  assert.notEqual(mid, low);
+  assert.equal(palette.colorFor(-60, "errTemp"), low); // clamped
+  assert.equal(palette.scaleValue("errTemp", 4), "+4 °C");
+  assert.equal(palette.scaleValue("errRain", -8), "−8 mm");
+  assert.equal(palette.scale("errWind").ends, "−4 m/s … +4 m/s");
 });

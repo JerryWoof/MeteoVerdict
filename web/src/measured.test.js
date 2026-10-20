@@ -217,3 +217,15 @@ test("a station's link keeps the day", () => {
   assert.equal(stationHref("0-20000-0-11518", "2026-10-16"), "?day=2026-10-16#0-20000-0-11518");
   assert.equal(stationHref("0-20000-0-11518", null), "#0-20000-0-11518");
 });
+
+test("a station with a model error gets a label and room for its chip", () => {
+  const row = { id: "S", lon: 15, lat: 50, symbol: null, tmax: null, precipitation: null };
+  const plain = labelSize(row, [], "day");
+  const withError = labelSize(row, [], "day", true);
+  assert.ok(withError.h >= 17 && withError.h > plain.h && withError.w >= 56);
+  const project = () => ({ x: 100, y: 100 });
+  const options = { shown: [], part: "day", project, width: 400, height: 400 };
+  assert.equal(pickLabels([row], options).size, 0);
+  assert.equal(pickLabels([row], { ...options, errors: new Map([["S", 1.2]]) }).has("S"), true);
+  assert.equal(pickLabels([row], { ...options, errors: new Map([["S", null]]) }).has("S"), false);
+});

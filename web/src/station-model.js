@@ -23,6 +23,9 @@ export const VARIABLES = [
   { key: "gust", digits: 1, unit: "m/s" },
 ];
 
+/** The values of the map's model-error colouring (the per-day files of `mvd station-fc`). */
+export const ERROR_VARS = ["tmax", "tmin", "r", "wind"];
+
 /** The single models in the order of the selector (others follow alphabetically). */
 const MODEL_ORDER = [
   "chmi_aladin_cz_1km", "chmi_aladin_central_europe_2km", "dwd_icon_d2", "dwd_icon_eu", "dwd_icon",
@@ -32,25 +35,28 @@ const MODEL_ORDER = [
   "jma_gsm", "cma_grapes_global",
 ];
 
-const SUFFIX = /;m=([a-z0-9_]+)(?:;l=(\d))?$/;
+const SUFFIX = /;m=([a-z0-9_]+)(?:;l=(\d))?(?:;e=([a-z]+))?$/;
 
-/** "#day/…;m=dwd_icon_d2;l=2" → {hash: "#day/…", model, lead}; without the suffix the
- * defaults (the choice of the page is then left as it is: `model`/`lead` null). */
+/** "#day/…;m=dwd_icon_d2;l=2;e=tmax" → {hash: "#day/…", model, lead, err}; without the suffix
+ * the choice of the page is left as it is (`model`/`lead` null); `err` (the map coloured by
+ * that value's model error) only when given. */
 export function splitModelHash(hash) {
   const text = hash ?? "";
   const m = SUFFIX.exec(text);
   if (!m) return { hash: text, model: null, lead: null };
   const lead = Number(m[2] ?? DEFAULT_LEAD);
-  return { hash: text.slice(0, m.index), model: m[1], lead: LEADS.includes(lead) ? lead : DEFAULT_LEAD };
+  const out = { hash: text.slice(0, m.index), model: m[1], lead: LEADS.includes(lead) ? lead : DEFAULT_LEAD };
+  return ERROR_VARS.includes(m[3]) ? { ...out, err: m[3] } : out;
 }
 
 /** The hash with the model choice appended (nothing for the defaults, to keep plain links plain). */
-export function withModelHash(hash, { model, lead }) {
+export function withModelHash(hash, { model, lead, err }) {
   const base = splitModelHash(hash).hash || "#";
   const parts = [];
-  if (model !== DEFAULT_MODEL || lead !== DEFAULT_LEAD) {
+  if (model !== DEFAULT_MODEL || lead !== DEFAULT_LEAD || err) {
     parts.push(`;m=${model}`);
     if (lead !== DEFAULT_LEAD) parts.push(`;l=${lead}`);
+    if (err) parts.push(`;e=${err}`);
   }
   return `${base}${parts.join("")}`;
 }
@@ -108,6 +114,18 @@ export function errorSummary(series) {
 }
 
 /**
+ * One station's model error (model minus measured) for a day, from the per-day error file:
+ * {byId: Map(station id → error | null), hasModel}; `hasModel` false when the file has no
+ * values of the model (MeteoVerdict AI: none published; or no model at all that day).
+ */
+export function errorLookup(doc, model, lead, key) {
+  const column = doc?.e?.[key]?.[String(lead)]?.[model];
+  if (!doc || !column || !Array.isArray(doc.stations)) return { byId: new Map(), hasModel: false };
+  const scale = doc.scale ?? 10;
+  return { byId: new Map(doc.stations.map((id, i) => [id, column[i] == null ? null : column[i] / scale])), hasModel: true };
+}
+
+/**
  * @param {object} o
  * @param {(path: string) => Promise<object|null>} o.getJson
  * @param {Function} o.t i18n
@@ -123,7 +141,10 @@ export function createModelCompare({ getJson, t, language }) {
   const loadStation = (id) => once(`s|${id}`, () => getJson(`data/scores/station-fc/${id}.json`));
   const loadAi = (id) => once(`a|${id}`, () => getJson(`data/scores/ai/fc/stations/fc/${id}.json`));
 
-  const state = { model: DEFAULT_MODEL, lead: DEFAULT_LEAD, key: "tmax" };
+  const loadErrors = (day) => once(`e|${day}`, () => getJson(`data/scores/station-fc/err-${day}.json`));
+
+  // `err`: the value whose model error colours the map's dots (null: the measured values)
+  const state = { model: DEFAULT_MODEL, lead: DEFAULT_LEAD, key: "tmax", err: null };
   const fmt = (v, digits = 1) =>
     v == null ? "–" : v.toLocaleString(language, { minimumFractionDigits: digits, maximumFractionDigits: digits });
   const signed = (v, digits = 1) => (v == null ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmt(Math.abs(v), digits)}`);
@@ -318,5 +339,5 @@ export function createModelCompare({ getJson, t, language }) {
     return box;
   }
 
-  return { state, loadIndex, stationSection, okresSection, options: async () => modelOptions(await loadIndex(), t) };
+  return { state, loadIndex, loadErrors, stationSection, okresSection, options: async () => modelOptions(await loadIndex(), t) };
 }

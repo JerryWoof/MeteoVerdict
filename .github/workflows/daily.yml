@@ -80,7 +80,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Every model at the station point, by day (the measured page's model selector)
         # optional, like the farmers' skill (reuses the runs and observations it downloaded):
-        # station-fc.zip in data-latest, read by the Pages build
+        # station-fc.zip in data-latest (per-station files and the per-day model-error
+        # files of the map's dot colours), read by the Pages build
         continue-on-error: true
         timeout-minutes: 30
         run: uv run --frozen mvd station-fc --github-release --publish
