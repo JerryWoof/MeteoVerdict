@@ -22,6 +22,6 @@ export function nearestPlace(places, lat, lon) {
   return best;
 }
 
-/** The detailed forecast page of an okres and an obec in it. */
+/** The forecast page's map with an okres and an obec in it selected (panel open). */
 export const forecastLink = (code, obec) =>
-  `forecast-detail.html#${code}${obec ? `/${encodeURIComponent(obec)}` : ""}`;
+  `forecast.html#${code}${obec ? `/${encodeURIComponent(obec)}` : ""}`;
