@@ -493,3 +493,48 @@ def test_high_sites_are_left_out_of_the_okres_and_ranked_on_their_own():
     assert mae("high_sites") == ({"a": 6.0, "b": 2.0}, 1)
     station = table.filter(pl.col("level") == "station", pl.col("region") == "summit")
     assert station.height == 2
+
+
+def test_wind_atypical_stations_are_left_out_of_okres_wind_only(monkeypatch):
+    monkeypatch.setattr(agg, "WIND_ATYPICAL", frozenset({"low3"}))
+    ids = ["low1", "low2", "low3", "low4"]
+    stations = pl.DataFrame(
+        {
+            "id": ids,
+            "name": ids,
+            "okres_code": ["CZ0423"] * 4,
+            "okres": ["Litoměřice"] * 4,
+            "kraj_code": ["CZ042"] * 4,
+            "kraj": ["Ústecký kraj"] * 4,
+            "elevation_class": ["lowland"] * 4,
+            "elevation": [180.0, 210.0, 240.0, 200.0],
+        }
+    )
+    rows = []
+    for d in [DAY - timedelta(days=i) for i in range(3)]:
+        for station in ids:
+            rows += [(d, station, "a", 1, 5.0 if station == "low3" else 1.0)]
+            rows += [(d, station, "b", 1, 2.0)]
+    temperature = score_rows(rows)
+    wind = temperature.with_columns(pl.lit("wind_speed_10m").alias("variable"))
+    table = agg.aggregate(
+        pl.concat([temperature, wind]), stations, windows=("all",), corrected=False
+    )
+
+    def result(level, variable):
+        here = table.filter(
+            pl.col("level") == level, pl.col("variable") == variable, pl.col("model") == "a"
+        )
+        return here["mae"].item(), here["stations"].item()
+
+    assert result("okres", "temperature_2m") == (2.0, 4)  # temperature keeps it
+    assert result("okres", "wind_speed_10m") == (1.0, 3)  # wind leaves low3 out
+    assert result("cz", "wind_speed_10m") == (2.0, 4)  # other levels unchanged
+    station = table.filter(pl.col("level") == "station", pl.col("variable") == "wind_speed_10m")
+    assert "low3" in station["region"].to_list()  # still scored on its own
+
+
+def test_wind_atypical_list_is_versioned_data():
+    ids = agg.load_wind_atypical()
+    assert len(ids) == 19
+    assert not ids & {"0-20000-0-11457"}  # sample: a representative station
