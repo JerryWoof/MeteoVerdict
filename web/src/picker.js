@@ -3,6 +3,7 @@
 // then the models without scores there (forecast.js modelOptions).
 
 import { COMBINED, modelOptions } from "./forecast.js";
+import { AI_MODEL } from "./ai-model.js";
 
 function optionText(o, names, t) {
   if (o.model === COMBINED) return t("forecast.pickCombined");
@@ -21,6 +22,7 @@ function optionText(o, names, t) {
  */
 export function fillPicker(select, { table, names, available, selected, t }) {
   const options = modelOptions(table, names, available);
+  // a choice the okres cannot offer (no AI forecast there) falls back to our combination
   const chosen = options.some((o) => o.model === selected) ? selected : COMBINED;
   const option = (o) => {
     const element = document.createElement("option");
@@ -36,8 +38,11 @@ export function fillPicker(select, { table, names, available, selected, t }) {
     return element;
   };
   const scored = options.filter((o) => o.scored);
-  const unscored = options.filter((o) => !o.scored && o.model !== COMBINED);
+  const unscored = options.filter((o) => !o.scored && o.model !== COMBINED && o.model !== AI_MODEL);
+  // MeteoVerdict AI (when the okres has it) first, above our combination, in no group
+  const ai = options.find((o) => o.model === AI_MODEL);
   select.replaceChildren(
+    ...(ai ? [option(ai)] : []),
     option(options[0]),
     ...(scored.length ? [group("forecast.pickScored", scored)] : []),
     ...(unscored.length ? [group("forecast.pickUnscored", unscored)] : []),

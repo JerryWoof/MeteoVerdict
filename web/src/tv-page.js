@@ -23,7 +23,7 @@ import {
 } from "./tv.js";
 import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 import { AI_FILES, aiPath, aiText } from "./ai-source.js";
-import { AI_MODEL, aiMapView, loadAi, withAi } from "./ai-model.js";
+import { AI_MODEL, aiMapView, hasAi, loadAi, withAi } from "./ai-model.js";
 import { renderAiExtras } from "./ai-extras.js";
 import { renderAiVerify } from "./ai-verify-view.js";
 setWorkerUrl(workerUrl);
@@ -112,16 +112,21 @@ let playing = null; // "day" or "week" while playing
 
 // --- which forecast the whole map shows: our combination (outlook.json) or one model's
 // raw forecast (forecast/models-parts/<model>.json, all okresy). Not remembered: no
-// storage and nothing in the URL, every page load starts on the combination.
+// storage and nothing in the URL, every page load starts on MeteoVerdict AI when it is offered
+// (fresh file), else on the combination.
 let mapModel = COMBINED;
 let mapView = null; // parseModelParts of mapModel while it is shown
 let mapStatus = null; // null, {loading: model} or {failed: model}
 let mapToken = 0;
 let modelIndex = null; // forecast/models-parts/index.json
 let modelNames = {}; // meta.json models
-let aiData = null; // MeteoVerdict AI as one more model (ai-model.js); null: not offered
+let aiData = null; // MeteoVerdict AI as one more model (ai-model.js); null: not offered (missing or stale)
+let mapChosen = false; // the user picked a map model: the AI default no longer applies
 const modelViews = new Map(); // model → parsed file (loaded once)
 let mapReady = false; // the selector works once the map has its layers
+
+/** The panel of an okres starts on the map's model; MeteoVerdict AI without data there: the combination. */
+const panelStart = (okres) => (mapModel === AI_MODEL && !hasAi(aiData, okres) ? COMBINED : mapModel);
 
 /** What the map draws: the chosen model's view, or our combination. */
 const shownView = () => (mapModel !== COMBINED && mapView ? mapView : outlook);
@@ -474,7 +479,7 @@ function partCell(row, part, single) {
 /** The badge and the short explanation shown while MeteoVerdict AI is selected. */
 function experimentalNote(generated) {
   const note = element("p", null, "model-note");
-  note.append(element("span", t("ai.badge"), "ai-badge"), " ", t("ai.modelNote", { time: issuedText(generated) ?? "–" }));
+  note.append(t("ai.modelNote", { time: issuedText(generated) ?? "–" }));
   note.title = t("ai.modelTip");
   return note;
 }
@@ -489,7 +494,7 @@ function modelPicker(data, rows) {
   // the map's model is offered also while the okres's file loads (the map has its values)
   const available = new Set([
     ...(ready ? Object.keys(data.parsed.models) : []),
-    ...(mapView && mapModel !== COMBINED ? [mapModel] : []),
+    ...(mapView && mapModel !== COMBINED && (mapModel !== AI_MODEL || hasAi(aiData, state.okres)) ? [mapModel] : []),
   ]);
   const chosen = fillPicker(select, {
     table: data.table,
@@ -522,7 +527,9 @@ function modelPicker(data, rows) {
     }
   }
   if (single && panelModel === AI_MODEL) notes.push(experimentalNote(data.parsed?.aiIssued ?? mapView?.generated));
-  if (panelModel !== mapModel) notes.push(element("p", t("tv.panelOnly", { map: modelName(mapModel) }), "model-note"));
+  if (mapModel === AI_MODEL && panelModel === COMBINED && !hasAi(aiData, state.okres)) {
+    notes.push(element("p", t("tv.aiFallback"), "model-note"));
+  } else if (panelModel !== mapModel) notes.push(element("p", t("tv.panelOnly", { map: modelName(mapModel) }), "model-note"));
   return [label, ...notes];
 }
 
@@ -730,7 +737,7 @@ function paintFill(colours) {
 function update(change = {}, fromPlay = false) {
   if (!fromPlay) stopPlay();
   // another okres (or none) starts on the forecast the map shows
-  if ("okres" in change && change.okres !== state.okres) panelModel = mapModel;
+  if ("okres" in change && change.okres !== state.okres) panelModel = panelStart(change.okres);
   // test: an obec's panel (change.obec) or its okres's; any other okres change closes it
   if ("okres" in change) panelObec = change.okres ? change.obec ?? null : null;
   // the AI tab's "forecast vs measured" follows the okres opened on the map
@@ -853,17 +860,23 @@ function renderMapPicker() {
   const ranked = options.filter((o) => o.rank != null)
     .map((o) => option(o.model, t("forecast.pickOption", { position: o.position, model: o.name, rank: rank(o.rank) })));
   const others = options.filter((o) => o.rank == null).map((o) => option(o.model, o.name));
-  // MeteoVerdict AI: experimental, in its own group at the end (never the default)
-  const experimental = aiData && !AI ? [group("tv.mapModelExperimental", [option(AI_MODEL, t("ai.modelName"))])] : [];
+  // MeteoVerdict AI (experimental in its name): the first option, above our combination
+  const aiOption = aiData && !AI ? [option(AI_MODEL, t("ai.modelName"))] : [];
   select.replaceChildren(
+    ...aiOption,
     option(COMBINED, t("forecast.pickCombined")),
     ...(ranked.length ? [group("tv.mapModelRanked", ranked)] : []),
     ...(others.length ? [group("tv.mapModelOthers", others)] : []),
-    ...experimental,
   );
   select.value = mapModel;
-  select.disabled = !mapReady || (options.length === 0 && !experimental.length);
+  select.disabled = !mapReady || (options.length === 0 && !aiOption.length);
   document.getElementById("map-model").title = t(options.length ? "tv.mapModelHint" : "tv.mapModelsMissing");
+}
+
+/** Once the map and a fresh AI file are there, MeteoVerdict AI is the default (unless chosen already). */
+function defaultToAi() {
+  if (AI || !aiData || !mapReady || mapChosen || mapModel !== COMBINED) return;
+  setMapModel(AI_MODEL);
 }
 
 /** Switch the whole map (and the okres panel) to `model`, or back to our combination. */
@@ -900,7 +913,7 @@ async function setMapModel(model) {
     mapStatus = null;
   }
   // the open okres follows the map
-  panelModel = mapModel;
+  panelModel = panelStart(state.okres);
   update();
 }
 
@@ -1009,6 +1022,7 @@ async function main() {
     modelNames = { ...meta?.models };
     renderMapPicker();
     if (state.okres) renderPanel(outlook);
+    defaultToAi();
   });
   await mapLoaded;
   addLayers();
@@ -1025,9 +1039,13 @@ async function main() {
   document.getElementById("obce-search").replaceChildren(
     placeSearch({ t, load: loadPlaces, choose: chooseObec }),
   );
-  picker.addEventListener("change", () => setMapModel(picker.value));
+  picker.addEventListener("change", () => {
+    mapChosen = true;
+    setMapModel(picker.value);
+  });
   mapReady = true;
   renderMapPicker();
+  defaultToAi();
 }
 
 // the past days moved to the measured page: an old link to a past day opens it there
