@@ -2743,6 +2743,11 @@ body.station [hidden] {
 .measured-head h2 {
   margin: 0;
 }
+/* the Weather / Stations switch sits where the title was: its size on phones too (the
+   segmented controls of the ribbon grow to the full width there) */
+.measured-mode {
+  flex: none;
+}
 .measured-mode button {
   padding: 0.3rem 0.8rem;
 }
