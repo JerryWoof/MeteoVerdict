@@ -24,6 +24,6 @@ test("nearestPlace: the closest place to a position", () => {
 });
 
 test("forecastLink: okres and encoded obec", () => {
-  assert.equal(forecastLink("CZ0423", "Úštěk"), "forecast-detail.html#CZ0423/%C3%9A%C5%A1t%C4%9Bk");
-  assert.equal(forecastLink("CZ0100"), "forecast-detail.html#CZ0100");
+  assert.equal(forecastLink("CZ0423", "Úštěk"), "forecast.html#CZ0423/%C3%9A%C5%A1t%C4%9Bk");
+  assert.equal(forecastLink("CZ0100"), "forecast.html#CZ0100");
 });

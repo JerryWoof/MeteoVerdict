@@ -354,7 +354,7 @@ async function showRegion(region) {
   links.append(compare);
   if (current.level === "okres") {
     const forecast = element("a", t("detail.forecast"));
-    forecast.href = `forecast-detail.html#${region}`;
+    forecast.href = `forecast.html#${region}/`;
     links.append(forecast);
   }
   blocks.push(links);
