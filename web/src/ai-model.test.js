@@ -60,3 +60,24 @@ test("aiMapView: an okres without AI data shows the blend's row, not a gap", () 
   assert.equal(row.single, true);
   assert.equal(row.beyond, undefined);
 });
+
+test("withAi fills rain, cloud and sunshine from the blend on the AI's hours", () => {
+  const ai = parseAi(doc(), NOW);
+  const times = hours(72).map(Date.parse);
+  const blend = times.map(() => 0.5);
+  const parsed = withAi({ times, models: {}, combined: { precipitation: blend, cloud_cover: blend } }, ai, "A");
+  assert.equal(parsed.models[AI_MODEL].precipitation[5], 0.5);
+  assert.equal(parsed.models[AI_MODEL].precipitation[60], null);
+  assert.equal(parsed.models[AI_MODEL].sunshine_duration, undefined);
+});
+
+test("aiMapView takes rain, cloud, sunshine and symbol from the blend's outlook row", () => {
+  const ai = parseAi(doc(), NOW);
+  const rows = new Map([["A|2026-10-20|day", { precipitation: 2, cloud: 80, sunshine: 1, symbol: "rain", tmax: 99 }]]);
+  const view = aiMapView(ai, { okresy: [{ code: "A" }], days: ["2026-10-20"], rows });
+  const row = view.rows.get("A|2026-10-20|day");
+  assert.equal(row.precipitation, 2);
+  assert.equal(row.cloud, 80);
+  assert.equal(row.symbol, "rain");
+  assert.notEqual(row.tmax, 99);
+});
