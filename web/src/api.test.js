@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { FLAGS, HOURLY, NOTICE, SITE, indexDoc, okresCsv, okresDoc, okresModels } from "./api.js";
+import { FLAGS, HOURLY, NOTICE, SITE, aiOkresDoc, indexDoc, obceDocs, obceIndexDoc, obecIds, okresCsv, okresDoc, okresModels, slug } from "./api.js";
 import { records } from "./data.js";
 
 const load = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
@@ -124,4 +124,140 @@ test("index: every okres with the addresses of its files", () => {
   assert.equal(index.okresy[0].csv, `${SITE}/api/v1/okresy/CZ0201.csv`);
   assert.equal(index.files.okres_json, `${SITE}/api/v1/okresy/{code}.json`);
   assert.equal(index.generated, "2026-10-12T10:49+00:00");
+});
+
+// ---- AI okres files ----
+const AI_TIMES = HOURLY_DOC.time.slice(10, 60);
+const AI_FORECAST = {
+  issued: "2026-10-20T15:25:00+00:00",
+  okresy: {
+    CZ0201: {
+      time: AI_TIMES,
+      temperature_2m: { ai: AI_TIMES.map((_, i) => (i === 3 ? null : 20 + i)), combined: [] },
+      wind_speed_10m: { ai: AI_TIMES.map((_, i) => 7 + i / 10) },
+    },
+  },
+};
+const AI_OUTLOOK = {
+  columns: ["okres", "day", "part", "tmin", "tmax", "wind", "precipitation"],
+  rows: [["CZ0201", OUTLOOK.rows[0][OUTLOOK.columns.indexOf("day")], "night", -1.5, 3.5, null, 99]],
+};
+const AI_DOC = aiOkresDoc({ okres: BENESOV, outlook: OUTLOOK, hourly: HOURLY_DOC, aiForecast: AI_FORECAST, aiOutlook: AI_OUTLOOK, meta: META });
+
+test("an AI okres file: AI temperature and wind on the blend's axis, the rest combined", () => {
+  assert.equal(AI_DOC.forecast.model, "ai");
+  assert.equal(AI_DOC.forecast.ai_issued, "2026-10-20T15:25:00+00:00");
+  assert.ok(!("models" in AI_DOC) && !("deprecated" in AI_DOC));
+  assert.match(AI_DOC.licence, /CC BY-SA 4\.0/);
+  const h = AI_DOC.forecast.hourly;
+  assert.deepEqual(h.time, HOURLY_DOC.time);
+  assert.equal(h.temperature_2m[10], 20);
+  assert.equal(h.temperature_2m[12], 22);
+  // the AI has no value for hour 13: the blend's stays, with its range
+  assert.equal(h.temperature_2m[13], HOURLY_DOC.okresy.CZ0201.temperature_2m[13]);
+  assert.equal(h.temperature_2m_lo[10], null);
+  assert.equal(h.temperature_2m_lo[13], HOURLY_DOC.okresy.CZ0201.temperature_2m_lo[13]);
+  assert.equal(h.temperature_2m_lo[0], HOURLY_DOC.okresy.CZ0201.temperature_2m_lo[0]);
+  assert.equal(h.wind_speed_10m[10], 7);
+  assert.deepEqual(h.precipitation, HOURLY_DOC.okresy.CZ0201.precipitation);
+  assert.equal(AI_DOC.forecast.sources.temperature_2m, "ai");
+  assert.equal(AI_DOC.forecast.sources.precipitation, "blend");
+  assert.equal(AI_DOC.forecast.sources.tmin, "ai");
+  assert.equal(AI_DOC.forecast.sources.symbol, "blend");
+  // the blend's own file is not changed
+  assert.deepEqual(DOC.forecast.hourly.temperature_2m, HOURLY_DOC.okresy.CZ0201.temperature_2m);
+});
+
+test("an AI okres file: parts take tmin, tmax and wind from the AI outlook where it has them", () => {
+  const [night, morning] = AI_DOC.forecast.parts;
+  assert.equal(night.tmin, -1.5);
+  assert.equal(night.tmax, 3.5);
+  assert.equal(night.wind, DOC.forecast.parts[0].wind, "null in the AI outlook: the blend's value");
+  assert.equal(night.precipitation, DOC.forecast.parts[0].precipitation);
+  assert.deepEqual(morning, (({ gust_warning, ...rest }) => rest)(DOC.forecast.parts[1]));
+  assert.ok(!("gust_warning" in night));
+  assert.equal(aiOkresDoc({ okres: { code: "CZ9999" }, outlook: OUTLOOK, hourly: HOURLY_DOC, aiForecast: AI_FORECAST, aiOutlook: AI_OUTLOOK, meta: META }), null);
+});
+
+// ---- obce ----
+test("slug: ASCII, lowercase, dashes; duplicates numbered by population", () => {
+  assert.equal(slug("Bílá Třemešná"), "bila-tremesna");
+  assert.equal(slug("  Nové Město n. M. "), "nove-mesto-n-m");
+  assert.equal(slug("???"), "obec");
+  const ids = obecIds([{ name: "Lhota", population: 10 }, { name: "Lhota", population: 500 }, { name: "Lhota", population: 20 }, { name: "Lhota 2", population: 1 }]);
+  assert.deepEqual(ids, ["lhota-3", "lhota", "lhota-2", "lhota-2-2"]);
+});
+
+/** An obec file made of the okres's own series (+offset), only every `step` hours. */
+function obceOf(offset, step, extra = {}) {
+  const idx = HOURLY_DOC.time.map((t, i) => i).filter((i) => i % step === 0);
+  const s = HOURLY_DOC.okresy.CZ0201;
+  const times = idx.map((i) => HOURLY_DOC.time[i].replace("Z", "+00:00"));
+  const pick = (a, f = (x) => x) => idx.map((i) => (a[i] == null ? null : f(a[i])));
+  return {
+    generated: "2026-10-20T20:12+00:00",
+    times,
+    places: [{ name: "Ves", lat: 49.5, lon: 14.5, elevation: 400, population: 100,
+      temperature_2m: pick(s.temperature_2m, (x) => x + offset), precipitation: pick(s.precipitation), wind_speed_10m: pick(s.wind_speed_10m, (x) => x + offset / 2), ...extra }],
+  };
+}
+
+test("an obec identical to its okres reproduces the okres's hours and parts", () => {
+  const [{ id, doc }] = obceDocs({ okresDoc: DOC, obceFile: obceOf(0, 1), meta: META });
+  assert.equal(id, "ves");
+  assert.equal(doc.test, true);
+  assert.equal(doc.obec.okres, "CZ0201");
+  assert.match(doc.attribution, /ČHMÚ/);
+  assert.match(doc.attribution, /ČÚZK/);
+  assert.deepEqual(doc.hourly.time, HOURLY_DOC.time);
+  assert.deepEqual(doc.hourly.temperature_2m, DOC.forecast.hourly.temperature_2m.map((x) => (x == null ? null : Number(x.toFixed(1)))));
+  assert.equal(doc.parts.length, DOC.forecast.parts.length);
+  DOC.forecast.parts.forEach((p, i) => {
+    const o = doc.parts[i];
+    assert.equal(`${o.day}|${o.part}`, `${p.day}|${p.part}`);
+    // the fixtures' parts and hours are from different runs (live data matches to 0.05)
+    for (const k of ["tmin", "tmax", "wind"]) assert.ok(Math.abs((o[k] ?? 0) - (p[k] ?? 0)) < 0.6, `${p.day} ${p.part} ${k}`);
+    assert.ok(Math.abs((o.precipitation ?? 0) - (p.precipitation ?? 0)) < 1);
+  });
+});
+
+test("obec hours: own value, straight line across a gap of 3 h or less, else okres plus offset; no nulls where the okres has a value", () => {
+  const [{ doc }] = obceDocs({ okresDoc: DOC, obceFile: obceOf(2, 3), meta: META });
+  const okres = DOC.forecast.hourly;
+  okres.time.forEach((_, i) => {
+    assert.equal(doc.hourly.temperature_2m[i] == null, okres.temperature_2m[i] == null, `hour ${i}`);
+    assert.equal(doc.hourly.wind_speed_10m[i] == null, okres.wind_speed_10m[i] == null);
+  });
+  const i = okres.time.findIndex((t, k) => k % 3 === 0 && okres.temperature_2m[k] != null && okres.temperature_2m[k + 3] != null);
+  const a = okres.temperature_2m[i] + 2, b = okres.temperature_2m[i + 3] + 2;
+  assert.equal(doc.hourly.temperature_2m[i + 1], Number((a + (b - a) / 3).toFixed(1)));
+  // precipitation: the okres's hourly value where the obec has none
+  assert.deepEqual(doc.hourly.precipitation.slice(0, 5), okres.precipitation.slice(0, 5).map((x) => (x == null ? null : Number(x.toFixed(2)))));
+  // two samples 6 h apart: offset instead of interpolation (+2 at every sample)
+  const sparse = obceOf(2, 6);
+  const [{ doc: far }] = obceDocs({ okresDoc: DOC, obceFile: sparse, meta: META });
+  const j = okres.time.findIndex((t, k) => k % 6 === 1 && okres.temperature_2m[k] != null);
+  assert.equal(far.hourly.temperature_2m[j], Number((okres.temperature_2m[j] + 2).toFixed(1)));
+});
+
+test("obec frost fields follow the okres's night minimum plus the obec's difference", () => {
+  const columns = [...OUTLOOK.columns, "night_min", "ground_min"];
+  const rows = OUTLOOK.rows.map((r) => [...r, 0.4, -1.2]);
+  const frosty = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, weightsDoc: WEIGHTS, scores: SCORES, meta: META });
+  const [{ doc }] = obceDocs({ okresDoc: frosty, obceFile: obceOf(-1, 1), meta: META });
+  const p = doc.parts[0];
+  assert.equal(p.night_min, -0.6);
+  assert.equal(p.ground_min, -2.2);
+  assert.equal(p.frost, true);
+  assert.equal(p.ground_frost, true);
+  assert.ok(!("night_min" in obceDocs({ okresDoc: DOC, obceFile: obceOf(0, 1), meta: META })[0].doc.parts[0]));
+});
+
+test("obce index and the file patterns in index.json", () => {
+  const idx = obceIndexDoc([["CZ0201", "ves", "Ves", 49.5, 14.5]], "2026-10-20T20:12+00:00");
+  assert.equal(idx.url, `${SITE}/api/v1/obce/{okres}/{id}.json`);
+  assert.deepEqual(idx.obce[0], ["CZ0201", "ves", "Ves", 49.5, 14.5]);
+  const files = indexDoc([BENESOV], META, null).files;
+  assert.equal(files.ai_okres_json, `${SITE}/api/v1/ai/okresy/{code}.json`);
+  assert.equal(files.obec_json, `${SITE}/api/v1/obce/{okres}/{id}.json`);
 });
