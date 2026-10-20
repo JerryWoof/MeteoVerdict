@@ -116,12 +116,15 @@ class Source:
     def gust_model(self) -> str | None:
         return self.bucket if self.gusts == "" else self.gusts
 
-    def extra_files(self, listed: dict[str, set[str]]) -> dict[str, tuple[str, Derived]]:
+    def extra_files(
+        self, listed: dict[str, set[str]], auxiliary: bool = False
+    ) -> dict[str, tuple[str, Derived]]:
         """Further variable -> (bucket model, ``Derived``) for a run whose bucket models
-        list ``listed`` variable files; variables none of them has are left out."""
+        list ``listed`` variable files; variables none of them has are left out. With
+        ``auxiliary`` also ``AUXILIARY``."""
         models = [self.bucket] + [m for m in (self.gust_model,) if m and m != self.bucket]
         found = {}
-        for variable, choices in EXTRA.items():
+        for variable, choices in (EXTRA | AUXILIARY if auxiliary else EXTRA).items():
             for choice in choices:
                 where = [m for m in models if set(choice.files) <= listed.get(m, set())]
                 if where:
@@ -223,6 +226,13 @@ EXTRA: dict[str, tuple[Derived, ...]] = {
     "cape": (Derived(("cape",)),),  # GFS: from ncep_gfs025
     "visibility": (Derived(("visibility",)),),  # GFS: from ncep_gfs025
 }
+#: Files read only when asked for by name (``read_run(extra=[...])``: the outlook's
+#: sunshine, as the API derives it from the direct radiation); not columns of the single
+#: runs. Where a model has neither, the outlook splits the shortwave radiation itself.
+AUXILIARY: dict[str, tuple[Derived, ...]] = {
+    "direct_radiation": (Derived(("direct_radiation",)),),  # ICON, IFS HRES, UKMO, DMI
+    "diffuse_radiation": (Derived(("diffuse_radiation",)),),  # ICON, GFS
+}
 #: Plausible further values; others (packing artefacts, a file being replaced) are
 #: dropped (null), the model-run is still taken
 EXTRA_PLAUSIBLE = {
@@ -278,7 +288,9 @@ def meta_variables(meta: dict) -> set[str]:
 
 
 def _all(hours: int) -> dict[int, int]:
-    return {h: hours for h in runs.RUN_HOURS}
+    """The same horizon for every run hour (also the 3-hourly runs in between that the
+    outlook reads: ICON-D2, AROME AT, KNMI, DMI)."""
+    return {h: hours for h in range(24)}
 
 
 #: The 19 models (checked against the bucket and the API 2026-10-13..16).
@@ -288,7 +300,8 @@ SOURCES: dict[str, Source] = {
         "chmi_aladin_central_europe_2km", "speed", horizon_h=_all(72)
     ),
     "dwd_icon_d2": Source("dwd_icon_d2", horizon_h=_all(48)),
-    "dwd_icon_eu": Source("dwd_icon_eu"),
+    # the runs in between (03, 09, 15, 21 UTC) reach 30 h (the outlook reads them)
+    "dwd_icon_eu": Source("dwd_icon_eu", horizon_h={h: 30 for h in (3, 9, 15, 21)}),
     "ecmwf_ifs": Source("ecmwf_ifs"),
     "ecmwf_ifs025": Source("ecmwf_ifs025"),
     "ecmwf_aifs025_single": Source("ecmwf_aifs025_single", gusts=None),
@@ -677,21 +690,26 @@ def read_run(
     stations: pl.DataFrame,
     cells: pl.DataFrame,
     pool: ThreadPoolExecutor,
-    extra: bool = False,
+    extra: bool | Iterable[str] = False,
+    max_lead_h: int = runs.MAX_LEAD_H,
 ) -> Fetched:
     """One model-run at ``stations`` (``id``, ``elevation``), complete or not at all
-    (module docstring); with ``extra`` also the further variables (``EXTRA``) the run
-    lists, as far as their files are written (``Fetched.extra_complete``). Network errors other
-    than missing files propagate."""
+    (module docstring); with ``extra`` also the further variables (``EXTRA``; all, or
+    those named) the run lists, as far as their files are written
+    (``Fetched.extra_complete``). Rows up to ``max_lead_h`` (the outlook reads past
+    ``runs.MAX_LEAD_H``; completeness is judged up to the usual horizon all the same).
+    Network errors other than missing files propagate."""
     readers: dict = {}
+    if extra is not True and extra:
+        extra = frozenset(extra)
     try:
-        return _read_run(bucket, model, run, stations, cells, pool, readers, extra)
+        return _read_run(bucket, model, run, stations, cells, pool, readers, extra, max_lead_h)
     finally:  # close the readers here, not at interpreter exit (omfiles holds callbacks)
         for reader in readers.values():
             reader.close()
 
 
-def _read_run(bucket, model, run, stations, cells, pool, readers, extra) -> Fetched:
+def _read_run(bucket, model, run, stations, cells, pool, readers, extra, max_lead_h) -> Fetched:
     source = SOURCES.get(model.id)
     if source is None:
         return Fetched(None, "not in the bucket")
@@ -736,7 +754,10 @@ def _read_run(bucket, model, run, stations, cells, pool, readers, extra) -> Fetc
     chosen, extra_complete = {}, True
     if extra:
         listed = {b: meta_variables(m) for b, m in metas.items()}
-        for variable, (bucket_model, derived) in source.extra_files(listed).items():
+        named = extra is not True
+        for variable, (bucket_model, derived) in source.extra_files(listed, named).items():
+            if extra is not True and variable not in extra:
+                continue
             usable = True
             for name in derived.files:
                 if (bucket_model, name) in readers:
@@ -772,7 +793,9 @@ def _read_run(bucket, model, run, stations, cells, pool, readers, extra) -> Fetc
         for sid in wanted
         if sid in indices[key[0]]
     }
-    rows, reason = _assemble(model, source, run, stations, cells, times, axes, values, need, chosen)
+    rows, reason = _assemble(
+        model, source, run, stations, cells, times, axes, values, need, chosen, max_lead_h
+    )
     return Fetched(rows, reason, extra_complete)
 
 
@@ -807,9 +830,23 @@ def _extras(chosen, sid, axes, values, main, shift: float) -> dict[str, np.ndarr
     return found
 
 
-def _assemble(model, source, run, stations, cells, times, axes, values, need, chosen=None):
+def _assemble(
+    model,
+    source,
+    run,
+    stations,
+    cells,
+    times,
+    axes,
+    values,
+    need,
+    chosen=None,
+    max_lead_h=runs.MAX_LEAD_H,
+):
     """Rows from the point values; ``(rows, "")`` or ``(None, reason)``. ``chosen``: the
-    further variables read (``Source.extra_files``); the others are null."""
+    further variables read (``Source.extra_files``); the others are null; the
+    ``AUXILIARY`` ones read become columns after ``runs.SCHEMA``'s."""
+    auxiliary = [v for v in AUXILIARY if v in (chosen or {})]
     main = times[source.bucket]
     elevation = dict(
         cells.filter(pl.col("bucket_model") == source.bucket)
@@ -850,13 +887,17 @@ def _assemble(model, source, run, stations, cells, times, axes, values, need, ch
                     "wind_speed_10m": series["wind_speed_10m"],
                     "wind_gusts_10m": series.get("wind_gusts_10m", nan),
                     **{v: extras.get(v, nan) for v in runs.EXTRA_VARIABLES},
+                    **{v: extras.get(v, nan) for v in auxiliary},
                 },
-                schema={**runs.HOURLY_SCHEMA, **{v: pl.Float32 for v in runs.EXTRA_VARIABLES}},
+                schema={
+                    **runs.HOURLY_SCHEMA,
+                    **{v: pl.Float32 for v in (*runs.EXTRA_VARIABLES, *auxiliary)},
+                },
             )
         )
     table = (
         pl.concat(frames)
-        .filter(pl.col("lead_h").is_between(1, runs.MAX_LEAD_H))
+        .filter(pl.col("lead_h").is_between(1, max_lead_h))
         .with_columns(pl.col(v).fill_nan(None) for v in runs.VARIABLES)
         # a station outside the model's domain (ICON-D2 in the far east): no rows, as
         # in the API's answers
@@ -872,7 +913,10 @@ def _assemble(model, source, run, stations, cells, times, axes, values, need, ch
     table = table.with_columns(
         pl.col("precipitation").clip(lower_bound=0.0), pl.lit("bucket").alias("source")
     ).with_columns(pl.col(v).round(DECIMALS) for v in runs.VARIABLES)
-    return tidy_extras(table).select(list(runs.SCHEMA)), ""
+    tidy = tidy_extras(table).with_columns(
+        pl.col(v).fill_nan(None).round(DECIMALS) for v in auxiliary
+    )
+    return tidy.select(*runs.SCHEMA, *auxiliary), ""
 
 
 def tidy_extras(table: pl.DataFrame) -> pl.DataFrame:

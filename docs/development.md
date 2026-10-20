@@ -109,8 +109,9 @@ okresy with fewer than three stations borrow the nearest stations of their neigh
 uv run mvd outlook             # → site/data/outlook.json and outlook-hourly.json
 ```
 
-Asks the Open-Meteo Forecast API once for all 77 okresy and all models (about 340
-weighted calls), combines them with the okres weights from `data/aggregates.parquet` and
+Reads every model's newest runs at the 77 okres points from Open-Meteo's open-data
+bucket on AWS (no API calls; `--api` asks the Forecast API for all models as before
+2026-10-20, ~730 weighted calls), combines them with the okres weights from `data/aggregates.parquet` and
 summarises each of the next six days by night, morning, afternoon and evening (Prague
 time) ([details](data-sources.md#outlook-mvd-outlook-roadmap-66)).
 
@@ -217,7 +218,7 @@ uv run mvd archive-satellite --regions ce --out-dir data/radar  # satellite days
 |---|---|---|
 | ALADIN archive | every 3 hours | `mvd archive-aladin --github-release` |
 | Radar | a loop of 340 min that pushes every 5 minutes and starts the next loop itself (hourly schedule as safety net); archive every 6 hours | `scripts/radar_live_loop.sh`: `mvd radar-live` → branch `radar-live` (force-pushed) ([live loop](data-sources.md#live-loop)); `mvd archive-radar --github-release`, `mvd archive-satellite --github-release` |
-| Backfill | 02:41 | `mvd backfill`, the shared 5,700 Open-Meteo calls a day: one sweep from today into the past, 14-day window by window, each with its D+N (all stations, rain gauges) and the single runs' API history of its days |
+| Backfill | 02:41 | `mvd backfill`, the shared 8,300 Open-Meteo calls a day: one sweep from today into the past, 14-day window by window, each with its D+N (all stations, rain gauges) and the single runs' API history of its days |
 | Single runs | 04:20, 10:20, 16:20, 22:20 | `mvd fetch-runs --github-release`: every run of the last 90 days not stored yet from Open-Meteo's open-data bucket (no API calls), then the API for the bucket's gaps (100 calls each, ≤ 400 a day) ([budget](data-sources.md#open-meteo-budget)) |
 | Daily | 05:17 | `mvd daily --github-release`, commits the badge, then `mvd leads --github-release --publish` (allowed to fail) |
 | Outlook | 04:50, 10:50, 16:50, 22:50 (a 22:50 run starting from 23:45 is skipped) | `mvd outlook --github-release`: `outlook.json`, `outlook-hourly.json`, `outlook-models.zip` (every model's forecast per okres) to `data-latest`; the plain means and the parts of day (`outlook-parts-YYYY-MM.parquet`, for "forecast vs. measured") to `outlook-archive`, the full answer to the day's file in `outlook-models-YYYY-MM` |

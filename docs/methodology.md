@@ -483,9 +483,10 @@ picking any single model is worse than averaging them.
 
 ## Our own forecast (roadmap 6.2, 6.3, 6.4)
 
-The forecast page combines, for one okres, the current forecasts of all models from the
-Open-Meteo Forecast API at a point inside the okres. Each model is weighted by how well
-it did there over the last 90 days (inverse of its error variance), and temperature and
+The forecast page combines, for one okres, the current forecasts of all models at a
+point inside the okres (from Open-Meteo's open-data bucket since 2026-10-20, read the
+way the Open-Meteo Forecast API answers, before from that API). Each model is weighted
+by how well it did there over the last 90 days (inverse of its error variance), and temperature and
 wind are corrected by its mean error there; precipitation is weighted but not
 corrected. The weights are shrunk towards a plain mean while there are few scored days
 (half-way after 30 days), the bias correction much less (half-way after 5 days: a

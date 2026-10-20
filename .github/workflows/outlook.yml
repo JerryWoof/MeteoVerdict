@@ -1,14 +1,17 @@
 name: Outlook
 
-# Four times a day, once each of the 00, 06, 12 and 18 UTC model runs is on Open-Meteo
+# Four times a day, once each of the 00, 06, 12 and 18 UTC model runs is out
 # (most models 3.5-6 h after the run starts: 04:50, 10:50, 16:50, 22:50 UTC): the
 # TV-style forecast for every okres (`mvd outlook`), combined with the okres weights of
 # the latest aggregates, published as outlook.json, outlook-hourly.json and
 # outlook-models.zip (every model's own hourly forecast per okres, for the forecast
-# pages) in the release data-latest. The Pages workflow then rebuilds the map. Only
-# models with weights are asked: ~420 weighted calls for 11 models, ~732 for all 19
-# (refused above 800), in requests of at most 500 a minute apart; <= 3,400 a day (4 runs,
-# 850 each with retries), priority (1) in the budget split of runs.yml
+# pages) in the release data-latest. The Pages workflow then rebuilds the map.
+# Since 2026-10-20 the models (those with weights) come from Open-Meteo's open-data
+# bucket on AWS (s3://openmeteo, no API calls; each model's newest complete runs at the
+# 77 okres points, interpolated to hours as the Forecast API does;
+# docs/data-sources.md#outlook-from-the-bucket). Only a model with no complete run there
+# in the last 24 h is asked from the Forecast API, at most 200 weighted calls a run
+# (5 models; <= 800 a day, before 3,400), priority (1) in the budget split of runs.yml
 # (docs/data-sources.md#open-meteo-budget). A scheduled 22:50 run that GitHub starts
 # at 23:45 UTC or later is skipped, so a UTC day never sees more than four runs.
 # Each run also appends the plain model means of cloud and sunshine to the release
