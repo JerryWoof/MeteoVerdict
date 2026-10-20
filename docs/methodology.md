@@ -451,17 +451,18 @@ few, so those scores are noisy. In autumn 2026 ALADIN is no better by ETS at 1 m
 - **Probability of being best** (`p_best`): the share of the 1,000 resamples in which a
   model has the lowest MAE of the ranked models (a resample where models share the
   lowest MAE counts for each in part). One winner per okres hides how sure that is;
-  `p_best` says it. The **map** colours an okres with its best model only if that
-  model's `p_best` is at least **0.6** (`ranking.P_BEST_MIN`, `p_best_min` in
-  `meta.json`), and leaves it white, **"no clear winner"**, otherwise. 0.6 means the
+  `p_best` says it. The **map** always colours an okres with the model of lowest
+  error; where that model's `p_best` is under **0.6** (`ranking.P_BEST_MIN`, `p_best_min`
+  in `meta.json`) the okres is **hatched** ("close call") and the tooltip names the other
+  close models. An okres with no ranking of its own takes its kraj's best model. 0.6 means the
   leader is best more often than all the others together, with a margin: with 1,000
   resamples the share itself is uncertain by about ±3 percentage points, and with 77
   okresy, five variables and five lead days some leads of 0.5 or 0.55 are chance. With
   the 90 days to 18 October 2026 (D+1), 58 of 77 okresy have a clear winner for
   temperature and 62 for wind, but only 10 for daily precipitation, 22 for the 06–06
   total and 31 for the daily maximum: for rain the data does not yet single out a
-  model in most okresy, and the map now shows that. The two ALADINs are near-duplicates
-  and split the resamples between them, so where ALADIN leads the map is often white;
+  model in most okresy, and the hatching shows that. The two ALADINs are near-duplicates
+  and split the resamples between them, so where ALADIN leads the map is often hatched;
   the okres panel names the closest model and its `p_best`.
 - **Small sample** (`small_sample`): fewer than **30 scored days** in the comparison
   (`ranking.SMALL_SAMPLE_DAYS`, the same limit at which the okres panel and the
