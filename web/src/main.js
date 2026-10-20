@@ -14,7 +14,7 @@ import { setUpHomeSearch } from "./home-search.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
-import { availableLeadDays, availableVariables, availableWindows, parseHash, pickWindow, windowLabel } from "./view.js";
+import { availableLeadDays, availableVariables, availableWindows, filesWindow, parseHash, pickWindow, windowLabel } from "./view.js";
 import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 
 setWorkerUrl(workerUrl);
@@ -58,7 +58,7 @@ async function getJson(path) {
 
 const cache = new Map();
 function scores(view, level, variable = view.variable) {
-  const path = `data/scores/${view.window}/${level}/${variable}.json`;
+  const path = `data/scores/${filesWindow(view.window, current.meta)}/${level}/${variable}.json`;
   if (!cache.has(path)) {
     // a failed fetch is not remembered: the next view tries again
     cache.set(path, getJson(path).then((doc) => {
@@ -465,6 +465,7 @@ function addLayers(filled) {
 // --- loading ------------------------------------------------------------------------
 map.on("load", async () => {
   const meta = await getJson("data/scores/meta.json");
+  current.meta = meta;
   document.getElementById("status").textContent = statusText(meta, t);
   current.names = { ...meta?.models, blend: t("model.blend") };
   current.pBestMin = meta?.p_best_min ?? P_BEST_MIN;
