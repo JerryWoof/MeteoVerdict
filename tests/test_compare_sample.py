@@ -52,6 +52,22 @@ def test_versus_outlook():
     assert next(s for s in e["series"] if s["id"] == "combined")["vs_outlook"] is None
 
 
+def test_versus_ai():
+    a, n = _data()
+    ids = ["m1", "m2", "blend", "meteoverdict_ai"]
+    e = compare_sample.entry(
+        list(range(40)), ids, a, n, {"meteoverdict_ai": "ai"}, "k", resamples=200
+    )
+    by = {s["id"]: s for s in e["series"]}
+    assert by["meteoverdict_ai"]["vs_ai"] is None
+    # positive: the model is worse than the AI, interval above zero
+    assert by["m2"]["vs_ai"]["diff"] > 0 and by["m2"]["vs_ai"]["low"] > 0
+    assert by["m2"]["vs_ai"]["p"] < 0.05
+    # no AI in the group: no vs_ai
+    e2 = compare_sample.entry(list(range(40)), ids, a, n, {}, "k", resamples=100)
+    assert all(s["vs_ai"] is None for s in e2["series"])
+
+
 def test_same_okresy_keeps_the_candidate_in_the_sum():
     import polars as pl
 

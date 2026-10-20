@@ -3344,6 +3344,9 @@ footer .site-links {
 .aic-table tr.ai td {
   background: #fbeae8;
 }
+.aic-table tr.selected td {
+  box-shadow: inset 0 -2px 0 #1f78b4;
+}
 .aic-table .badge {
   margin-left: 0.4rem;
   padding: 0 0.35rem;
