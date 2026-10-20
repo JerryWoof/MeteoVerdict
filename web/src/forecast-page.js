@@ -263,9 +263,12 @@ function renderWeights(table, names) {
   target.replaceChildren(head, ...rows);
 }
 
-// which forecast is shown: our combination on every page load (not remembered, not in
-// the link, so a shared link always opens on the combination); kept while the okres changes
-let selected = COMBINED;
+// which forecast is shown: MeteoVerdict AI on every page load where the okres has it, else
+// our combination (not remembered, not in the link); `preferred` is the choice kept while the
+// okres changes, `selected` what the okres can offer of it (no AI forecast there: the combination)
+const defaultModel = () => (AI ? COMBINED : AI_MODEL);
+let preferred = defaultModel();
+let selected = preferred;
 // the okres on screen: {point, table, parsed, forecast, combined, periods, days, sunOf, gustOf}
 let state = null;
 // test: the obec shown instead of the okres (obce-test.js), "" = the whole okres
@@ -300,12 +303,6 @@ function render(names, colors) {
     }
     modelNote.textContent = note;
     modelNote.title = selected === AI_MODEL ? t("ai.modelTip") : "";
-    if (selected === AI_MODEL) {
-      const badge = document.createElement("span");
-      badge.className = "ai-badge";
-      badge.textContent = t("ai.badge");
-      modelNote.prepend(badge, " ");
-    }
     // the gusts come from our corrected outlook: not shown for a single model
     renderDays(rows.map(dayRow), sunOf, () => null);
   } else {
@@ -320,6 +317,7 @@ function render(names, colors) {
 }
 
 function pick(model, names, colors) {
+  preferred = model;
   selected = model;
   if (state) render(names, colors);
 }
@@ -403,7 +401,7 @@ async function show(point, names, colors, outlook) {
   issued.textContent = when ? t("forecast.issued", { time: when }) : "";
   if (!place) {
     selected = fillPicker(document.getElementById("model"), {
-      table, names, available: new Set(Object.keys(parsed.models)), selected, t,
+      table, names, available: new Set(Object.keys(parsed.models)), selected: preferred, t,
     });
   }
   if (!AI) renderWeights(table, names);
