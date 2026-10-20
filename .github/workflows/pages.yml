@@ -153,6 +153,37 @@ jobs:
           npm ci --no-audit --no-fund
           npm test
           npm run build
+      - name: One copy of score windows with the same days
+        # While the history is short, "all" covers the days of "90d" and "son" those of
+        # "season": their score files differ only by bootstrap noise (~40 MB a window).
+        # The later window (view.js's WINDOWS order) is left out and named in meta.json's
+        # `aliases`; the pages read the files of the kept one (view.js filesWindow).
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, shutil
+          root = pathlib.Path("web/dist/data/scores")
+          meta_path = root / "meta.json"
+          if not meta_path.exists():
+              raise SystemExit("no meta.json, nothing to merge")
+          meta = json.loads(meta_path.read_text())
+          windows = meta.get("windows") or {}
+          files = lambda d: sorted(str(p.relative_to(d)) for p in d.rglob("*"))
+          kept, aliases = {}, {}
+          for key in ["90d", "season", "all", "djf", "mam", "jja", "son"]:
+              span, folder = windows.get(key), root / key
+              if not span or not folder.is_dir():
+                  continue
+              days = (span.get("from"), span.get("to"))
+              base = kept.get(days)
+              if base and files(folder) == files(root / base):
+                  aliases[key] = base
+                  shutil.rmtree(folder)
+                  print(f"{key}: same days as {base} ({days[0]} to {days[1]}), left out")
+              else:
+                  kept.setdefault(days, key)
+          meta["aliases"] = aliases
+          meta_path.write_text(json.dumps(meta, ensure_ascii=False, separators=(",", ":")))
+          PY
       - name: Radar days (web-YYYYMMDD.tar of the last 7 days from the releases radar-YYYY-MM)
         # Satellite images only for the last 7 days and echo tops for the last 14 (size);
         # if the site would still pass PAGES_BUDGET_MB, the oldest days go first.
