@@ -2126,6 +2126,9 @@ export function setUpLanguage() {
     element.title = t(element.dataset.i18nTitle);
     element.setAttribute("aria-label", element.title);
   }
+  // the tab title in the page language (<title data-i18n-page="key">)
+  const title = document.querySelector("title[data-i18n-page]");
+  if (title) document.title = `MeteoVerdict: ${t(title.dataset.i18nPage)}`;
   for (const footer of document.querySelectorAll("footer[data-footer]")) {
     renderFooter(footer, t);
   }
