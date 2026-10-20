@@ -209,7 +209,13 @@ test("an obec identical to its okres reproduces the okres's hours and parts", ()
   assert.equal(doc.obec.okres, "CZ0201");
   assert.match(doc.attribution, /ČHMÚ/);
   assert.match(doc.attribution, /ČÚZK/);
-  assert.deepEqual(doc.hourly.time, HOURLY_DOC.time);
+  assert.equal(doc.hourly.time, undefined);
+  assert.equal(doc.hourly.start, HOURLY_DOC.time[0]);
+  assert.equal(doc.hourly.step_hours, 1);
+  assert.equal(doc.hourly.hours, HOURLY_DOC.time.length);
+  assert.equal(doc.hourly.temperature_2m.length, HOURLY_DOC.time.length);
+  // the okres axis really is hourly and contiguous
+  HOURLY_DOC.time.forEach((t, i) => assert.equal(Date.parse(t), Date.parse(HOURLY_DOC.time[0]) + i * 3600e3));
   assert.deepEqual(doc.hourly.temperature_2m, DOC.forecast.hourly.temperature_2m.map((x) => (x == null ? null : Number(x.toFixed(1)))));
   assert.equal(doc.parts.length, DOC.forecast.parts.length);
   DOC.forecast.parts.forEach((p, i) => {
@@ -224,6 +230,7 @@ test("an obec identical to its okres reproduces the okres's hours and parts", ()
 test("obec hours: own value, straight line across a gap of 3 h or less, else okres plus offset; no nulls where the okres has a value", () => {
   const [{ doc }] = obceDocs({ okresDoc: DOC, obceFile: obceOf(2, 3), meta: META });
   const okres = DOC.forecast.hourly;
+  assert.equal(doc.hourly.hours, okres.time.length);
   okres.time.forEach((_, i) => {
     assert.equal(doc.hourly.temperature_2m[i] == null, okres.temperature_2m[i] == null, `hour ${i}`);
     assert.equal(doc.hourly.wind_speed_10m[i] == null, okres.wind_speed_10m[i] == null);

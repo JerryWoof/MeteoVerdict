@@ -103,7 +103,7 @@ same name in one okres get `-2`, `-3` … in order of falling population).
 layout may change.
 
 - `obec`: `id`, `name`, `okres`, `lat`, `lon`, `elevation` (m); `generated`.
-- `hourly`: the **time axis of the okres file** (`time`, UTC) with `temperature_2m` (°C, one decimal),
+- `hourly`: on the **time axis of the okres file**, not repeated: `start` (its first time, UTC), `step_hours` (1) and `hours` (the length), so hour *i* is `start` + *i* h and the arrays are as long as the okres file's `forecast.hourly.time`; with `temperature_2m` (°C, one decimal),
   `precipitation` (mm in the hour ending at the time) and `wind_speed_10m` (m/s, one decimal).
   An hour the obec forecast has: its value. Between two of its hours at most 3 h apart:
   temperature and wind on a straight line. Otherwise (the first hours of the day, the
@@ -120,7 +120,7 @@ layout may change.
   18–06 UTC) and `frost` (`night_min` ≤ 1 °C), `ground_frost` (`ground_min` ≤ 0 °C);
   the keys are missing on the other rows. These flags are our thresholds, **not official warnings**.
 
-An obec file is about 9 kB (6 days hourly), so the whole set is large; fetch only the
+An obec file is about 6 kB (6 days hourly), so the whole set is large; fetch only the
 obce you need, at most once an hour.
 
 ## Every model's own forecast (outside `api/v1`)
@@ -170,7 +170,7 @@ e-ink display. It uses `forecast.hourly` and `forecast.parts`, including `sunris
 them from the data the pages use: `outlook.json` and `outlook-hourly.json` (`mvd
 outlook`, four times a day), `forecast/<okres>.json` and `90d/okres/<variable>.json` (`mvd
 aggregate`, daily). The Pages workflow runs after the Daily and the Outlook workflows,
-so the files follow both. The okres files are about 3.4 MB in total, 25 kB per okres (the AI files add 21 kB per okres); the obce files about 9 kB per obec.
+so the files follow both. The okres files are about 3.4 MB in total, 25 kB per okres (the AI files add 21 kB per okres); the obce files about 6 kB per obec.
 
 ## Terms
 

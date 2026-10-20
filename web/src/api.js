@@ -355,7 +355,7 @@ export function obecForecast(place, times, okresHourly, okresParts) {
     if (row.ground_min != null && dn != null) { out.ground_min = round(row.ground_min + dn, 1); out.ground_frost = out.ground_min <= 0; }
     return out; // night_min, frost, ground_min, ground_frost only on the rows that have them
   });
-  return { hourly: { time: times, temperature_2m, precipitation, wind_speed_10m }, parts, temperature_offset: tOffset };
+  return { hourly: { start: times[0], step_hours: 1, hours: times.length, temperature_2m, precipitation, wind_speed_10m }, parts, temperature_offset: tOffset };
 }
 
 /** The files of the obce of one okres: [{id, doc}] (docs/open-data.md). */
