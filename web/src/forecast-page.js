@@ -64,7 +64,9 @@ function timeTick(date) {
   return new Intl.DateTimeFormat(language, { weekday: "short", day: "numeric", month: "numeric", timeZone: TIME_ZONE }).format(date);
 }
 
-const fmt = (v, digits = 1) => (v == null ? "–" : v.toFixed(digits));
+// in the page language: "7,4" in Czech
+const fmt = (v, digits = 1) =>
+  v == null ? "–" : v.toLocaleString(document.documentElement.lang || "en", { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false });
 
 // sunrise and sunset as on the forecast map: the glyphs with the local times
 function sunCell(sun) {
