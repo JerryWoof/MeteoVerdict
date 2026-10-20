@@ -280,6 +280,7 @@ function kindsMap() {
     container: $("station-map"),
     t,
     describe,
+    extraFor: (station) => (kindsErr ? errorText(station, kindsErr) : null),
     onPick: (station) => {
       if (mode === "kinds") {
         openStationPanel(station.id);
@@ -362,9 +363,27 @@ function dot(color, hollow) {
   return d;
 }
 
+let kindsErr = null; // the error view of the Stations map's dots (buildErrView), or null
+
+/** What the error colours mean on the Stations map, and where they are missing. */
+function kindsErrNote(v) {
+  const value = t(`fc.var.${v.key}`).toLowerCase();
+  if (v.noFile) return t("measured.err.noFile");
+  if (models.state.model === AI) return t("fc.noAi");
+  if (!v.hasModel) return t("fc.noModelValue", { model: v.name, value });
+  const have = placed.filter((s) => v.byId.get(s.id) != null).length;
+  return `${t("measured.err.note", { model: v.name, lead: models.state.lead, value, unit: v.unit, n: formatNumber(have), of: formatNumber(placed.length) })} ${t("map.err.day", { day: v.day })}`;
+}
+
 function renderLegend(shown) {
   const items = [];
-  if ($("map-colour").value === "elevation") {
+  if (kindsErr) {
+    const box = el("div", null, "station-map-error-scale");
+    renderScale(box, kindsErr.ramp, t(`measured.scale.${kindsErr.ramp}`));
+    const note = el("p", kindsErrNote(kindsErr), "muted small");
+    note.classList.toggle("missing", kindsErr.noFile || !kindsErr.hasModel);
+    items.push(box, note);
+  } else if ($("map-colour").value === "elevation") {
     const bar = el("span", null, "station-map-ramp");
     bar.style.background = elevationGradient();
     bar.setAttribute("aria-hidden", "true");
@@ -384,6 +403,24 @@ function renderLegend(shown) {
   const neutral = "#5b6670";
   items.push(legendItem(dot(neutral), t("map.automatic")), legendItem(dot(neutral, true), t("map.manual")));
   $("map-legend").replaceChildren(...items);
+}
+
+let plainColour = "kind"; // the colour choice when not coloured by error
+
+/** The Stations map's dot colours from the colour select and the shared model choice: by kind,
+ * by elevation, or by the error (model − measured) of the newest measured day. */
+let kindsColourToken = 0;
+async function applyKindsColour() {
+  const token = ++kindsColourToken;
+  const select = $("map-colour");
+  select.value = models.state.err ?? plainColour;
+  const err = models.state.err;
+  const day = startView().day ?? (await models.loadIndex())?.to;
+  const next = err && day ? await buildErrView(day) : null;
+  if (token !== kindsColourToken) return;
+  kindsErr = next;
+  stationMap.setColour(next ? "error" : plainColour, next ? { errors: next.byId, ramp: next.ramp } : {});
+  renderLegend(filterStations(placed, $("map-measure").value));
 }
 
 function applyFilter() {
@@ -413,10 +450,14 @@ function fillMapTools() {
     );
     select.addEventListener("change", applyFilter);
   }
-  $("map-colour").addEventListener("change", (event) => {
-    stationMap.setColour(event.target.value);
-    renderLegend(filterStations(placed, $("map-measure").value));
+  $("map-colour").addEventListener("change", () => {
+    const value = $("map-colour").value;
+    models.state.err = ERROR_VARS.includes(value) ? value : null;
+    if (!models.state.err) plainColour = value;
+    syncModelHash();
+    applyKindsColour();
   });
+  applyKindsColour();
   applyFilter();
 }
 
@@ -550,8 +591,7 @@ function describeRow(row, part) {
 let errView = null; // {key, ramp, byId, hasModel, noFile, name, day} for the day shown, or null
 
 /** "Model error: +1.2 °C" for a station in the tooltip, or why it has none. */
-function errorText(row) {
-  const v = errView;
+function errorText(row, v = errView) {
   const e = v.byId.get(row.id);
   if (e != null) return t("measured.err.tip", { model: v.name, lead: models.state.lead, value: v.label(e) });
   if (v.noFile || !v.hasModel) return t("measured.err.tipNone");
@@ -958,7 +998,10 @@ function modelChanged() {
   models.state.lead = Number(leadSelect.value);
   syncModelHash();
   if (mode === "measured") renderLanding();
-  else if (mode === "kinds" && stationPanelState?.id) openStationPanel(stationPanelState.id);
+  else if (mode === "kinds") {
+    if (stationMap) applyKindsColour();
+    if (stationPanelState?.id) openStationPanel(stationPanelState.id);
+  }
 }
 modelSelect.addEventListener("change", modelChanged);
 leadSelect.addEventListener("change", modelChanged);

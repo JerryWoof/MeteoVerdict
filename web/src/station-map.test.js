@@ -90,7 +90,7 @@ test("map points", () => {
   const { type, features } = stationFeatures([LIBUS, RAIN, ODD]);
   assert.equal(type, "FeatureCollection");
   assert.deepEqual(features[0].geometry, { type: "Point", coordinates: [14.4469, 50.0078] });
-  assert.deepEqual(features[0].properties, { id: LIBUS.id, name: "Praha, Libuš", kind: "main", automatic: 1, elevation: 302 });
+  assert.deepEqual(features[0].properties, { id: LIBUS.id, name: "Praha, Libuš", kind: "main", automatic: 1, elevation: 302, err: null });
   assert.equal(features[1].properties.automatic, 0);
   assert.equal(features[2].properties.elevation, null);
 });
@@ -106,4 +106,14 @@ test("colours and the nearest station", () => {
   assert.equal(nearestStation([LIBUS, AUTO_CLIMATE, RAIN], [14.4, 50.1]), LIBUS);
   assert.equal(nearestStation([LIBUS, AUTO_CLIMATE, RAIN], [12.5, 50]), AUTO_CLIMATE);
   assert.equal(nearestStation([], [14, 50]), null);
+});
+
+test("colouring by a model's error: the error on the property, grey without one", () => {
+  const withError = stationFeatures([LIBUS, ODD], new Map([[LIBUS.id, 1.2]]));
+  assert.deepEqual(withError.features.map((f) => f.properties.err), [1.2, null]);
+  const expression = colorExpression("error", "errRain");
+  assert.equal(expression[0], "case");
+  assert.equal(expression[2], "#bfc5ca"); // no error: grey
+  assert.deepEqual(expression[3].slice(0, 3), ["interpolate", ["linear"], ["get", "err"]]);
+  assert.equal(expression[3][3], -8); // the rain ramp, mm
 });
