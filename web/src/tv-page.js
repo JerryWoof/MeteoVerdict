@@ -240,7 +240,7 @@ function renderShow() {
 function renderLegend() {
   // a single model: rain in mm (no probability), its raw cloud cover
   const single = Boolean(shownView()?.single);
-  const key = rampKey(state.colour, single);
+  const key = rampKey(state.colour, true);
   renderScale(document.getElementById("scale"), key, t(single && state.colour === "cloud" ? "scale.cloudModel" : `scale.${key}`));
 }
 
@@ -468,9 +468,9 @@ function panelRows(data) {
   };
 }
 
-const rainText = (row, single) => {
-  if (!single) return percent(row.rain_probability);
-  return row.precipitation == null ? "–" : `${fmt(row.precipitation, 1)} mm`;
+const rainText = (row) => {
+  if (row.precipitation != null) return `${fmt(row.precipitation, 1)} mm`;
+  return row.rain_probability == null ? "–" : percent(row.rain_probability);
 };
 
 function partCell(row, part, single) {
@@ -653,7 +653,7 @@ function renderPanel(outlook) {
     for (const text of [
       symbolText(now.symbol),
       t("tv.range", { low: fmt(now.tmin), high: fmt(now.tmax) }),
-      single
+      single || now.rain_probability == null
         ? t("tv.rainModel", { amount: fmt(now.precipitation, 1) })
         : t("tv.rain", { chance: percent(now.rain_probability), amount: fmt(now.precipitation, 1) }),
       // gusts from the single runs: null beyond the newest run and in older files
