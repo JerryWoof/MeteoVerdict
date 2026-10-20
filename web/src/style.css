@@ -1441,12 +1441,9 @@ pre.code {
   cursor: default;
   color: var(--muted);
 }
-/* static swatches need an edge; close calls are hatched, small samples outlined dashed */
+/* static swatches need an edge; small samples outlined dashed */
 .legend-item.static .swatch {
   outline: 1px solid rgba(0, 0, 0, 0.12);
-}
-.legend-item .swatch.close-win {
-  background: repeating-linear-gradient(135deg, #8a96a0 0 3px, #ffffff 3px 5px);
 }
 .legend-item .swatch.small-sample {
   outline: none;
