@@ -10,13 +10,16 @@
     "dev": "npm run data && vite",
     "build": "npm run data && vite build",
     "preview": "vite preview",
-    "test": "node --test src/*.test.js"
+    "test": "node --test src/*.test.js",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@observablehq/plot": "0.6.17",
     "maplibre-gl": "6.13.0"
   },
   "devDependencies": {
+    "eslint": "10.12.0",
+    "globals": "17.12.0",
     "vite": "7.3.7"
   }
 }

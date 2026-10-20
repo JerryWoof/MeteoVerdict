@@ -543,7 +543,7 @@ function windCell(row) {
 
 // test: the panel of an obec (obce-map.js): as the okres's with our combination, but its
 // rows have no symbol, cloud or rain probability (rain in mm)
-function renderObecPanel(panel, { doc, rows }) {
+function renderObecPanel(panel, { doc, rows, ai: ownAi }) {
   const place = doc.places.find((p) => p.name === panelObec);
   const own = rows.get(panelObec) ?? new Map();
   const rowOf = (day, part) => own.get(`${day}|${part}`);
