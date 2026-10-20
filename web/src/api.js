@@ -4,7 +4,7 @@
 //   api/v1/okresy/<code>.json     forecast (hourly and by part of day) and model ranking
 //   api/v1/okresy/<code>.csv      the hourly forecast as CSV
 //   api/v1/ai/okresy/<code>.json  the same forecast with temperature and wind from the AI (experimental)
-//   api/v1/obce/<okres>/<id>.json hourly forecast and parts of day of one obec (test)
+//   api/v1/obce/<okres>/<id>.json hourly forecast and parts of day of one obec
 //   api/v1/obce/index.json        every obec: okres, id, name, position
 // GitHub Pages serves them with "Access-Control-Allow-Origin: *", so browsers can fetch
 // them from any site.
@@ -240,7 +240,7 @@ export function aiOkresDoc({ okres, outlook, hourly, aiForecast, aiOutlook, meta
 }
 
 // ---------------------------------------------------------------------------------------
-// Obec files (test): the combined forecast of one obec on the hourly axis of its okres
+// Obec files: the combined forecast of one obec on the hourly axis of its okres
 
 const HOUR = 3600e3;
 const ZONE = "Europe/Prague";
@@ -374,7 +374,6 @@ export function obceDocs({ okresDoc: doc, obceFile, meta }) {
         licence: LICENCE,
         attribution: `${meta?.attribution ?? ""}${OBEC_ATTRIBUTION_EXTRA}`.trim(),
         notice: NOTICE,
-        test: true,
         obec: { id: ids[i], name: place.name, okres: doc.okres.code, lat: place.lat, lon: place.lon, elevation: place.elevation ?? null },
         generated: obceFile.generated ?? null,
         hourly: f.hourly,
@@ -389,7 +388,6 @@ export function obceIndexDoc(rows, generated) {
   return {
     api: `MeteoVerdict open data ${VERSION}`,
     licence: LICENCE,
-    test: true,
     generated,
     url: `${SITE}/api/${VERSION}/obce/{okres}/{id}.json`,
     obce: rows,
