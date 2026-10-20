@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { aiMapView, aiPeriods, parseAi, parseSky, skyRow, withAi, AI_MODEL } from "./ai-model.js";
+import { parseSources, aiMapView, aiPeriods, parseAi, parseSky, skyRow, withAi, AI_MODEL } from "./ai-model.js";
 
 const NOW = Date.parse("2026-10-20T12:00:00Z");
 const hours = (n) => Array.from({ length: n }, (_, i) => new Date(Date.parse("2026-10-20T00:00:00Z") + i * 3600e3).toISOString());
@@ -105,4 +105,11 @@ test("skyRow: the AI's cloud, sunshine and gust win where present, the symbol fo
   // an okres or part the AI has not: untouched
   assert.equal(skyRow(row, ai, "B", "2026-10-20|day"), row);
   assert.equal(aiPeriods(new Map([["2026-10-20|day", row]]), ai, "A").get("2026-10-20|day").cloud, 20);
+});
+
+test("parseSources groups the columns into layers and ignores a missing flag", () => {
+  const flags = parseSources({ sources: { tmin: "ai", tmax: "ai", wind: "ai", cloud: "ai", sunshine: "ai", gust: "ai", gust_over_threshold: "ai", precipitation: "blend", rain_probability: "blend", symbol: "ai" } });
+  assert.deepEqual(flags, { ai: ["temperature", "wind", "cloud", "sunshine", "gust"], blend: ["precipitation"] });
+  assert.equal(parseSources({}), null);
+  assert.equal(parseSources(null), null);
 });

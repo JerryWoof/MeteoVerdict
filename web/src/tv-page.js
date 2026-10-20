@@ -526,6 +526,7 @@ function modelPicker(data, rows) {
       notes.push(note);
     }
   }
+  if (panelModel === AI_MODEL && sourceText()) notes.push(element("p", sourceText(), "model-note"));
   if (mapModel === AI_MODEL && panelModel === COMBINED && !hasAi(aiData, state.okres)) {
     notes.push(element("p", t("tv.aiFallback"), "model-note"));
   } else if (panelModel !== mapModel) notes.push(element("p", t("tv.panelOnly", { map: modelName(mapModel) }), "model-note"));
@@ -879,12 +880,20 @@ function defaultToAi() {
   setMapModel(AI_MODEL);
 }
 
+/** Which layers the AI forecasts itself and which come from the blend ("" when the file has no flag). */
+function sourceText() {
+  const flags = aiData?.sources;
+  if (!flags) return "";
+  const names = (layers) => layers.map((l) => t(`layer.${l}`).toLowerCase()).join(", ");
+  return t("ai.sourceNote", { ai: names(flags.ai) || "–", blend: names(flags.blend) || "–" });
+}
+
 /** The AI's info line (issue time, experimental) and the sections below the map: only while the AI is shown. */
 function renderAiBlock() {
   const on = mapModel === AI_MODEL;
   document.getElementById("ai-info").hidden = !on;
   document.getElementById("ai-extras-block").hidden = !on;
-  if (on) document.getElementById("ai-info-text").textContent = t("ai.modelNote", { time: issuedText(aiData?.issued) ?? "–" });
+  if (on) document.getElementById("ai-info-text").textContent = `${t("ai.modelNote", { time: issuedText(aiData?.issued) ?? "–" })} ${sourceText()}`.trim();
 }
 
 /** After the map's model changed: the obce of the open okres and of those in view, for the new source. */
