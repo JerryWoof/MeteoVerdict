@@ -36,3 +36,26 @@ def test_write_monthly_can_replace_whole_units(tmp_path):
     partitions.write_monthly(new, tmp_path, keys, "run", replace=["run", "model"])
     stored = pl.read_parquet(tmp_path / "2026-10.parquet")
     assert stored.select("model", "lead_h").rows() == [("m", 3), ("n", 1)]
+
+
+def test_write_monthly_keeps_the_file_sorted_when_merging(tmp_path):
+    keys = ["run", "model", "lead_h"]
+    runs = [datetime(2026, 10, d, tzinfo=UTC) for d in (1, 2, 3)]
+    old = pl.DataFrame(
+        {
+            "run": [r for r in runs for _ in range(4)],
+            "model": ["a", "a", "b", "b"] * 3,
+            "lead_h": [1, 2] * 6,
+            "n": list(range(12)),
+        }
+    )
+    partitions.write_monthly(old, tmp_path, keys, "run")
+    new = pl.DataFrame({"run": [runs[1]] * 2, "model": ["a"] * 2, "lead_h": [3, 1], "x": [1, 2]})
+    partitions.write_monthly(new, tmp_path, keys, "run", replace=["run", "model"])
+    stored = pl.read_parquet(tmp_path / "2026-10.parquet")
+    assert stored.equals(stored.sort(keys))
+    assert stored.height == 12 - 2 + 2
+    replaced = stored.filter(pl.col("run") == runs[1], pl.col("model") == "a")
+    assert replaced["lead_h"].to_list() == [1, 3]
+    assert stored.columns == ["run", "model", "lead_h", "n", "x"]
+    assert not list(tmp_path.glob("*.tmp"))
