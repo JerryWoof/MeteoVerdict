@@ -674,3 +674,17 @@ def test_add_stations_fills_in_only_the_missing_stations(tmp_path, monkeypatch):
     asked.clear()
     bucket.add_stations(None, stations, [model], tmp_path, now, cells=pl.DataFrame())
     assert asked == []
+
+
+def test_arpege_radiation_undoes_meteo_france_s_storage_factor(tmp_path):
+    arpege = MODELS["meteofrance_arpege_europe"]
+    fake = FakeBucket()
+    cells_ = pl.concat(
+        [cells(), cells().with_columns(pl.lit("meteofrance_arpege_europe").alias("bucket_model"))]
+    ).unique(["bucket_model", "station_id"])
+    with_extras(fake, tmp_path, model=arpege, extra={"shortwave_radiation": 1296.0})
+    with ThreadPoolExecutor(4) as pool:
+        fetched = bucket.read_run(reader(fake), arpege, RUN, STATIONS, cells_, pool, extra=True)
+    assert fetched.rows is not None, fetched.reason
+    # 1296 W/m² as stored is 1296 x 10^7 / 3600² = 1000 W/m² in the API
+    assert fetched.rows["shortwave_radiation"].unique().to_list() == [1000.0]

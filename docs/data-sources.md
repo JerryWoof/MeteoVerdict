@@ -697,7 +697,7 @@ same layout, cells and conventions), built the way the Forecast API builds its a
   the share of the hour with a direct normal irradiance between 60 and 180 W/m²
   (`calculateBackwardsSunshineDuration`). ARPEGE's radiation in the bucket is 1.296
   times the API's (Météo-France's files keep a conversion factor that the API's readers
-  undo, 10⁷ / 3600²): multiplied back. JMA and AIGFS have no radiation: no sunshine, as
+  undo, 10⁷ / 3600²): undone in `bucket.RADIATION_SCALE`, as for the single runs. JMA and AIGFS have no radiation: no sunshine, as
   in the API.
 - **Fallback:** a model none of whose runs of the last 24 h is complete in the bucket
   is asked from the API (`outlook.gather`; ≤ 200 calls a run).
@@ -2015,6 +2015,14 @@ brackets) and used later:
   temperature, CAPE and visibility identical, radiation within 0.7 W/m². The API computes **sunshine** for every model from the
   radiation; it is stored only where the bucket has a file (ALADIN, AROME AT) and can be
   derived from `shortwave_radiation` for the rest.
+- **ARPEGE's radiation** (Europe and World): Météo-France's files in the bucket keep a
+  conversion factor that the API's readers undo (open-meteo
+  `shortwaveRadiationArchiveCorrectionFactor`, 10⁷ / 3600²), so the bucket's values are
+  1.296 times the API's; undone since 2026-10-20 (`bucket.RADIATION_SCALE`; checked on
+  the run of 2026-10-20 00 UTC at Praha: within 0.2 W/m² of the Single Runs API for
+  Europe, 4 W/m² for World). The model-runs stored before are read again once while
+  the bucket keeps them (`runs.EXTRA_FIXES`, state `extra_fixed`: about 720 model-runs,
+  after the new runs of each schedule); those it no longer has keep the old values.
 - **Plausible values** (`bucket.EXTRA_PLAUSIBLE`): others are dropped (null) without
   rejecting the model-run (the four verified variables decide that, as before); then
   clipped to 0 (radiation: GEM Global gives −11 W/m² at night; ALADIN's sunshine a few

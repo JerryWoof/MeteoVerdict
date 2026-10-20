@@ -82,14 +82,6 @@ VARIABLES = (
     "cloud_cover",
     "sunshine_duration",
 )
-#: Météo-France's radiation is stored with a conversion factor the API's readers undo
-#: (open-meteo ``MeteoFranceSurfaceVariable.shortwaveRadiationArchiveCorrectionFactor``,
-#: 10^7 / 3600²): the bucket's ARPEGE values are 1.296 times the API's (checked on the
-#: runs of 2026-10-19 12 and 10-20 00 UTC)
-MEAN_RADIATION_SCALE = {
-    "meteofrance_arpege_europe": 1e7 / 3600**2,
-    "meteofrance_arpege_world025": 1e7 / 3600**2,
-}
 #: W/m² (Open-Meteo's ``Zensun.solarConstant``)
 SOLAR_CONSTANT = 1367.7
 
@@ -342,7 +334,6 @@ def hourly(
         lat, lon = where.get(sid, (math.nan, math.nan))
 
         series: dict[str, np.ndarray] = {}
-        scale = MEAN_RADIATION_SCALE.get(source.bucket, 1.0)
         for column, how in (
             ("temperature_2m", "hermite"),
             ("wind_speed_10m", "hermite0"),
@@ -357,8 +348,6 @@ def hourly(
                 series[column] = np.full(len(hours), np.nan)
                 continue
             leads, values = _native(part, column)
-            if how == "solar":
-                values = values * scale
             if len(leads) == 0:
                 series[column] = np.full(len(hours), np.nan)
             elif how == "hermite":
