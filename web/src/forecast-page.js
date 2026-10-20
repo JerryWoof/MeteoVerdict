@@ -38,7 +38,6 @@ if (AI) {
   // the AI tab's colours and menu entry; the texts the page sets once
   document.body.classList.replace("theme-forecast", "theme-ai");
   document.querySelector('.site-nav a[href="forecast.html"]')?.classList.remove("current-section");
-  document.querySelector('.site-nav a[href="ai.html"]')?.classList.add("current-section");
   document.getElementById("combined-note").textContent = t("forecast.note");
   document.getElementById("weights-section").hidden = true;
   document.title = "MeteoVerdict: AI forecast by okres";

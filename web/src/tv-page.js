@@ -22,16 +22,13 @@ import {
   today, viewHash, measuredRedirect, gustOver, gustOverText, chmiNotice,
 } from "./tv.js";
 import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
-import { AI_FILES, aiPath, aiText } from "./ai-source.js";
+import { aiPath } from "./ai-source.js";
 import { AI_MODEL, aiMapView, aiPeriods, hasAi, loadAi, withAi } from "./ai-model.js";
 import { renderAiExtras } from "./ai-extras.js";
 import { renderAiVerify } from "./ai-verify-view.js";
 setWorkerUrl(workerUrl);
-// the AI forecast tab (ai.html) is this page on MeteoVerdict AI's forecast: its own
-// outlook.json and obce files (ai-source.js), "MeteoVerdict AI" wherever ours is named
-const AI = document.body.dataset.source === "ai";
-const t = AI ? aiText(setUpLanguage()) : setUpLanguage();
-const DETAIL = AI ? "forecast-detail.html?source=ai" : "forecast-detail.html";
+const t = setUpLanguage();
+const DETAIL = "forecast-detail.html";
 const language = document.documentElement.lang;
 
 const BOUNDS = [
@@ -86,8 +83,7 @@ async function fetchJson(path) {
   }
 }
 
-// on the AI tab the files with an AI version come from data/scores/ai/fc/ (ai-source.js)
-const getJson = AI ? async (path) => (AI_FILES.test(path) ? fetchJson(aiPath(path)) : fetchJson(path)) : fetchJson;
+const getJson = fetchJson;
 
 function element(tag, text, className) {
   const e = document.createElement(tag);
@@ -418,7 +414,7 @@ function okresData(code) {
       getJson(`data/scores/forecast/${code}.json`),
       getJson(`data/scores/forecast/models/${code}.json`),
       metaJson,
-      AI ? null : loadAi(getJson),
+      loadAi(getJson),
     ]).then(([weights, models, meta, ai]) => {
       entry.table = weightTable(weights);
       entry.parsed = withAi(parseModels(models), ai, code);
@@ -616,7 +612,7 @@ function renderObecPanel(panel, { doc, rows }) {
       : []),
     element("p", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`, "when"),
     note,
-    ...(AI || ownAi ? [] : [accuracy]),
+    ...(ownAi ? [] : [accuracy]),
     back,
     big,
     facts,
@@ -743,14 +739,15 @@ function update(change = {}, fromPlay = false) {
   if ("okres" in change && change.okres !== state.okres) panelModel = panelStart(change.okres);
   // test: an obec's panel (change.obec) or its okres's; any other okres change closes it
   if ("okres" in change) panelObec = change.okres ? change.obec ?? null : null;
-  // the AI tab's "forecast vs measured" follows the okres opened on the map
-  if (AI && change.okres && change.okres !== state.okres) {
+  // the AI section's "forecast vs measured" follows the okres opened on the map
+  if (change.okres && change.okres !== state.okres) {
     document.dispatchEvent(new CustomEvent("mv:okres", { detail: change.okres }));
   }
   const { obec: _obec, ...rest } = change;
   state = { ...state, ...rest };
   window.history.replaceState(null, "", viewHash({ ...state, obec: panelObec }));
   const view = shownView();
+  renderAiBlock();
   renderWhen(outlook);
   renderShow();
   paintFill(okresColours(view, state.day, state.part, state.colour));
@@ -864,7 +861,7 @@ function renderMapPicker() {
     .map((o) => option(o.model, t("forecast.pickOption", { position: o.position, model: o.name, rank: rank(o.rank) })));
   const others = options.filter((o) => o.rank == null).map((o) => option(o.model, o.name));
   // MeteoVerdict AI (experimental in its name): the first option, above our combination
-  const aiOption = aiData && !AI ? [option(AI_MODEL, t("ai.modelName"))] : [];
+  const aiOption = aiData ? [option(AI_MODEL, t("ai.modelName"))] : [];
   select.replaceChildren(
     ...aiOption,
     option(COMBINED, t("forecast.pickCombined")),
@@ -878,8 +875,16 @@ function renderMapPicker() {
 
 /** Once the map and a fresh AI file are there, MeteoVerdict AI is the default (unless chosen already). */
 function defaultToAi() {
-  if (AI || !aiData || !mapReady || mapChosen || mapModel !== COMBINED) return;
+  if (!aiData || !mapReady || mapChosen || mapModel !== COMBINED) return;
   setMapModel(AI_MODEL);
+}
+
+/** The AI's info line (issue time, experimental) and the sections below the map: only while the AI is shown. */
+function renderAiBlock() {
+  const on = mapModel === AI_MODEL;
+  document.getElementById("ai-info").hidden = !on;
+  document.getElementById("ai-extras-block").hidden = !on;
+  if (on) document.getElementById("ai-info-text").textContent = t("ai.modelNote", { time: issuedText(aiData?.issued) ?? "–" });
 }
 
 /** After the map's model changed: the obce of the open okres and of those in view, for the new source. */
@@ -967,7 +972,7 @@ const loadPlaces = placesLoader(placesUrl);
 async function obceOf(code) {
   const key = obceKey(code);
   if (!obceLoaded.has(key)) {
-    const ai = !AI && obceSrc() === "ai" ? await getJson(aiPath(`data/scores/forecast/obce-${code}.json`)).catch(() => null) : null;
+    const ai = obceSrc() === "ai" ? await getJson(aiPath(`data/scores/forecast/obce-${code}.json`)).catch(() => null) : null;
     const doc = ai?.places ? ai : await obceFor(code, getJson);
     obceLoaded.set(key, doc ? { doc, rows: obcePartRows(doc), ai: doc === ai } : null);
     refreshObceDocs();
@@ -1033,7 +1038,7 @@ async function main() {
   picker.disabled = true; // until the map is there
   // the models offered for the whole map, by their mean rank over Czechia
   metaJson ??= getJson("data/scores/meta.json");
-  Promise.all([getJson("data/scores/forecast/models-parts/index.json"), metaJson, AI ? null : loadAi(getJson)]).then(([index, meta, ai]) => {
+  Promise.all([getJson("data/scores/forecast/models-parts/index.json"), metaJson, loadAi(getJson)]).then(([index, meta, ai]) => {
     modelIndex = index;
     aiData = ai;
     modelNames = { ...meta?.models };
@@ -1058,11 +1063,11 @@ async function main() {
   // test: the obce of the okresy in view, loaded once zoomed in, and the search above
   map.on("moveend", loadObceInView);
   loadObceInView();
-  // the AI tab: forecast vs measured, MeteoVerdict AI's scores and its experiments below the map
-  if (AI) {
-    renderAiVerify(t, fetchJson, state.okres);
-    renderAiExtras(t, fetchJson);
-  }
+  // MeteoVerdict AI (shown below the map while the AI is the map's model): forecast vs
+  // measured, its scores against our blend and its experiments
+  renderAiVerify(t, fetchJson, state.okres);
+  renderAiExtras(t, fetchJson);
+  renderAiBlock();
   document.getElementById("obce-search").replaceChildren(
     placeSearch({ t, load: loadPlaces, choose: chooseObec }),
   );
