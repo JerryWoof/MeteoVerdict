@@ -2842,7 +2842,7 @@ body.station [hidden] {
   }
 }
 
-/* the AI forecast tab (ai.html): everything on it is experimental */
+/* the AI forecast (forecast.html with MeteoVerdict AI shown): everything on it is experimental */
 .ai-badge {
   display: inline-block;
   vertical-align: middle;
