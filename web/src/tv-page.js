@@ -104,8 +104,16 @@ const symbolText = (symbol) => (symbol ? t(`symbol.${symbol}`) : "");
 let state = { day: null, part: null, colour: "temperature", shown: [], okres: null };
 // test: the obce of the okresy loaded so far (those zoomed into): okres → {doc, rows}, or
 // null without a file; obceDocs: the loaded ones (obce-map.js)
-const obceLoaded = new Map();
+const obceLoaded = new Map(); // "blend|<okres>" or "ai|<okres>" → {doc, rows} or null
 let obceDocs = [];
+// the obce follow the map's model: MeteoVerdict AI's own obce files while the AI is shown
+// (our blend's where an okres has none), our blend's with the combination; no other model has any
+const obceSrc = () => (mapModel === AI_MODEL ? "ai" : "blend");
+const obceShown = () => mapModel === COMBINED || mapModel === AI_MODEL;
+const obceKey = (code) => `${obceSrc()}|${code}`;
+const refreshObceDocs = () => {
+  obceDocs = [...obceLoaded].filter(([key, v]) => v && key.startsWith(`${obceSrc()}|`)).map(([, v]) => v);
+};
 // test: the obec whose panel is open (in place of its okres's), or null
 let panelObec = null;
 let playing = null; // "day" or "week" while playing
@@ -312,7 +320,7 @@ function declutter() {
     });
   const shown = placeMarkers(boxes, 4, state.okres);
   // test: zoomed in, the obce stand in for their okres's marker
-  if (obceDocs.length && mapModel === COMBINED && map.getZoom() >= MIN_ZOOM) {
+  if (obceDocs.length && obceShown() && map.getZoom() >= MIN_ZOOM) {
     for (const code of obceDrawn()) shown.delete(code);
   }
   for (const [code, m] of markers) {
@@ -326,10 +334,10 @@ function declutter() {
 function modelBanner(view) {
   if (mapStatus?.failed) return element("p", t("tv.bannerFailed", { model: modelName(mapStatus.failed) }), "model-banner failed");
   if (mapStatus?.loading) return element("p", t("tv.bannerLoading", { model: modelName(mapStatus.loading) }), "model-banner");
-  if (!view.single) return null;
+  // MeteoVerdict AI: only its name says "experimental", no banner and no way back
+  if (!view.single || mapModel === AI_MODEL) return null;
   const banner = element("div", null, "model-banner");
   banner.append(element("p", t("tv.banner", { model: modelName(mapModel), time: issuedText(view.generated) ?? "–" })));
-  if (mapModel === AI_MODEL) banner.append(experimentalNote(view.generated));
   const cut = view.days.some((day) => view.okresy.some((o) => rowFor(view, o.code, day, "day")?.beyond));
   if (cut && view.lastHour != null) banner.append(element("p", t("tv.bannerHorizon", { end: endText(view.lastHour) }), "horizon"));
   const back = element("button", t("tv.bannerBack"), "back");
@@ -476,14 +484,6 @@ function partCell(row, part, single) {
   return cell;
 }
 
-/** The badge and the short explanation shown while MeteoVerdict AI is selected. */
-function experimentalNote(generated) {
-  const note = element("p", null, "model-note");
-  note.append(t("ai.modelNote", { time: issuedText(generated) ?? "–" }));
-  note.title = t("ai.modelTip");
-  return note;
-}
-
 // the "Forecast" selector and, for a single model, what it is and where it ends
 function modelPicker(data, rows) {
   const { single, periods } = rows;
@@ -515,8 +515,8 @@ function modelPicker(data, rows) {
   const notes = [];
   if (data.status === "loading") notes.push(element("p", t("tv.modelLoading"), "model-note"));
   if (data.status === "missing") notes.push(element("p", t("tv.modelUnavailable"), "model-note"));
-  if (single) {
-    let text = panelModel === AI_MODEL ? "" : t("tv.modelNote", { time: issuedText(rows.generated) ?? "–" });
+  if (single && panelModel !== AI_MODEL) {
+    let text = t("tv.modelNote", { time: issuedText(rows.generated) ?? "–" });
     // days of our forecast the model does not cover whole
     const cut = outlook.days.some((day) => rowFor(outlook, state.okres, day, "day") && !periods.get(`${day}|day`));
     if (cut && rows.end != null) text += ` ${t("tv.modelHorizon", { end: endText(rows.end) })}`;
@@ -526,7 +526,6 @@ function modelPicker(data, rows) {
       notes.push(note);
     }
   }
-  if (single && panelModel === AI_MODEL) notes.push(experimentalNote(data.parsed?.aiIssued ?? mapView?.generated));
   if (mapModel === AI_MODEL && panelModel === COMBINED && !hasAi(aiData, state.okres)) {
     notes.push(element("p", t("tv.aiFallback"), "model-note"));
   } else if (panelModel !== mapModel) notes.push(element("p", t("tv.panelOnly", { map: modelName(mapModel) }), "model-note"));
@@ -597,7 +596,7 @@ function renderObecPanel(panel, { doc, rows }) {
     event.preventDefault();
     update({ okres: state.okres });
   });
-  const note = element("p", t("tv.obecNote", { okres: displayName(info?.name ?? state.okres) }), "model-note");
+  const note = element("p", t(ownAi ? "ai.obecNote" : "tv.obecNote", { okres: displayName(info?.name ?? state.okres) }), "model-note");
   // how good the obec forecast is away from the stations (not the AI's, a different method)
   const accuracy = element("p", null, "model-note");
   const link = element("a", t("forecast.obecAccuracy"));
@@ -613,7 +612,7 @@ function renderObecPanel(panel, { doc, rows }) {
       : []),
     element("p", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`, "when"),
     note,
-    ...(AI ? [] : [accuracy]),
+    ...(AI || ownAi ? [] : [accuracy]),
     back,
     big,
     facts,
@@ -629,7 +628,7 @@ function renderPanel(outlook) {
     panel.replaceChildren();
     return;
   }
-  const obecDoc = panelObec ? obceLoaded.get(state.okres) : null;
+  const obecDoc = panelObec ? obceLoaded.get(obceKey(state.okres)) : null;
   if (obecDoc) {
     renderObecPanel(panel, obecDoc);
     return;
@@ -752,7 +751,7 @@ function update(change = {}, fromPlay = false) {
   renderShow();
   paintFill(okresColours(view, state.day, state.part, state.colour));
   map.setFilter("okres-selected", ["==", ["get", "code"], state.okres ?? ""]);
-  if (mapReady || obceDocs.length) paintObce(map, mapModel === COMBINED ? obceDocs : [], state, panelObec);
+  if (mapReady || obceDocs.length) paintObce(map, obceShown() ? obceDocs : [], state, panelObec);
   paintMarkers(view);
   renderHeadline(view);
   renderPanel(outlook);
@@ -879,6 +878,13 @@ function defaultToAi() {
   setMapModel(AI_MODEL);
 }
 
+/** After the map's model changed: the obce of the open okres and of those in view, for the new source. */
+async function switchObce() {
+  if (!obceShown()) return;
+  if (state.okres) await obceOf(state.okres);
+  loadObceInView();
+}
+
 /** Switch the whole map (and the okres panel) to `model`, or back to our combination. */
 async function setMapModel(model) {
   const token = ++mapToken;
@@ -889,6 +895,8 @@ async function setMapModel(model) {
     mapView = null;
     mapStatus = null;
     panelModel = COMBINED;
+    refreshObceDocs();
+    await switchObce();
     update();
     return;
   }
@@ -914,6 +922,9 @@ async function setMapModel(model) {
   }
   // the open okres follows the map
   panelModel = panelStart(state.okres);
+  refreshObceDocs();
+  await switchObce();
+  if (token !== mapToken) return;
   update();
 }
 
@@ -950,22 +961,24 @@ const loadPlaces = placesLoader(placesUrl);
 
 /** The okres's obce (its file, loaded once); null without one. */
 async function obceOf(code) {
-  if (!obceLoaded.has(code)) {
-    const doc = await obceFor(code, getJson);
-    obceLoaded.set(code, doc ? { doc, rows: obcePartRows(doc) } : null);
-    obceDocs = [...obceLoaded.values()].filter(Boolean);
+  const key = obceKey(code);
+  if (!obceLoaded.has(key)) {
+    const ai = !AI && obceSrc() === "ai" ? await getJson(aiPath(`data/scores/forecast/obce-${code}.json`)).catch(() => null) : null;
+    const doc = ai?.places ? ai : await obceFor(code, getJson);
+    obceLoaded.set(key, doc ? { doc, rows: obcePartRows(doc), ai: doc === ai } : null);
+    refreshObceDocs();
   }
-  return obceLoaded.get(code);
+  return obceLoaded.get(key);
 }
 
 /** Zoomed in: load the obce of the okresy in view, then draw them. */
 async function loadObceInView() {
   if (map.getZoom() < MIN_ZOOM) return;
   const codes = new Set(map.queryRenderedFeatures({ layers: ["okresy-fill"] }).map((f) => f.properties.code));
-  const missing = [...codes].filter((code) => !obceLoaded.has(code));
+  const missing = [...codes].filter((code) => !obceLoaded.has(obceKey(code)));
   if (!missing.length) return;
   await Promise.all(missing.map(obceOf));
-  paintObce(map, mapModel === COMBINED ? obceDocs : [], state, panelObec);
+  paintObce(map, obceShown() ? obceDocs : [], state, panelObec);
   declutter();
 }
 
@@ -978,7 +991,7 @@ async function chooseObec(place) {
   const loaded = await obceOf(info.code);
   const obec = nearestObec(loaded?.doc, place.lat, place.lon);
   if (!obec) return;
-  if (mapModel !== COMBINED) await setMapModel(COMBINED);
+  if (!obceShown()) await setMapModel(COMBINED);
   update({ okres: info.code, obec: obec.name });
   goToObec(map, [obec.lon, obec.lat]);
 }
@@ -1033,7 +1046,7 @@ async function main() {
     const { okres, obec: name } = state;
     const place = (await obceOf(okres))?.doc.places.find((p) => p.name === name);
     if (place) {
-      if (mapModel !== COMBINED) await setMapModel(COMBINED);
+      if (!obceShown()) await setMapModel(COMBINED);
       update({ okres, obec: name });
       goToObec(map, [place.lon, place.lat]);
     }
