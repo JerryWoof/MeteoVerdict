@@ -9,8 +9,8 @@ import {
 import { setUpLanguage } from "./i18n.js";
 import { glyph } from "./icons.js";
 import { asForecast, modelHorizon, modelPeriods, parseModels } from "./models.js";
-import { fillObce, obceFor, obecSeries, obecTimes, placeOf } from "./obce-test.js";
 import { fillPicker, issuedText } from "./picker.js";
+import { SEAT_OKRES, seatName, seatOkres } from "./seats.js";
 import { statusText } from "./status.js";
 import { chmiNotice, dayLabel, gustOver, gustOverText, parseOutlook, rowFor, sunFor, today } from "./tv.js";
 import { AI_FILES, aiPath, aiText } from "./ai-source.js";
@@ -270,9 +270,6 @@ let preferred = defaultModel();
 let selected = preferred;
 // the okres on screen: {point, table, parsed, forecast, combined, periods, days, sunOf, gustOf}
 let state = null;
-// test: the obec shown instead of the okres (obce-test.js), "" = the whole okres
-let obec = "";
-
 const dayRow = (d) => ({ day: d.day, tmin: d.tmin, tmax: d.tmax, precipitation: d.precipitation, wind: d.wind });
 
 // the day table, the charts and the notes for the selected forecast
@@ -328,7 +325,7 @@ async function show(point, names, colors, outlook) {
   const token = ++showToken;
   const message = document.getElementById("message");
   const issued = document.getElementById("issued");
-  document.getElementById("title").textContent = t("forecast.titleFor", { okres: point.name });
+  document.getElementById("title").textContent = t("forecast.titleFor", { town: seatName(point.code, point.name) });
   state = null;
   for (const id of ["days", "charts", "weights"]) document.getElementById(id).replaceChildren();
   document.getElementById("model-note").hidden = true;
@@ -358,7 +355,7 @@ async function show(point, names, colors, outlook) {
     return;
   }
   const forecast = asForecast(parsed, VARIABLES);
-  // MeteoVerdict AI: no hourly series per okres (only per obec, below), so no black line
+  // MeteoVerdict AI: no hourly series per okres, so no black line
   const combined = Object.fromEntries(
     VARIABLES.map((v) => [v, (AI ? null : parsed.combined[v]) ?? parsed.times.map(() => null)]),
   );
@@ -369,46 +366,17 @@ async function show(point, names, colors, outlook) {
   const fromOutlook = outlook.days
     .map((day) => ({ ...rowFor(outlook, point.code, day, "day"), day }))
     .filter((d) => d.tmin != null);
-  let days = fromOutlook.length ? fromOutlook : dailySummary(parsed.times, combined, TIME_ZONE);
+  const days = fromOutlook.length ? fromOutlook : dailySummary(parsed.times, combined, TIME_ZONE);
   // the range around our temperature (not for the AI view, which has no okres series)
   const range = !AI && parsed.combined.temperature_2m_lo && parsed.combined.temperature_2m_hi
     ? { lo: parsed.combined.temperature_2m_lo, hi: parsed.combined.temperature_2m_hi }
     : null;
   state = { point, table, parsed, forecast, combined, days, sunOf, gustOf, range };
-  // test: an obec of the okres instead of the okres's point
-  // with MeteoVerdict AI chosen (the default) the obec has the AI's own forecast, else ours
-  const aiObce = !AI && preferred === AI_MODEL
-    ? await getJson(aiPath(`data/scores/forecast/obce-${point.code}.json`)).catch(() => null)
-    : null;
-  const obceDoc = aiObce?.places ? aiObce : await obceFor(point.code, getJson);
-  const obceAi = obceDoc === aiObce;
-  if (token !== showToken) return;
-  const obecPick = document.getElementById("obec-pick");
-  obecPick.hidden = !obceDoc;
-  if (obceDoc) fillObce(document.getElementById("obec"), obceDoc, obec, t("forecast.obecWhole"));
-  const place = placeOf(obceDoc, obec);
-  const obecNote = document.getElementById("obec-note");
-  obecNote.hidden = !place;
-  // how good the obec forecast is away from the stations (not the AI's, a different method)
-  document.getElementById("obec-accuracy").hidden = !place || AI || obceAi;
-  document.getElementById("model-pick").hidden = Boolean(place);
-  if (place) {
-    const series = obecSeries(obceDoc, place);
-    days = dailySummary(obecTimes(obceDoc), series.combined, TIME_ZONE);
-    state = { ...state, ...series, days, gustOf: () => null, range: null, parsed: { ...parsed, generated: obceDoc.generated } };
-    selected = COMBINED;
-    document.getElementById("title").textContent = t("forecast.titleForObec", { obec: place.name });
-    obecNote.textContent = t(obceAi ? "ai.detailObecNote" : "forecast.obecNote", {
-      obec: place.name, elevation: Math.round(place.elevation), okres: point.name, time: issuedText(obceDoc.generated) ?? "",
-    });
-  }
   const when = issuedText(state.parsed.generated);
   issued.textContent = when ? t("forecast.issued", { time: when }) : "";
-  if (!place) {
-    selected = fillPicker(document.getElementById("model"), {
-      table, names, available: new Set(Object.keys(parsed.models)), selected: preferred, t,
-    });
-  }
+  selected = fillPicker(document.getElementById("model"), {
+    table, names, available: new Set(Object.keys(parsed.models)), selected: preferred, t,
+  });
   if (!AI) renderWeights(table, names);
   message.textContent = "";
   render(names, colors);
@@ -426,21 +394,25 @@ async function main() {
   document.getElementById("status").textContent = statusText(meta, t);
   const names = { ...meta?.models, [AI_MODEL]: t("ai.modelName") };
   const colors = modelColors(names);
-  const points = records(index).sort((a, b) => a.name.localeCompare(b.name, "cs"));
+  // one entry per okres town; the okresy whose seat is a city elsewhere show that city
+  const points = records(index)
+    .filter((p) => !(p.code in SEAT_OKRES))
+    .map((p) => ({ ...p, town: seatName(p.code, p.name) }))
+    .sort((a, b) => a.town.localeCompare(b.town, "cs"));
   if (points.length === 0) {
     document.getElementById("message").textContent = t("forecast.noWeights");
     return;
   }
-  const [wanted, wantedObec] = window.location.hash.slice(1).split("/");
-  obec = wantedObec ? decodeURIComponent(wantedObec) : "";
-  const link = (point) => `#${point.code}${obec ? `/${encodeURIComponent(obec)}` : ""}`;
+  // #<okres> (an older #<okres>/<obec> link opens its okres town)
+  const wanted = seatOkres(window.location.hash.slice(1).split("/")[0]);
+  const link = (point) => `#${point.code}`;
   const current = points.find((p) => p.code === wanted) ?? points.find((p) => p.code === "CZ0100") ?? points[0];
   const select = document.getElementById("okres");
   select.replaceChildren(
     ...points.map((p) => {
       const option = document.createElement("option");
       option.value = p.code;
-      option.textContent = p.name;
+      option.textContent = p.town;
       option.selected = p.code === current.code;
       return option;
     }),
@@ -449,14 +421,6 @@ async function main() {
   modelSelect.addEventListener("change", () => pick(modelSelect.value, names, colors));
   select.addEventListener("change", () => {
     const point = points.find((p) => p.code === select.value);
-    obec = "";
-    window.history.replaceState(null, "", link(point));
-    show(point, names, colors, outlook);
-  });
-  const obecSelect = document.getElementById("obec");
-  obecSelect.addEventListener("change", () => {
-    const point = points.find((p) => p.code === select.value);
-    obec = obecSelect.value;
     window.history.replaceState(null, "", link(point));
     show(point, names, colors, outlook);
   });
