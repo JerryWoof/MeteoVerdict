@@ -1376,7 +1376,10 @@ instantaneous values). Quality 1, 2 and 4 are left out, as everywhere. Checked o
 1.9 h and gust 3.8 m/s equal ČHMÚ's own daily values.
 
 **An okres's value** is the mean over its stations with a value (`tmax`, `tmin`, `r`,
-`wind`, `ssv`, `cloud`), with the extremes beside it (`tmax_hi`, `tmin_lo`, `r_hi`) and the
+`wind`, `ssv`, `cloud`) **without the high sites** (stations more than 300 m above the
+median elevation of their okres's stations, `aggregate.with_high_sites`: the scoring's
+pool, [methodology.md](methodology.md); a high site also lends nothing to a neighbour,
+and nothing to an okres it stands 300 m above), with the extremes beside it (`tmax_hi`, `tmin_lo`, `r_hi`) and the
 strongest gust in the okres; `n_t`, `n_r`, `n_w`, `n_g`, `n_s`, `n_c` count the stations
 behind each value. **Borrowed stations:** an okres without a station of its own with a
 value of a group (`t` temperature, `r` precipitation, `w` wind, `g` gust, `s` sunshine,
@@ -1392,7 +1395,12 @@ wind and gusts of Blansko (its own stations are rain gauges only) and sunshine o
 okresy (12 part-of-day values); cloud cover (synoptic stations only) is borrowed for 64
 okresy and stays "–" in 50 okres-periods. `light` is the hours of daylight of each period at the okres point (for the
 symbol), `ph` the phenomena recorded that day at any of its stations, `sno` the most new
-snow, `st` the stations with any value.
+snow, `st` the stations with any value (not the high sites). `high` lists the okres's
+high sites with a value (`id`, `name`, `elevation`, `tmax` and `tmin` per period) and
+`near` the station nearest the okres's forecast point (the same, with `km`), as the
+panel shows the range of all stations, the nearest station with its height and the high
+sites beside the mean. The forecast is one point of the okres, the mean its stations
+without the high sites, so a small difference remains even for a perfect forecast.
 
 **The symbol** is computed in the browser with the station diary's rules
 (`daySymbol` in `web/src/diary.js`) from the okres values: at least 0.5 mm of
@@ -1450,7 +1458,7 @@ stations). About 2 minutes and 45,000 rows.
   "hourly" | "daily", "leads": [...], "kinds": [...]}], "notes", "source_credit"}`;
 - `<YYYY-MM-DD>.json`: `{"day", "source", "parts", "columns", "counts", "borrow":
   {"max_km", "stations"}, "okresy": {code: {column: [value per period], n_*: [...],
-  "light", "st", "borrowed"?, "bst"?, "ph"?, "sno"?}}, "forecasts": [{"lead", "kind",
+  "light", "st", "high"?, "near"?, "borrowed"?, "bst"?, "ph"?, "sno"?}}, "forecasts": [{"lead", "kind",
   "issued"?, "trained_to"?, "sky_issued"?, "columns", "okresy": {code: {column: [per
   period]}}}]}` (a forecast's columns without any value are left out);
 - `<YYYY-MM-DD>-stations.json`: the stations' own values (the measured page's station layer):

@@ -571,3 +571,38 @@ def test_cli_writes_the_folder_from_a_local_archive(tmp_path, monkeypatch):
     # --publish needs the releases
     bad = CliRunner().invoke(app, ["observed-map", "--stations", str(stations), "--publish"])
     assert bad.exit_code != 0
+
+
+def test_high_sites_are_out_of_the_okres_mean_but_listed_with_the_nearest_station(tmp_path):
+    # D stands 620 m above the okres's median (as Milešovka): in no okres mean, own station
+    # values and the okres file's "high" keep it; "near" is the station nearest the point
+    d = "0-203-0-D"
+    stations = pl.DataFrame(
+        {
+            "id": [A, B, d],
+            "name": ["Aa", "Bb", "Dd"],
+            "lat": [50.5, 50.6, 50.53],
+            "lon": [14.1, 14.2, 14.13],
+            "okres_code": ["CZ0423"] * 3,
+            "elevation": [200.0, 240.0, 840.0],
+        }
+    )
+    rows = obs(
+        full_day(A, DAY, temp=lambda h: 10.0)
+        + full_day(B, DAY, temp=lambda h: 14.0)
+        + full_day(d, DAY, temp=lambda h: -2.0)
+    )
+    values = om.station_periods(rows)
+    okres = om.okres_periods(values, stations)
+    lit = okres.filter(pl.col("day") == DAY, pl.col("part") == "day").row(0, named=True)
+    assert lit["n_t"] == 2 and lit["tmax"] == pytest.approx(12.5) and lit["st"] == [A, B]
+    assert lit["tmin_lo"] == 9.5  # not the high site's -2.5
+    extras = pl.DataFrame(
+        schema={"station": pl.String, "day": pl.Date, "sno": pl.Float64, "ph": pl.List(pl.String)}
+    )
+    doc = om.day_doc(DAY, "hourly", okres, extras, POINTS, stations, [], utc(DAY, 5), None, values)
+    entry = doc["okresy"]["CZ0423"]
+    assert [h["id"] for h in entry["high"]] == [d] and entry["high"][0]["elevation"] == 840
+    assert entry["high"][0]["tmin"][4] == -2.5
+    assert entry["near"]["id"] == d and entry["near"]["km"] < 1  # at the okres point
+    assert "high" not in doc["okresy"]["CZ0642"]
