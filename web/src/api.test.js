@@ -267,4 +267,5 @@ test("obce index and the file patterns in index.json", () => {
   const files = indexDoc([BENESOV], META, null).files;
   assert.equal(files.ai_okres_json, `${SITE}/api/v1/ai/okresy/{code}.json`);
   assert.equal(files.obec_json, `${SITE}/api/v1/obce/{okres}/{id}.json`);
+  assert.equal(files.ai_obec_json, `${SITE}/api/v1/ai/obce/{okres}/{id}.json`);
 });

@@ -33,6 +33,7 @@ if (withAi) mkdirSync(join(out, "ai", "okresy"), { recursive: true });
 else console.log("no ai/ai-forecast.json or ai/fc/outlook.json in public/data/scores: no AI files");
 const obceRows = [];
 let obceCount = 0;
+let aiObceCount = 0;
 let aiCount = 0;
 for (const okres of okresy) {
   const doc = okresDoc({ okres, outlook, hourly, weightsDoc: read(`forecast/${okres.code}.json`), scores, meta });
@@ -43,6 +44,20 @@ for (const okres of okresy) {
     if (ai) {
       writeFileSync(join(out, "ai", "okresy", `${okres.code}.json`), JSON.stringify(ai));
       aiCount++;
+      // the AI's obce (a test, as the combined ones): on the axis and parts of the AI's okres file
+      const aiObceFile = read(`ai/fc/forecast/obce-${okres.code}.json`);
+      if (aiObceFile) {
+        try {
+          mkdirSync(join(out, "ai", "obce", okres.code), { recursive: true });
+          for (const { id, doc: obec } of obceDocs({ okresDoc: ai, obceFile: aiObceFile, meta })) {
+            obec.model = "ai";
+            writeFileSync(join(out, "ai", "obce", okres.code, `${id}.json`), JSON.stringify(obec));
+            aiObceCount++;
+          }
+        } catch (e) {
+          console.log(`AI obce of ${okres.code} skipped: ${e.message}`);
+        }
+      }
     }
   }
   // the obce (a test): one file each; a broken okres file must not fail the build
@@ -63,4 +78,4 @@ for (const okres of okresy) {
 const generated = hourly?.generated ?? outlook.generated;
 writeFileSync(join(out, "index.json"), JSON.stringify(indexDoc(okresy, meta, generated), null, 1));
 if (obceCount) writeFileSync(join(out, "obce", "index.json"), JSON.stringify(obceIndexDoc(obceRows, generated)));
-console.log(`open data: ${okresy.length} okresy, ${aiCount} AI files, ${obceCount} obce → ${out}`);
+console.log(`open data: ${okresy.length} okresy, ${aiCount} AI files, ${obceCount} obce, ${aiObceCount} AI obce → ${out}`);
