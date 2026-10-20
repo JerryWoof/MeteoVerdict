@@ -37,6 +37,7 @@ from meteoverdict import (
     observations,
     observed_map,
     outlook,
+    outlook_bucket,
     partitions,
     quality,
     radar,
@@ -1464,11 +1465,20 @@ def bucket_cells(
         Path | None,
         typer.Option("--stations", help="Station subset CSV. Default: the committed one."),
     ] = None,
+    okres: Annotated[
+        bool,
+        typer.Option(
+            "--okres",
+            help="The okres forecast points of the outlook instead of the stations "
+            "(default --out: src/meteoverdict/data/okres-cells.csv).",
+        ),
+    ] = False,
 ) -> None:
-    """Rebuild the grid cell of every run station in every bucket model (nearest cell,
-    its model surface height) from Open-Meteo's open-data bucket. Needed after the
-    station subset or a model's grid changes (the bucket's reader then reports a grid
-    not in the cells file and the API is asked instead)."""
+    """Rebuild the grid cell of every run station (or, with --okres, every okres
+    forecast point of the outlook) in every bucket model (nearest cell, its model
+    surface height) from Open-Meteo's open-data bucket. Needed after the station subset
+    or a model's grid changes (the bucket's reader then reports a grid not in the cells
+    file and the API is asked instead)."""
     chosen = (
         runs.parse_run(run)
         if run
@@ -1478,9 +1488,14 @@ def bucket_cells(
     )
     limits = httpx.Limits(max_connections=64, max_keepalive_connections=64)
     with httpx.Client(timeout=60, limits=limits) as client:
-        cells = bucket.build_cells(
-            bucket.Bucket(client), runs.load_stations(stations_path), chosen, log=typer.echo
+        points = (
+            outlook_bucket.point_table(combine.okres_points())
+            if okres
+            else runs.load_stations(stations_path)
         )
+        cells = bucket.build_cells(bucket.Bucket(client), points, chosen, log=typer.echo)
+    if okres and out == Path("src/meteoverdict/data") / bucket.CELLS_FILE:
+        out = out.with_name(outlook_bucket.CELLS_FILE)
     bucket.write_cells(cells, out)
     typer.echo(f"{cells.height} cells of {cells['bucket_model'].n_unique()} models → {out}")
 
@@ -1784,14 +1799,28 @@ def outlook_cmd(
     archive_dir: Annotated[
         Path, typer.Option(help="Folder of the monthly archive of the plain model means.")
     ] = Path("data/outlook-archive"),
+    api_only: Annotated[
+        bool,
+        typer.Option(
+            "--api",
+            help="Ask the Open-Meteo Forecast API for every model (as until 2026-10-20) "
+            "instead of reading the open-data bucket.",
+        ),
+    ] = False,
 ) -> None:
-    """TV-style forecast for every okres: today's models combined by their okres scores."""
+    """TV-style forecast for every okres: today's models combined by their okres scores.
+    The models come from Open-Meteo's open-data bucket (no API calls), a model missing
+    there from the Forecast API."""
     meter = _OpenMeteoMeter()
-    with httpx.Client(
-        timeout=300,
-        transport=httpx.HTTPTransport(retries=3),
-        event_hooks={"request": [meter]},
-    ) as client:
+    limits = httpx.Limits(max_connections=64, max_keepalive_connections=64)
+    with (
+        httpx.Client(
+            timeout=300,
+            transport=httpx.HTTPTransport(retries=3),
+            event_hooks={"request": [meter]},
+        ) as client,
+        httpx.Client(timeout=60, limits=limits) as bucket_client,
+    ):
         releases = _release_store(client) if github_release else None
         weights_path = aggregates_path.with_name(combine.FORECAST_WEIGHTS_FILE)
         if releases:
@@ -1829,6 +1858,8 @@ def outlook_cmd(
         nights: list[pl.DataFrame] = []
         forecasts: list[pl.DataFrame] = []
         single_runs = _outlook_runs(releases, data_dir)
+        bucket_store = None if api_only else bucket.Bucket(bucket_client)
+        sources: dict[str, list[str]] = {}
         try:
             table, hourly = outlook.outlook(
                 client,
@@ -1842,10 +1873,29 @@ def outlook_cmd(
                 single_runs=single_runs,
                 forecasts=forecasts,
                 interval=interval,
+                store=bucket_store,
+                sources=sources,
+                log=typer.echo,
             )
         finally:  # also when it fails: the calls count against the daily budget
-            typer.echo(meter.line())
-            _job_summary(f"## Outlook\n\n- {meter.line()}\n")
+            lines = [meter.line()]
+            if bucket_store is not None:
+                lines.append(
+                    f"Bucket: {len(sources.get('bucket', []))} models in "
+                    f"{bucket_store.requests:,} requests (no API calls)"
+                )
+            if sources.get("api") and bucket_store is not None:
+                lines.append(
+                    f"From the API (not complete in the bucket): {', '.join(sources['api'])}"
+                )
+            if sources.get("left_out"):
+                lines.append(
+                    f"Left out (over the fallback's {outlook.MAX_FALLBACK_CALLS} calls): "
+                    + ", ".join(sources["left_out"])
+                )
+            for line in lines:
+                typer.echo(line)
+            _job_summary("## Outlook\n\n" + "".join(f"- {line}\n" for line in lines))
         now = datetime.now(UTC)
         path = outlook.write(table, points, out, now)
         hourly_path = outlook.write_hourly(hourly, out.with_name("outlook-hourly.json"), now)

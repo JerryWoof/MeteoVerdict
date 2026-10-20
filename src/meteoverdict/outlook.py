@@ -1,8 +1,10 @@
 """TV-style forecast for every okres (roadmap 6.6).
 
-Four times a day (after the 00, 06, 12 and 18 UTC model runs), ask the Open-Meteo
-Forecast API for the next ``DAYS`` days of all models at the forecast point of every
-okres (one request, 77 locations), combine them with the
+Four times a day (after the 00, 06, 12 and 18 UTC model runs), read the next ``DAYS``
+days of all models at the forecast point of every okres from Open-Meteo's open-data
+bucket (``meteoverdict.outlook_bucket``, no API calls; until 2026-10-20 one Forecast API
+request for the 77 locations, which now only asks for a model the bucket lacks),
+combine them with the
 okres weights of ``meteoverdict.combine`` (the same rules as the forecast page: bias
 correction, weights per lead day, the next 24 h with D+1, models fading out over their
 last ``TAPER_HOURS`` hours) and summarise each day by part of day in Prague time:
@@ -23,10 +25,10 @@ Wind gusts (``gust``, the largest per part of day, corrected, and ``gust_over_th
 from the newest stored single run at the okres's lowland stations
 (``meteoverdict.gusts``, no request); null beyond the run and without one.
 
-Cost: 77 locations x 5 variables x models / 10 weighted calls a run, and only the
-models with weights are asked: 11 models about 420, 19 models about 730. A request
-stays at or below ``MAX_REQUEST`` calls (Open-Meteo allows 600 a minute), so with more
-than 12 models the okresy are split into equal parts, a minute apart.
+Cost of the API fallback: 77 locations x 5 variables x models / 10 weighted calls a
+run, only for the models the bucket lacks (all 19: about 730). A request stays at or
+below ``MAX_REQUEST`` calls (Open-Meteo allows 600 a minute), so with more than 12
+models the okresy are split into equal parts, a minute apart.
 """
 
 from __future__ import annotations
@@ -41,7 +43,16 @@ from zoneinfo import ZoneInfo
 import httpx
 import polars as pl
 
-from meteoverdict import blend_interval, frost, gusts, rain_calibration, sun_cloud_gust
+from meteoverdict import (
+    blend_interval,
+    bucket,
+    frost,
+    gusts,
+    outlook_bucket,
+    rain_calibration,
+    sun_cloud_gust,
+)
+from meteoverdict import models as catalogue
 from meteoverdict import runs as runs_mod
 from meteoverdict.combine import BLEND_COLUMNS, combine_values, okres_points, point_elevations
 from meteoverdict.forecasts import _reason, call_weight
@@ -91,6 +102,9 @@ MAX_CALLS = 800
 #: one request at most (Open-Meteo: 600 a minute); parts are ``PART_PAUSE`` s apart
 MAX_REQUEST = 500
 PART_PAUSE = 61
+#: a run's API calls for the models the bucket lacks (since 2026-10-20; 77 okresy:
+#: ~38.5 a model, so 5 models); models beyond it are left out of that run
+MAX_FALLBACK_CALLS = 200
 
 
 def request_params(points: pl.DataFrame, models: list[str]) -> dict:
@@ -188,6 +202,9 @@ def parse(payload: list | dict, codes: list[str], models: list[str]) -> pl.DataF
         times = pl.Series(hourly["time"]).str.to_datetime("%Y-%m-%dT%H:%M", time_zone="UTC")
         for model in models:
             columns = {v: hourly.get(f"{v}_{model}") for v in VARIABLES}
+            if len(models) == 1 and all(c is None for c in columns.values()):
+                # one model asked (the bucket's fallback): the API leaves out the suffix
+                columns = {v: hourly.get(v) for v in VARIABLES}
             if all(c is None for c in columns.values()):
                 continue
             frames.append(
@@ -960,7 +977,9 @@ MODEL_ARCHIVE_SCHEMA = {
 
 MODEL_ARCHIVE_NOTES = (
     "Every model's hourly forecast at the 77 okres points as the outlook (mvd outlook) "
-    "fetched it from the Open-Meteo Forecast API: one file per UTC day of the run "
+    "had it: from Open-Meteo's open-data bucket since 2026-10-20 (read and interpolated "
+    "to hours as the Forecast API does; a model missing there from the API), before "
+    "from the Open-Meteo Forecast API: one file per UTC day of the run "
     "(outlook-models-YYYY-MM-DD.parquet: issued, okres, model, time, temperature_2m, "
     "precipitation, wind_speed_10m, cloud_cover, sunshine_duration; issued = the run's "
     "time, UTC; up to four runs a day), one release per month. Forecasts: "
@@ -1084,6 +1103,9 @@ def outlook(
     single_runs: pl.LazyFrame | pl.DataFrame | None = None,
     forecasts: list[pl.DataFrame] | None = None,
     interval: dict | None = None,
+    store: bucket.Bucket | None = None,
+    sources: dict[str, list[str]] | None = None,
+    log: Callable[[str], None] = lambda _: None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Fetch, combine and summarise for all ``points`` (code, name, lat, lon) that have
     weights: the parts-of-day table and the combined hourly series (with the plain
@@ -1095,12 +1117,13 @@ def outlook(
     gusts come from the newest of ``single_runs`` (``runs``; none: null). Every model's
     own hourly forecast (``parse``, as Open-Meteo gave it) is appended to ``forecasts``
     (the per-model files and the archive; no extra calls). ``interval`` (``blend_interval``
-    file): adds ``temperature_2m_lo`` and ``temperature_2m_hi`` to the hourly series."""
+    file): adds ``temperature_2m_lo`` and ``temperature_2m_hi`` to the hourly series.
+    With ``store`` the models come from the bucket and only those it lacks from the API
+    (``gather``; ``sources``: which came from where)."""
     now = now or datetime.now(UTC)
     points = points.filter(pl.col("code").is_in(weights["region"].unique().to_list()))
     models = sorted(weights["model"].unique().to_list())
-    payload = fetch(client, points, models, sleep)
-    fc = parse(payload, points["code"].to_list(), models)
+    fc, payload = gather(client, store, points, models, now, sleep, sources, log)
     if forecasts is not None:
         forecasts.append(fc)
     hourly = combine_hourly(fc, weights, now)
@@ -1115,6 +1138,50 @@ def outlook(
     table = frost.add_to_outlook(table, night_rows, frost_calibration)
     table = add_gusts(table, single_runs, points, corrections or sun_cloud_gust.load(), now)
     return with_sun(table, points), hourly
+
+
+def gather(
+    client: httpx.Client,
+    store: bucket.Bucket | None,
+    points: pl.DataFrame,
+    models: list[str],
+    now: datetime,
+    sleep: Callable[[float], None],
+    sources: dict[str, list[str]] | None = None,
+    log: Callable[[str], None] = lambda _: None,
+) -> tuple[pl.DataFrame, list | dict]:
+    """Every model's hourly forecast at ``points`` (``parse``'s rows) and an answer
+    with each point's ``elevation`` (for ``frost.point_nights``): from the bucket
+    (``outlook_bucket.from_bucket``) where it has a complete run, the rest from the API
+    in one ``fetch``; without ``store`` all from the API."""
+    sources = sources if sources is not None else {}
+    if store is None:
+        payload = fetch(client, points, models, sleep)
+        sources["api"] = list(models)
+        return parse(payload, points["code"].to_list(), models), payload
+    known = {m.id: m for m in catalogue.enabled_models()}
+    fc, reads = outlook_bucket.from_bucket(
+        store, [known[m] for m in models if m in known], points, now, days=DAYS, log=log
+    )
+    read = {r.model for r in reads if r.fc is not None}
+    sources["bucket"] = sorted(read)
+    lacking = [m for m in models if m not in read]
+    sources["api"] = [
+        m for i, m in enumerate(lacking) if cost(points.height, i + 1) <= MAX_FALLBACK_CALLS
+    ]
+    sources["left_out"] = lacking[len(sources["api"]) :]
+    if sources["left_out"]:
+        log(
+            f"outlook: over the fallback's {MAX_FALLBACK_CALLS} calls, left out: "
+            + ", ".join(sources["left_out"])
+        )
+    if sources["api"]:
+        payload = fetch(client, points, sources["api"], sleep)
+        api = parse(payload, points["code"].to_list(), sources["api"])
+        fc = pl.concat([fc, api.select(fc.columns).cast(fc.schema)])
+    heights = dict(outlook_bucket.point_table(points).select("id", "elevation").rows())
+    answer = [{"location_id": i, "elevation": heights.get(c)} for i, c in enumerate(points["code"])]
+    return fc.sort("okres", "model", "time"), answer
 
 
 def add_gusts(

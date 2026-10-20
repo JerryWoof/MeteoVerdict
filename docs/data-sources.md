@@ -508,14 +508,23 @@ on the training rows).
 
 The TV-style forecast for every okres (`meteoverdict.outlook`):
 
-- **Request:** one Open-Meteo **Forecast API** request (`api.open-meteo.com/v1/forecast`)
-  for the forecast points of all 77 okresy, all models with weights,
+- **Source (since 2026-10-20):** Open-Meteo's **open-data bucket** on AWS, no API calls:
+  every model with weights at the forecast points of all 77 okresy, read and made
+  hourly the way the Forecast API answers ([outlook from the bucket](#outlook-from-the-bucket)),
+  `temperature_2m, precipitation, wind_speed_10m, cloud_cover, sunshine_duration` from
+  00 UTC today for 6 days. A model with no complete run in the bucket in the last 24 h
+  is asked from the API instead (at most 200 weighted calls a run, 5 models; more are
+  left out of that run). `mvd outlook --api` asks the API for every model, as before.
+- **The API request** (until 2026-10-20 for every model, now the fallback): one Open-Meteo
+  **Forecast API** request (`api.open-meteo.com/v1/forecast`)
+  for the forecast points of all 77 okresy and the models asked,
   `hourly=temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration`,
   `forecast_days=6`, UTC; 77 × 5 × models / 10 weighted calls: ≈ 420 with 11 models,
   ≈ 732 with all 19 (refused above 800). A request is at most 500 calls (Open-Meteo
   allows 600 a minute), so with more than 12 models the okresy go in two equal requests
   61 s apart, merged into one answer. Checked live on 2026-10-12: a JSON list of 77
-  results, columns `<variable>_<model>`, 2.7 MB, under a second.
+  results, columns `<variable>_<model>`, 2.7 MB, under a second (one model asked: the
+  columns lack the suffix, which `outlook.parse` allows for).
 - **New models** enter only once they have weights, i.e. once `mvd aggregate` has 90-day
   okres scores for them (the D+N backfill fetches their current windows first). Weights
   are per okres, variable and lead day; a model without weights in an okres is left out
@@ -650,9 +659,82 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
   Measured on the live run of 17 Oct 2026 (11 models): 61–78 kB per model (global
   models smaller, the short ones' nulls larger; ≤ 100 kB is checked in the tests),
   ~0.75 MB for all, ~160 kB zipped.
-- **Budget:** four runs a day ≈ 1,700 calls with 11 models, ≈ 2,930 with 19 (3,400
-  budgeted with retries); priority 1 in the [budget split](#open-meteo-budget) with the
-  backfill and the single runs.
+- **Budget:** none while the bucket has every model; its API fallback at most 200 calls a
+  run, 800 a day (until 2026-10-20 all models from the API: four runs a day ≈ 2,930
+  calls with 19 models, 3,400 budgeted with retries); priority 1 in the
+  [budget split](#open-meteo-budget) with the backfill and the single runs. The job
+  summary shows the calls, the bucket's requests and which models came from the API.
+
+### Outlook from the bucket
+
+`meteoverdict.outlook_bucket` (since 2026-10-20): the outlook's table (`outlook.parse`'s
+rows: okres, hour, model and the five variables) from the open-data bucket
+([single runs from the bucket](#single-runs-from-the-bucket): `bucket.read_run`, the
+same layout, cells and conventions), built the way the Forecast API builds its answer
+(open-meteo's `Interpolation.swift`, `Zensun.swift`, read 2026-10-20):
+
+- **Grid cells:** the nearest cell of each okres point in every bucket model, committed
+  as `src/meteoverdict/data/okres-cells.csv` (1,540 rows: 77 points × 20 bucket models;
+  rebuilt with `mvd bucket-cells --okres` when a grid changes, like `bucket-cells.csv`),
+  the temperature moved from the cell's surface height to the point's elevation
+  (`okres-elevations.csv`, the API's) by 0.65 K per 100 m.
+- **Runs stitched like the API's time series:** each hour and variable from the newest
+  complete run that has it; older runs for the hours before it starts (back to 00 UTC
+  today) and beyond its end where they reach further (UKMO's and JMA's 06 and 18 UTC
+  runs end at 60 and 132 h, their 00 and 12 UTC ones later; a run's `meta.json` tells
+  its end before it is read). Every 3 hours for ICON-D2, ICON-EU (its 03, 09, 15, 21 UTC
+  runs reach 30 h), AROME AT, KNMI and DMI, as the API serves them; the others at their
+  run hours. Leads up to 168 h (the answer's last hour is 143 h after 00 UTC today).
+- **Hourly between a model's native steps** (3- and 6-hourly models, the 3-hourly ends
+  of ICON, IFS and GFS): temperature and wind speed by Open-Meteo's Hermite
+  (Catmull-Rom) spline, cloud cover linearly, precipitation spread evenly over its
+  step, the radiation through the clearness index of each step's solar factor
+  (`interpolateSolarBackwards`).
+- **Sunshine** from the model's own file (ALADIN, AROME AT), else from the hourly direct
+  radiation as the API derives it: the model's own direct radiation (ICON, IFS HRES,
+  UKMO, DMI), else shortwave minus its own diffuse (GFS), else minus Open-Meteo's
+  diffuse model (a polynomial in the clearness index and the sun's angle); sunshine is
+  the share of the hour with a direct normal irradiance between 60 and 180 W/m²
+  (`calculateBackwardsSunshineDuration`). ARPEGE's radiation in the bucket is 1.296
+  times the API's (Météo-France's files keep a conversion factor that the API's readers
+  undo, 10⁷ / 3600²): multiplied back. JMA and AIGFS have no radiation: no sunshine, as
+  in the API.
+- **Fallback:** a model none of whose runs of the last 24 h is complete in the bucket
+  is asked from the API (`outlook.gather`; ≤ 200 calls a run).
+- **Cost:** ~27,000–30,000 range requests, ~4 min from Prague with 4 models and 32
+  requests in parallel (GitHub's runners are closer to us-west-2); no quota.
+- **Validation** (2026-10-20, the API asked at 09:10 UTC and the bucket read right
+  after for the same moment, all 19 models at the 77 points, 164,472 hours in both;
+  mean absolute difference; sunshine per hour (s) and per UTC day (h)):
+
+  | Model | Runs from the bucket (UTC) | t2m °C | precip mm | wind m/s | cloud % | sun s / h a day |
+  |---|---|---|---|---|---|---|
+  | ALADIN CZ 1 km / CE 2 km | 20 00, 19 18 | 0.035 / 0.039 | 0.000 | 0.006 / 0.012 | 0.4 / 0.5 | 0.1 / 0.00 |
+  | ICON-D2 | 20 06, 03, 00, 19 21 | 0.065 | 0.009 | 0.040 | 0.7 | 5 / 0.02 |
+  | ICON-EU | 20 03, 00, 19 21 | 0.028 | 0.001 | 0.018 | 0.1 | 27 / 0.10 |
+  | ICON | 20 00, 19 18 | 0.038 | 0.003 | 0.029 | 0.2 | 40 / 0.18 |
+  | IFS HRES | 20 00, 19 18 | **0.240** | 0.006 | 0.083 | 1.6 | 42 / 0.20 |
+  | IFS 0.25° / AIFS | 20 00, 19 18 | 0.036 / 0.048 | 0.006 / 0.012 | 0.059 / 0.102 | 1.6 / 2.2 | 2 / 0.01 |
+  | GFS / AIGFS | 20 00, 19 18 | 0.027 / 0.037 | 0.001 / 0.008 | 0.010 / 0.120 | 0.2 / 2.1 | 9 / 0.06 (AIGFS –) |
+  | ARPEGE Europe / World | 20 00, 19 18 | 0.029 / 0.030 | 0.000 / 0.004 | 0.003 / 0.032 | 0.2 / 0.7 | 0.4 / 0.00, 20 / 0.10 |
+  | AROME AT / KNMI / DMI | 20 06–19 21 (3-hourly) | 0.038 / 0.087 / 0.031 | 0.000–0.001 | 0.009–0.064 | 0.2–1.6 | 0–3 / 0.00–0.01 |
+  | GEM Global | 19 12 | 0.026 | 0.001 | 0.008 | 0.6 | 64 / 0.36 |
+  | JMA GSM / CMA GRAPES | 19 18 (+ 12) / 19 18 | 0.056 / 0.028 | 0.009 / 0.008 | 0.108 / 0.062 | 2.1 / 0.1 | – / 4 |
+  | UKMO 10 km | 19 18, 12 (the API: 20 00) | 0.938 | 0.113 | 0.707 | 24.8 | 386 / 0.37 |
+  | **All** (without UKMO) | | **0.112** (0.053) | 0.012 (0.004) | 0.093 (0.049) | 2.6 (0.9) | 28 / 0.10 |
+
+  The same run gives the same values: temperature within 0.03–0.09 °C (the API rounds
+  to 0.1 and interpolates u/v rather than the speed), precipitation within 0.01 mm;
+  IFS HRES as for the single runs (the API's cell differs on the O1280 grid). **UKMO**
+  differs because the API already had its 00 UTC run at 09:10 and the bucket did not
+  (UKMO reaches the bucket ~9 h after its start: 18 UTC at 03:03, 12 UTC at 20:35); at
+  the outlook's times (04:50, 10:50, …) both have the same run. Sunshine per day agrees
+  within 0.1 h on average (bias −0.02 h; GEM's and IFS HRES's 3-hourly ends differ
+  most: the API's own interpolation there is not reproduced exactly); the outlook
+  scales the hourly sunshine to the corrected daily total anyway. CMA lacks 2 of 117
+  hours where its run has a gap the API fills. The daily `sun-cloud-gust` refit keeps
+  learning from what the outlook archives, so it follows the bucket's values from
+  2026-10-20 on.
 
 ## Ranking with confidence intervals (roadmap 2.5)
 
@@ -720,7 +802,7 @@ from its archive start, then the window's daily scores.
   its windows are fetched but scored only once ČHMÚ publishes the month.
 - With `--github-release` the month files and the state are pulled from and pushed to
   GitHub Releases (`data-YYYY-MM`, state in `data-state`) after every window, so the
-  scheduled workflow `.github/workflows/backfill.yml` (daily, the shared 5,700 calls,
+  scheduled workflow `.github/workflows/backfill.yml` (daily, the shared 8,300 calls,
   see the [budget split](#open-meteo-budget)) can continue from any machine.
 - **One sweep from today into the past** (since 2026-10-17; the user's wish: "fill it
   gradually from today into the past, D-1, D-2, D-3 …"): the windows are processed
@@ -756,24 +838,25 @@ from its archive start, then the window's daily scores.
   `forecasts.estimate_calls` and `runs.run_cost` at 7,400 shared calls a day, the 400 of
   the fallback, a new window every 14 days; ~542,000 calls of D+N at the stations,
   ~211,000 at the gauges, ~274,000 for the single runs of 2026-04-02 to 07-31 and
-  ~270,000 for IFS HRES before 2026-04-02 were left). Since the outlook runs four times
-  a day (2026-10-17) the share is 5,700: the dates below are that simulation **scaled,
-  not simulated again**: a new window takes ~860 calls a day of the share (~10,070 every
-  14 days and ~3,860 every 28), so the old history moved by 7,400 − 860 = 6,540 a day
-  and now by 5,700 − 860 = 4,840, and every time from 2026-10-17 is ×1.35 (old dates in
-  brackets):
+  ~270,000 for IFS HRES before 2026-04-02 were left). Since the outlook reads the bucket
+  (2026-10-20) the share is 8,300 (5,700 from 2026-10-17, when the outlook went to four
+  API runs a day): the dates below are that simulation **scaled, not simulated again**:
+  a new window takes ~860 calls a day of the share (~10,070 every 14 days and ~3,860
+  every 28), so the old history moved by 7,400 − 860 = 6,540 a day and now by
+  8,300 − 860 = 7,440, and every time from 2026-10-17 is ×0.88 (the dates at 7,400 in
+  brackets; at 5,700 they were ×1.35, e.g. 2024-01-01 in July 2027):
 
   | Complete back to (D+N and single runs) | Expected |
   |---|---|
-  | 2026-07-01 | 2026-11-13 (2026-11-06) |
-  | 2026-04-02 (every model's single runs) | 2027-01-11 (2026-12-20) |
-  | 2026-01-01 | 2027-02-03 (2027-01-06) |
-  | **2025-10-01** (one full year) | **2027-02-26** (2027-01-23; D+N alone 2027-02-25) |
-  | 2025-01-01 | 2027-04-30 (2027-03-10) |
-  | **2024-01-01** (D+N; IFS HRES single runs from 2024-03-14) | **2027-07-01** (2027-04-25) |
+  | 2026-07-01 | 2026-11-04 (2026-11-06) |
+  | 2026-04-02 (every model's single runs) | 2026-12-12 (2026-12-20) |
+  | 2026-01-01 | 2026-12-27 (2027-01-06) |
+  | **2025-10-01** (one full year) | **2027-01-11** (2027-01-23; D+N alone 2027-01-10) |
+  | 2025-01-01 | 2027-02-21 (2027-03-10) |
+  | **2024-01-01** (D+N; IFS HRES single runs from 2024-03-14) | **2027-04-02** (2027-04-25) |
 
-  Without the IFS HRES single runs before 2026-04-02 (~50 days of the share) the D+N
-  would reach 2024-01-01 around 2027-05-05. Scheduled runs start late or are skipped
+  Without the IFS HRES single runs before 2026-04-02 (~33 days of the share) the D+N
+  would reach 2024-01-01 around 2027-02-24. Scheduled runs start late or are skipped
   sometimes, and a request cut by the budget is asked again in full, so take these dates
   as a few days optimistic ([budget](#open-meteo-budget)).
 - **Models added later:** a `model|window` key that is not in the state is pending, also
@@ -2192,16 +2275,18 @@ newest single runs come from the bucket and their API calls go to the backfill, 
 history is **one strict sweep from today into the past**: "download everything gradually
 from today into the past, so that the forecast keeps improving: D-1, D-2, D-3 …"):
 
-1. **Outlook** (user-facing, `outlook.yml`): only the models with weights are asked,
-   77 okresy × 5 variables × models / 10: ~732 calls a run with all 19 (refused above
-   800), four times a day (04:50, 10:50, 16:50, 22:50, after each model run; twice a
-   day until 2026-10-17); 3,400 a day budgeted with retries.
+1. **Outlook** (user-facing, `outlook.yml`, four times a day: 04:50, 10:50, 16:50,
+   22:50): since 2026-10-20 the models come from the bucket
+   ([outlook from the bucket](#outlook-from-the-bucket)); only a model the bucket lacks
+   is asked from the API, at most 200 calls a run (`outlook.MAX_FALLBACK_CALLS`, 5
+   models), ≤ 800 a day. Until then every model with weights was asked: 77 okresy × 5
+   variables × models / 10, ~732 calls a run with all 19, 3,400 a day budgeted.
 2. **The bucket's gaps** (`runs.yml`, 100 at 04:20, 10:20, 16:20 and 22:20, ≤ 400 a
    day): the single runs the bucket lacks once 24 h old, newest first, then the few runs
    between the start of the month the bucket's window starts in and the window
    (`runs.history_edge`). GEM Global before 2026-08-18 and the bucket's other gaps
    (96 runs on 2026-10-17, 100 calls each) take about 3–4 weeks of it.
-3. **The sweep** (`backfill.yml` at 02:41, the shared 5,700): 14-day windows newest
+3. **The sweep** (`backfill.yml` at 02:41, the shared 8,300): 14-day windows newest
    first, each finished before the next older one: its D+N at every station and the
    rain gauges, then the single runs' API history of its days (before
    `runs.history_edge`). The current windows (the last 90 days: the 90-day ranking and
@@ -2217,11 +2302,12 @@ from today into the past, so that the forecast keeps improving: D-1, D-2, D-3 �
 The recent days need no calls of their own: their D+N is rebuilt from the single runs
 ([Fresh D+N](#fresh-dn-from-the-single-runs)).
 
-The shared **5,700 calls a day** are the backfill's alone (`--max-calls 5700`, ~1.2 h at
-its pace of 4,800 an hour). History: 4,500 until 2026-10-17 (the newest single runs then
-cost 3,400 a day), then 7,400 once they came from the bucket, and 5,700 since the
-outlook runs four times a day (its 1,700 more come out of the share, so the day's total
-stays the same). Until 2026-10-17 `runs.yml` took what the backfill left of them at 10:20
+The shared **8,300 calls a day** are the backfill's alone (`--max-calls 8300`, ~1.75 h
+at its pace of 4,800 an hour). History: 4,500 until 2026-10-17 (the newest single runs then
+cost 3,400 a day), then 7,400 once they came from the bucket, 5,700 while the outlook
+asked the API four times a day (2026-10-17 to 10-20), and 8,300 since the outlook reads
+the bucket (its 3,400 less its fallback's 800 go to the share, so the day's total stays
+the same). Until 2026-10-17 `runs.yml` took what the backfill left of them at 10:20
 and 13:20 for the single runs' history (`--shared-calls`, `backfill.share_left`), and
 the backfill held its older windows back until that history was done
 (`--older-windows after-runs-history`) and fetched one year back at the ~100 stations
@@ -2239,14 +2325,16 @@ from its archive start)".
 |---|---|---|---|---|
 | Before 2026-10-17 | ≤ 1,600 | 3,400 (newest runs) | 4,500 | ≤ 9,500 |
 | 2026-10-17 (bucket) | ≤ 1,700 | ≤ 400 (bucket gaps) | 7,400 | ≤ 9,500 |
-| **Since the outlook runs 4 × a day** | **≤ 3,400** | **≤ 400** (bucket gaps) | **5,700** | **≤ 9,500** |
-| In 31 days | ≤ 105,400 | ≤ 12,400 | 176,700 | **≤ 294,500** |
+| 2026-10-17 (outlook 4 × a day) | ≤ 3,400 | ≤ 400 (bucket gaps) | 5,700 | ≤ 9,500 |
+| **Since 2026-10-20 (outlook from the bucket)** | **≤ 800** (fallback) | **≤ 400** (bucket gaps) | **8,300** | **≤ 9,500** |
+| In 31 days | ≤ 24,800 | ≤ 12,400 | 257,300 | **≤ 294,500** |
 
 No day exceeds 9,500 and no 31-day month 294,500, whoever spends the share, as long as
 the runs start on time; a late 22:20 single runs schedule slipping into the next UTC day
 adds at most 100 there (9,600); a late 22:50 outlook does not (it is skipped from 23:45
-UTC on). Hours: the backfill's ≤ 4,800 an hour (02:41), the outlook ≤ 800 at 04:50,
-10:50, 16:50 and 22:50, the single runs ≤ 100 each. `tests/test_budget.py` checks these
+UTC on). Hours: the backfill's ≤ 4,800 an hour (02:41), the outlook's fallback ≤ 200 at
+04:50, 10:50, 16:50 and 22:50 (4,800 + 200 = the hourly 5,000), the single runs ≤ 100
+each. `tests/test_budget.py` checks these
 sums and the outlook's schedule against the workflows.
 
 **The times above are when the runs are scheduled, not when they start.** GitHub starts
@@ -2255,8 +2343,8 @@ scheduled workflows **up to ~5 hours late** (on 2026-10-15 every scheduled run s
 single runs of 04:20 at 09:11) and sometimes skips a slot altogether (the 3-hourly
 ALADIN archive ran 4 of 8 times that day). So the budget assumes:
 
-- **Runs may overlap in one clock hour.** The backfill may still run (~1.2 h for its
-  5,700) when a late outlook or single-runs schedule starts. `forecasts.Budget` paces
+- **Runs may overlap in one clock hour.** The backfill may still run (~1.75 h for its
+  8,300) when a late outlook or single-runs schedule starts. `forecasts.Budget` paces
   each run below 4,800 an hour, but two runs in the same hour can together pass
   Open-Meteo's 5,000; Open-Meteo then answers 429, which the runs retry after a pause
   (and stop cleanly on the daily limit, continuing next time).
@@ -2264,9 +2352,9 @@ ALADIN archive ran 4 of 8 times that day). So the budget assumes:
   00:00): only the 100 fallback calls move, inside the 500-call margin below 10,000.
   The 22:50 outlook could too, with up to 850: the workflow skips a scheduled 22:50 run
   that starts at 23:45 UTC or later (the next run follows at 04:50), so a UTC day never
-  has more than four. The backfill (02:41, ~1.2 h) cannot cross midnight even 5 h late.
+  has more than four. The backfill (02:41, ~1.75 h) cannot cross midnight even 5 h late.
 - **Two backfill runs are ~24 h apart by the schedule**, ~19–29 h with the delays; each
-  spends at most 5,700 of its UTC day. Should Open-Meteo count a rolling 24 hours
+  spends at most 8,300 of its UTC day. Should Open-Meteo count a rolling 24 hours
   instead, a very late run followed by an early one could meet its limit: the run then
   stops cleanly and the next one continues.
 - **The single runs no longer lag:** the bucket is read at every schedule, model by
@@ -2277,22 +2365,22 @@ ALADIN archive ran 4 of 8 times that day). So the budget assumes:
 
 **How long the histories take** (simulated day by day from the live states of
 2026-10-17 at 7,400 shared calls a day plus the 400 fallback, a new window every 14 days,
-costs from `forecasts.estimate_calls` and `runs.run_cost`; since the outlook runs four
-times a day scaled to the 5,700, ×1.35 from 2026-10-17; scheduled runs start late or are
+costs from `forecasts.estimate_calls` and `runs.run_cost`; since the outlook reads the
+bucket scaled to the 8,300, ×0.88 from 2026-10-17; scheduled runs start late or are
 skipped sometimes, so take these dates as a few days optimistic): see the table in
 [backfill](#backfill-mvd-backfill). In short: the sweep (D+N at every station and the
 gauges, and the single runs of the same days) is complete back to **2026-07-01 around
-2026-11-13**, all models' single runs back to **2026-04-02 around 2027-01-11**,
-everything back to **2025-10-01 around 2027-02-26**, and the D+N back to **2024-01-01
-around 2027-07-01** (with IFS HRES's single runs back to 2024-03-14; without them
-2027-05-05). Until 2026-10-17 the plan was: the current windows and one year back at
+2026-11-04**, all models' single runs back to **2026-04-02 around 2026-12-12**,
+everything back to **2025-10-01 around 2027-01-11**, and the D+N back to **2024-01-01
+around 2027-04-02** (with IFS HRES's single runs back to 2024-03-14; without them
+2027-02-24). Until 2026-10-17 the plan was: the current windows and one year back at
 the ~100 stations by 2026-10-30, the single runs back to 2026-06-23 by 2026-11-10, the
 other ~400 stations of that year and everything back to 2024-01-01 by 2027-02-05,
 without the single runs before 2026-06-23. The sweep reaches the full stations of each
 day sooner (2025-10-01 for all stations in January 2027 instead of February) and adds
 ~540,000 calls of single runs (2026-04-02 to 06-22 for all models, IFS HRES back to
 2024), which move the end from February to late April 2027 (at the 7,400 of that time;
-at today's 5,700 about July 2027).
+at 5,700 about July 2027, at today's 8,300 early April 2027).
 
 Every daily run (`mvd daily`) downloads all score months and aggregates them again, so
 each window the backfill scores reaches the "all time" and season windows (and the
