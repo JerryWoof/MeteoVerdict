@@ -314,8 +314,13 @@ are not independent.
   elevation of its okres's stations** (all stations of the station table in that okres)
   is a *high site* (`high_site` in `stations.json`): 47 of 782 stations in October 2026,
   the summits (Milešovka, Lysá hora, Praděd, Sněžka, Klínovec, Kleť, …) and a few
-  ridge and plateau stations (Protivanov, Potštát). It is left out of its own okres and
-  never borrowed by another. Why: an okres ranking is read as "which model to use where
+  ridge and plateau stations (Protivanov, Potštát). It is left out of its own okres, and
+  out of an okres that would borrow it only where it also stands more than 300 m above
+  *that* okres's median (since 2026-10-20; before, never borrowed): Protivanov (675 m)
+  is 450 m above Prostějov's median and out of Prostějov, but 245 m above Blansko's
+  (430 m) and in Blansko's pool, which has no temperature station of its own; Věšín
+  (720 m) is no longer borrowed by Rokycany. In October 2026 that is 39 station-okres
+  pairs in 23 okresy, 257 of the 293 temperature stations in some okres. Why: an okres ranking is read as "which model to use where
   people live", and a summit is another climate. 300 m is about 2 °C of temperature at
   the usual lapse rate, more than the models differ by, and the same margin the frost
   and gust corrections use for "not representative of the okres". Before, Milešovka
