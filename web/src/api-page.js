@@ -65,24 +65,46 @@ async function main() {
   select.replaceChildren(
     ...okresy.map((o) => Object.assign(document.createElement("option"), { value: o.code, textContent: `${displayName(o.name)} (${o.code})` })),
   );
+  const model = document.getElementById("model");
+  model.replaceChildren(
+    Object.assign(document.createElement("option"), { value: "blend", textContent: t("api.modelBlend") }),
+    Object.assign(document.createElement("option"), { value: "ai", textContent: t("api.modelAi") }),
+  );
+  let aiFile; // data/scores/ai/ai-forecast.json, fetched once when the AI is chosen
+  const AI_URL = "data/scores/ai/ai-forecast.json";
   async function show(code, remember = true) {
     const okres = okresy.find((o) => o.code === code);
     const links = document.getElementById("links");
-    links.replaceChildren(
-      ...[["JSON", okres.json], ["CSV", okres.csv]].map(([label, href]) => {
-        const li = document.createElement("li");
-        const a = Object.assign(document.createElement("a"), { href, textContent: href });
-        li.append(`${label}: `, a);
-        return li;
-      }),
-    );
-    const csv = await get(`api/v1/okresy/${code}.csv`, "text");
-    document.getElementById("preview").textContent = csv ? `${csv.split("\n").slice(0, 8).join("\n")}\n…` : "";
+    const preview = document.getElementById("preview");
+    if (model.value === "ai") {
+      aiFile ??= await get(AI_URL);
+      const ai = aiFile?.okresy?.[code];
+      const li = Object.assign(document.createElement("li"), { textContent: "JSON: " });
+      li.append(Object.assign(document.createElement("a"), { href: AI_URL, textContent: AI_URL }));
+      links.replaceChildren(li, Object.assign(document.createElement("li"), { textContent: t("api.aiNote") }));
+      preview.textContent = ai
+        ? ["time_utc,temperature_2m,wind_speed_10m",
+          ...ai.time.slice(0, 7).map((time, i) => `${time},${ai.temperature_2m?.ai?.[i] ?? ""},${ai.wind_speed_10m?.ai?.[i] ?? ""}`),
+          "…"].join("\n")
+        : "";
+    } else {
+      links.replaceChildren(
+        ...[["JSON", okres.json], ["CSV", okres.csv]].map(([label, href]) => {
+          const li = document.createElement("li");
+          const a = Object.assign(document.createElement("a"), { href, textContent: href });
+          li.append(`${label}: `, a);
+          return li;
+        }),
+      );
+      const csv = await get(`api/v1/okresy/${code}.csv`, "text");
+      preview.textContent = csv ? `${csv.split("\n").slice(0, 8).join("\n")}\n…` : "";
+    }
     if (remember) window.history.replaceState(null, "", `#${code}`);
   }
   const wanted = window.location.hash.slice(1);
   select.value = okresy.some((o) => o.code === wanted) ? wanted : (okresy.find((o) => o.code === "CZ0100") ?? okresy[0]).code;
   select.addEventListener("change", () => show(select.value));
+  model.addEventListener("change", () => show(select.value));
   // a link to a section (#releases) keeps its address
   await show(select.value, !wanted || okresy.some((o) => o.code === wanted));
 }
