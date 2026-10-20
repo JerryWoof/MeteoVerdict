@@ -511,15 +511,17 @@ function modelPicker(data, rows) {
   if (data.status === "loading") notes.push(element("p", t("tv.modelLoading"), "model-note"));
   if (data.status === "missing") notes.push(element("p", t("tv.modelUnavailable"), "model-note"));
   if (single) {
-    let text = t("tv.modelNote", { time: issuedText(rows.generated) ?? "–" });
+    let text = panelModel === AI_MODEL ? "" : t("tv.modelNote", { time: issuedText(rows.generated) ?? "–" });
     // days of our forecast the model does not cover whole
     const cut = outlook.days.some((day) => rowFor(outlook, state.okres, day, "day") && !periods.get(`${day}|day`));
     if (cut && rows.end != null) text += ` ${t("tv.modelHorizon", { end: endText(rows.end) })}`;
-    const note = element("p", text, "model-note");
-    note.title = t("tv.modelNoteMore");
-    notes.push(note);
+    if (text) {
+      const note = element("p", text.trim(), "model-note");
+      note.title = t("tv.modelNoteMore");
+      notes.push(note);
+    }
   }
-  if (single && panelModel === AI_MODEL) notes.push(experimentalNote(rows.generated));
+  if (single && panelModel === AI_MODEL) notes.push(experimentalNote(data.parsed?.aiIssued ?? mapView?.generated));
   if (panelModel !== mapModel) notes.push(element("p", t("tv.panelOnly", { map: modelName(mapModel) }), "model-note"));
   return [label, ...notes];
 }
