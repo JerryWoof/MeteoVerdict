@@ -17,7 +17,7 @@ of the 6,258 obce.
 | [On an e-ink display](https://github.com/JerryWoof/MeteoVerdict-TRMNL) | today and tomorrow, the next 24 hours, five days or the weekend on a TRMNL display, in Czech or English; combined or AI forecast |
 | [Score map](https://jerrywoof.github.io/MeteoVerdict/) | the most accurate model in every okres, or "no clear winner" where the data cannot tell; click an okres to see why it wins |
 | [Compare](https://jerrywoof.github.io/MeteoVerdict/compare.html) | all models ranked for Czechia, a kraj or an okres, with confidence intervals, and every model's error hour by hour after each run (H+1 to H+120) |
-| [Forecast per okres](https://jerrywoof.github.io/MeteoVerdict/forecast-detail.html) | the hourly combined forecast for one okres (or, as a test, one obec of it) next to the best single model, with sunrise, sunset and the nights shaded |
+| [Forecast per okres](https://jerrywoof.github.io/MeteoVerdict/forecast-detail.html) | the hourly combined forecast for one okres (or one obec of it) next to the best single model, with sunrise, sunset and the nights shaded |
 | [Measured](https://jerrywoof.github.io/MeteoVerdict/measured.html) | what ČHMÚ's stations measured, as a map like the forecast's: each station (or each okres, next to what our forecast had said) by day and part of day for the last 30 days, the whole day for 60; and for one station what the weather was like there, day by day back to the start of its records (weather symbol, max/min, precipitation, snow, sunshine, gusts, phenomena; week and month views with a summary; the course of recent days), and every element it measures, with its history. Zoomed in, the map shows the stations by name over relief and rivers. A model selector (MeteoVerdict AI, the blend or any single model, D+1 or D+2) puts a model's forecast at the station's own point and height next to what it measured, with the error, in the station panel and the okres's station list |
 | [Radar](https://jerrywoof.github.io/MeteoVerdict/radar.html) | ČHMÚ weather radar over Czechia: the last hours with the nowcast for the next hour, hourly precipitation from radar and rain gauges, and archived days |
 | [AI heatmap](https://jerrywoof.github.io/MeteoVerdict/heatmap.html) | experimental: MeteoVerdict AI's temperature at 100 m from the terrain (valleys, slopes, frost hollows), hour by hour; click anywhere for the forecast at that place |
@@ -44,7 +44,7 @@ of the 6,258 obce.
 6. **Every obec.** The same combination for each of the 6,258 obce: every model's
    newest run read at the obce's own grid cell from Open-Meteo's open-data bucket, the
    temperature moved to the obec's height, weighted as its okres
-   ([details](docs/data-sources.md#forecast-for-every-obec-test-mvd-obce-forecast)).
+   ([details](docs/data-sources.md#forecast-for-every-obec-mvd-obce-forecast)).
 
 Everything runs on GitHub Actions: scores are updated every morning, the forecast four
 times a day (04:50, 10:50, 16:50 and 22:50 UTC, after each model run), the obce right

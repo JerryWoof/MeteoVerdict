@@ -2681,9 +2681,9 @@ WGS 84 with pyproj and rounds to 4 decimals (about 10 m). Praha belongs to no ok
 RÚIAN; it is listed under "Hlavní město Praha". Rebuild after municipal changes (a few
 a year); the committed file is from 2026-09-30.
 
-## Forecast for every obec (test, `mvd obce-forecast`)
+## Forecast for every obec (`mvd obce-forecast`)
 
-A test, started 2026-10-18 for okres Litoměřice and extended the same day to every obec
+Started 2026-10-18 for okres Litoměřice and extended the same day to every obec
 (about 6,250 in 77 okresy), that may be reworked or removed: a forecast for each obec
 instead of only the okres's forecast point. After each outlook run
 (`.github/workflows/outlook.yml`, its own step; a failure does not fail the outlook):

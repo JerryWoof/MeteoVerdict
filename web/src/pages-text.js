@@ -11,7 +11,7 @@ export const PAGES = {
         ["p", "MeteoVerdict je český web o počasí s jednou nezvyklou otázkou: **kterému předpovědnímu modelu v Česku věřit a trefil se?** Každý den porovnáváme předpovědi desítek modelů (ALADIN, ICON, ECMWF a další) s tím, co naměřily stanice ČHMÚ, a výsledek ukazujeme na mapě po okresech."],
         ["h", "Co tu najdete"],
         ["ul", [
-          "**[Předpověď](forecast.html)** pro každý okres a pro 6 258 obcí. Skládáme ji z modelů podle toho, jak přesně v daném okrese v poslední době předpovídaly. Předpověď pro obce je interpolovaná z okresních modelů a v místech bez stanice zatím není ověřená.",
+          "**[Předpověď](forecast.html)** pro každý okres a pro 6 258 obcí. Skládáme ji z modelů podle toho, jak přesně v daném okrese v poslední době předpovídaly.",
           "**[Mapa přesnosti](./)** a **[Porovnání](compare.html)**: který model vede kde, pro jakou veličinu a jak jisté to pořadí je.",
           "**[Radar](radar.html)** a **[Naměřeno](measured.html)**: radar ČHMÚ a měření stanic.",
           "**[Heatmapa](heatmap.html)** a **MeteoVerdict AI**, výchozí model v [Předpovědi](forecast.html): experimentální modely, které ověřujeme stejně přísně jako ostatní.",
@@ -32,7 +32,7 @@ export const PAGES = {
         ["p", "MeteoVerdict is a Czech weather site built around one unusual question: **which forecast model should you trust in Czechia, and did it get it right?** Every day we compare the forecasts of dozens of models (ALADIN, ICON, ECMWF and others) with what the ČHMÚ stations measured, and show the result on a map by okres."],
         ["h", "What you will find"],
         ["ul", [
-          "**[Forecast](forecast.html)** for every okres and for 6,258 municipalities. We combine the models by how accurately each has forecast that okres lately. The municipality forecast is interpolated from the okres models and not yet checked at places without a station.",
+          "**[Forecast](forecast.html)** for every okres and for 6,258 municipalities. We combine the models by how accurately each has forecast that okres lately.",
           "**[The accuracy map](./)** and **[Compare](compare.html)**: which model leads where, for which variable, and how sure that ranking is.",
           "**[Radar](radar.html)** and **[Measured](measured.html)**: ČHMÚ's radar and the stations' measurements.",
           "**[Heatmap](heatmap.html)** and **MeteoVerdict AI**, the default model of the [Forecast](forecast.html): experimental models, checked as strictly as the others.",
@@ -77,7 +77,7 @@ export const PAGES = {
         ["p", "Předpověď MeteoVerdict pro okres bere aktuální předpovědi všech modelů a váží je podle toho, jak přesně se v tomto okrese trefovaly v posledních 90 dnech. U teploty a větru se navíc odečítá jejich typická chyba (podle denní doby a nadmořské výšky). Váhy a opravy se každý den přepočítají. U srážek se váží, ale neopravuje; pravděpodobnost deště se kalibruje zvlášť."],
         ["p", "Spolehlivost jsme zkusili ověřit zpětným testem: pro každý den jen s tím, co jsme v ten den mohli vědět. Za 26 podzimních dnů vycházela skládaná předpověď pro teplotu a vítr o zhruba 0,1 až 0,3 °C a 0,2 až 0,35 m/s lepší než nejlepší jediný model pro celé Česko (statisticky jistě). U srážek je výhoda menší a u delších horizontů není jistá. **Je to podzimní test na krátkém vzorku, ne konečný verdikt**; test běží denně a výsledek se může změnit."],
         ["p", "**Rozpětí kolem teploty.** Na stránce podrobné předpovědi je kolem naší teploty šedý pruh, rozpětí 80 %: v osmi případech z deseti by měla naměřená teplota ležet uvnitř. Nepočítá se z neshody modelů (ta je příliš úzká, uvnitř by ležela jen v 56 % případů), ale z chyb naší vlastní předpovědi: pro okres, předstih a hodinu dne (00, 06, 12, 18 UTC, mezi nimi se dopočítává) bereme chyby za posledních 30 dní a z nich dolní a horní hranici (7. a 93. percentil, okres se tahá k celostátní hodnotě, protože jeho vzorek je malý). Ve zpětném testu (jen pro to, co bylo známo v den vydání, 26 podzimních dnů) leželo měření uvnitř v 82 % případů na D+1, 79 % na D+2 a 77 % na D+3; v noci a na horách je to o 2 až 6 bodů méně. Prosté 10. a 90. percentil drželo jen 70 až 75 %, protože podzimní chyby posledního měsíce jsou menší než chyby dnů příštích; šíře je proto dosazena na tomto vzorku a je třeba ji ověřit v zimě."],
-        ["p", "Předpověď pro obce (6 258) je **interpolovaná**: modely se čtou v místě a výšce obce a kombinují se s vahami a opravami jejího okresu. Jak přesná je v místech bez stanice, ukazuje [test s vynechanou stanicí](#obce-loso)."],
+        ["p", "Předpověď pro obce (6 258): modely se čtou v místě a výšce obce a kombinují se s vahami a opravami jejího okresu. Jak přesná je v místech bez stanice, ukazuje [test s vynechanou stanicí](#obce-loso)."],
         ["slot", "obce-loso"],
         ["h", "Co metodika neumí"],
         ["ul", [
@@ -120,7 +120,7 @@ export const PAGES = {
         ["p", "MeteoVerdict's forecast for an okres takes the current forecasts of all models and weights them by how accurately each forecast that okres over the last 90 days. For temperature and wind each model's typical error (by time of day and elevation) is also subtracted. Weights and corrections are recomputed every day. Rain is weighted but not corrected; the probability of rain is calibrated separately."],
         ["p", "We tried to check it with a back-test: each day using only what we could have known that day. Over 26 autumn days the combined forecast for temperature and wind was about 0.1 to 0.3 °C and 0.2 to 0.35 m/s better than the best single model for the whole of Czechia (statistically certain). For rain the advantage is smaller and at longer leads not certain. **This is an autumn test on a short sample, not a final verdict**; the test runs daily and the result may change."],
         ["p", "**The range around the temperature.** On the detailed forecast page a grey band surrounds our temperature, an 80 % range: in eight cases out of ten the measured temperature should fall inside it. It is not taken from the disagreement of the models (that is too narrow, it held the truth in only 56 % of cases) but from the errors of our own forecast: for each okres, lead and hour of the day (00, 06, 12, 18 UTC, interpolated in between) we take the errors of the last 30 days and from them a lower and an upper bound (the 7th and 93rd percentile; an okres is pulled towards the national value because its sample is small). In a back-test (using only what was known on the day of issue, 26 autumn days) the measurement fell inside in 82 % of cases at D+1, 79 % at D+2 and 77 % at D+3; at night and in the mountains it is 2 to 6 points lower. The plain 10th and 90th percentile held only 70 to 75 %, because the last month's autumn errors are smaller than those of the days ahead; the width was therefore set on this sample and has to be checked in winter."],
-        ["p", "The forecast for municipalities (6,258) is **interpolated**: the models are read at the municipality's place and elevation and combined with the weights and corrections of its okres. How accurate it is at places without a station is shown by [the test with the station left out](#obce-loso)."],
+        ["p", "The forecast for municipalities (6,258): the models are read at the municipality's place and elevation and combined with the weights and corrections of its okres. How accurate it is at places without a station is shown by [the test with the station left out](#obce-loso)."],
         ["slot", "obce-loso"],
         ["h", "What the method cannot do"],
         ["ul", [
@@ -145,7 +145,6 @@ export const PAGES = {
         ["ul", [
           "**[Otevřená data](data.html)**: předpověď a pořadí modelů pro 77 okresů jako JSON a CSV, bez klíče a registrace.",
           "**[Skóre přesnosti](compare.html)** a **[měsíční report](report.html)**: který model měl pravdu a jak jistě. Postup je v [metodice](methodology.html).",
-          "**Předpověď pro 6 258 obcí** je interpolovaná z okresů a v místech bez stanic zatím není ověřená.",
           "Žádná předpověď tu není oficiální a nic nezaručujeme (bez SLA).",
         ]],
         ["h", "Open-source a licence"],
@@ -162,7 +161,6 @@ export const PAGES = {
         ["ul", [
           "**[Open data](data.html)**: the forecast and the model ranking for 77 okresy as JSON and CSV, no key or registration.",
           "**[Accuracy scores](compare.html)** and the **[monthly report](report.html)**: which model was right and how surely. The method is in the [methodology](methodology.html).",
-          "**The forecast for 6,258 municipalities** is interpolated from the okresy and not yet checked at places without a station.",
           "No forecast here is official and we guarantee nothing (no SLA).",
         ]],
         ["h", "Open source and licences"],

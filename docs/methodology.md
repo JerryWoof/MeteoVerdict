@@ -891,7 +891,7 @@ windows. A dew-point floor did not help (observed minima fell below the forecast
 
 ### The obec forecast away from the stations (`mvd obce-loso`)
 
-The [forecast for every obec](data-sources.md#forecast-for-every-obec-test-mvd-obce-forecast)
+The [forecast for every obec](data-sources.md#forecast-for-every-obec-mvd-obce-forecast)
 reads every model at the obec's own place and height and combines the models with the
 weights and corrections of its okres; since 20 October 2026 the corrections' elevation
 term is taken at the obec's own height (before: at the okres's forecast point, see
