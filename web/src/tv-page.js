@@ -334,10 +334,10 @@ function declutter() {
 function modelBanner(view) {
   if (mapStatus?.failed) return element("p", t("tv.bannerFailed", { model: modelName(mapStatus.failed) }), "model-banner failed");
   if (mapStatus?.loading) return element("p", t("tv.bannerLoading", { model: modelName(mapStatus.loading) }), "model-banner");
-  if (!view.single) return null;
+  // MeteoVerdict AI: only its name says "experimental", no banner and no way back
+  if (!view.single || mapModel === AI_MODEL) return null;
   const banner = element("div", null, "model-banner");
   banner.append(element("p", t("tv.banner", { model: modelName(mapModel), time: issuedText(view.generated) ?? "–" })));
-  if (mapModel === AI_MODEL) banner.append(experimentalNote(view.generated));
   const cut = view.days.some((day) => view.okresy.some((o) => rowFor(view, o.code, day, "day")?.beyond));
   if (cut && view.lastHour != null) banner.append(element("p", t("tv.bannerHorizon", { end: endText(view.lastHour) }), "horizon"));
   const back = element("button", t("tv.bannerBack"), "back");
@@ -484,14 +484,6 @@ function partCell(row, part, single) {
   return cell;
 }
 
-/** The badge and the short explanation shown while MeteoVerdict AI is selected. */
-function experimentalNote(generated) {
-  const note = element("p", null, "model-note");
-  note.append(t("ai.modelNote", { time: issuedText(generated) ?? "–" }));
-  note.title = t("ai.modelTip");
-  return note;
-}
-
 // the "Forecast" selector and, for a single model, what it is and where it ends
 function modelPicker(data, rows) {
   const { single, periods } = rows;
@@ -523,8 +515,8 @@ function modelPicker(data, rows) {
   const notes = [];
   if (data.status === "loading") notes.push(element("p", t("tv.modelLoading"), "model-note"));
   if (data.status === "missing") notes.push(element("p", t("tv.modelUnavailable"), "model-note"));
-  if (single) {
-    let text = panelModel === AI_MODEL ? "" : t("tv.modelNote", { time: issuedText(rows.generated) ?? "–" });
+  if (single && panelModel !== AI_MODEL) {
+    let text = t("tv.modelNote", { time: issuedText(rows.generated) ?? "–" });
     // days of our forecast the model does not cover whole
     const cut = outlook.days.some((day) => rowFor(outlook, state.okres, day, "day") && !periods.get(`${day}|day`));
     if (cut && rows.end != null) text += ` ${t("tv.modelHorizon", { end: endText(rows.end) })}`;
@@ -534,7 +526,6 @@ function modelPicker(data, rows) {
       notes.push(note);
     }
   }
-  if (single && panelModel === AI_MODEL) notes.push(experimentalNote(data.parsed?.aiIssued ?? mapView?.generated));
   if (mapModel === AI_MODEL && panelModel === COMBINED && !hasAi(aiData, state.okres)) {
     notes.push(element("p", t("tv.aiFallback"), "model-note"));
   } else if (panelModel !== mapModel) notes.push(element("p", t("tv.panelOnly", { map: modelName(mapModel) }), "model-note"));
