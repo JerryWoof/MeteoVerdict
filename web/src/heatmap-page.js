@@ -189,6 +189,9 @@ function showTip(event) {
   tip.setLngLat(event.lngLat).setText(temp100mFormat(value, language, unit)).addTo(map);
 }
 
+/** A legend end in the page language ("21,5°" in Czech). */
+const degrees = (value) => `${value.toLocaleString(language)}°`;
+
 /** The hourly map's legend: the active ramp with its ends in °C (`range` null: the fixed scale), and the overlays' swatches. */
 function renderHourlyLegend(range) {
   const box = $("scale");
@@ -196,7 +199,7 @@ function renderHourlyLegend(range) {
   else {
     const bar = element("div", null, "bar");
     bar.style.background = heatRampGradient();
-    box.replaceChildren(element("div", t("heat.legend"), "scale-title"), bar, element("div", `${range.lo}° … ${range.hi}°`, "scale-ends"));
+    box.replaceChildren(element("div", t("heat.legend"), "scale-title"), bar, element("div", `${degrees(range.lo)} … ${degrees(range.hi)}`, "scale-ends"));
   }
   if (options.frost) {
     const row = element("div", null, "scale-key");
@@ -213,7 +216,7 @@ function renderLegend(range) {
   const { min, max } = source.single;
   const bar = element("div", null, "bar");
   bar.style.background = temp100mGradient(source.single);
-  box.replaceChildren(element("div", t("heat.legend"), "scale-title"), bar, element("div", `${min}° … ${max}°`, "scale-ends"));
+  box.replaceChildren(element("div", t("heat.legend"), "scale-title"), bar, element("div", `${degrees(min)} … ${degrees(max)}`, "scale-ends"));
 }
 
 // --- the time control ----------------------------------------------------------------------
