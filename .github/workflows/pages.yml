@@ -191,6 +191,25 @@ jobs:
             echo "  $layer: $(du -sch web/dist/radar/days/*/$layer 2>/dev/null | tail -1 | cut -f1)"
           done
           echo "site: $(du -sh web/dist | cut -f1)"
+      - name: Size report (a published Pages site may be 1 GB)
+        run: |
+          bytes=$(du -sb web/dist | cut -f1)
+          {
+            echo "### Pages site: $(( bytes / 1000000 )) MB of the 1000 MB limit ($(( 1000 - bytes / 1000000 )) MB left)"
+            echo
+            echo "| folder | MB |"
+            echo "|---|---|"
+            du -sb web/dist/data/scores/* web/dist/api web/dist/radar web/dist/assets 2>/dev/null \
+              | sort -rn | head -15 | awk '{ sub("web/dist/", "", $2); printf "| %s | %d |\n", $2, $1 / 1000000 }'
+            echo
+            echo "Biggest files:"
+            echo '```'
+            find web/dist -type f -printf '%s %p\n' | sort -rn | head -15 | awk '{ sub("web/dist/", "", $2); printf "%6.1f MB  %s\n", $1 / 1000000, $2 }'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$bytes" -gt 850000000 ]; then
+            echo "::warning::Pages site is $(( bytes / 1000000 )) MB, the hard limit is 1000 MB (the radar step drops old days above 900 MB)."
+          fi
       - uses: actions/upload-pages-artifact@v5
         if: steps.pages.outputs.enabled == 'true'
         with:
