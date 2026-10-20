@@ -5,14 +5,14 @@
 // each, and the forecast we archived for that day. Pure helpers; the page is the measured
 // page (measured.html: station-page.js, measured-okres.js).
 
-import { daySymbol } from "./diary.js";
+import { daySymbol } from "./observed-symbol.js";
 
 export const PARTS = ["night", "morning", "afternoon", "evening", "day"];
 /** Values the map can show on a past day (the forecast's four, plus gust and sunshine). */
 export const OBSERVED_LAYERS = ["temperature", "precipitation", "wind", "gust", "sunshine", "cloud"];
 /** Hours of each part (a whole day 24): a part is dark with less than half of it in daylight. */
 const PART_HOURS = { night: 6, morning: 6, afternoon: 6, evening: 6, day: 24 };
-/** Octas → % (the files have cloud cover in %, the diary's symbol takes octas). */
+/** Octas → % (the files have cloud cover in %, the symbol takes octas). */
 const OCTAS = 12.5;
 
 const DAY_MS = 86_400_000;
@@ -53,7 +53,7 @@ export function isDark(part, light) {
 
 /**
  * The weather symbol of an okres's part of day, from what was measured, as the station
- * diary's (diary.js daySymbol): precipitation (okres mean) of at least 0.5 mm rain, sleet
+ * diary's (observed-symbol.js daySymbol): precipitation (okres mean) of at least 0.5 mm rain, sleet
  * or snow (from the day's phenomena, new snow or the temperature), else the sky from the
  * sunshine as a share of the part's daylight, else from the cloud cover; null when there
  * is neither.
