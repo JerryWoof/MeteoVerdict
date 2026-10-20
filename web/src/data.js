@@ -2,9 +2,8 @@
 
 export const NO_DATA = "#ececec";
 export const TOO_FEW = "#bdbdbd";
-// no model is best with probability P_BEST_MIN or more (ranking.P_BEST_MIN, also in
-// meta.json as p_best_min): the region is left white instead of taking a model's colour
-export const NO_CLEAR = "#ffffff";
+// the best model is best with probability under P_BEST_MIN (ranking.P_BEST_MIN, also in
+// meta.json as p_best_min): the region still takes that model's colour, hatched
 export const P_BEST_MIN = 0.6;
 
 // Qualitative palette (ColorBrewer Paired, then the Tableau 20 pairs Paired lacks),
@@ -15,7 +14,7 @@ const PALETTE = [
   "#1f78b4", "#e31a1c", "#33a02c", "#ff7f00", "#6a3d9a", "#b15928",
   "#a6cee3", "#fb9a99", "#b2df8a", "#fdbf6f", "#cab2d6", "#ffff99",
   "#17becf", "#e377c2", "#bcbd22", "#8c564b",
-  "#9edae5", "#f7b6d2", "#dbdb8d", "#c49c94",
+  "#00695c", "#8e0152", "#7f7f7f", "#c49c94",
 ];
 
 /** {"columns": [...], "rows": [[...]]} → array of objects */
@@ -69,13 +68,30 @@ export function bestByRegion(rows, leadDay, pBestMin = P_BEST_MIN) {
   return best;
 }
 
-/** Fill colour of a region: its best model, grey with too few stations, white without
- * a clear winner. */
+/** Fill colour of a region: its best model (also when the win is not clear: the map is
+ * hatched there, see `closeCodes`), grey with too few stations or no model at all. */
 export function regionColor(entry, colors) {
   if (!entry || entry.model == null) return NO_DATA;
   if (!entry.enough) return TOO_FEW;
-  if (entry.clear === false) return NO_CLEAR;
   return colors[entry.model] ?? NO_DATA;
+}
+
+/** An okres without a ranking of its own (no model, or too few stations) takes its
+ * kraj's best model, marked `fallback`. okres code CZ0201 belongs to kraj CZ020. */
+export function withKrajFallback(okresBest, krajBest) {
+  const out = new Map(okresBest);
+  for (const [code, entry] of okresBest) {
+    if (entry.model != null && entry.enough) continue;
+    const kraj = krajBest.get(code.slice(0, 5));
+    if (!kraj || kraj.model == null || !kraj.enough) continue;
+    out.set(code, { ...kraj, name: entry.name, fallback: true, krajName: kraj.name });
+  }
+  return out;
+}
+
+/** The regions whose best model is not clearly the best (hatched on the map). */
+export function closeCodes(best) {
+  return [...best].filter(([, e]) => e.clear === false && e.enough && e.model != null).map(([code]) => code);
 }
 
 /** The regions whose ranking rests on a small sample (outlined dashed on the map). */
