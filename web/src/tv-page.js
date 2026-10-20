@@ -352,7 +352,8 @@ function renderHeadline(outlook) {
   const banner = modelBanner(outlook);
   box.classList.toggle("single", Boolean(outlook.single));
   if (!s) {
-    const note = outlook.single && outlook.lastHour != null
+    // "beyond its horizon" only after the model's last hour, not for a past day it never covered
+    const note = outlook.single && outlook.lastHour != null && state.day >= today(outlook.lastHour)
       ? t("tv.beyondPart", { end: endText(outlook.lastHour) })
       : t("tv.noPart");
     box.replaceChildren(...(banner ? [banner] : []), element("h2", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`), element("p", note));
