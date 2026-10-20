@@ -62,6 +62,7 @@ test("English number format and labels", () => {
   assert.equal(score(-0.002), "0.00");
   assert.equal(score(null), "–");
   assert.equal(count(12345), "12,345");
+  assert.equal(count(4574, "cs"), "4\u00a0574");
   assert.equal(binLabel("13-24"), "H+13–24");
 });
 
