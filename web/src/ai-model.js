@@ -17,6 +17,8 @@ const AI_VARIABLES = ["temperature_2m", "wind_speed_10m"];
 // what the AI does not forecast hourly: rain, taken from our blend (labelled "z blendu" on the
 // pages); cloud, sunshine and gusts come from its sky file per part of day when it has them
 const BLEND_VARIABLES = ["precipitation", "cloud_cover", "sunshine_duration"];
+/** The outlook's gust warning threshold (m/s). */
+const GUST_THRESHOLD = 13.5;
 const BLEND_FIELDS = ["precipitation", "cloud", "sunshine", "symbol", "gust", "gust_over_threshold"];
 
 /**
@@ -83,7 +85,10 @@ export function skyRow(row, ai, code, key) {
   const next = { ...row };
   if (own.cloud != null) next.cloud = own.cloud;
   if (own.sunshine != null) next.sunshine = own.sunshine;
-  if (own.gust != null) next.gust = own.gust;
+  if (own.gust != null) {
+    next.gust = own.gust;
+    next.gust_over_threshold = own.gust >= GUST_THRESHOLD;
+  }
   if (own.cloud != null && row.tmin != null && row.tmax != null) {
     next.symbol = modelSymbol(next.cloud, next.precipitation, (row.tmin + row.tmax) / 2) ?? row.symbol;
   }
