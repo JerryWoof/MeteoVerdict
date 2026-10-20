@@ -4,7 +4,7 @@ import { test } from "node:test";
 import {
   stationsIn,
   NO_DATA, P_BEST_MIN, TOO_FEW, bestByRegion, fillExpression, modelColors, records,
-  closeCodes, regionColor, smallSampleCodes, stationFeatures, withKrajFallback,
+  regionColor, smallSampleCodes, stationFeatures, withKrajFallback,
 } from "./data.js";
 
 
@@ -115,7 +115,7 @@ test("station pages of an okres: all its stations by name, also by kraj", () => 
   assert.deepEqual(stationsIn(null, "CZ0423"), []);
 });
 
-test("a close win keeps its model colour (hatched), and the small-sample regions", () => {
+test("a close win keeps its model colour, and the small-sample regions", () => {
   const rows = [
     { region: "a", region_name: "A", lead_day: 1, model: "icon", mae: 1, rank: 1, enough_stations: true, p_best: 0.9 },
     { region: "b", region_name: "B", lead_day: 1, model: "icon", mae: 1, rank: 1, enough_stations: true, p_best: 0.45, small_sample: true },
@@ -129,7 +129,6 @@ test("a close win keeps its model colour (hatched), and the small-sample regions
   // the rank-1 model leads on MAE but is best in fewer than 60 % of the resamples
   assert.deepEqual([best.get("b").model, best.get("b").clear, best.get("b").small], ["icon", false, true]);
   assert.equal(regionColor(best.get("b"), colors), colors.icon);
-  assert.deepEqual(closeCodes(best), ["b"]);
   assert.equal(regionColor(bestByRegion(rows, 1, 0.4).get("b"), colors), colors.icon);
   assert.deepEqual(smallSampleCodes(best), ["b"]);
 });

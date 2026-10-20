@@ -3,7 +3,7 @@
 export const NO_DATA = "#ececec";
 export const TOO_FEW = "#bdbdbd";
 // the best model is best with probability under P_BEST_MIN (ranking.P_BEST_MIN, also in
-// meta.json as p_best_min): the region still takes that model's colour, hatched
+// meta.json as p_best_min): the region still takes that model's colour
 export const P_BEST_MIN = 0.6;
 
 // Qualitative palette (ColorBrewer Paired, then the Tableau 20 pairs Paired lacks),
@@ -68,8 +68,8 @@ export function bestByRegion(rows, leadDay, pBestMin = P_BEST_MIN) {
   return best;
 }
 
-/** Fill colour of a region: its best model (also when the win is not clear: the map is
- * hatched there, see `closeCodes`), grey with too few stations or no model at all. */
+/** Fill colour of a region: its best model (also when the win is not clear: only the
+ * tooltip and panel say so), grey with too few stations or no model at all. */
 export function regionColor(entry, colors) {
   if (!entry || entry.model == null) return NO_DATA;
   if (!entry.enough) return TOO_FEW;
@@ -87,11 +87,6 @@ export function withKrajFallback(okresBest, krajBest) {
     out.set(code, { ...kraj, name: entry.name, fallback: true, krajName: kraj.name });
   }
   return out;
-}
-
-/** The regions whose best model is not clearly the best (hatched on the map). */
-export function closeCodes(best) {
-  return [...best].filter(([, e]) => e.clear === false && e.enough && e.model != null).map(([code]) => code);
 }
 
 /** The regions whose ranking rests on a small sample (outlined dashed on the map). */

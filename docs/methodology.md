@@ -453,7 +453,7 @@ few, so those scores are noisy. In autumn 2026 ALADIN is no better by ETS at 1 m
   lowest MAE counts for each in part). One winner per okres hides how sure that is;
   `p_best` says it. The **map** always colours an okres with the model of lowest
   error; where that model's `p_best` is under **0.6** (`ranking.P_BEST_MIN`, `p_best_min`
-  in `meta.json`) the okres is **hatched** ("close call") and the tooltip names the other
+  in `meta.json`) the colour is unchanged, but the tooltip and okres panel say "close call" and name the other
   close models. An okres with no ranking of its own takes its kraj's best model. 0.6 means the
   leader is best more often than all the others together, with a margin: with 1,000
   resamples the share itself is uncertain by about ±3 percentage points, and with 77
@@ -461,8 +461,8 @@ few, so those scores are noisy. In autumn 2026 ALADIN is no better by ETS at 1 m
   the 90 days to 18 October 2026 (D+1), 58 of 77 okresy have a clear winner for
   temperature and 62 for wind, but only 10 for daily precipitation, 22 for the 06–06
   total and 31 for the daily maximum: for rain the data does not yet single out a
-  model in most okresy, and the hatching shows that. The two ALADINs are near-duplicates
-  and split the resamples between them, so where ALADIN leads the map is often hatched;
+  model in most okresy, and the tooltip and panel say so. The two ALADINs are near-duplicates
+  and split the resamples between them, so where ALADIN leads the map is often a close call;
   the okres panel names the closest model and its `p_best`.
 - **Small sample** (`small_sample`): fewer than **30 scored days** in the comparison
   (`ranking.SMALL_SAMPLE_DAYS`, the same limit at which the okres panel and the
