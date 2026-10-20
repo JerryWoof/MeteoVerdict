@@ -224,7 +224,7 @@ uv run mvd archive-satellite --regions ce --out-dir data/radar  # satellite days
 | Outlook | 04:50, 10:50, 16:50, 22:50 (a 22:50 run starting from 23:45 is skipped) | `mvd outlook --github-release`: `outlook.json`, `outlook-hourly.json`, `outlook-models.zip` (every model's forecast per okres) to `data-latest`; the plain means and the parts of day (`outlook-parts-YYYY-MM.parquet`, for "forecast vs. measured") to `outlook-archive`, the full answer to the day's file in `outlook-models-YYYY-MM` |
 | CHMI archive | 01:41 and 13:41 | `mvd chmi-archive --part days --part recent --github-release` (the last days of `now/`, changed months of `recent/`), then `mvd station-pages --github-release --publish` and `mvd observed-map --github-release --publish` (`observed-data.zip`; allowed to fail) |
 | CHMI backfill | 02:07, up to 5 h | `mvd chmi-archive --part history --part months --github-release`, resumable, same concurrency group |
-| Pages | after Daily, Outlook, CHMI archive and changes in `web/` | builds `web/`, adds the radar frames of the last 60 days from the releases (satellite images 7 days, echo tops 14, a 900 MB guard) and the station pages, and publishes it |
+| Pages | after Daily, Outlook, CHMI archive and changes in `web/` | builds `web/`, adds the radar frames of the last 7 days from the releases (satellite images 7 days, echo tops 14, a 900 MB guard) and the station pages, and publishes it |
 
 ## Web pages
 
