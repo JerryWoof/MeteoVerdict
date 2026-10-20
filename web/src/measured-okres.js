@@ -199,7 +199,7 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
     return box;
   }
 
-  /** A station linked to its page (the diary opens on that day). */
+  /** A station linked to its page (the Stations tab). */
   function stationLink(id, name) {
     const a = element("a", name ?? id);
     a.href = stationHref(id);
