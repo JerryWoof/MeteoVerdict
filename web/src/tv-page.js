@@ -274,9 +274,10 @@ function setMarker(entry, row, part, shown) {
   entry.temp.textContent = labelFor(row, "temperature", part);
   let any = false;
   for (const [layer, { chip, text }] of Object.entries(entry.chips)) {
-    chip.hidden = !shown.includes(layer);
-    any ||= !chip.hidden;
     text.textContent = labelFor(row, layer, part);
+    // a single model without this variable (MeteoVerdict AI has no rain or cloud): no empty chip
+    chip.hidden = !shown.includes(layer) || (row.single && !row.beyond && text.textContent === "");
+    any ||= !chip.hidden;
   }
   entry.chipBox.hidden = !any;
 }
@@ -359,11 +360,11 @@ function renderHeadline(outlook) {
     // at night the coldest place comes first
     lines.push(...(state.part === "night" ? [cold, warm] : [warm, cold]));
   }
-  if (shown("precipitation")) {
+  if (shown("precipitation") && s.hasRain) {
     lines.push(line("precipitation", t(s.single ? "tv.rainyModel" : "tv.rainy", { n: s.rainy, of: s.okresy })));
   }
   if (shown("wind")) lines.push(line("wind", t("tv.windiest", { okres: displayName(s.windiest.name), value: fmt(s.windiest.value) })));
-  if (shown("cloud")) lines.push(line("cloud", t("tv.clearIn", { n: s.clear, of: s.okresy })));
+  if (shown("cloud") && s.hasCloud) lines.push(line("cloud", t("tv.clearIn", { n: s.clear, of: s.okresy })));
   // the day's sunrise and sunset, earliest to latest over the okresy (about 25 minutes apart)
   const sun = sunRange(outlook, state.day);
   if (sun) {
