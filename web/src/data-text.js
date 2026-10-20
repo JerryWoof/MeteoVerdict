@@ -75,8 +75,8 @@ export function dataBlocks(language, c) {
       ],
     }],
     ["note", L(
-      "AI výstupy jsou experiment: nejsou oficiální předpověď a nemají záruku. Soubory AI zatím nenesou pole `licence` a `attribution`; platí pro ně licence a zdroje níže.",
-      "The AI outputs are an experiment: not an official forecast and without a guarantee. The AI files do not yet carry `licence` and `attribution` fields; the licence and sources below apply.")],
+      "AI výstupy jsou experiment: nejsou oficiální předpověď a nemají záruku. Soubory AI zatím nenesou pole `licence` a `attribution`; licence se upřesní; do té doby s nimi zacházejte jako s odvozenými daty CC BY-SA a uvádějte zdroje níže.",
+      "The AI outputs are an experiment: not an official forecast and without a guarantee. The AI files do not yet carry `licence` and `attribution` fields; the licence will be clarified; until then treat them as CC BY-SA derived data and credit the sources below.")],
 
     ["h", L("Soubory ke stažení: releasy na GitHubu", "Downloads: releases on GitHub"), "releases"],
     ["p", L(
@@ -87,7 +87,7 @@ export function dataBlocks(language, c) {
       rows: [
         [release("data-latest"), L("Měřené hodnoty, archivované předpovědi na stanicích a denní skóre (`obs-`, `fc-`, `scores-YYYY-MM.parquet`, `aggregates.parquet`), váhy modelů, `blend-interval.json` (rozpětí „±“), `frost.json`, `compare.zip`, `outlook*.zip`, `site-data.zip`. Starší měsíce: " + releases("data-YYYY-MM", "data-20") + ".", "Observed values, archived forecasts at the stations and daily scores (`obs-`, `fc-`, `scores-YYYY-MM.parquet`, `aggregates.parquet`), model weights, `blend-interval.json` (the “±” range), `frost.json`, `compare.zip`, `outlook*.zip`, `site-data.zip`. Older months: " + releases("data-YYYY-MM", "data-20") + "."), L("CC BY-SA 4.0", "CC BY-SA 4.0")],
         [release("data-latest") + L(": `station-data.zip`", ": `station-data.zip`"), L("Stránky stanic (jen data ČHMÚ).", "The station pages (ČHMÚ data only)."), L("CC BY 4.0, ČHMÚ", "CC BY 4.0, ČHMÚ")],
-        [release("ai-latest"), L("`ai.zip`: soubory `ai/` výše, denně nové.", "`ai.zip`: the `ai/` files above, new every day."), "CC BY-SA 4.0"],
+        [release("ai-latest"), L("`ai.zip`: soubory `ai/` výše, denně nové.", "`ai.zip`: the `ai/` files above, new every day."), L("upřesní se (zatím jako CC BY-SA)", "to be clarified (for now as CC BY-SA)")],
         [releases("runs-YYYY-MM", "runs-20"), L("Samostatné běhy modelů na asi 100 stanicích, jeden Parquet za měsíc.", "Single model runs at about 100 stations, one Parquet per month."), "CC BY-SA 4.0"],
         [releases("outlook-models-YYYY-MM", "outlook-models") + ", " + release("outlook-archive"), L("Celá odpověď modelů při každém běhu předpovědi, jeden Parquet za den; průměry oblačnosti a svitu.", "Every model's whole answer at each forecast run, one Parquet per day; the means of cloud and sunshine."), "CC BY-SA 4.0"],
         [releases("aladin-YYYY-MM", "aladin-20"), L("ALADIN ČHMÚ ve stanicích, jeden Parquet na běh modelu.", "ČHMÚ's ALADIN at the stations, one Parquet per model run."), L("CC BY 4.0, ČHMÚ", "CC BY 4.0, ČHMÚ")],
@@ -121,7 +121,8 @@ export function dataBlocks(language, c) {
     ["table", {
       head: [L("Naše výstupy", "Our outputs"), L("Licence", "Licence")],
       rows: [
-        [L("`api/v1`, předpovědi, skóre a pořadí, výstupy AI, `runs-*`, `outlook-*`", "`api/v1`, forecasts, scores and rankings, AI outputs, `runs-*`, `outlook-*`"), `[CC BY-SA 4.0](${BY_SA})`],
+        [L("`api/v1`, předpovědi, skóre a pořadí, `runs-*`, `outlook-*`", "`api/v1`, forecasts, scores and rankings, `runs-*`, `outlook-*`"), `[CC BY-SA 4.0](${BY_SA})`],
+        [L("Výstupy AI (`ai/`, `ai-latest`)", "AI outputs (`ai/`, `ai-latest`)"), L("zatím neurčeno; do upřesnění jako CC BY-SA", "not decided yet; until clarified as CC BY-SA")],
         [L("Archivy jen s daty ČHMÚ (`aladin-*`, `chmi-*`, radar, stránky stanic) a družicí", "Archives with ČHMÚ data only (`aladin-*`, `chmi-*`, radar, the station pages) and satellite"), `[CC BY 4.0](${BY})`],
         [L("Kód", "Code"), `[MIT](${REPO}/blob/main/LICENSE)`],
       ],
