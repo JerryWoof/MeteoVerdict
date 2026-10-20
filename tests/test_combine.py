@@ -208,7 +208,8 @@ def test_forecast_weights_with_the_regression():
     assert a["mos_weight"] == 0.7 and a["mos_models"] == 2
     assert [a[c] for c in combine.SLOT_CORRECTIONS] == pytest.approx([1.15, 2.15, 3.15, 4.15])
     assert a["correction"] == pytest.approx(2.65)  # the mean, for readers of the old columns
-    assert set(w.columns) == {"region", "region_name", *combine.FORECAST_COLUMNS}
+    columns = {"region", "region_name", *combine.FORECAST_COLUMNS}
+    assert set(w.columns) == columns | set(combine.ELEVATION_TERM_COLUMNS)
     # a regression model without an inverse-error weight there: no regression at all
     partial = coefficient_rows(["a", "c"], [0.5, 0.5], {**bias, "c": [0.0] * 4})
     assert combine.forecast_weights(rows, partial)["mos_weight"].null_count() == 2

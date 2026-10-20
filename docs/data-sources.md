@@ -468,7 +468,9 @@ on the training rows).
   slot corrections equal `correction`. The method: [methodology.md](methodology.md#temperature-and-wind-regression-blend).
 - `data/forecast-weights.parquet` (also in `data-latest`): the same table for all
   okresy, read by `mvd outlook` (it falls back to `combine.weights` of
-  `aggregates.parquet` where the file is missing).
+  `aggregates.parquet` where the file is missing), plus the regression's elevation term
+  (`bias_*`, `lapse_*`, `station_elevation`, `dz_min`, `dz_max`) so that `mvd
+  obce-forecast` can take the corrections at each obec's height.
 - `src/meteoverdict/data/okres-elevations.csv`: the elevation of each okres's point
   (Open-Meteo Elevation API, rebuilt by `scripts/build_okres_elevations.py`).
 - Whether the combination beats the best single model: see the out-of-sample test below.
@@ -2549,8 +2551,15 @@ instead of only the okres's forecast point. After each outlook run
   file are read by grid row, points of a row at most 64 cells apart in one request
   (`bucket.segments`), so 6,250 obce cost a few hundred reads per file. No Open-Meteo calls.
 - **Combination:** `outlook.combine_hourly` with each obec's okres weights and corrections
-  (`forecast-weights.parquet`), so each obec is combined as its okres's point. The slot
-  corrections are those at the okres's point: their elevation term is not moved to the obec.
+  (`forecast-weights.parquet`), so each obec is combined as its okres's point, except
+  that the temperature and wind slot corrections take the regression's elevation term at
+  the obec's own height (at the point's half strength, `combine.POINT_LAPSE_FACTOR`;
+  `obce_forecast.at_obec_height`) instead of at the okres point (since 20 October 2026;
+  left out one station at a time this was better for every kind of station, most in the
+  mountains: [methodology.md](methodology.md#the-obec-forecast-away-from-the-stations-mvd-obce-loso)).
+  For that `forecast-weights.parquet` keeps the regression's bias, lapse, mean station
+  height and height range (`combine.ELEVATION_TERM_COLUMNS`); the okres JSON files do
+  not. With a weight file from before (no such columns) the point's corrections are used.
 - **Output:** `obce-<okres>.json` per okres (per obec the combined temperature,
   precipitation and wind and every model's temperature, from Prague midnight of the day),
   packed in `obce.zip` in the release `data-latest`; Pages unpacks it to

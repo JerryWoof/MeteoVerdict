@@ -885,10 +885,12 @@ windows. A dew-point floor did not help (observed minima fell below the forecast
 
 The [forecast for every obec](data-sources.md#forecast-for-every-obec-test-mvd-obce-forecast)
 reads every model at the obec's own place and height and combines the models with the
-weights and corrections of its okres, taken at the okres's forecast point. Most of the
-6,258 obce have no station, so the only honest check is to make a station's place look
-like one: **leave one station out**. For every ČHMÚ station the obec forecast is rebuilt
-at the station as if it did not exist and scored against what it measured.
+weights and corrections of its okres; since 20 October 2026 the corrections' elevation
+term is taken at the obec's own height (before: at the okres's forecast point, see
+below). Most of the 6,258 obce have no station, so the only honest check is to make a
+station's place look like one: **leave one station out**. For every ČHMÚ station the obec
+forecast is rebuilt at the station as if it did not exist and scored against what it
+measured.
 
 - **Held out** from everything it would feed: the okres scores the weights and bias
   corrections come from, the okres pools (its okres borrows another station instead
@@ -911,8 +913,8 @@ at the station as if it did not exist and scored against what it measured.
   the okres forecast; the okres point itself has no stored D+N), (b) `nearest`: the
   models at the place weighted and bias-corrected by their scores at the nearest
   remaining station alone, (c) `median`: the plain median of the models at the place,
-  uncorrected; and `obec_dz`, the obec forecast with the corrections' elevation term at
-  the place's own height instead of the okres point's (a candidate change).
+  uncorrected; and `obec_point`, the obec forecast with the corrections at the okres
+  point's height (what the site did until 20 October 2026).
 - **Intervals**: 95 %, circular moving-block bootstrap of whole days in 4-day blocks
   (`obce_loso.block_bootstrap`, so that runs of similar weather stay together; 2,000
   resamples). With 1-, 3- or 5-day blocks the intervals change by at most 0.03 °C and no
@@ -921,38 +923,41 @@ at the station as if it did not exist and scored against what it measured.
 **Period and stations:** 41 test days, 8 September – 18 October 2026 (scores exist from
 24 August; the first two weeks are the training warm-up), 291 stations for temperature,
 208 for wind and 433 for daily precipitation (472 stations in all, 44 batches; buffer
-variant 59 batches). Results: `obce-loso.json` in the release `data-latest`
-(groups by variant, variable, lead day and stratum; MAE per station).
+variant 59 batches). Run of 20 October 2026 on the current code; the first run of 19 October gave the same
+MAEs to within 0.001 (its `obec_dz` is today's `obec`, its `obec` today's `obec_point`).
+Results: `obce-loso.json` in the release `data-latest` (groups by variant, variable,
+lead day and stratum; MAE per station); the methodology page shows the key numbers.
 
-MAE of the obec forecast and the difference to each alternative (obec minus it,
-negative = obec better, bold = interval excludes 0), station held out:
+MAE of the obec forecast (as the site now: corrections at the obec's height) and the
+difference to each alternative (obec minus it, negative = obec better, bold = interval
+excludes 0), station held out:
 
-| | lead | stations | MAE obec | − okres | − nearest | − median | obec_dz − obec |
+| | lead | stations | MAE obec | − okres | − nearest | − median | obec − obec_point |
 |---|---|---|---|---|---|---|---|
-| Temperature (°C) | D+1 | 291 | 1.27 | **-0.47 (-0.55…-0.40)** | **-0.16 (-0.22…-0.11)** | **-0.10 (-0.17…-0.02)** | -0.018 (-0.023…-0.013) |
-| Temperature (°C) | D+2 | 291 | 1.44 | **-0.34 (-0.44…-0.24)** | **-0.12 (-0.15…-0.08)** | **-0.06 (-0.11…-0.00)** | -0.024 (-0.030…-0.019) |
-| Temperature (°C) | D+3 | 291 | 1.60 | **-0.26 (-0.36…-0.16)** | **-0.09 (-0.13…-0.04)** | -0.04 (-0.09…+0.02) | -0.027 (-0.033…-0.021) |
-| Temperature (°C) | D+4 | 291 | 1.76 | **-0.21 (-0.31…-0.11)** | -0.06 (-0.12…+0.01) | -0.01 (-0.08…+0.05) | -0.025 (-0.031…-0.019) |
-| Temperature (°C) | D+5 | 291 | 1.89 | **-0.16 (-0.26…-0.05)** | -0.04 (-0.09…+0.02) | +0.03 (-0.04…+0.10) | -0.031 (-0.038…-0.023) |
-| Temperature (°C) | D+1–5 | 291 | 1.58 | **-0.29 (-0.39…-0.20)** | **-0.09 (-0.14…-0.05)** | -0.04 (-0.09…+0.02) | -0.025 (-0.031…-0.019) |
-| Wind (m/s) | D+1 | 208 | 0.98 | **-0.12 (-0.14…-0.10)** | **-0.16 (-0.17…-0.15)** | **-0.17 (-0.22…-0.14)** | -0.006 (-0.009…-0.003) |
-| Wind (m/s) | D+2 | 208 | 1.04 | **-0.06 (-0.07…-0.05)** | **-0.14 (-0.15…-0.13)** | **-0.16 (-0.20…-0.12)** | -0.013 (-0.017…-0.009) |
-| Wind (m/s) | D+3 | 208 | 1.07 | **-0.02 (-0.03…-0.02)** | **-0.13 (-0.14…-0.12)** | **-0.10 (-0.13…-0.07)** | -0.015 (-0.020…-0.010) |
-| Wind (m/s) | D+4 | 208 | 1.11 | **-0.01 (-0.02…-0.01)** | **-0.12 (-0.14…-0.11)** | **-0.07 (-0.10…-0.04)** | -0.014 (-0.019…-0.008) |
-| Wind (m/s) | D+5 | 208 | 1.15 | -0.00 (-0.01…+0.00) | **-0.12 (-0.14…-0.11)** | **-0.09 (-0.12…-0.05)** | -0.017 (-0.023…-0.011) |
-| Wind (m/s) | D+1–5 | 208 | 1.07 | **-0.05 (-0.06…-0.04)** | **-0.13 (-0.14…-0.13)** | **-0.12 (-0.15…-0.09)** | -0.013 (-0.017…-0.008) |
+| Temperature (°C) | D+1 | 291 | 1.26 | **-0.49 (-0.56…-0.42)** | **-0.18 (-0.24…-0.12)** | **-0.11 (-0.19…-0.04)** | **-0.018 (-0.023…-0.013)** |
+| Temperature (°C) | D+2 | 291 | 1.41 | **-0.36 (-0.46…-0.27)** | **-0.14 (-0.18…-0.10)** | **-0.08 (-0.13…-0.03)** | **-0.024 (-0.030…-0.019)** |
+| Temperature (°C) | D+3 | 291 | 1.57 | **-0.28 (-0.39…-0.18)** | **-0.11 (-0.16…-0.06)** | **-0.06 (-0.12…-0.01)** | **-0.027 (-0.033…-0.021)** |
+| Temperature (°C) | D+4 | 291 | 1.74 | **-0.24 (-0.33…-0.14)** | **-0.09 (-0.14…-0.02)** | -0.04 (-0.10…+0.03) | **-0.025 (-0.031…-0.019)** |
+| Temperature (°C) | D+5 | 291 | 1.86 | **-0.19 (-0.29…-0.08)** | **-0.07 (-0.12…-0.01)** | -0.00 (-0.07…+0.07) | **-0.031 (-0.038…-0.023)** |
+| Temperature (°C) | D+1–5 | 291 | 1.56 | **-0.32 (-0.41…-0.22)** | **-0.12 (-0.17…-0.07)** | **-0.06 (-0.12…-0.01)** | **-0.025 (-0.031…-0.019)** |
+| Wind (m/s) | D+1 | 208 | 0.97 | **-0.13 (-0.15…-0.11)** | **-0.17 (-0.18…-0.15)** | **-0.18 (-0.22…-0.14)** | **-0.006 (-0.009…-0.003)** |
+| Wind (m/s) | D+2 | 208 | 1.03 | **-0.07 (-0.09…-0.06)** | **-0.15 (-0.16…-0.14)** | **-0.18 (-0.22…-0.14)** | **-0.013 (-0.017…-0.009)** |
+| Wind (m/s) | D+3 | 208 | 1.06 | **-0.04 (-0.05…-0.03)** | **-0.14 (-0.15…-0.13)** | **-0.11 (-0.14…-0.08)** | **-0.015 (-0.020…-0.010)** |
+| Wind (m/s) | D+4 | 208 | 1.10 | **-0.03 (-0.04…-0.02)** | **-0.14 (-0.15…-0.13)** | **-0.08 (-0.10…-0.06)** | **-0.014 (-0.019…-0.008)** |
+| Wind (m/s) | D+5 | 208 | 1.14 | **-0.02 (-0.03…-0.01)** | **-0.14 (-0.15…-0.13)** | **-0.10 (-0.14…-0.07)** | **-0.017 (-0.023…-0.011)** |
+| Wind (m/s) | D+1–5 | 208 | 1.06 | **-0.06 (-0.07…-0.05)** | **-0.15 (-0.16…-0.14)** | **-0.13 (-0.16…-0.10)** | **-0.013 (-0.017…-0.008)** |
 | Precipitation (mm/day) | D+1 | 433 | 0.76 | **-0.05 (-0.08…-0.02)** | -0.00 (-0.00…+0.00) | -0.01 (-0.09…+0.06) | +0.000 (-0.000…+0.000) |
-| Precipitation (mm/day) | D+2 | 432 | 0.93 | **-0.03 (-0.04…-0.01)** | -0.00 (-0.00…-0.00) | -0.01 (-0.10…+0.08) | -0.000 (-0.000…+0.000) |
-| Precipitation (mm/day) | D+3 | 432 | 1.02 | **-0.01 (-0.02…-0.01)** | +0.00 (-0.00…+0.00) | -0.02 (-0.17…+0.12) | +0.000 (+0.000…+0.000) |
-| Precipitation (mm/day) | D+4 | 432 | 1.09 | **-0.01 (-0.02…-0.01)** | **-0.00 (-0.00…-0.00)** | +0.03 (-0.09…+0.14) | +0.000 (-0.000…+0.000) |
-| Precipitation (mm/day) | D+5 | 432 | 1.17 | **-0.01 (-0.02…-0.01)** | **-0.00 (-0.01…-0.00)** | +0.12 (-0.05…+0.30) | +0.000 (-0.000…+0.000) |
-| Precipitation (mm/day) | D+1–5 | 433 | 0.99 | **-0.02 (-0.04…-0.01)** | -0.00 (-0.00…-0.00) | +0.02 (-0.09…+0.12) | -0.000 (-0.000…-0.000) |
+| Precipitation (mm/day) | D+2 | 432 | 0.93 | **-0.03 (-0.04…-0.01)** | **-0.00 (-0.00…-0.00)** | -0.01 (-0.10…+0.08) | -0.000 (-0.000…+0.000) |
+| Precipitation (mm/day) | D+3 | 432 | 1.02 | **-0.01 (-0.02…-0.01)** | +0.00 (-0.00…+0.00) | -0.02 (-0.17…+0.12) | +0.000 (-0.000…+0.000) |
+| Precipitation (mm/day) | D+4 | 432 | 1.09 | **-0.01 (-0.02…-0.01)** | -0.00 (-0.00…-0.00) | +0.03 (-0.09…+0.14) | +0.000 (+0.000…+0.000) |
+| Precipitation (mm/day) | D+5 | 432 | 1.17 | **-0.01 (-0.02…-0.01)** | -0.00 (-0.01…-0.00) | +0.12 (-0.05…+0.30) | +0.000 (-0.000…+0.000) |
+| Precipitation (mm/day) | D+1–5 | 433 | 0.99 | **-0.02 (-0.04…-0.01)** | -0.00 (-0.00…-0.00) | +0.02 (-0.09…+0.12) | +0.000 (+0.000…+0.000) |
 
-Stations within 20 km also held out (`buffer`), D+1–5: temperature 1.61 °C, obec − okres
-**−0.52** (−0.65…−0.39), − nearest **−0.08** (−0.12…−0.04), − median −0.02 (−0.07…+0.04);
-wind 1.09 m/s, **−0.07** (−0.08…−0.06), +0.00 (−0.00…+0.01), **−0.10** (−0.13…−0.07);
-precipitation 0.99 mm, **−0.04** (−0.07…−0.02), −0.00, +0.02 (−0.10…+0.13). The obec
-forecast itself hardly gets worse without its neighbours (+0.02 °C, +0.02 m/s, ±0 mm);
+Stations within 20 km also held out (`buffer`), D+1–5: temperature 1.60 °C, obec − okres
+**−0.53** (−0.66…−0.40), − nearest **−0.09** (−0.13…−0.05), − median −0.03 (−0.08…+0.03);
+wind 1.08 m/s, **−0.08** (−0.09…−0.07), −0.01 (−0.02…+0.00), **−0.11** (−0.14…−0.08);
+precipitation 0.99 mm, **−0.04** (−0.07…−0.02), −0.00, +0.02 (−0.09…+0.13). The obec
+forecast itself hardly gets worse without its neighbours (+0.04 °C, +0.02 m/s, ±0 mm);
 the okres forecast does (+0.25 °C).
 
 By station class (held out, D+1–5; "150-400 m" etc. = height of the station above or
@@ -961,54 +966,88 @@ rest:
 
 | | stratum | stations | MAE obec | okres | nearest | median | obec − okres | obec − median |
 |---|---|---|---|---|---|---|---|---|
-| Temperature (°C) | lowland | 121 | 1.44 | 1.74 | 1.57 | 1.56 | **-0.30 (-0.38…-0.23)** | **-0.12 (-0.20…-0.04)** |
-| Temperature (°C) | mountain | 48 | 1.90 | 2.37 | 1.89 | 1.71 | **-0.47 (-0.77…-0.16)** | **+0.20 (+0.13…+0.26)** |
-| Temperature (°C) | upland | 122 | 1.61 | 1.82 | 1.70 | 1.65 | **-0.21 (-0.27…-0.14)** | -0.04 (-0.10…+0.02) |
-| Temperature (°C) | 150-400 m | 74 | 1.69 | 1.97 | 1.79 | 1.64 | **-0.28 (-0.39…-0.17)** | **+0.05 (+0.01…+0.09)** |
-| Temperature (°C) | over 400 m | 35 | 1.80 | 2.52 | 1.75 | 1.64 | **-0.72 (-1.11…-0.35)** | **+0.17 (+0.11…+0.22)** |
+| Temperature (°C) | lowland | 121 | 1.43 | 1.74 | 1.57 | 1.56 | **-0.31 (-0.38…-0.24)** | **-0.12 (-0.20…-0.04)** |
+| Temperature (°C) | mountain | 48 | 1.79 | 2.37 | 1.89 | 1.71 | **-0.58 (-0.87…-0.29)** | **+0.09 (+0.04…+0.13)** |
+| Temperature (°C) | upland | 122 | 1.60 | 1.82 | 1.70 | 1.65 | **-0.22 (-0.28…-0.16)** | -0.06 (-0.11…+0.00) |
+| Temperature (°C) | 150-400 m | 74 | 1.65 | 1.97 | 1.79 | 1.64 | **-0.32 (-0.43…-0.21)** | +0.01 (-0.03…+0.05) |
+| Temperature (°C) | over 400 m | 35 | 1.68 | 2.52 | 1.75 | 1.64 | **-0.84 (-1.22…-0.49)** | **+0.04 (+0.01…+0.08)** |
 | Temperature (°C) | within 150 m | 182 | 1.50 | 1.72 | 1.62 | 1.61 | **-0.21 (-0.27…-0.16)** | **-0.11 (-0.18…-0.04)** |
-| Wind (m/s) | lowland | 100 | 0.93 | 0.97 | 1.07 | 1.09 | **-0.04 (-0.05…-0.03)** | **-0.16 (-0.19…-0.14)** |
-| Wind (m/s) | mountain | 16 | 2.34 | 2.39 | 2.63 | 2.16 | **-0.05 (-0.07…-0.03)** | **+0.18 (+0.16…+0.20)** |
-| Wind (m/s) | upland | 92 | 1.00 | 1.06 | 1.10 | 1.12 | **-0.06 (-0.06…-0.04)** | **-0.12 (-0.16…-0.09)** |
-| Wind (m/s) | 150-400 m | 42 | 1.09 | 1.15 | 1.17 | 1.09 | **-0.06 (-0.07…-0.05)** | -0.01 (-0.05…+0.03) |
-| Wind (m/s) | over 400 m | 14 | 2.66 | 2.72 | 2.92 | 2.35 | **-0.06 (-0.09…-0.03)** | **+0.31 (+0.29…+0.33)** |
-| Wind (m/s) | within 150 m | 152 | 0.92 | 0.96 | 1.06 | 1.11 | **-0.04 (-0.05…-0.03)** | **-0.19 (-0.22…-0.16)** |
+| Wind (m/s) | lowland | 100 | 0.92 | 0.97 | 1.07 | 1.09 | **-0.06 (-0.07…-0.05)** | **-0.18 (-0.21…-0.15)** |
+| Wind (m/s) | mountain | 16 | 2.27 | 2.39 | 2.63 | 2.16 | **-0.12 (-0.19…-0.06)** | **+0.11 (+0.05…+0.17)** |
+| Wind (m/s) | upland | 92 | 1.00 | 1.06 | 1.10 | 1.12 | **-0.05 (-0.06…-0.04)** | **-0.12 (-0.15…-0.09)** |
+| Wind (m/s) | 150-400 m | 42 | 1.06 | 1.15 | 1.17 | 1.09 | **-0.09 (-0.10…-0.08)** | -0.03 (-0.07…+0.00) |
+| Wind (m/s) | over 400 m | 14 | 2.57 | 2.73 | 2.92 | 2.35 | **-0.16 (-0.23…-0.09)** | **+0.21 (+0.15…+0.28)** |
+| Wind (m/s) | within 150 m | 152 | 0.92 | 0.96 | 1.06 | 1.11 | **-0.04 (-0.05…-0.04)** | **-0.19 (-0.22…-0.16)** |
 | Precipitation (mm/day) | lowland | 183 | 0.93 | 0.96 | 0.93 | 0.92 | **-0.02 (-0.03…-0.01)** | +0.01 (-0.11…+0.11) |
 | Precipitation (mm/day) | mountain | 35 | 1.36 | 1.38 | 1.36 | 1.37 | -0.02 (-0.09…+0.04) | -0.01 (-0.15…+0.13) |
 | Precipitation (mm/day) | upland | 215 | 0.98 | 1.00 | 0.98 | 0.94 | **-0.02 (-0.04…-0.01)** | +0.04 (-0.08…+0.14) |
 | Precipitation (mm/day) | 150-400 m | 98 | 1.16 | 1.19 | 1.16 | 1.13 | **-0.03 (-0.05…-0.00)** | +0.03 (-0.10…+0.15) |
-| Precipitation (mm/day) | over 400 m | 23 | 1.48 | 1.52 | 1.48 | 1.52 | -0.05 (-0.14…+0.03) | -0.04 (-0.23…+0.11) |
+| Precipitation (mm/day) | over 400 m | 23 | 1.48 | 1.52 | 1.48 | 1.52 | -0.05 (-0.14…+0.03) | -0.04 (-0.22…+0.11) |
 | Precipitation (mm/day) | within 150 m | 312 | 0.90 | 0.92 | 0.90 | 0.88 | **-0.02 (-0.03…-0.01)** | +0.02 (-0.08…+0.12) |
+
+#### The corrections at the obec's height (switched on 20 October 2026)
+
+The regression blend's slot corrections have an elevation term (`lapse_* × Δz`, from the
+mean height of the okres's stations, clipped to their height range, at half strength,
+`combine.POINT_LAPSE_FACTOR`). Until 20 October the obec forecast took it at the okres
+point's height for every obec; now at the obec's own height (`obce_forecast.at_obec_height`;
+the same half strength and clipping). Same run, same station-days, before (`obec_point`)
+and after (`obec`), D+1–5, station held out (precipitation has no elevation term and is
+unchanged):
+
+| | stratum | stations | MAE before (okres point) | MAE now (obec height) | now − before | now − median |
+|---|---|---|---|---|---|---|
+| Temperature (°C) | all | 291 | 1.585 | 1.560 | **-0.025 (-0.031…-0.019)** | **-0.06 (-0.12…-0.01)** |
+| Temperature (°C) | lowland | 121 | 1.437 | 1.432 | **-0.005 (-0.008…-0.001)** | **-0.12 (-0.20…-0.04)** |
+| Temperature (°C) | mountain | 48 | 1.904 | 1.793 | **-0.111 (-0.141…-0.082)** | **+0.09 (+0.04…+0.13)** |
+| Temperature (°C) | upland | 122 | 1.609 | 1.597 | **-0.012 (-0.015…-0.009)** | -0.06 (-0.11…+0.00) |
+| Temperature (°C) | 150-400 m | 74 | 1.691 | 1.651 | **-0.040 (-0.049…-0.031)** | +0.01 (-0.03…+0.05) |
+| Temperature (°C) | over 400 m | 35 | 1.806 | 1.682 | **-0.124 (-0.159…-0.091)** | **+0.04 (+0.01…+0.08)** |
+| Temperature (°C) | within 150 m | 182 | 1.500 | 1.500 | -0.000 (-0.000…+0.000) | **-0.11 (-0.18…-0.04)** |
+| Wind (m/s) | all | 208 | 1.070 | 1.057 | **-0.013 (-0.017…-0.008)** | **-0.13 (-0.16…-0.10)** |
+| Wind (m/s) | lowland | 100 | 0.932 | 0.915 | **-0.017 (-0.019…-0.015)** | **-0.18 (-0.21…-0.15)** |
+| Wind (m/s) | mountain | 16 | 2.346 | 2.270 | **-0.076 (-0.122…-0.029)** | **+0.11 (+0.05…+0.17)** |
+| Wind (m/s) | upland | 92 | 1.002 | 1.004 | +0.002 (-0.002…+0.006) | **-0.12 (-0.15…-0.09)** |
+| Wind (m/s) | 150-400 m | 42 | 1.086 | 1.060 | **-0.026 (-0.033…-0.020)** | -0.03 (-0.07…+0.00) |
+| Wind (m/s) | over 400 m | 14 | 2.668 | 2.568 | **-0.100 (-0.147…-0.052)** | **+0.21 (+0.15…+0.28)** |
+| Wind (m/s) | within 150 m | 152 | 0.919 | 0.917 | -0.001 (-0.002…-0.000) | **-0.19 (-0.22…-0.16)** |
+
+The rule set beforehand was to switch it on only if it is not worse overall and better on
+the mountain stations, with intervals: **better overall** (−0.025 °C, −0.013 m/s, both
+intervals below 0, at every lead day), **better on the mountain stations** (−0.11 °C,
+−0.08 m/s) and at the stations far above or below their okres point, and nowhere
+significantly worse (upland wind +0.002, interval −0.002…+0.006). In the buffer variant
+too: −0.010 °C (−0.012…−0.007), −0.011 m/s (−0.013…−0.009), mountains −0.029 °C
+(−0.039…−0.020) and −0.031 m/s (−0.043…−0.017). It is small, and the mountain stations
+remain behind the plain median (+0.09 °C, +0.11 m/s), but less so than before
+(+0.20 °C, +0.18 m/s).
 
 **Conclusions.**
 
-- At a place without a station the obec forecast's typical error is about **1.3 °C at
-  D+1 and 1.6 °C over D+1–5**, wind **1.0–1.15 m/s**, daily precipitation **0.8–1.2 mm**
+- At a place without a station the obec forecast's typical error is about **1.26 °C at
+  D+1 and 1.56 °C over D+1–5**, wind **1.0–1.15 m/s**, daily precipitation **0.8–1.2 mm**
   (autumn 2026, 41 days; winter inversions are not in it).
 - **Reading the models at the place pays off clearly against the okres forecast**
-  (−0.29 °C, −16 %; wind −4 %; precipitation −2 %), most where the place lies far above
-  or below the okres point (−0.72 °C over 400 m); without close neighbours the gain
-  doubles (−0.52 °C). Showing the okres's single number for every obec would be worse
+  (−0.32 °C, −17 %; wind −5 %; precipitation −2 %), most where the place lies far above
+  or below the okres point (−0.84 °C over 400 m); without close neighbours the gain
+  grows (−0.53 °C). Showing the okres's single number for every obec would be worse
   everywhere.
 - **Against the plain median of the models at the place the gain is smaller**: wind
-  −0.12 m/s (−10 %, every lead day), temperature −0.10 °C at D+1 and −0.06 at D+2 but
-  no significant difference from D+3 on, and none for precipitation (the median is
-  even slightly better at D+4–5, not significant). The okres corrections carry over to a
-  place without a station for lowland and upland places, **not for mountains**:
-  at the 48 mountain stations the obec forecast is **worse** than the raw median
-  (+0.20 °C, wind +0.18 m/s; for temperature also at stations more than 150 m above or
-  below their okres point, +0.05 and +0.17 °C), because
-  its corrections are learnt mostly at lower stations and taken at the okres point's
-  height.
-- **Moving the corrections' elevation term to the obec's own height (`obec_dz`) is
-  better everywhere** but small: −0.025 °C and −0.013 m/s overall, −0.11 °C and
-  −0.08 m/s at the mountain stations (still behind the median there). It is a
-  one-line candidate change for `obce_forecast`; not switched on here.
+  −0.13 m/s (−11 %, every lead day), temperature −0.11 °C at D+1 to −0.06 at D+3 but
+  no significant difference at D+4–5, and none for precipitation (the median is even
+  slightly better at D+4–5, not significant). The okres corrections carry over to a
+  place without a station for lowland and upland places, **not fully for mountains**:
+  at the 48 mountain stations the obec forecast is still **worse** than the raw median
+  (+0.09 °C, wind +0.11 m/s; for temperature also at stations more than 400 m above or
+  below their okres point, +0.04 °C), because its corrections are learnt mostly at lower
+  stations.
+- **The corrections at the obec's height** (on since 20 October) are better everywhere
+  they matter, most in the mountains (−0.11 °C, −0.08 m/s); see above.
 - The nearest-station correction is a poor substitute for the okres weights:
-  −0.09 °C and −0.13 m/s worse than the obec forecast; a wind bias learnt at one
+  −0.12 °C and −0.15 m/s worse than the obec forecast; a wind bias learnt at one
   station does not carry over to the next (sheltered and open sites differ). In the
-  buffer variant it is as good as the obec forecast for wind, because nearby stations
-  in similar terrain are no longer available to mislead it.
+  buffer variant it is about as good as the obec forecast for wind, because nearby
+  stations in similar terrain are no longer available to mislead it.
 - Not covered: the obec forecast's own inputs are the bucket's grid cell moved to the
   obec's height (0.65 K per 100 m), here Open-Meteo's D+N at the station's coordinates
   and height (its own elevation correction) for most days; the elevation of an obec

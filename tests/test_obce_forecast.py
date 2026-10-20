@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
 
 import polars as pl
+import pytest
 
-from meteoverdict import models, obce_forecast
+from meteoverdict import combine, models, mos, obce_forecast
 
 
 def test_places_of_litomerice():
@@ -63,3 +64,33 @@ def test_the_day_starts_at_prague_midnight():
     assert obce_forecast.start_of_day(datetime(2026, 10, 17, 23, 30, tzinfo=UTC)) == datetime(
         2026, 10, 17, 22, tzinfo=UTC
     )
+
+
+def test_corrections_at_the_obec_height():
+    # the okres point of Benešov (CZ0201) is at 430 m, its stations at 400 m on average
+    regression = {
+        **{c: b for c, b in zip(mos.BIAS_COLUMNS, [1.0, 2.0, 3.0, 4.0], strict=True)},
+        **{c: 1.0 for c in mos.LAPSE_COLUMNS},
+        "station_elevation": 400.0, "dz_min": -2.0, "dz_max": 2.0,
+    }  # fmt: skip
+    point = combine.slot_corrections(pl.lit(430.0), combine.POINT_LAPSE_FACTOR)
+    weights = (
+        pl.DataFrame(
+            [{"region": "o", "variable": "temperature_2m", "correction": 0.0, **regression}]
+        )
+        .with_columns(point)
+        .join(pl.DataFrame({"_elevation": [600.0, 900.0, None]}), how="cross")
+    )
+    out = obce_forecast.at_obec_height(weights)
+    slots = out.select(combine.SLOT_CORRECTIONS).rows()
+    # 600 m: 2 steps of 100 m above the stations at half strength → +1.0
+    assert slots[0] == pytest.approx((2.0, 3.0, 4.0, 5.0))
+    # 900 m: clipped to dz_max (2 steps), as for the okres point
+    assert slots[1] == pytest.approx((2.0, 3.0, 4.0, 5.0))
+    assert out["correction"][0] == pytest.approx(3.5)
+    # no height: the point's corrections (30 m above the stations → +0.15)
+    assert slots[2] == pytest.approx((1.15, 2.15, 3.15, 4.15))
+    assert out["correction"][2] == 0.0
+    # a weight file from before the elevation term was kept: unchanged
+    old = weights.drop(combine.ELEVATION_TERM_COLUMNS)
+    assert obce_forecast.at_obec_height(old).equals(old)
