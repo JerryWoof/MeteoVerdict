@@ -10,6 +10,9 @@ and CSV files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
 | `api/v1/index.json` | all 77 okresy: `code`, `name`, `lat`, `lon` and the URLs of their files |
 | `api/v1/okresy/{code}.json` | everything for one okres (below) |
 | `api/v1/okresy/{code}.csv` | the hourly forecast: `time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration,temperature_2m_lo,temperature_2m_hi` |
+| `api/v1/ai/okresy/{code}.json` | the same forecast with temperature and wind from the MeteoVerdict AI (**experimental**, below) |
+| `api/v1/obce/{okres}/{id}.json` | the forecast of one obec (village or town), **a test** (below) |
+| `api/v1/obce/index.json` | every obec as `[okres, id, name, lat, lon]` |
 
 The CSV files are plain CSV: one header row, no comment line, so that Google Sheets'
 `=IMPORTDATA`, Excel and `pandas.read_csv` read them as they are. They hold the hourly
@@ -67,6 +70,59 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
   (`models.from`, `models.to`).
 - `licence`, `attribution`, `docs`.
 
+## The AI okres file (experimental)
+
+`api/v1/ai/okresy/{code}.json` has the layout of the okres file (`okres`, `forecast`
+with `generated`, `time_zone_of_parts`, `units`, `hourly`, `parts`, and `licence`,
+`attribution`, `notice`), without `models` and without the deprecated `gust_warning`.
+It is our combined forecast with **temperature and wind from the MeteoVerdict AI**
+(experimental, still unverified): `forecast.model` is `"ai"`, `forecast.method` says so
+in a sentence, `forecast.ai_issued` is when the AI issued its forecast and
+`forecast.sources` says `ai` or `blend` for every hourly series and part field.
+
+- `hourly`: the axis and series of the okres file; `temperature_2m` and `wind_speed_10m`
+  are the AI's on every hour it has a value for (hour-matched by time), the combined
+  forecast's elsewhere. `temperature_2m_lo` and `temperature_2m_hi` (the range of the
+  combined temperature) are `null` on the hours that now have the AI's temperature.
+  Precipitation, cloud and sunshine are the combined forecast's.
+- `parts`: `tmin`, `tmax` and `wind` from the AI outlook (`ai/fc/outlook.json`) where it has
+  a value; `symbol`, `cloud`, `sunshine`, `gust`, rain and the frost fields are the combined
+  forecast's.
+
+The files are only written when the AI files (`data/scores/ai/`) are in the build.
+The thresholds (`gust_over_threshold`, `frost`, `ground_frost`, `heavy_rain`) are ours,
+**not official warnings** (the `notice` in the file is unchanged).
+
+## The obec files (a test)
+
+`api/v1/obce/{okres}/{id}.json`: the combined forecast of one obec (`okres` is the code
+as above, `id` a name in lowercase ASCII with dashes: `bila-tremesna`; two obce of the
+same name in one okres get `-2`, `-3` … in order of falling population).
+`api/v1/obce/index.json` lists all of them (`url` is the pattern; `obce` is
+`[okres, id, name, lat, lon]`). They are a **test**: `test: true` in every file, the
+layout may change.
+
+- `obec`: `id`, `name`, `okres`, `lat`, `lon`, `elevation` (m); `generated`.
+- `hourly`: on the **time axis of the okres file**, not repeated: `start` (its first time, UTC), `step_hours` (1) and `hours` (the length), so hour *i* is `start` + *i* h and the arrays are as long as the okres file's `forecast.hourly.time`; with `temperature_2m` (°C, one decimal),
+  `precipitation` (mm in the hour ending at the time) and `wind_speed_10m` (m/s, one decimal).
+  An hour the obec forecast has: its value. Between two of its hours at most 3 h apart:
+  temperature and wind on a straight line. Otherwise (the first hours of the day, the
+  end of the 6 days) the okres value plus the obec's mean difference from the okres over
+  the hours both have (wind not below 0); precipitation then is the okres value.
+  Where the okres has no value, neither has the obec.
+- `parts`: the rows of the okres file's `parts` (same `day`, `part`, order) with `tmin`,
+  `tmax`, `precipitation`, `wind`, computed from the obec's hourly series by the rules of the
+  okres parts (Prague time: night 0–6 … evening 18–24 and the whole day; `tmin`/`tmax` the lowest and
+  highest hour, `precipitation` the sum of the hours ending inside the part, `wind` the highest
+  hourly mean; a part needs 4 hours, a day 18). Applied to the okres's own series they give the
+  okres file's values. On the rows where the okres file has them also `night_min`,
+  `ground_min` (the okres value plus the obec's mean temperature difference over the night
+  18–06 UTC) and `frost` (`night_min` ≤ 1 °C), `ground_frost` (`ground_min` ≤ 0 °C);
+  the keys are missing on the other rows. These flags are our thresholds, **not official warnings**.
+
+An obec file is about 6 kB (6 days hourly), so the whole set is large; fetch only the
+obce you need, at most once an hour.
+
 ## Every model's own forecast (outside `api/v1`)
 
 The forecast pages read `data/scores/forecast/models/{code}.json` (e.g.
@@ -114,7 +170,7 @@ e-ink display. It uses `forecast.hourly` and `forecast.parts`, including `sunris
 them from the data the pages use: `outlook.json` and `outlook-hourly.json` (`mvd
 outlook`, four times a day), `forecast/<okres>.json` and `90d/okres/<variable>.json` (`mvd
 aggregate`, daily). The Pages workflow runs after the Daily and the Outlook workflows,
-so the files follow both. About 3.4 MB in total, 25 kB per okres.
+so the files follow both. The okres files are about 3.4 MB in total, 25 kB per okres (the AI files add 21 kB per okres); the obce files about 6 kB per obec.
 
 ## Terms
 
