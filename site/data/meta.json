@@ -1,14 +1,14 @@
 {
- "generated": "2026-10-19T11:08:59+00:00",
- "as_of": "2026-10-18",
+ "generated": "2026-10-20T10:28:01+00:00",
+ "as_of": "2026-10-19",
  "windows": {
   "90d": {
    "from": "2026-08-10",
-   "to": "2026-10-18"
+   "to": "2026-10-19"
   },
   "all": {
    "from": "2026-08-10",
-   "to": "2026-10-18"
+   "to": "2026-10-19"
   },
   "jja": {
    "from": "2026-08-10",
@@ -16,11 +16,11 @@
   },
   "season": {
    "from": "2026-09-01",
-   "to": "2026-10-18"
+   "to": "2026-10-19"
   },
   "son": {
    "from": "2026-09-01",
-   "to": "2026-10-18"
+   "to": "2026-10-19"
   }
  },
  "levels": [
@@ -29,6 +29,7 @@
   "kraj",
   "elevation",
   "network",
+  "high_sites",
   "cz"
  ],
  "variables": [
@@ -90,38 +91,13 @@
  "short_record": {
   "90d": {
    "cma_grapes_global": {
-    "coverage": 0.783,
-    "days": 54,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "dmi_harmonie_arome_europe": {
-    "coverage": 0.797,
+    "coverage": 0.786,
     "days": 55,
     "variables": [
      "precipitation_24h"
-    ]
-   },
-   "dwd_icon": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
     ]
    },
    "gem_global": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily",
-     "temperature_2m_06utc",
-     "temperature_2m_18utc"
-    ]
-   },
-   "geosphere_arome_austria": {
     "coverage": 0.797,
     "days": 55,
     "variables": [
@@ -132,28 +108,6 @@
     "coverage": 0.797,
     "days": 55,
     "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
-    ]
-   },
-   "knmi_harmonie_arome_europe": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "meteofrance_arpege_europe": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "meteofrance_arpege_world": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
      "precipitation_24h"
     ]
    },
@@ -161,45 +115,19 @@
     "coverage": 0.797,
     "days": 55,
     "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
+     "precipitation_24h"
     ]
    }
   },
   "all": {
    "cma_grapes_global": {
-    "coverage": 0.783,
-    "days": 54,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "dmi_harmonie_arome_europe": {
-    "coverage": 0.797,
+    "coverage": 0.786,
     "days": 55,
     "variables": [
      "precipitation_24h"
-    ]
-   },
-   "dwd_icon": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
     ]
    },
    "gem_global": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily",
-     "temperature_2m_06utc",
-     "temperature_2m_18utc"
-    ]
-   },
-   "geosphere_arome_austria": {
     "coverage": 0.797,
     "days": 55,
     "variables": [
@@ -210,28 +138,6 @@
     "coverage": 0.797,
     "days": 55,
     "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
-    ]
-   },
-   "knmi_harmonie_arome_europe": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "meteofrance_arpege_europe": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "meteofrance_arpege_world": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
      "precipitation_24h"
     ]
    },
@@ -239,8 +145,7 @@
     "coverage": 0.797,
     "days": 55,
     "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
+     "precipitation_24h"
     ]
    }
   },
@@ -252,28 +157,7 @@
      "precipitation_24h"
     ]
    },
-   "dmi_harmonie_arome_europe": {
-    "coverage": 0.364,
-    "days": 8,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "dwd_icon": {
-    "coverage": 0.364,
-    "days": 8,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
    "gem_global": {
-    "coverage": 0.364,
-    "days": 8,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "geosphere_arome_austria": {
     "coverage": 0.364,
     "days": 8,
     "variables": [
@@ -287,109 +171,22 @@
      "precipitation_24h"
     ]
    },
-   "knmi_harmonie_arome_europe": {
-    "coverage": 0.364,
-    "days": 8,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "meteofrance_arpege_europe": {
-    "coverage": 0.364,
-    "days": 8,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "meteofrance_arpege_world": {
-    "coverage": 0.364,
-    "days": 8,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
    "ncep_aigfs025": {
     "coverage": 0.364,
     "days": 8,
     "variables": [
      "precipitation_24h"
-    ]
-   }
-  },
-  "season": {
-   "dwd_icon": {
-    "coverage": 0.717,
-    "days": 33,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
-    ]
-   },
-   "gem_global": {
-    "coverage": 0.717,
-    "days": 34,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily",
-     "temperature_2m_06utc",
-     "temperature_2m_18utc"
-    ]
-   },
-   "jma_gsm": {
-    "coverage": 0.717,
-    "days": 33,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
-    ]
-   },
-   "ncep_aigfs025": {
-    "coverage": 0.717,
-    "days": 33,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
-    ]
-   }
-  },
-  "son": {
-   "dwd_icon": {
-    "coverage": 0.717,
-    "days": 33,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
-    ]
-   },
-   "gem_global": {
-    "coverage": 0.717,
-    "days": 34,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily",
-     "temperature_2m_06utc",
-     "temperature_2m_18utc"
-    ]
-   },
-   "jma_gsm": {
-    "coverage": 0.717,
-    "days": 33,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
-    ]
-   },
-   "ncep_aigfs025": {
-    "coverage": 0.717,
-    "days": 33,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
     ]
    }
   }
  },
- "ranking": "by MAE; tied_with_best when the 95 % bootstrap interval (days resampled) of the MAE difference to the best model contains 0; clear_winner when nobody is tied; the blend (mean of all models) is not ranked, its difference and interval are relative to the best single model",
+ "ranking": "by MAE; 95 % moving-block bootstrap interval of the MAE difference to the best model (blocks of 4 consecutive days); tied_with_best unless that interval excludes 0 and the Diebold-Mariano test (Newey-West variance, 3 lags) gives dm_p < 0.05; clear_winner when nobody is tied; p_best: share of the resamples in which the model has the lowest MAE, the map names a winner only from 0.6; small_sample: fewer than 30 days; the blend (mean of all models) is not ranked, its difference and interval are relative to the best single model",
+ "p_best_min": 0.6,
+ "small_sample_days": 30,
+ "block_days": 4,
+ "high_sites": "stations more than 300 m above the median elevation of their okres's stations: in no okres's ranking, ranked on their own (station level) and together (level high_sites); still in kraj, elevation, network, cz",
+ "high_site_above_m": 300.0,
+ "wind_atypical": "19 stations whose wind differs most from their neighbours' (mean absolute log deviation 0.73 or more): left out of the okres wind rankings, in all other levels",
  "licence": "CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/",
  "attribution": "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com (CC BY 4.0) from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, KNMI, DMI, ČHMÚ, Environment and Climate Change Canada, the Japan Meteorological Agency, the China Meteorological Administration and the UK Met Office (CC BY-SA 4.0). Boundaries: ČÚZK (CC BY 4.0).",
  "sources": {
@@ -398,8 +195,8 @@
    "to": "2026-10-18"
   },
   "single_runs": {
-   "from": "2026-10-04",
-   "to": "2026-10-18"
+   "from": "2026-10-18",
+   "to": "2026-10-19"
   }
  }
 }
