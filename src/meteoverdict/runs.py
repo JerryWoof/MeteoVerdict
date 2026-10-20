@@ -417,6 +417,13 @@ def wanted(models: list[Model], run: datetime) -> list[Model]:
 # --- progress ------------------------------------------------------------------------
 
 
+#: Models whose further variables were read wrongly before a fix, so that every stored
+#: model-run of theirs is read again once while the bucket keeps it (``State.extra_todo``):
+#: ARPEGE Europe and World, whose radiation was 1.296 times too high until 2026-10-20
+#: (``bucket.RADIATION_SCALE``)
+EXTRA_FIXES = frozenset({"meteofrance_arpege_europe", "meteofrance_arpege_world"})
+
+
 @dataclass
 class State:
     path: Path
@@ -431,6 +438,9 @@ class State:
     #: read from the bucket, or not to be had there any more. A stored model-run not
     #: in it is read from the bucket again while the bucket keeps it (``extra_todo``)
     extra: dict[str, set[str]] = field(default_factory=dict)
+    #: run key -> model ids of ``EXTRA_FIXES`` settled after their fix: a stored
+    #: model-run of such a model not in it is read again once, like one without them
+    extra_fixed: dict[str, set[str]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> State:
@@ -443,6 +453,7 @@ class State:
             {k: set(v) for k, v in doc.get("missing", {}).items()},
             {k: set(v) for k, v in doc.get("bucket_missing", {}).items()},
             {k: set(v) for k, v in doc.get("extra", {}).items()},
+            {k: set(v) for k, v in doc.get("extra_fixed", {}).items()},
         )
 
     def save(self) -> None:
@@ -451,6 +462,7 @@ class State:
             "missing": {k: sorted(v) for k, v in sorted(self.missing.items()) if v},
             "bucket_missing": {k: sorted(v) for k, v in sorted(self.bucket_missing.items()) if v},
             "extra": {k: sorted(v) for k, v in sorted(self.extra.items()) if v},
+            "extra_fixed": {k: sorted(v) for k, v in sorted(self.extra_fixed.items()) if v},
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(doc, indent=0) + "\n", encoding="utf-8")
@@ -463,6 +475,7 @@ class State:
             (self.missing, other.missing),
             (self.bucket_missing, other.bucket_missing),
             (self.extra, other.extra),
+            (self.extra_fixed, other.extra_fixed),
         ):
             for k, ids in theirs.items():
                 mine.setdefault(k, set()).update(ids)
@@ -480,8 +493,16 @@ class State:
     def extra_todo(self, run: datetime, models: list[Model]) -> list[Model]:
         """Models of ``run`` stored without their further variables settled: read from
         the bucket again (the whole model-run, which replaces the stored one)."""
-        stored = self.fetched.get(key(run), set()) - self.extra.get(key(run), set())
+        k = key(run)
+        unfixed = EXTRA_FIXES - self.extra_fixed.get(k, set())
+        stored = self.fetched.get(k, set()) - (self.extra.get(k, set()) - unfixed)
         return [m for m in models if m.id in stored]
+
+    def settle(self, run_key: str, model_id: str) -> None:
+        """The model-run's further variables are settled (read, or not to be had)."""
+        self.extra.setdefault(run_key, set()).add(model_id)
+        if model_id in EXTRA_FIXES:
+            self.extra_fixed.setdefault(run_key, set()).add(model_id)
 
     def api_todo(self, run: datetime, models: list[Model], now: datetime) -> list[Model]:
         """Models of ``run`` to ask the API for: within the bucket's window only those

@@ -226,6 +226,17 @@ EXTRA: dict[str, tuple[Derived, ...]] = {
     "cape": (Derived(("cape",)),),  # GFS: from ncep_gfs025
     "visibility": (Derived(("visibility",)),),  # GFS: from ncep_gfs025
 }
+#: Radiation variables (W/m², means over the preceding step)
+RADIATION = ("shortwave_radiation", "direct_radiation", "diffuse_radiation")
+#: Météo-France keeps its radiation in the bucket with a conversion factor that the API's
+#: readers undo (open-meteo ``MeteoFranceSurfaceVariable
+#: .shortwaveRadiationArchiveCorrectionFactor``, 10^7 / 3600²): the bucket's ARPEGE values
+#: are 1.296 times the API's (checked on the runs of 2026-10-19 12 and 10-20 00 UTC;
+#: stored that way until 2026-10-20, then read again: ``runs.EXTRA_FIXES``)
+RADIATION_SCALE = {
+    "meteofrance_arpege_europe": 1e7 / 3600**2,
+    "meteofrance_arpege_world025": 1e7 / 3600**2,
+}
 #: Files read only when asked for by name (``read_run(extra=[...])``: the outlook's
 #: sunshine, as the API derives it from the direct radiation); not columns of the single
 #: runs. Where a model has neither, the outlook splits the shortwave radiation itself.
@@ -826,6 +837,8 @@ def _extras(chosen, sid, axes, values, main, shift: float) -> dict[str, np.ndarr
         ]
         with np.errstate(invalid="ignore", over="ignore"):
             value = derived.combine(*arrays) if derived.combine else arrays[0]
+        if variable in RADIATION:
+            value = value * np.float32(RADIATION_SCALE.get(bucket_model, 1.0))
         found[variable] = np.asarray(value, dtype=np.float32)
     return found
 
@@ -1033,10 +1046,10 @@ def collect(
                     else:
                         result.stored.setdefault(k, set()).add(model.id)
                     if fetched.extra_complete or final:
-                        state.extra.setdefault(k, set()).add(model.id)
+                        state.settle(k, model.id)
                 elif model.id in again:  # the stored rows stay
                     if final:
-                        state.extra.setdefault(k, set()).add(model.id)
+                        state.settle(k, model.id)
                 elif final:
                     state.bucket_missing.setdefault(k, set()).add(model.id)
                     result.missing.setdefault(k, {})[model.id] = fetched.reason
