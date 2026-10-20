@@ -2718,7 +2718,7 @@ instead of only the okres's forecast point. After each outlook run
   precipitation and wind and every model's temperature, from Prague midnight of the day),
   packed in `obce.zip` in the release `data-latest`; Pages unpacks it to
   `data/scores/forecast/`.
-- **Pages:** the forecast detail page shows an "Obec (test)" picker for the okres shown (link
+- **Pages:** the forecast detail page shows an "Obec" picker for the okres shown (link
   `#<okres>/<obec>`). The forecast map (`web/src/obce-map.js`) loads the files of the okresy
   in view from zoom 8.5 and shows the obce as yr.no and Windy draw places: no dots, the name
   small and the main value large beneath it, the other values ticked under "Values at each

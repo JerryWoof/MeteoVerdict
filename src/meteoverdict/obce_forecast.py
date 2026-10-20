@@ -1,4 +1,4 @@
-"""Forecast for every obec (test, roadmap: forecast for a place).
+"""Forecast for every obec (roadmap: forecast for a place).
 
 Each model's newest complete run from the bucket at the obec's own grid cell, its
 temperature moved from the cell's terrain height to the obec's (``bucket.read_run``),
@@ -207,7 +207,6 @@ def document(
     return {
         "okres": code,
         "generated": now.isoformat(timespec="minutes"),
-        "test": True,
         "runs": {m: r.isoformat(timespec="minutes") for m, r in runs.rows()},
         "times": [t.isoformat(timespec="minutes") for t in times],
         "places": places_out,

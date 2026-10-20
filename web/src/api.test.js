@@ -205,7 +205,7 @@ function obceOf(offset, step, extra = {}) {
 test("an obec identical to its okres reproduces the okres's hours and parts", () => {
   const [{ id, doc }] = obceDocs({ okresDoc: DOC, obceFile: obceOf(0, 1), meta: META });
   assert.equal(id, "ves");
-  assert.equal(doc.test, true);
+  assert.equal(doc.test, undefined);
   assert.equal(doc.obec.okres, "CZ0201");
   assert.match(doc.attribution, /ČHMÚ/);
   assert.match(doc.attribution, /ČÚZK/);

@@ -13,7 +13,7 @@ of the 6,258 obce.
 
 | Page | What you get |
 |---|---|
-| [Forecast](https://jerrywoof.github.io/MeteoVerdict/forecast.html) (the experimental MeteoVerdict AI forecast is its default model, with its verification and experiments below the map) | TV-style weather map for the next six days: temperature, rain, wind and cloud in every okres, by night, morning, afternoon and evening, with sunrise and sunset and play buttons. Zoom in for relief, rivers and town names, and (test) the forecast for every obec, biggest places first; "Find a place" goes to any obec and opens its panel |
+| [Forecast](https://jerrywoof.github.io/MeteoVerdict/forecast.html) (the experimental MeteoVerdict AI forecast is its default model, with its verification and experiments below the map) | TV-style weather map for the next six days: temperature, rain, wind and cloud in every okres, by night, morning, afternoon and evening, with sunrise and sunset and play buttons. Zoom in for relief, rivers and town names, and the forecast for every obec, biggest places first; "Find a place" goes to any obec and opens its panel |
 | [On an e-ink display](https://github.com/JerryWoof/MeteoVerdict-TRMNL) | today and tomorrow, the next 24 hours, five days or the weekend on a TRMNL display, in Czech or English; combined or AI forecast |
 | [Score map](https://jerrywoof.github.io/MeteoVerdict/) | the most accurate model in every okres, or "no clear winner" where the data cannot tell; click an okres to see why it wins |
 | [Compare](https://jerrywoof.github.io/MeteoVerdict/compare.html) | all models ranked for Czechia, a kraj or an okres, with confidence intervals, and every model's error hour by hour after each run (H+1 to H+120) |
@@ -41,7 +41,7 @@ of the 6,258 obce.
    how well each did there over the last 90 days (temperature and wind also corrected
    for their usual bias), as operational consensus forecasts such as NOAA's National
    Blend of Models do ([research](docs/forecast-research.md)).
-6. **Every obec (test).** The same combination for each of the 6,258 obce: every model's
+6. **Every obec.** The same combination for each of the 6,258 obce: every model's
    newest run read at the obce's own grid cell from Open-Meteo's open-data bucket, the
    temperature moved to the obec's height, weighted as its okres
    ([details](docs/data-sources.md#forecast-for-every-obec-test-mvd-obce-forecast)).
@@ -94,7 +94,7 @@ the day and the model ranking with weights. Codes, fields and examples:
 [open data](docs/open-data.md). Licence CC BY-SA 4.0 (credit MeteoVerdict, Open-Meteo.com
 and ČHMÚ).
 
-The forecast for every obec (test) is public too, but not versioned:
+The forecast for every obec is public too, but not versioned:
 `data/scores/forecast/obce-{code}.json` per okres (name, position, height, population,
 hourly temperature, precipitation and wind).
 

@@ -70,7 +70,7 @@ jobs:
             exit 0
           fi
           uv run --frozen mvd outlook --github-release
-      - name: Forecast for every obec (test)
+      - name: Forecast for every obec
         # a test (forecast for a place); its failure does not fail the outlook
         if: always()
         continue-on-error: true
