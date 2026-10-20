@@ -99,6 +99,7 @@ test("skyRow: the AI's cloud, sunshine and gust win where present, the symbol fo
   const row = { tmin: 5, tmax: 12, precipitation: 0, cloud: 90, sunshine: 1, gust: null, symbol: "cloudy" };
   const next = skyRow(row, ai, "A", "2026-10-20|day");
   assert.deepEqual([next.cloud, next.sunshine, next.gust, next.symbol], [20, 6.5, 9.1, "clear"]);
+  assert.equal(next.gust_over_threshold, false);
   // night: no cloud from the AI, the blend's stays
   assert.equal(skyRow(row, ai, "A", "2026-10-20|night").cloud, 90);
   // an okres or part the AI has not: untouched
