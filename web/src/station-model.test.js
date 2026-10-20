@@ -12,10 +12,11 @@ test("the model choice lives in a suffix of the hash and the defaults leave it o
   assert.deepEqual(splitModelHash("#kinds/0-20000-0-11464;m=blend"), { hash: "#kinds/0-20000-0-11464", model: "blend", lead: 1 });
   assert.deepEqual(splitModelHash("#kinds"), { hash: "#kinds", model: null, lead: null });
   assert.equal(splitModelHash("#kinds;m=x;l=9").lead, 1);
-  assert.equal(withModelHash("#kinds/S1", { model: "ai", lead: 1 }), "#kinds/S1");
-  assert.equal(withModelHash("#kinds/S1", { model: "blend", lead: 1 }), "#kinds/S1;m=blend");
-  assert.equal(withModelHash("#kinds/S1;m=blend", { model: "ecmwf_ifs", lead: 2 }), "#kinds/S1;m=ecmwf_ifs;l=2");
-  assert.equal(withModelHash("", { model: "ai", lead: 2 }), "#;m=ai;l=2");
+  const base = { lead: 1, err: "tmax" };
+  assert.equal(withModelHash("#kinds/S1", { ...base, model: "blend" }), "#kinds/S1");
+  assert.equal(withModelHash("#kinds/S1", { ...base, model: "ai" }), "#kinds/S1;m=ai");
+  assert.equal(withModelHash("#kinds/S1;m=ai", { ...base, model: "ecmwf_ifs", lead: 2 }), "#kinds/S1;m=ecmwf_ifs;l=2");
+  assert.equal(withModelHash("", { ...base, model: "blend", lead: 2 }), "#;m=blend;l=2");
 });
 
 test("options: AI, the blend, then the models in a fixed order", () => {
@@ -59,15 +60,17 @@ test("size of a difference", () => {
   assert.equal(sizeClass(4, "mm"), "medium");
 });
 
-test("the error choice rides in the hash after the model and lead", () => {
-  assert.deepEqual(splitModelHash("#2026-10-19/day/temperature/tp/stations;m=blend;l=2;e=tmax"), {
-    hash: "#2026-10-19/day/temperature/tp/stations", model: "blend", lead: 2, err: "tmax",
+test("the error choice rides in the hash after the model and lead; the maximum is the default", () => {
+  assert.deepEqual(splitModelHash("#2026-10-19/day/temperature/tp/stations;m=blend;l=2;e=tmin"), {
+    hash: "#2026-10-19/day/temperature/tp/stations", model: "blend", lead: 2, err: "tmin",
   });
   assert.deepEqual(splitModelHash("#x;m=ai;e=r"), { hash: "#x", model: "ai", lead: 1, err: "r" });
+  assert.equal(splitModelHash("#x;m=ai;e=none").err, null); // the measured values
   assert.equal(splitModelHash("#x;m=ai;e=gust").err, undefined); // only the mapped values
-  assert.equal(withModelHash("#x", { model: "ai", lead: 1, err: "wind" }), "#x;m=ai;e=wind");
+  assert.equal(withModelHash("#x", { model: "blend", lead: 1, err: "wind" }), "#x;m=blend;e=wind");
   assert.equal(withModelHash("#x", { model: "blend", lead: 2, err: "tmin" }), "#x;m=blend;l=2;e=tmin");
-  assert.equal(withModelHash("#x;m=blend;e=r", { model: "ai", lead: 1, err: null }), "#x");
+  assert.equal(withModelHash("#x", { model: "blend", lead: 1, err: null }), "#x;m=blend;e=none");
+  assert.equal(withModelHash("#x;m=ai;e=r", { model: "blend", lead: 1, err: "tmax" }), "#x");
 });
 
 test("the day's errors per station, in the unit (the file has tenths), null where missing", () => {

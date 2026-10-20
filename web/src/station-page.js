@@ -33,7 +33,7 @@ import {
   DEFAULT_SHOWN, dayLabel, displayName, labelFor, okresColours, rampKey, today, valueFor,
 } from "./tv.js";
 import { keepRoomForPanels } from "./panel-room.js";
-import { DEFAULT_MODEL, ERROR_VARS, LEADS, AI, createModelCompare, errorLookup, modelOptions, splitModelHash, withModelHash } from "./station-model.js";
+import { DEFAULT_ERR, DEFAULT_MODEL, ERROR_VARS, LEADS, AI, createModelCompare, errorLookup, modelOptions, splitModelHash, withModelHash } from "./station-model.js";
 
 const t = setUpLanguage();
 const language = document.documentElement.lang;
@@ -76,7 +76,7 @@ function cleanHash() {
   if (model) {
     models.state.model = model;
     models.state.lead = lead;
-    models.state.err = err ?? null;
+    models.state.err = err === undefined ? DEFAULT_ERR : err;
   }
   return hash;
 }
