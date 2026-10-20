@@ -236,3 +236,23 @@ test("borrowed stations: per period and value group, named with their okres", ()
   assert.deepEqual(rowFor(view, "CZ0641", "2026-10-16", "night").borrowed, { t: ["a", "b"] });
   assert.equal(row.tmax, 17);
 });
+
+test("high sites and the station nearest the okres point, per period", () => {
+  const doc = {
+    day: "2026-10-16",
+    parts: ["night", "morning", "afternoon", "evening", "day"],
+    okresy: {
+      CZ0423: {
+        tmax: [3, 6, 9, 5, 9], tmin: [1, 2, 5, 3, 1], n_t: [2, 2, 2, 2, 2], st: ["a", "b"],
+        high: [{ id: "m", name: "Milešovka", elevation: 837, tmax: [0, 2, 4, 1, 4], tmin: [-2, -1, 1, 0, -2] }],
+        near: { id: "a", name: "Aa", elevation: 200, km: 0.4, tmax: [3, 6, 9, 5, 9], tmin: [1, 2, 5, 3, 1] },
+      },
+    },
+  };
+  const view = parseObservedDay(doc, [{ code: "CZ0423", name: "Litoměřice", lat: 50.53, lon: 14.13 }]);
+  const row = rowFor(view, "CZ0423", "2026-10-16", "afternoon");
+  assert.deepEqual(row.high, [{ id: "m", name: "Milešovka", elevation: 837, km: null, tmax: 4, tmin: 1 }]);
+  assert.equal(row.near.elevation, 200);
+  assert.equal(row.near.tmax, 9);
+  assert.equal(rowFor(view, "CZ0423", "2026-10-16", "night").high[0].tmin, -2);
+});

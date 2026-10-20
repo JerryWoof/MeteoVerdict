@@ -30,7 +30,9 @@ outlook's instantaneous values). Temperature, wind and gust need values in at le
 ``MIN_SHARE`` of the period's hours (cloud half of them; sunshine in ``MIN_SHARE`` of its
 daylight hours), else the station has no value for that period.
 
-An okres's value is the mean over its stations with a value (``tmax``, ``tmin``, ``r``,
+An okres's value is the mean over its stations with a value, without the high sites (as
+the scoring pool, ``aggregate.with_high_sites``; they stay visible as stations and in the
+okres file's ``high``) (``tmax``, ``tmin``, ``r``,
 ``wind``, ``ssv``, ``cloud``), with the extremes beside (``tmax_hi``, ``tmin_lo``,
 ``r_hi``) and the strongest gust; ``n_*`` count the stations. Older days (up to
 ``DAILY_DAYS`` back) have the whole day only, from ČHMÚ's daily climate values with
@@ -114,7 +116,9 @@ NOTES = (
     "(mm, from the hourly totals, all hours needed), wind the highest value at the full hour "
     "(m/s), gust the strongest 10-minute gust in the okres (m/s), ssv sunshine (h), cloud the "
     "mean cloud cover (%, synoptic stations only), light the hours of daylight at the okres "
-    "point; tmax_hi/tmin_lo/r_hi the extremes over the stations. An okres without a "
+    "point; tmax_hi/tmin_lo/r_hi the extremes over the stations. The okres mean leaves out "
+    "the high sites (more than 300 m above the okres's median, as the scoring): 'high' "
+    "lists them, 'near' is the station nearest the okres point. An okres without a "
     "station of its own for a value takes it from the nearest stations of other okresy "
     "(at most 30 km from its border, up to 3): 'borrowed' lists them per value group "
     "(t, r, w, g, s, c) and period, 'bst' names them. Daily days: the whole day "
@@ -496,7 +500,10 @@ def borrowed_stations(
     ``part`` and the counts (``COUNTS``) of the okres's own stations. One row per okres,
     day, period, group and station: ``okres``, ``day``, ``part``, ``group``, ``station``,
     ``km``."""
-    home = stations.select(pl.col("id").alias("station"), pl.col("okres_code").alias("home"))
+    info = aggregate.with_high_sites(stations)
+    home = info.filter(~pl.col("high_site")).select(
+        pl.col("id").alias("station"), pl.col("okres_code").alias("home")
+    )
     near = (
         distance.filter(pl.col("distance_km") <= max_km)
         .select(
@@ -508,6 +515,22 @@ def borrowed_stations(
         .filter(pl.col("okres") != pl.col("home"))
         .drop("home")
     )
+    if "okres_median_m" in info.columns:
+        # as the scoring (``aggregate.high_pairs``): no station far above the okres it lends to
+        medians = info.select(pl.col("okres_code").alias("okres"), "okres_median_m").unique("okres")
+        heights = info.select(
+            pl.col("id").alias("station"), pl.col("elevation").cast(pl.Float64).alias("height")
+        )
+        near = (
+            near.join(heights, on="station", how="left")
+            .join(medians, on="okres", how="left")
+            .filter(
+                ~(
+                    (pl.col("height") - pl.col("okres_median_m")) > aggregate.HIGH_SITE_ABOVE_M
+                ).fill_null(False)
+            )
+            .drop("height", "okres_median_m")
+        )
     frames = []
     for group, column in GROUPS.items():
         count_column = next(n for n, c in COUNTS.items() if c == column)
@@ -541,12 +564,17 @@ def okres_periods(
     """One row per okres, day and period: the mean over its stations (``tmax``, ``tmin``,
     ``r``, ``wind``, ``ssv``, ``cloud``), the extremes (``tmax_hi``, ``tmin_lo``,
     ``r_hi``, ``gust``) and the number of stations behind each (``COUNTS``); ``st`` the
-    stations with any value. ``stations``: ``id`` and ``okres_code``.
+    stations with any value. ``stations``: ``id`` and ``okres_code`` (with ``elevation``,
+    the high sites, ``aggregate.with_high_sites``, are left out, as in the scoring).
 
     With ``distance`` (``neighbours.distances``), an okres without a station of its own
     for a variable group takes that group's values from the nearest stations of its
     neighbours (``borrowed_stations``); ``b_<group>`` lists them (null: its own)."""
-    where = stations.select(pl.col("id").alias("station"), pl.col("okres_code").alias("okres"))
+    info = aggregate.with_high_sites(stations)
+    # the scoring's pool: high sites (more than 300 m above their okres's median) are in no okres
+    where = info.filter(~pl.col("high_site")).select(
+        pl.col("id").alias("station"), pl.col("okres_code").alias("okres")
+    )
     joined = values.join(where, on="station", how="inner")
     aggs = _okres_aggs()
     own = (
@@ -564,7 +592,7 @@ def okres_periods(
     )
     if distance is None:
         return own.sort("okres", "day", "part")
-    borrowed = borrowed_stations(values, stations, distance, own)
+    borrowed = borrowed_stations(values, info, distance, own)
     keys = ["okres", "day", "part"]
     out = own
     for group, column in GROUPS.items():
@@ -779,6 +807,31 @@ def forecast_doc(
 
 
 # --- the files ---------------------------------------------------------------------------
+def _km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    p = math.pi / 180
+    a = (
+        math.sin((lat2 - lat1) * p / 2) ** 2
+        + math.cos(lat1 * p) * math.cos(lat2 * p) * math.sin((lon2 - lon1) * p / 2) ** 2
+    )
+    return 12742 * math.asin(math.sqrt(a))
+
+
+def _station_series(values: pl.DataFrame, day: date, periods: tuple[str, ...]) -> dict:
+    """``{station: {"tmax": [per period], "tmin": [per period]}}`` of the stations with a
+    temperature that day."""
+    rows = values.filter(pl.col("day") == day)
+    at = {(r["station"], r["part"]): r for r in rows.iter_rows(named=True)}
+    out = {}
+    for station in rows["station"].unique().to_list():
+        series = {
+            c: [_value(at.get((station, p), {}).get(c), c) for p in periods]
+            for c in ("tmax", "tmin")
+        }
+        if any(v is not None for vs in series.values() for v in vs):
+            out[station] = series
+    return out
+
+
 def day_doc(
     day: date,
     source: str,
@@ -789,12 +842,16 @@ def day_doc(
     forecasts: list[dict],
     generated: datetime,
     distance: pl.DataFrame | None = None,
+    values: pl.DataFrame | None = None,
 ) -> dict:
     """The okres file of one day (``source`` "hourly": parts of day; "daily": the whole
     day from the daily climate values). An okres with borrowed stations (``okres_rows``
     ``b_<group>``) gets ``borrowed`` ({group: [station ids or null per period]}) and
     ``bst`` (those stations: id, name, their okres, km from its border, nearest first);
-    ``distance`` (``neighbours.distances``) gives the km."""
+    ``distance`` (``neighbours.distances``) gives the km. With ``values`` (the stations'
+    own values) and elevations in ``stations``, an okres also gets ``high`` (its high sites
+    with a value, out of its mean: id, name, elevation, tmax and tmin per period) and
+    ``near`` (the station nearest its forecast point: the same, with ``km``)."""
     periods = PERIODS if source == "hourly" else ("day",)
     rows = okres_rows.filter(pl.col("day") == day)
     at = {(r["okres"], r["part"]): r for r in rows.iter_rows(named=True)}
@@ -817,6 +874,13 @@ def day_doc(
         o: sorted({c for codes in lists if codes for c in codes})
         for o, lists in extra.group_by("okres").agg(pl.col("ph")).iter_rows()
     }
+    own_values = _station_series(values, day, periods) if values is not None else {}
+    info = aggregate.with_high_sites(stations)
+    in_okres: dict[str, list[dict]] = {}
+    if "elevation" in info.columns and "lat" in info.columns:
+        for r in info.iter_rows(named=True):
+            if r["okres_code"] and r["id"] in own_values and r["lat"] is not None:
+                in_okres.setdefault(r["okres_code"], []).append(r)
     okresy = {}
     for code, lat, lon in points.select("code", "lat", "lon").iter_rows():
         entry: dict = {}
@@ -846,6 +910,25 @@ def day_doc(
                     for s in ids
                 ),
                 key=lambda b: (b["km"], b["id"]),
+            )
+        mine = in_okres.get(code, [])
+
+        def described(r, **more):
+            return {
+                "id": r["id"],
+                "name": names.get(r["id"], r["id"]),
+                "elevation": None if r["elevation"] is None else round(r["elevation"]),
+                **more,
+                **own_values[r["id"]],
+            }
+
+        high = [described(r) for r in mine if r["high_site"]]
+        if high:
+            entry["high"] = high
+        if mine:
+            nearest = min(mine, key=lambda r: (_km(lat, lon, r["lat"], r["lon"]), r["id"]))
+            entry["near"] = described(
+                nearest, km=round(_km(lat, lon, nearest["lat"], nearest["lon"]), 1)
             )
         if ph.get(code):
             entry["ph"] = ph[code]
@@ -970,7 +1053,16 @@ def build(
         forecasts = forecast_doc(archive, day, periods, hindcasts, means)
         okres_rows = okres_periods(values, stations, distance)
         doc = day_doc(
-            day, source, okres_rows, extras, points, stations, forecasts, generated, distance
+            day,
+            source,
+            okres_rows,
+            extras,
+            points,
+            stations,
+            forecasts,
+            generated,
+            distance,
+            values,
         )
         name = f"{day.isoformat()}.json"
         written.append(_write(out / name, doc))

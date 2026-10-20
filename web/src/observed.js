@@ -113,6 +113,10 @@ export function parseObservedDay(doc, okresy) {
         // as the scoring's borrowed stations: group → [station ids]
         borrowed: borrowedAt(v.borrowed, i),
         bst: v.bst ?? [],
+        // the high sites (out of the mean) and the station nearest the okres point, with
+        // their values in this period: {id, name, elevation, tmax, tmin[, km]}
+        high: (v.high ?? []).map((s) => stationAt(s, i)),
+        near: v.near ? stationAt(v.near, i) : null,
       };
       row.symbol = observedSymbol(row, doc.day);
       row.dark = isDark(part, row.light);
@@ -131,6 +135,11 @@ export function parseObservedDay(doc, okresy) {
     generated: doc.generated ?? null,
     forecasts: parseForecasts(doc),
   };
+}
+
+/** A station of an okres file (values per period) with its values in the `i`-th period. */
+function stationAt(s, i) {
+  return { id: s.id, name: s.name, elevation: s.elevation ?? null, km: s.km ?? null, tmax: s.tmax?.[i] ?? null, tmin: s.tmin?.[i] ?? null };
 }
 
 /** The value groups an okres borrowed in the `i`-th period: {t: [ids], …} (empty: none). */
