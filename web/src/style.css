@@ -3418,3 +3418,40 @@ footer .site-links {
     overflow-y: auto;
   }
 }
+
+/* the model selector of the measured page and its station chart (station-model.js) */
+.model-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  margin: 0.25rem 0 0.5rem;
+}
+.model-pick select {
+  max-width: 100%;
+}
+.model-compare {
+  margin: 0.5rem 0;
+}
+.model-compare .model-var {
+  margin: 0.25rem 0 0.4rem;
+  flex-wrap: wrap;
+}
+.model-compare .model-note.missing {
+  color: var(--danger);
+}
+.model-chart {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.model-chart figure {
+  margin: 0;
+}
+.model-table td.num,
+.model-table th {
+  white-space: nowrap;
+}
+.model-table small {
+  color: var(--muted);
+  font-weight: 400;
+}
