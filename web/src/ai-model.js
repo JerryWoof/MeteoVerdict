@@ -85,9 +85,14 @@ export function aiMapView(ai, outlook) {
       const sunTimes = sun ? { sunrise: sun.sunrise, sunset: sun.sunset } : {};
       for (const part of [...PARTS, "day"]) {
         const p = periods.get(`${day}|${part}`);
+        // an okres the AI has no forecast for shows our blend's row (rain in mm, as the AI's),
+        // so the map has no gaps; a period beyond the AI's hours stays "–"
+        const blend = own ? null : outlook.rows.get(`${o.code}|${day}|${part}`);
         rows.set(`${o.code}|${day}|${part}`, p
           ? { ...EMPTY, ...p, single: true, ...sunTimes }
-          : { ...EMPTY, rain_probability: null, single: true, beyond: true, ...sunTimes });
+          : blend
+            ? { ...blend, single: true, fromBlend: true }
+            : { ...EMPTY, rain_probability: null, single: true, beyond: true, ...sunTimes });
       }
     }
   }
