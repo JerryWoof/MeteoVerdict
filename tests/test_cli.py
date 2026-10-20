@@ -794,7 +794,7 @@ def _outlook_args(tmp_path):
 
 def test_outlook_writes_the_per_model_files_and_archives_them(tmp_path, monkeypatch):
     monkeypatch.setattr(cli.outlook, "fetch", lambda client, points, models, sleep: OUTLOOK_PAYLOAD)
-    result = runner.invoke(app, _outlook_args(tmp_path))
+    result = runner.invoke(app, [*_outlook_args(tmp_path), "--api"])
     assert result.exit_code == 0, result.output
     models = tmp_path / "site" / "forecast" / "models"
     assert sorted(p.name for p in models.glob("*.json")) == ["CZ0100.json", "CZ0201.json"]
@@ -823,7 +823,30 @@ def test_a_failing_model_archive_does_not_fail_the_outlook(tmp_path, monkeypatch
 
     monkeypatch.setattr(cli.outlook, "fetch", lambda client, points, models, sleep: OUTLOOK_PAYLOAD)
     monkeypatch.setattr(cli, "_archive_outlook_models", broken)
-    result = runner.invoke(app, _outlook_args(tmp_path))
+    result = runner.invoke(app, [*_outlook_args(tmp_path), "--api"])
     assert result.exit_code == 0, result.output
     assert "model archive not updated: disk full" in plain(result.output)
+    assert (tmp_path / "site" / "outlook.json").exists()
+
+
+def test_outlook_reads_the_bucket_and_asks_the_api_for_nothing(tmp_path, monkeypatch):
+    from meteoverdict import outlook_bucket
+
+    codes = ["CZ0100", "CZ0201"]
+
+    def from_bucket(store, chosen, points, now, days, log):
+        models = [m.id for m in chosen]
+        fc = cli.outlook.parse(OUTLOOK_PAYLOAD, codes, models)
+        return fc, [outlook_bucket.ModelRead(m, fc) for m in models]
+
+    def no_api(*args):
+        raise AssertionError("the API was asked")
+
+    monkeypatch.setattr(outlook_bucket, "from_bucket", from_bucket)
+    monkeypatch.setattr(cli.outlook, "fetch", no_api)
+    result = runner.invoke(app, _outlook_args(tmp_path))
+    assert result.exit_code == 0, result.output
+    out = plain(result.output)
+    assert "Open-Meteo: 0 calls in 0 requests" in out
+    assert "Bucket: 11 models" in out
     assert (tmp_path / "site" / "outlook.json").exists()
