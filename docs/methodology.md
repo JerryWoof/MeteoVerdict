@@ -333,6 +333,23 @@ are not independent.
   (1059 m) and Kubova Huť (997 m) stay in. Our forecast's temperature and wind regression
   still trains on all pool stations including the high sites (`mos.pools`), as it was
   tested; its model weights follow the okres scores and so no longer include them.
+- **Wind-atypical stations are not in the okres wind rankings.** The 10 % of the other
+  wind stations (19 of 194 in October 2026, e.g. Přimda, Dyleň, Brno-Tuřany, Temelín
+  exposed; Teplice, Pec pod Sněžkou, Ústí n. L.-Vaňov, Králíky sheltered) whose hourly
+  wind deviates most from their neighbours' (mean absolute deviation of
+  `log((v + 0.3) / IDW mean of up to 8 stations within 45 km)`, 0.73 or more, from the
+  hourly observations of 2026-08-01 to 10-17) are left out of every okres's *wind*
+  ranking, own and borrowed (an okres still short of 3 stations borrows the next
+  nearest, as above; all 77 keep a ranking). Temperature and the other variables, and the
+  station, kraj, elevation, network and Czechia levels, are unchanged. Why: the okres
+  ranking says which model to use where people live, and a sheltered or exposed gauge
+  measures a wind the models cannot be asked to reproduce at 10 km. In a 60-day test the
+  exclusion changed the winner in 58 of 385 okres wind rankings (33 clearly, outside the
+  confidence interval), against 12 (6) when 19 random stations were left out. It is a
+  versioned list, `src/meteoverdict/data/wind-atypical.csv`, not recomputed daily, so
+  rankings do not jump with the window; the observations-only rule is documented here and
+  can be re-run on a longer record. Our forecast's regression is not affected
+  (`high_sites_in_okres` keeps all stations for training).
 - Windows: the last 90 days, the current season, all time, and each season over all
   years (all winters, springs, summers, autumns). "All time" starts with the oldest day
   scored so far and grows as the backfill fills in history back to January 2024 (ALADIN
