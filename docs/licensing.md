@@ -42,6 +42,7 @@ is a summary for the project, not legal advice.
 | Radar archive (`radar-YYYY-MM` releases) and live frames (branch `radar-live`) | GitHub Release assets, a git branch | CC BY 4.0, derived from ČHMÚ data only (echo-top frames, motion fields and storm cells are our derivations from the ČHMÚ composites); release notes and the branch README credit ČHMÚ and list our changes |
 | Satellite archive (`satellite-YYYY-MM` releases), satellite frames in `radar-live` and the radar day sets | GitHub Release assets, a git branch, GitHub Pages | CC BY 4.0; the release notes, the branch README and `index.json` (`satellite_attribution`) credit EUMETSAT ("contains modified EUMETSAT Meteosat data <year>") and ČHMÚ and list our changes |
 | Single model runs at ~100 stations (`runs-YYYY-MM` releases) | GitHub Release assets | **CC BY-SA 4.0** (includes UK Met Office data); release notes credit Open-Meteo and the providers |
+| AI forecast outputs (`ai-latest` release, `data/scores/ai/`: `ai.json`, `ai-forecast.json`, `fc/`, the heatmap inputs) | GitHub Release asset, GitHub Pages | **CC BY-SA 4.0**: they are derived from forecasts of all sources, including UK Met Office data (ShareAlike); the files carry no licence field yet, the Data page states it |
 | Scores, rankings, web map, open data | repository and GitHub Pages | **CC BY-SA 4.0**: they combine all sources, including UK Met Office data (ShareAlike). CC BY 4.0 inputs may be included in CC BY-SA 4.0 work. |
 
 Publishing these outputs openly is allowed: every source permits redistribution and

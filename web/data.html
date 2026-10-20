@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MeteoVerdict: data</title>
-    <meta name="description" content="Free JSON and CSV files per okres: our combined forecast and the ranking of the weather models." />
+    <meta name="description" content="Free open data: forecast and ranking of weather models per okres (JSON, CSV), release archives, licences and update times." />
   </head>
   <body class="page theme-data">
     <header>
@@ -28,7 +28,6 @@
       </div>
       <p data-i18n="api.intro"></p>
       <p id="updates"></p>
-      <p class="note" data-i18n="api.whenLate"></p>
 
       <h2 data-i18n="api.try">Your okres</h2>
       <div class="strip standalone">
@@ -39,27 +38,7 @@
       <ul id="links"></ul>
       <pre id="preview" class="code"></pre>
 
-      <h2 data-i18n="api.files">Files</h2>
-      <div class="scroll">
-        <table id="files" class="doc-table data-table">
-          <tr><th data-i18n="api.file">File</th><th data-i18n="api.contains">Contains</th></tr>
-          <tr><td><code>api/v1/index.json</code></td><td data-i18n="api.fileIndex"></td></tr>
-          <tr><td><code>api/v1/okresy/{code}.json</code></td><td data-i18n="api.fileJson"></td></tr>
-          <tr><td><code>api/v1/okresy/{code}.csv</code></td><td data-i18n="api.fileCsv"></td></tr>
-        </table>
-      </div>
-
-      <h2 data-i18n="api.fields">What is in an okres file</h2>
-      <div class="scroll">
-        <table class="doc-table data-table">
-          <tr><th data-i18n="api.field">Field</th><th data-i18n="api.meaning">Meaning</th></tr>
-          <tr><td><code>okres</code></td><td data-i18n="api.fOkres"></td></tr>
-          <tr><td><code>forecast.hourly</code></td><td data-i18n="api.fHourly"></td></tr>
-          <tr><td><code>forecast.parts</code></td><td data-i18n="api.fParts"></td></tr>
-          <tr><td><code>models.variables</code></td><td data-i18n="api.fModels"></td></tr>
-          <tr><td><code>licence</code>, <code>attribution</code></td><td data-i18n="api.fLicence"></td></tr>
-        </table>
-      </div>
+      <div id="doc-api"></div>
 
       <h2 data-i18n="api.examples">Examples</h2>
       <pre class="code">curl -s https://jerrywoof.github.io/MeteoVerdict/api/v1/okresy/CZ0201.json</pre>
@@ -81,10 +60,7 @@ console.log(`best model for tomorrow's temperature: ${best.name}`);</pre>
       <p><a href="https://github.com/JerryWoof/MeteoVerdict-TRMNL"><img class="eink" src="https://raw.githubusercontent.com/JerryWoof/MeteoVerdict-TRMNL/main/screenshots/today-tomorrow.png" width="800" height="480" alt="MeteoVerdict on a TRMNL e-ink display: today and tomorrow in Prague" loading="lazy" /></a></p>
       <p><a href="https://github.com/JerryWoof/MeteoVerdict-TRMNL" data-i18n="api.einkLink">MeteoVerdict for TRMNL</a></p>
 
-      <h2 data-i18n="api.terms">Terms</h2>
-      <p data-i18n="api.licence"></p>
-      <p data-i18n="api.fair"></p>
-      <p data-i18n="api.caveats"></p>
+      <div id="doc-more"></div>
     </main>
     <footer data-footer="models" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/open-data.md">
       <!-- filled in by src/footer.js (the credits and licences of every page) -->

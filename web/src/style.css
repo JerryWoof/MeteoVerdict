@@ -1376,6 +1376,10 @@ pre.code {
 .doc-table td {
   vertical-align: top;
 }
+/* long addresses in text (data.html) wrap instead of widening the page */
+.content p code {
+  overflow-wrap: anywhere;
+}
 #links {
   font-size: 0.85rem;
   word-break: break-all;

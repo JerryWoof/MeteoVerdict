@@ -9,7 +9,7 @@ and CSV files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
 |---|---|
 | `api/v1/index.json` | all 77 okresy: `code`, `name`, `lat`, `lon` and the URLs of their files |
 | `api/v1/okresy/{code}.json` | everything for one okres (below) |
-| `api/v1/okresy/{code}.csv` | the hourly forecast: `time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration` |
+| `api/v1/okresy/{code}.csv` | the hourly forecast: `time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration,temperature_2m_lo,temperature_2m_hi` |
 
 The CSV files are plain CSV: one header row, no comment line, so that Google Sheets'
 `=IMPORTDATA`, Excel and `pandas.read_csv` read them as they are. They hold the hourly
@@ -30,7 +30,9 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
   sunshine in the hour ending at the time; both the mean of the models corrected
   against ČHMÚ observations, the hourly sunshine scaled so that each UTC day adds up to
   the corrected daily total: [methodology](methodology.md#sunshine-cloud-and-gusts));
-  6 days; `null` where fewer than two models cover an hour.
+  6 days; `null` where fewer than two models cover an hour. `temperature_2m_lo` and
+  `temperature_2m_hi` (°C) are the 80 % range around the temperature (the "±" of the chart; absent
+  until computed; [methodology](methodology.md#the-range-around-the-temperature-mvd-blend-interval)).
 - `forecast.parts`: per day and part of day in Prague time (`night`, `morning`,
   `afternoon`, `evening`, `day`): `tmin`, `tmax`, `precipitation`, `rain_probability`,
   `wind`, `cloud`, `sunshine` (hours), `symbol` (as on the forecast map;
@@ -60,7 +62,7 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
 - `models.variables.<variable>` for `temperature_2m`, `wind_speed_10m`,
   `precipitation_daily` and `precipitation_24h`: `stations`, `borrowed`, `days`, and
   `lead_days."1"…"5"`: the models in rank order with `rank`, `mae`, `bias`, `rmse`,
-  `tied_with_best`, `p_best` (the probability of being the best model: the share of the block-bootstrap resamples in which it has the lowest MAE; below 0.6 for the leader, the map shows no clear winner; `null` in files written before October 2026), `small_sample` (the ranking rests on fewer than 30 days), and `weight`/`correction` as used in our forecast (`null` for the
+  `tied_with_best`, `p_best` (the probability of being the best model: the share of the block-bootstrap resamples in which it has the lowest MAE; below 0.6 for the leader, the map shows no clear winner; `null` in files written before October 2026), `small_sample` (the ranking rests on fewer than 30 days), `short_record` (a newly added model: scores on fewer than 80 % of the window's days, not ranked, no weight), `days`, `mos_weight` (its weight in the temperature and wind regression) and `weight`/`correction` as used in our forecast (`null` for the
   06–06 precipitation, which is ranked but not combined). Window: the last 90 days
   (`models.from`, `models.to`).
 - `licence`, `attribution`, `docs`.
@@ -88,6 +90,16 @@ null beyond the model's horizon, `last_hour`; no probability of precipitation), 
 models in order of their mean rank over Czechia
 ([data-sources.md](data-sources.md#outlook-mvd-outlook-roadmap-66)). Raw model output,
 without our correction. Public, but not part of `api/v1` either.
+
+## Files for the AI forecast and the heatmap (outside `api/v1`)
+
+Experimental, published daily with the release `ai-latest` (`ai.zip`, from about 08:30 Prague time)
+and served under `data/scores/ai/`: `ai.json` (status, verification rule, scores and validation,
+counted from the launch on 2026-10-19), `ai-forecast.json` (hourly forecast by okres), `fc/outlook.json`,
+`fc/verify/{code}.json`, `fc/compare/`, and the inputs of the 100 m heatmap (`fc/heat/`, `fc/temp100m/`;
+the browser composes the hour). They carry no `licence` or `attribution` field yet; CC BY-SA 4.0 applies
+([licensing.md](licensing.md)). The [Data page](https://jerrywoof.github.io/MeteoVerdict/data.html) lists
+every file, release, schedule and licence.
 
 ## On an e-ink display
 

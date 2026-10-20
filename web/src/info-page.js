@@ -14,6 +14,10 @@ function inline(parent, text) {
       a.href = part.href;
       a.textContent = part.text;
       parent.append(a);
+    } else if (part.code) {
+      const code = document.createElement("code");
+      code.textContent = part.text;
+      parent.append(code);
     } else if (part.bold) {
       const b = document.createElement("strong");
       b.textContent = part.text;
