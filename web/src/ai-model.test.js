@@ -50,3 +50,13 @@ test("aiMapView: rows for covered periods, beyond for the rest and for okresy wi
   assert.equal(view.rows.get("B|2026-10-20|day").beyond, true);
   assert.equal(view.rows.get("A|2026-10-20|day").precipitation, null);
 });
+
+test("aiMapView: an okres without AI data shows the blend's row, not a gap", () => {
+  const ai = parseAi(doc(), NOW);
+  const rows = new Map([["B|2026-10-20|day", { tmin: 1, tmax: 9, precipitation: 3 }]]);
+  const view = aiMapView(ai, { okresy: [{ code: "B" }], days: ["2026-10-20"], rows });
+  const row = view.rows.get("B|2026-10-20|day");
+  assert.equal(row.tmax, 9);
+  assert.equal(row.single, true);
+  assert.equal(row.beyond, undefined);
+});
