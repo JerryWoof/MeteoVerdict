@@ -35,6 +35,9 @@ temperature, more than the models differ by, and a summit's wind is another clim
 temperature error and 70 % of its wind error). It keeps its own ``station`` rows, is
 ranked with the other high sites in ``high_sites`` and stays in the kraj, elevation,
 network and Czechia levels, which describe the whole area including its mountains.
+Wind-atypical stations (``WIND_ATYPICAL``, ``data/wind-atypical.csv``): the 10 % of the
+other stations whose hourly wind deviates most from their neighbours' (sheltered or
+exposed) are left out of the okres wind rankings only, as the high sites are from all.
 A region needs at least ``MIN_STATIONS`` stations; otherwise ``enough_stations`` is
 false and it must not be ranked. An okres with too few stations of its own borrows the
 nearest ones of its neighbours (``meteoverdict.neighbours``, roadmap 6.1); ``borrowed``
@@ -71,6 +74,19 @@ MIN_STATIONS = 3
 #: not in any okres's pool, ranked on its own and in the level ``high_sites``
 HIGH_SITE_ABOVE_M = 300.0
 HIGH_SITES = ("high_sites", "Stanice vysoko nad okresem")
+#: wind stations whose wind is not like their neighbours' (the mean absolute deviation of
+#: log((v + 0.3) / neighbours' IDW mean) over hourly observations is in the top 10 % of the
+#: stations that are not high sites, ``WIND_ATYPICAL_MAD`` or more: sheltered in a valley or
+#: town, or exposed on a ridge); in no okres's wind ranking. Versioned list, ``data/``
+WIND_ATYPICAL_MAD = 0.73
+WIND_ATYPICAL_FILE = Path(__file__).parent / "data" / "wind-atypical.csv"
+
+
+def load_wind_atypical(path: Path = WIND_ATYPICAL_FILE) -> frozenset[str]:
+    return frozenset(pl.read_csv(path)["station_id"].to_list())
+
+
+WIND_ATYPICAL = load_wind_atypical()
 #: a model is compared in a window when it has scores on at least this share of the days
 #: the window has scores for (per variable and lead day)
 MIN_COVERAGE = 0.8
@@ -217,6 +233,7 @@ def station_info(stations: pl.DataFrame) -> pl.LazyFrame:
             "elevation_class",
             network_class(pl.col("id")).alias("network"),
             "high_site",
+            pl.col("id").is_in(sorted(WIND_ATYPICAL)).alias("wind_atypical"),
         )
         .lazy()
     )
@@ -295,8 +312,16 @@ def with_regions(
     appear once for every okres whose pool it is in (``neighbours.pools``). The high
     sites (``high_site``) are in no okres, unless ``high_sites_in_okres`` (the training
     of our forecast's regression, ``mos.pools``, which keeps them); the level
-    ``high_sites`` has only them.
+    ``high_sites`` has only them. The wind-atypical stations (``wind_atypical``) are in no
+    okres's wind pool, on the same terms (and they are in the pools of other variables).
     """
+    if (
+        level == "okres"
+        and not high_sites_in_okres
+        and "wind_atypical" in in_window.collect_schema().names()
+    ):
+        wind = pl.col("variable").str.starts_with("wind_speed_10m")
+        in_window = in_window.filter(~(wind & pl.col("wind_atypical")))
     if "high_site" in in_window.collect_schema().names():
         if level == "okres" and not high_sites_in_okres:
             in_window = in_window.filter(~pl.col("high_site"))
@@ -699,6 +724,11 @@ def metadata(table: pl.DataFrame, models: dict[str, str], generated: datetime) -
             "level) and together (level high_sites); still in kraj, elevation, network, cz"
         ),
         "high_site_above_m": HIGH_SITE_ABOVE_M,
+        "wind_atypical": (
+            f"{len(WIND_ATYPICAL)} stations whose wind differs most from their neighbours' "
+            f"(mean absolute log deviation {WIND_ATYPICAL_MAD} or more): left out of the "
+            "okres wind rankings, in all other levels"
+        ),
         "licence": "CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/",
         "attribution": (
             "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com "
