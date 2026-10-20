@@ -597,6 +597,7 @@ body.tv > * {
 .sun .glyph + span + .glyph {
   margin-left: 0.35rem;
 }
+#station-panel .facts .sun ,
 #okres-panel .facts .sun {
   font-size: 0.85rem;
   vertical-align: -0.1em;
@@ -822,11 +823,13 @@ body.tv > * {
   color: var(--muted);
   font-size: 0.75rem;
 }
+#station-panel h2,
 #okres-panel h2,
 #station-panel h2 {
   font-size: 1.15rem;
   margin: 0 1.5rem 0 0;
 }
+#station-panel .when,
 #okres-panel .when,
 #station-panel .when {
   margin: 0 0 0.3rem;
@@ -835,6 +838,7 @@ body.tv > * {
 #station-panel .model-note {
   margin: 0.3rem 0 0.6rem;
 }
+#station-panel .close,
 #okres-panel .close,
 #station-panel .close {
   float: right;
@@ -844,6 +848,7 @@ body.tv > * {
   cursor: pointer;
 }
 /* which forecast the okres panel shows (only the panel; the map has its own selector) */
+#station-panel .model-pick ,
 #okres-panel .model-pick {
   display: flex;
   flex-wrap: wrap;
@@ -852,6 +857,7 @@ body.tv > * {
   margin: 0.2rem 0 0.3rem;
   font-weight: 600;
 }
+#station-panel .model-pick select ,
 #okres-panel .model-pick select {
   flex: 1 1 10rem;
   min-width: 0;
@@ -859,36 +865,43 @@ body.tv > * {
   font-size: 0.85rem;
   padding: 0.2rem 0.3rem;
 }
+#station-panel .model-note ,
 #okres-panel .model-note {
   margin: 0 0 0.3rem;
   font-size: 0.75rem;
   color: var(--muted);
 }
 /* a single model's raw forecast: marked so it is not taken for ours */
+#station-panel.single ,
 #okres-panel.single {
   box-shadow:
     inset 4px 0 0 var(--model),
     0 1px 4px rgba(29, 35, 41, 0.18);
 }
+#station-panel .now ,
 #okres-panel .now {
   display: flex;
   align-items: center;
   gap: 0.6rem;
 }
+#station-panel .big-temp ,
 #okres-panel .big-temp {
   font-size: 2.4rem;
   font-weight: 600;
 }
+#station-panel .facts ,
 #okres-panel .facts {
   margin: 0.3rem 0 0.6rem;
   padding-left: 1.1rem;
 }
 /* gust over MeteoVerdict's threshold (outlook.json gust_over_threshold), also in the forecast page's table */
+#station-panel .gust-over-threshold,
 #okres-panel .gust-over-threshold,
 #days .gust-over-threshold {
   color: var(--danger);
   font-weight: 600;
 }
+#station-panel .strip ,
 #okres-panel .strip {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -896,6 +909,7 @@ body.tv > * {
   text-align: center;
   margin-bottom: 0.6rem;
 }
+#station-panel .part ,
 #okres-panel .part {
   display: flex;
   flex-direction: column;
@@ -904,6 +918,7 @@ body.tv > * {
   border-radius: 4px;
   background: var(--paper);
 }
+#station-panel .part-name ,
 #okres-panel .part-name {
   font-size: 0.75rem;
   color: var(--muted);
@@ -911,24 +926,29 @@ body.tv > * {
 .rain {
   color: var(--model);
 }
+#station-panel .week ,
 #okres-panel .week {
   width: 100%;
   border-collapse: collapse;
   margin-bottom: 0.6rem;
 }
+#station-panel .week td ,
 #okres-panel .week td {
   padding: 0.15rem 0.3rem;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
+#station-panel .week .num ,
 #okres-panel .week .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+#station-panel .week tr ,
 #okres-panel .week tr {
   cursor: pointer;
 }
+#station-panel .week tr.current ,
 #okres-panel .week tr.current {
   background: var(--paper);
   font-weight: 600;
@@ -1134,6 +1154,7 @@ body.tv.past #ribbon {
   cursor: not-allowed;
 }
 #headline.past,
+#station-panel.past,
 #okres-panel.past,
 #station-panel.past {
   box-shadow:
@@ -1171,14 +1192,17 @@ body.tv.past #ribbon {
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
+#station-panel .facts .missing ,
 #okres-panel .facts .missing {
   color: #7b8791;
   font-style: italic;
 }
 /* a value from the neighbours' stations (an okres without its own) */
+#station-panel .facts .borrowed ,
 #okres-panel .facts .borrowed {
   color: var(--measured-ink);
 }
+#station-panel .facts .borrowed::before ,
 #okres-panel .facts .borrowed::before {
   content: "↔ ";
   color: var(--measured);
@@ -1190,13 +1214,16 @@ body.tv.past #ribbon {
   color: var(--muted);
   font-size: 0.85em;
 }
+#station-panel h3 ,
 #okres-panel h3 {
   font-size: 0.95rem;
   margin: 0.6rem 0 0.3rem;
 }
+#station-panel .leads ,
 #okres-panel .leads {
   margin: 0 0 0.3rem;
 }
+#station-panel .leads button ,
 #okres-panel .leads button {
   padding: 0.15rem 0.5rem;
   font-size: 0.78rem;
@@ -3368,4 +3395,15 @@ footer .site-links {
 }
 .aic-table td:nth-child(3) {
   white-space: normal;
+}
+
+#station-panel .station-info {
+  margin: 0.4rem 0 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border-left: 3px solid var(--measured);
+  background: color-mix(in srgb, var(--measured) 8%, transparent);
+}
+#station-panel .station-info .when,
+#station-panel .station-info .model-note {
+  margin: 0.15rem 0;
 }

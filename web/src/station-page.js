@@ -282,24 +282,50 @@ function kindsMap() {
 const stationPanel = $("station-panel");
 keepRoomForPanels($("station-map-wrap"), $("station-map"), [stationPanel]);
 
-/** Open (or, with null, close) a station's panel in the Stations view; the hash follows ("#kinds/<id>"). */
-function openStationPanel(id) {
-  const station = id && placed.find((s) => s.id === id);
-  window.history.replaceState(null, "", station ? `${KINDS_HASH}/${encodeURIComponent(id)}` : KINDS_HASH);
-  kindsMap().select(station ? id : null, { move: false });
-  if (!station) {
-    stationPanel.replaceChildren();
-    return;
-  }
-  const close = el("button", "×", "close");
-  close.type = "button";
-  close.setAttribute("aria-label", t("map.closePanel"));
-  close.addEventListener("click", () => openStationPanel(null));
+/** The station's own block at the top of its panel: kind, facts and the link to its page. */
+function stationInfo(station) {
   const measure = $("map-measure").value;
   const element = measure ? elementFor(station, measure) : null;
   const open = el("a", t("map.openStation"));
   open.href = `#${station.id}${element ? `/${element}` : ""}`;
-  stationPanel.replaceChildren(close, el("h2", station.name ?? station.id), el("p", describe(station), "when"), el("p", facts(station), "model-note"), open);
+  const box = el("div", null, "station-info");
+  box.append(el("strong", `${t("map.stationLabel")}: ${station.name ?? station.id}`), el("p", describe(station), "when"), el("p", facts(station), "model-note"), open);
+  return box;
+}
+
+let stationPanelToken = 0;
+let stationPanelState = null; // {id, day, part, okres}: what the panel shows
+
+/** Open (or, with null, close) a station's panel in the Stations view; the hash follows ("#kinds/<id>"). The
+ * panel is the Weather view's okres panel (the okres the station is in), with the station's own block in it. */
+async function openStationPanel(id, change = null) {
+  const station = id && placed.find((s) => s.id === id);
+  const token = ++stationPanelToken;
+  window.history.replaceState(null, "", station ? `${KINDS_HASH}/${encodeURIComponent(id)}` : KINDS_HASH);
+  kindsMap().select(station ? id : null, { move: false });
+  if (!station) {
+    stationPanelState = null;
+    stationPanel.replaceChildren();
+    return;
+  }
+  const start = startView();
+  const okresy = await loadOkresy();
+  const okres = okresy.find((o) => displayName(o.name) === displayName(station.okres ?? ""))?.code ?? null;
+  const day = start.day;
+  const part = stationPanelState?.id === id && change?.part ? change.part : stationPanelState?.id === id ? stationPanelState.part : start.part;
+  stationPanelState = { id, day, part, okres };
+  const data = okres && day ? await dayData("okresy", day) : null;
+  if (token !== stationPanelToken || mode !== "kinds") return;
+  if (data) {
+    stationOkresPanel.render(data, { day, part, okres });
+    stationPanel.querySelector(".when")?.after(stationInfo(station));
+  } else {
+    const close = el("button", "×", "close");
+    close.type = "button";
+    close.setAttribute("aria-label", t("map.closePanel"));
+    close.addEventListener("click", () => openStationPanel(null));
+    stationPanel.replaceChildren(close, el("h2", station.name ?? station.id), stationInfo(station));
+  }
   // phones: the panel is under the map; bring it into view
   if (window.innerWidth <= 700) stationPanel.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
@@ -434,6 +460,8 @@ const todayIso = () => today(Date.now());
 const fmt = (v, digits = 0) => (v == null ? "–" : v.toFixed(digits));
 const fmt1 = (v) => (v == null ? "–" : v.toLocaleString(language, { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
 
+const loadOkresy = () => (okresyList ??= getJson("data/scores/outlook.json").then((d) => d?.okresy ?? []));
+
 /** A file of a day, loaded once ("stations": the stations' values; "okresy": the parsed
  * okres view). */
 function dayData(kind, day) {
@@ -442,8 +470,7 @@ function dayData(kind, day) {
     let promise;
     if (kind === "stations") promise = getJson(`${OBSERVED}/${day}-stations.json`);
     else {
-      okresyList ??= getJson("data/scores/outlook.json").then((d) => d?.okresy ?? []);
-      promise = Promise.all([getJson(`${OBSERVED}/${day}.json`), okresyList]).then(([d, okresy]) => parseObservedDay(d, okresy));
+      promise = Promise.all([getJson(`${OBSERVED}/${day}.json`), loadOkresy()]).then(([d, okresy]) => parseObservedDay(d, okresy));
     }
     loading.set(key, promise.then((value) => {
       loaded.set(key, value ?? null);
@@ -504,6 +531,18 @@ const measuredMap = createMeasuredMap({
 // a long okres panel reaches below the map instead of resizing it
 keepRoomForPanels($("measured-map").parentElement, $("measured-map"), [$("okres-panel")]);
 
+
+// the same panel in the Stations view (#station-panel), for the okres of the clicked station
+const stationOkresPanel = createOkresPanel({
+  panel: stationPanel,
+  t,
+  language,
+  dayText,
+  update: (change) => openStationPanel(change.okres === null ? null : stationPanelState?.id, change),
+  stationHref: (id) => stationHref(id, stationPanelState?.day),
+  openStation: (id, event) => openStation(id, stationPanelState?.day, event),
+  stationIndex: async () => stationIndexDoc,
+});
 
 /** Open an okres's panel (okres layer); on phones it is under the map: bring it into view. */
 async function openOkres(code) {
