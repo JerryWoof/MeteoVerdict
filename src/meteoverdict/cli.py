@@ -1511,6 +1511,11 @@ def runs_add_stations(
     github_release: Annotated[
         bool, typer.Option(help="Pull and push the month files of the releases runs-YYYY-MM.")
     ] = False,
+    parallel_models: Annotated[int, typer.Option(help="Model-runs read at once.")] = 8,
+    threads: Annotated[int, typer.Option(help="Range requests at once.")] = 96,
+    extra: Annotated[
+        bool, typer.Option(help="Also the further variables (four times the requests).")
+    ] = False,
 ) -> None:
     """Fill in the stations of the subset that stored model-runs lack (after the subset
     grew), from Open-Meteo's open-data bucket, newest month first; no API calls
@@ -1525,7 +1530,7 @@ def runs_add_stations(
                 client, *_github_credentials(), notes=runs.RELEASE_NOTES
             )
             sync = runs.RunsSync(notes_store, data_dir, log=typer.echo)
-        limits = httpx.Limits(max_connections=192, max_keepalive_connections=192)
+        limits = httpx.Limits(max_connections=2 * threads, max_keepalive_connections=2 * threads)
         with httpx.Client(timeout=60, limits=limits) as s3:
             result = bucket.add_stations(
                 bucket.Bucket(s3),
@@ -1536,6 +1541,9 @@ def runs_add_stations(
                 sync=sync,
                 first=since,
                 max_minutes=max_minutes,
+                threads=threads,
+                parallel_models=parallel_models,
+                extra=extra,
                 log=typer.echo,
             )
     for month in sorted(result.filled, reverse=True):

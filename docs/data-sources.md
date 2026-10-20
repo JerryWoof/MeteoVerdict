@@ -2178,7 +2178,10 @@ not change from run to run). The rule (`runs.select_stations`, regenerated with
    (`mvd runs-add-stations`, workflow `runs-add-stations.yml`, sharing the concurrency
    group of `runs.yml`): every model-run of the bucket's window that was read from the
    bucket is read again at its missing stations only and merged by run, model and
-   station, newest month first, resumable. Model-runs from the API (the bucket's gaps,
+   station, newest month first, resumable; the four main variables only (the further
+   ones come with the new runs). A GitHub runner holding a month in memory was lost, so
+   the rows are spooled to disk and the fill-in ran on a machine with more memory.
+   Model-runs from the API (the bucket's gaps,
    the history before its window) stay at the 100. Their bucket cells were appended to
    `bucket-cells.csv` (three of them, in the far east, are outside ICON-D2's domain).
 
