@@ -86,8 +86,10 @@ test("a single model's rain: mm on the map and in the colours, and the summary c
   const row = { single: true, precipitation: 1.24, rain_probability: null, tmax: 10 };
   assert.equal(valueFor(row, "precipitation", "afternoon"), 1.24);
   assert.equal(labelFor(row, "precipitation", "afternoon"), "1.2 mm");
-  // our combination keeps the probability
-  assert.equal(labelFor({ rain_probability: 0.6, precipitation: 3 }, "precipitation", "afternoon"), "60 %");
+  // our combination: the weighted amount too (the probability is a second value in the panel)
+  assert.equal(labelFor({ rain_probability: 0.6, precipitation: 3 }, "precipitation", "afternoon"), "3.0 mm");
+  // an old file without amounts: the probability
+  assert.equal(labelFor({ rain_probability: 0.6 }, "precipitation", "afternoon"), "60 %");
   const colours = okresColours(IFS, DAY, "afternoon", "precipitation");
   const ifsRow = rowFor(IFS, "CZ0201", DAY, "afternoon");
   assert.equal(colours.get("CZ0201"), colorFor(ifsRow.precipitation, "precipitationMm"));

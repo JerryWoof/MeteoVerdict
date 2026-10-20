@@ -605,8 +605,9 @@ National Blend of Models, MeteoSwiss) and what still has to be tested:
 [forecast-research.md](forecast-research.md).
 
 The forecast map (`forecast.html`) shows the same combination for every okres, made twice a
-day by `mvd outlook`: by part of day, with the probability of precipitation (calibrated,
-below) and a symbol; cloud cover and sunshine there are the mean of the models
+day by `mvd outlook`: by part of day, with the combined precipitation amount in mm (the
+weighted blend, comparable to every single model; the map, tables and panel show it) and
+beside it, in the okres panel, the probability of precipitation (calibrated, below), and a symbol; cloud cover and sunshine there are the mean of the models
 corrected against ČHMÚ observations ([below](#sunshine-cloud-and-gusts)).
 
 ### Probability of precipitation and heavy rain (`meteoverdict.rain_calibration`)
