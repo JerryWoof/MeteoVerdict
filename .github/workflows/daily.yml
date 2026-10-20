@@ -78,6 +78,14 @@ jobs:
         run: uv run --frozen mvd farm --github-release --publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Every model at the station point, by day (the measured page's model selector)
+        # optional, like the farmers' skill (reuses the runs and observations it downloaded):
+        # station-fc.zip in data-latest, read by the Pages build
+        continue-on-error: true
+        timeout-minutes: 30
+        run: uv run --frozen mvd station-fc --github-release --publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Does our combined forecast beat the best model? (out of sample)
         # optional, like the lead hours: a failure here must not fail the daily update
         continue-on-error: true
