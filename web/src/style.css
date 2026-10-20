@@ -1597,7 +1597,16 @@ button.legend-item[aria-pressed="true"]:hover {
   }
 }
 
-/* the TRMNL screenshot on the open data page */
+/* the TRMNL screenshots on the open data page */
+.eink-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+.eink-grid img.eink {
+  max-width: 100%;
+}
 img.eink {
   display: block;
   width: 100%;
