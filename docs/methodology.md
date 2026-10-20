@@ -151,7 +151,7 @@ morning. Meteorologists verify run by run instead, and so do we:
 
 **ALADIN from our own archive** is still verified the same way (H+1 … H+72, both
 domains on the same runs and stations, ~290 stations, values at the nearest grid point
-**without** elevation correction) and published as `leads-aladin.json`, but no longer
+**without** elevation correction) and published as `leads-aladin.json` (release data-latest only, not on the site), but no longer
 drawn: the all-model chart takes ALADIN from Open-Meteo, so all models are processed
 alike. The archive remains our check of Open-Meteo's ALADIN and records when ČHMÚ
 published each run.
