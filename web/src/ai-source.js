@@ -1,4 +1,4 @@
-// The AI forecast tab (ai.html, and forecast-detail.html?source=ai): the forecast pages on
+// The AI forecast (the forecast page's AI model; old forecast-detail.html?source=ai links): the forecast pages on
 // MeteoVerdict AI's forecast instead of our combination. Its files have the same formats
 // and relative paths as ours, under data/scores/ai/fc/ (outlook.json, forecast/obce-*.json);
 // everything else (meta.json, weights, the models' own forecasts, boundaries) is shared.

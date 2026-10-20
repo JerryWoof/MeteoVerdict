@@ -17,7 +17,6 @@
         <a href="heatmap.html" data-i18n="page.heatmap">Heatmap</a>
         <a href="measured.html" data-i18n="page.station">Measured</a>
         <a href="compare.html" data-i18n="page.compare">Compare</a>
-        <a href="ai.html" data-i18n="page.ai">AI forecast</a>
         <a href="data.html" data-i18n="page.api">Data</a>
       </nav>
       <button type="button" id="language">Česky</button>
@@ -27,6 +26,8 @@
         <h2 class="page-title" data-i18n="page.tvTitle">Weather forecast</h2>
       </div>
       <p class="page-intro" data-i18n="page.tvIntro">The weather of the next days in every okres.</p>
+      <!-- shown while MeteoVerdict AI is the map's model: issue time and status -->
+      <p id="ai-info" class="ai-banner" hidden><span class="ai-badge" data-i18n="ai.badge">Experimental</span> <span id="ai-info-text"></span> <a href="compare.html" data-i18n="ai.compareLink">Compare with the models</a> · <a href="methodology.html" data-i18n="ai.methodLink">Methodology</a></p>
       <nav id="ribbon" class="strip attached" data-i18n-aria="tv.when">
         <div class="when">
           <div class="day-row">
@@ -65,6 +66,41 @@
           </details>
         </aside>
         <aside id="okres-panel" class="map-box panel" aria-live="polite"></aside>
+      </div>
+      <div id="ai-extras-block" hidden>
+        <!-- data/scores/ai/fc/verify/ (src/ai-verify-view.js): hidden until its index loads -->
+        <section id="ai-verify-section" class="ai-extras" hidden>
+          <h2 data-i18n="ai.verifyTitle">Forecast vs measured</h2>
+          <p id="ai-verify-intro" class="note"></p>
+          <form id="ai-verify-controls" class="strip standalone"></form>
+          <p id="ai-verify-legend" class="ai-verify-legend"></p>
+          <div id="ai-verify-chart" class="ai-verify-chart"></div>
+          <p id="ai-verify-mae" class="ai-verify-mae"></p>
+          <p id="ai-verify-stations" class="note"></p>
+        </section>
+        <!-- data/scores/ai/ai.json (src/ai-extras.js): hidden until it loads -->
+        <section id="ai-score-section" class="ai-extras" hidden>
+          <h2 data-i18n="ai.scoreTitle">MeteoVerdict AI vs our blend</h2>
+          <p id="ai-score-intro" class="note"></p>
+          <div id="ai-scores"></div>
+          <p class="note" data-i18n="ai.scoreExplain"></p>
+          <p id="ai-score-rule" class="note"></p>
+        </section>
+        <section id="ai-exp-section" class="ai-extras" hidden>
+          <h2 data-i18n="ai.expTitle">Experiments that work</h2>
+          <p class="note" data-i18n="ai.expIntro"></p>
+          <div id="ai-experiments" class="ai-experiments"></div>
+        </section>
+        <section id="ai-unverified-section" class="ai-extras" hidden>
+          <h2 data-i18n="ai.unverifiedTitle">Not yet verified</h2>
+          <p class="note" data-i18n="ai.unverifiedIntro"></p>
+          <div id="ai-unverified" class="ai-experiments"></div>
+        </section>
+        <section id="ai-testing-section" class="ai-extras" hidden>
+          <h2 data-i18n="ai.testingTitle">Under evaluation</h2>
+          <p class="note" data-i18n="ai.testingIntro"></p>
+          <div id="ai-testing" class="ai-experiments"></div>
+        </section>
       </div>
     </main>
     <footer data-footer="tv" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/methodology.md#our-own-forecast-roadmap-62-63">
