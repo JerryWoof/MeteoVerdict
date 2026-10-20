@@ -746,7 +746,7 @@ function update(change = {}, fromPlay = false) {
   }
   const { obec: _obec, ...rest } = change;
   state = { ...state, ...rest };
-  window.history.replaceState(null, "", viewHash(state));
+  window.history.replaceState(null, "", viewHash({ ...state, obec: panelObec }));
   const view = shownView();
   renderWhen(outlook);
   renderShow();
@@ -1028,6 +1028,16 @@ async function main() {
   addLayers();
   buildMarkers(outlook);
   update();
+  // a link to an obec ("#okres/obec", from the home page): its panel open, the map on it
+  if (state.okres && state.obec) {
+    const { okres, obec: name } = state;
+    const place = (await obceOf(okres))?.doc.places.find((p) => p.name === name);
+    if (place) {
+      if (mapModel !== COMBINED) await setMapModel(COMBINED);
+      update({ okres, obec: name });
+      goToObec(map, [place.lon, place.lat]);
+    }
+  }
   // test: the obce of the okresy in view, loaded once zoomed in, and the search above
   map.on("moveend", loadObceInView);
   loadObceInView();
