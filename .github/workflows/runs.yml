@@ -1,7 +1,8 @@
 name: Single runs
 
-# Every model run by run (roadmap: error by hours ahead), at the ~100 stations of
-# src/meteoverdict/data/run-stations.csv, H+1…H+120, all 19 models, every 00, 06, 12 and
+# Every model run by run (roadmap: error by hours ahead), at the stations of
+# src/meteoverdict/data/run-stations.csv (the bucket at all 297 temperature stations, the
+# API at the rule's 100), H+1…H+120, all 19 models, every 00, 06, 12 and
 # 18 UTC run (`mvd fetch-runs`; docs/data-sources.md#single-runs-mvd-fetch-runs):
 #
 # 1. Open-Meteo's open-data bucket on AWS (s3://openmeteo, CC BY 4.0, no API calls), every

@@ -1,0 +1,48 @@
+name: Single runs at added stations
+
+# One-off (and rerun until done): after the station subset grew (2026-10-20: every
+# temperature station, src/meteoverdict/data/run-stations.csv), read the model-runs of
+# the bucket's window that the month files store without the added stations again at
+# those stations only (`mvd runs-add-stations`; docs/data-sources.md#the-station-subset).
+# Open-Meteo's open-data bucket on AWS, no API calls. It shares the concurrency group of
+# runs.yml, so the two never write a month file at the same time.
+on:
+  workflow_dispatch:
+    inputs:
+      first:
+        description: "Oldest run to fill in (YYYY-MM-DDTHH; empty: the bucket's window)"
+        default: ""
+      max_minutes:
+        description: "Stop after this many minutes (rerun to continue)"
+        default: "330"
+
+permissions:
+  contents: write # release assets
+
+concurrency:
+  group: single-runs
+  cancel-in-progress: false
+
+jobs:
+  add:
+    name: Fill in the added stations
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+      - name: Install project
+        run: uv sync --frozen
+      - name: Add stations
+        run: |
+          args=(--github-release --max-minutes "$MAX_MINUTES")
+          if [ -n "$FIRST" ]; then args+=(--first "$FIRST"); fi
+          uv run --frozen mvd runs-add-stations "${args[@]}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FIRST: ${{ inputs.first }}
+          MAX_MINUTES: ${{ inputs.max_minutes || '330' }}

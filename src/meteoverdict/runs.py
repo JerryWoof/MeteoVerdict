@@ -199,14 +199,14 @@ def select_stations(
     """The station subset, by a fixed rule (docs/data-sources.md#the-station-subset):
 
     1. every okres (by code): of its active stations with the most of ``ELEMENTS`` at
-       10 minutes, the one closest to the okres's forecast point (``points``); an okres
-       none of whose stations measures temperature (``T``; Blansko) also gets the
-       station with temperature closest to its point, 100 m of height above or below the
-       median of its stations counted as 10 km, unless that one is chosen already
-       (``temperature``, beyond ``total``, so every okres has a temperature station);
+       10 minutes, the one closest to the okres's forecast point (``points``);
     2. every other full station (all three elements) above ``MOUNTAIN_M``;
     3. until ``total``: the full station farthest from all chosen ones, by distance
-       with 100 m of height counted as 10 km (spreads stations and elevations).
+       with 100 m of height counted as 10 km (spreads stations and elevations);
+    4. beyond ``total``: every other active station that measures temperature (``T`` at
+       10 minutes; ``temperature``, since 2026-10-20), so every temperature station has
+       the single runs. Only steps 1-3 are asked from the API (``api_stations``); the
+       bucket, which costs no quota, is read at all.
 
     Ties go to the lower id, so the same inputs always give the same subset.
     """
@@ -232,26 +232,6 @@ def select_stations(
             continue
         best = min(here, key=lambda r: (-r["elements"], _km(lat, lon, r["lat"], r["lon"]), r["id"]))
         chosen[best["id"]] = "okres"
-    no_t = []
-    for code, _name, lat, lon in points.sort("code").select("code", "name", "lat", "lon").rows():
-        here = [r for r in rows.values() if r["okres_code"] == code]
-        if here and not any(r["id"] in with_t for r in here):
-            heights = sorted(r["elevation"] for r in here if r["elevation"] is not None)
-            no_t.append((lat, lon, heights[len(heights) // 2] if heights else None))
-    extra = 0
-    for lat, lon, median in no_t:
-
-        def cost(r: dict, lat=lat, lon=lon, median=median) -> float:
-            dz = abs((r["elevation"] or 0) - median) * KM_PER_M if median is not None else 0
-            return math.hypot(_km(lat, lon, r["lat"], r["lon"]), dz)
-
-        t_rows = [r for r in rows.values() if r["id"] in with_t]
-        if t_rows:
-            pick = min(t_rows, key=lambda r: (cost(r), r["id"]))
-            if pick["id"] not in chosen:
-                chosen[pick["id"]] = "temperature"
-                extra += 1
-    total += extra
     full = [r for r in rows.values() if r["elements"] == len(ELEMENTS)]
     mountains = sorted(
         (r for r in full if (r["elevation"] or 0) > MOUNTAIN_M and r["id"] not in chosen),
@@ -277,6 +257,9 @@ def select_stations(
         del nearest[pick]
         for i in nearest:
             nearest[i] = min(nearest[i], distance(rows[i], rows[pick]))
+    for r in rows.values():
+        if r["id"] in with_t and r["id"] not in chosen:
+            chosen[r["id"]] = "temperature"
     order = {station: n for n, station in enumerate(chosen)}
     columns = ["id", "name", "lat", "lon", "elevation", "okres_code", "okres", "kraj_code"]
     return (
@@ -288,6 +271,15 @@ def select_stations(
         .sort("_order")
         .select(*columns, "elevation_class", "elements", "reason")
     )
+
+
+def api_stations(stations: pl.DataFrame) -> pl.DataFrame:
+    """The stations the Single Runs API is asked at: the rule's ``TOTAL_STATIONS`` (steps
+    1-3 of ``select_stations``), not the further temperature stations, which come from
+    the bucket only (a run of all models at all ~300 would cost three times the calls)."""
+    if "reason" not in stations.columns:
+        return stations
+    return stations.filter(pl.col("reason") != "temperature")
 
 
 def load_stations(path: Path | None = None) -> pl.DataFrame:

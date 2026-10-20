@@ -1026,6 +1026,134 @@ def collect(
     return result
 
 
+@dataclass
+class Added:
+    """What ``add_stations`` did: per month the model-runs filled in, rows and the
+    model-runs the bucket no longer has (or not complete) at the added stations."""
+
+    filled: dict[str, int] = field(default_factory=dict)
+    rows: dict[str, int] = field(default_factory=dict)
+    skipped: dict[str, int] = field(default_factory=dict)
+    failed: dict[str, str] = field(default_factory=dict)
+    stopped: str = ""
+
+
+def _present(path: Path) -> pl.DataFrame:
+    """``run``, ``model``, ``source`` and the ``stations`` of every stored model-run."""
+    return (
+        pl.scan_parquet(path)
+        .group_by("run", "model")
+        .agg(pl.col("source").first(), pl.col("station_id").unique().alias("stations"))
+        .collect()
+    )
+
+
+def add_stations(
+    bucket: Bucket,
+    stations: pl.DataFrame,
+    models: list[Model],
+    data_dir: Path,
+    now: datetime,
+    cells: pl.DataFrame | None = None,
+    sync: runs.RunsSync | None = None,
+    first: datetime | None = None,
+    max_minutes: float = 330,
+    threads: int = 96,
+    parallel_models: int = 8,
+    log: Callable[[str], None] = lambda _: None,
+    clock: Callable[[], float] = time.monotonic,
+) -> Added:
+    """Fill in the stations of ``stations`` that stored model-runs lack, after the
+    station subset grew (2026-10-20: every temperature station): every model-run of the
+    bucket's window (from ``first`` if later) that was stored from the bucket is read
+    again at its missing stations only and merged by run, model and station, so the
+    stored stations' rows stay as they are. Newest month first, newest run first; each
+    month file is pulled again just before it is written and pushed, so a schedule of
+    ``runs.yml`` that wrote it meanwhile is kept (the workflow shares its concurrency
+    group anyway). Model-runs from the API are not in the bucket and stay without the
+    added stations. Resumable: a month already complete costs one scan."""
+    cells = load_cells() if cells is None else cells
+    catalogue = {m.id: m for m in models}
+    wanted = set(stations["id"])
+    window = [r for r in runs.bucket_runs(now) if first is None or r >= first]
+    months = sorted({f"{r:%Y-%m}" for r in window}, reverse=True)
+    result, start = Added(), clock()
+    with ThreadPoolExecutor(threads) as pool, ThreadPoolExecutor(parallel_models) as outer:
+        for month in months:
+            if sync:
+                sync.pull([month])
+            path = data_dir / "runs" / f"{month}.parquet"
+            if not path.exists():
+                continue
+            present = _present(path)
+            todo = []
+            for run, model_id, source, have in present.sort("run", descending=True).rows():
+                if source != "bucket" or model_id not in catalogue:
+                    continue
+                if run < window[-1] or run > window[0]:
+                    continue
+                missing = sorted(wanted - set(have))
+                if missing:
+                    todo.append((run, model_id, missing))
+            log(f"{month}: {len(todo)} model-runs lack some of the {len(wanted)} stations")
+            frames, done = [], 0
+            for i in range(0, len(todo), parallel_models * 4):
+                if clock() - start > max_minutes * 60:
+                    result.stopped = f"time limit of {max_minutes:g} minutes reached"
+                    break
+                chunk = todo[i : i + parallel_models * 4]
+                jobs = [
+                    (
+                        run,
+                        model_id,
+                        outer.submit(
+                            read_run,
+                            bucket,
+                            catalogue[model_id],
+                            run,
+                            stations.filter(pl.col("id").is_in(missing)),
+                            cells,
+                            pool,
+                            extra=True,
+                        ),
+                    )
+                    for run, model_id, missing in chunk
+                ]
+                for run, model_id, job in jobs:
+                    try:
+                        fetched = job.result()
+                    except Exception as exc:  # network trouble after the retries: next time
+                        result.failed[f"{runs.key(run)} {model_id}"] = (
+                            f"{type(exc).__name__}: {exc}"[:300]
+                        )
+                        continue
+                    if fetched.rows is None:
+                        result.skipped[month] = result.skipped.get(month, 0) + 1
+                    else:
+                        frames.append(fetched.rows)
+                        done += 1
+                if (i // (parallel_models * 4)) % 25 == 0:
+                    log(f"{month}: {done} of {len(todo)} model-runs read")
+            if frames:
+                table = pl.concat(frames, how="diagonal_relaxed")
+                if sync:
+                    sync.pull([month])  # the newest release, if a schedule wrote it meanwhile
+                partitions.write_monthly(
+                    table,
+                    data_dir / "runs",
+                    runs.KEYS,
+                    "run",
+                    replace=["run", "model", "station_id"],
+                )
+                if sync:
+                    sync.push([month])
+                result.filled[month], result.rows[month] = done, table.height
+                log(f"{month}: {done} model-runs filled in, {table.height:,} rows")
+            if result.stopped:
+                break
+    return result
+
+
 def summary(result: Result) -> str:
     """Markdown lines for the job summary."""
     stored = sum(len(v) for v in result.stored.values())
