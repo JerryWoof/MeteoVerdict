@@ -249,8 +249,14 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
       panel.replaceChildren();
       return;
     }
-    panel.classList.add("past");
     const info = view.okresy.find((o) => o.code === state.okres);
+    // an okres code the day does not know (a mistyped or old link): no empty panel
+    if (!info && !view.loading && !view.failed && view.okresy.length) {
+      panel.replaceChildren();
+      queueMicrotask(() => update({ okres: null }));
+      return;
+    }
+    panel.classList.add("past");
     const close = element("button", "×", "close");
     close.type = "button";
     close.setAttribute("aria-label", t("chart.close"));
