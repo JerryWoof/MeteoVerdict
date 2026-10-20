@@ -298,8 +298,10 @@ function fillMapTools() {
     syncModelHash();
     applyKindsColour();
   });
+  // coloured by error: the map waits for the error file instead of drawing every station first
+  // (they would blink away when the filter applies)
   applyKindsColour();
-  applyFilter();
+  if (!models.state.err) applyFilter();
 }
 
 /** Show the parts of the page of a view: the measured map or the kinds map. */
