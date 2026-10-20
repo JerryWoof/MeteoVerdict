@@ -6,6 +6,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 // MapLibre's ES module build loads its worker from a separate file
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 
+import { panelRoom } from "./panel-room.js";
 import { colorExpression, nearestStation, stationFeatures } from "./station-map.js";
 
 setWorkerUrl(workerUrl);
@@ -187,12 +188,14 @@ export function createStationMap({ container, t, onPick, describe }) {
 
   // the whole country stays in view while the map changes size, until someone moves it
   let keepFit = false;
+  let right = 10; // room kept on the right for an open panel
+  const fit = (duration = 0) => map.fitBounds(BOUNDS, { padding: { top: 10, bottom: 10, left: 10, right }, duration });
   map.on("movestart", (event) => {
     if (event.originalEvent) keepFit = false;
   });
   new ResizeObserver(() => {
     map.resize();
-    if (keepFit) map.fitBounds(BOUNDS, { padding: 10, duration: 0 });
+    if (keepFit) fit();
   }).observe(container);
 
   return {
@@ -225,8 +228,20 @@ export function createStationMap({ container, t, onPick, describe }) {
     /** The whole country, kept in view on resizes until someone moves the map. */
     fitAll() {
       map.resize();
-      map.fitBounds(BOUNDS, { padding: 10, duration: 0 });
+      fit();
       keepFit = true;
+    },
+    /** Room for an open panel on wide screens: the whole country glides beside it (only while
+     * it is in view; a map someone has moved or zoomed stays where it is). */
+    fitBeside(open) {
+      const next = open && window.innerWidth > 900 ? panelRoom() : 10;
+      if (next === right) return;
+      right = next;
+      if (!keepFit) return;
+      requestAnimationFrame(() => {
+        map.resize();
+        fit(400);
+      });
     },
     ready,
     map,

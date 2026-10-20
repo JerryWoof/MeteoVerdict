@@ -2395,7 +2395,7 @@ body.radar #show-box {
   background: var(--paper);
 }
 .station-top.browse .station-map {
-  height: clamp(320px, 62vh, 640px);
+  height: var(--map-height);
 }
 /* from the keyboard: a cross marks the middle, where Enter picks the nearest station */
 .station-map.keyboard::after {
