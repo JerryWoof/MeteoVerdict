@@ -11,7 +11,8 @@ import * as Plot from "@observablehq/plot";
 
 export const AI = "ai";
 export const BLEND = "blend";
-export const DEFAULT_MODEL = AI;
+// the blend: MeteoVerdict AI publishes no station values yet (the page says so when it is chosen)
+export const DEFAULT_MODEL = BLEND;
 export const DEFAULT_LEAD = 1;
 export const LEADS = [1, 2];
 /** The values of the files, in the order of the selector: key, decimals, unit. */
@@ -25,6 +26,8 @@ export const VARIABLES = [
 
 /** The values of the map's model-error colouring (the per-day files of `mvd station-fc`). */
 export const ERROR_VARS = ["tmax", "tmin", "r", "wind"];
+/** The map's dots start coloured by the model's error of the day's maximum ("none" in the hash: the measured values). */
+export const DEFAULT_ERR = "tmax";
 
 /** The single models in the order of the selector (others follow alphabetically). */
 const MODEL_ORDER = [
@@ -39,13 +42,14 @@ const SUFFIX = /;m=([a-z0-9_]+)(?:;l=(\d))?(?:;e=([a-z]+))?$/;
 
 /** "#day/…;m=dwd_icon_d2;l=2;e=tmax" → {hash: "#day/…", model, lead, err}; without the suffix
  * the choice of the page is left as it is (`model`/`lead` null); `err` (the map coloured by
- * that value's model error) only when given. */
+ * that value's model error; null for "none") only when given. */
 export function splitModelHash(hash) {
   const text = hash ?? "";
   const m = SUFFIX.exec(text);
   if (!m) return { hash: text, model: null, lead: null };
   const lead = Number(m[2] ?? DEFAULT_LEAD);
   const out = { hash: text.slice(0, m.index), model: m[1], lead: LEADS.includes(lead) ? lead : DEFAULT_LEAD };
+  if (m[3] === "none") return { ...out, err: null };
   return ERROR_VARS.includes(m[3]) ? { ...out, err: m[3] } : out;
 }
 
@@ -53,10 +57,10 @@ export function splitModelHash(hash) {
 export function withModelHash(hash, { model, lead, err }) {
   const base = splitModelHash(hash).hash || "#";
   const parts = [];
-  if (model !== DEFAULT_MODEL || lead !== DEFAULT_LEAD || err) {
+  if (model !== DEFAULT_MODEL || lead !== DEFAULT_LEAD || (err ?? null) !== DEFAULT_ERR) {
     parts.push(`;m=${model}`);
     if (lead !== DEFAULT_LEAD) parts.push(`;l=${lead}`);
-    if (err) parts.push(`;e=${err}`);
+    if ((err ?? null) !== DEFAULT_ERR) parts.push(`;e=${err ?? "none"}`);
   }
   return `${base}${parts.join("")}`;
 }
@@ -144,7 +148,7 @@ export function createModelCompare({ getJson, t, language }) {
   const loadErrors = (day) => once(`e|${day}`, () => getJson(`data/scores/station-fc/err-${day}.json`));
 
   // `err`: the value whose model error colours the map's dots (null: the measured values)
-  const state = { model: DEFAULT_MODEL, lead: DEFAULT_LEAD, key: "tmax", err: null };
+  const state = { model: DEFAULT_MODEL, lead: DEFAULT_LEAD, key: "tmax", err: DEFAULT_ERR };
   const fmt = (v, digits = 1) =>
     v == null ? "–" : v.toLocaleString(language, { minimumFractionDigits: digits, maximumFractionDigits: digits });
   const signed = (v, digits = 1) => (v == null ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmt(Math.abs(v), digits)}`);
