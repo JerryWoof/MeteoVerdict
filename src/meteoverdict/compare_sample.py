@@ -14,9 +14,11 @@ Entry (``entry``): ``days``, ``dates`` (first, last), ``stations``, ``hours`` (s
 values of one series), ``small_sample``, ``clear_winner`` and ``series``: one object
 per series, best first: ``id``, ``kind`` (``model``, ``mean``, ``outlook``, ``ai``),
 ``mae``, ``diff`` (MAE minus the best's) with ``low`` and ``high`` (95 % interval),
-``p_best``, ``tied`` (not shown to be worse than the best), ``vs_outlook`` (minus our
-combination: ``diff``, ``low``, ``high``, Diebold-Mariano ``p``) and ``daily`` (MAE per date,
-null where the series has no value).
+``p_best``, ``tied`` (not shown to be worse than the best), ``vs_outlook`` and ``vs_ai``
+(minus our combination, minus the AI: ``diff``, ``low``, ``high``, Diebold-Mariano ``p`` and
+``p_lower``, the share of resamples where the series has the lower MAE; null for the reference
+itself and in regions without the AI) and ``daily`` (MAE per date, null where the series has no
+value).
 """
 
 from __future__ import annotations
@@ -71,13 +73,16 @@ def entry(
         order, diff = np.array([0]), np.array([0.0])
         bounds, p_best, tied = np.zeros((2, 1)), np.ones(1), np.array([False])
     mae = a.sum(axis=0) / m.sum(axis=0)
-    versus = _versus(a, m, names, key, resamples, seed)
+    versus = _versus(a, m, names, OUTLOOK, key + "|vs", resamples, seed)
+    ai = next((n_ for n_ in names if kinds.get(n_) == "ai"), None)
+    versus_ai = _versus(a, m, names, ai, key + "|ai", resamples, seed) if ai else {}
     daily = np.where(m > 0, a / np.where(m > 0, m, 1), np.nan)
     series = [
         {
             "id": names[i], "kind": kinds.get(names[i], "model"), "mae": _round(mae[i]),
             "diff": _round(diff[i]), "low": _round(bounds[0][i]), "high": _round(bounds[1][i]),
             "p_best": _round(p_best[i]), "tied": bool(tied[i]), "vs_outlook": versus.get(names[i]),
+            "vs_ai": versus_ai.get(names[i]),
             "daily": [_round(v, 2) for v in daily[:, i]],
         }
         for i in order
@@ -96,15 +101,22 @@ def entry(
 
 
 def _versus(
-    a: np.ndarray, m: np.ndarray, names: list[str], key: str, resamples: int, seed: int
+    a: np.ndarray,
+    m: np.ndarray,
+    names: list[str],
+    reference: str | None,
+    key: str,
+    resamples: int,
+    seed: int,
 ) -> dict[str, dict]:
-    """Every series minus our combination (the Outlook blend): the MAE difference with
-    its block-bootstrap interval and the Diebold-Mariano p-value (negative: better than
-    the Outlook blend). Empty without the combination or with fewer than 3 days."""
-    if OUTLOOK not in names or a.shape[0] < 3:
+    """Every series minus the ``reference`` series (our combination, the Outlook blend, or
+    the AI): the MAE difference with its block-bootstrap interval and the Diebold-Mariano
+    p-value (negative: better than the reference). Empty without the reference or with
+    fewer than 3 days."""
+    if reference not in names or a.shape[0] < 3:
         return {}
-    ref = names.index(OUTLOOK)
-    rng = np.random.default_rng([seed, zlib.crc32((key + "|vs").encode())])
+    ref = names.index(reference)
+    rng = np.random.default_rng([seed, zlib.crc32(key.encode())])
     boot = ranking.resampled_mae(a, m, rng, resamples)
     diffs = boot - boot[:, [ref]]
     tail = (1 - ranking.CONFIDENCE) / 2
@@ -117,6 +129,7 @@ def _versus(
             "low": _round(low[i]),
             "high": _round(high[i]),
             "p": _round(p[i], 4),
+            "p_lower": _round((diffs[:, i] < 0).mean(), 3),
         }
         for i, name in enumerate(names)
         if i != ref

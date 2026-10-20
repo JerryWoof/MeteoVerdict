@@ -2,8 +2,8 @@
 import * as Plot from "@observablehq/plot";
 
 import {
-  SOURCES, LEADS, VARIABLES, aiStatus, aiVerdict, compareRows, dailyRows, defaultSeries, entryKey, formatView, hasAi,
-  parseView, regionGroups,
+  SOURCES, LEADS, VARIABLES, aiStatus, aiVersus, availableModels, bestModel, dailyRows, entryKey, formatView, hasAi,
+  opponentSeries, parseView, regionGroups, seriesOf,
 } from "./compare-ai.js";
 import { displayName } from "./tv.js";
 
@@ -70,9 +70,36 @@ export async function setUpAiCompare(t, names, language) {
   const query = new URLSearchParams(window.location.search).get("cmp");
   const view = parseView(query, valIndex?.regions);
   if (view.sample === "live" && !liveIndex) view.sample = "validation";
+  const modelName = (id) => names[id] ?? valIndex?.models?.[id] ?? id;
+  let bestId = null;
   const label = (id, kind) =>
     kind === "ai" ? t("aic.ai") : kind === "outlook" ? t("aic.outlook") : kind === "mean" ? t("model.blend")
-      : t("aic.bestModel", { name: names[id] ?? valIndex?.models?.[id] ?? id });
+      : id === bestId && view.opponent === "best" ? t("aic.bestModel", { name: modelName(id) }) : modelName(id);
+  const opponentName = (entry) => {
+    const opp = opponentSeries(entry, view.opponent);
+    return view.opponent === "best" && opp ? t("aic.bestModel", { name: modelName(opp.id) }) : label(opp.id, opp.kind);
+  };
+
+  /** Fills the opponent menu; a model the AI shares too few hours with here is greyed out. */
+  function fillOpponents(entry) {
+    const have = new Set(availableModels(entry));
+    const option = (value, text, disabled = false) => Object.assign(el("option", text), { value, selected: value === view.opponent, disabled });
+    const group = (text, items) => {
+      const g = document.createElement("optgroup");
+      g.label = text;
+      g.append(...items);
+      return g;
+    };
+    const best = bestModel(entry);
+    const summaries = [
+      option("outlook", t("aic.outlook")), option("mean", t("model.blend")),
+      option("best", t("aic.opp.best") + (best ? ` (${modelName(best.id)})` : ""), !best),
+    ];
+    const all = [...new Set([...Object.keys(valIndex?.models ?? {}), ...have])]
+      .sort((x, y) => modelName(x).localeCompare(modelName(y), language));
+    const models = all.map((id) => option(id, have.has(id) ? modelName(id) : `${modelName(id)} (${t("aic.opp.few")})`, !have.has(id)));
+    document.getElementById("aic-opponent").replaceChildren(group(t("aic.opp.group"), summaries), group(t("aic.opp.models"), models));
+  }
 
   function fillRegions(index) {
     const groups = regionGroups(index, language);
@@ -106,6 +133,15 @@ export async function setUpAiCompare(t, names, language) {
   async function render() {
     const index = view.sample === "live" ? liveIndex : valIndex;
     fillRegions(valIndex ?? liveIndex);
+    const doc = await load(view.sample, `${view.region}.json`);
+    const entry = doc?.entries?.[entryKey(view.variable, view.lead)];
+    bestId = bestModel(entry)?.id ?? null;
+    let gone = false;
+    if (entry && !opponentSeries(entry, view.opponent)) {
+      view.opponent = "outlook";
+      gone = true;
+    }
+    if (entry) fillOpponents(entry);
     fillSelect("aic-variable", VARIABLES.map((v) => [v, t(`variable.${v}`)]), view.variable);
     fillSelect("aic-lead", LEADS.map((l) => [l, `D+${l}`]), view.lead);
     fillSelect("aic-sample", [
@@ -115,10 +151,8 @@ export async function setUpAiCompare(t, names, language) {
     document.getElementById("aic-sample").querySelector('[value="live"]').disabled = !liveIndex;
     banner(index);
     document.getElementById("aic-region-note").hidden = false;
-    const doc = await load(view.sample, `${view.region}.json`);
-    const entry = doc?.entries?.[entryKey(view.variable, view.lead)];
     const unit = valIndex?.units?.[view.variable] ?? "";
-    renderVerdict(entry, unit);
+    renderVerdict(entry, unit, gone);
     renderTable(entry, unit);
     renderChart(entry, unit);
     const url = new URL(window.location.href);
@@ -126,7 +160,7 @@ export async function setUpAiCompare(t, names, language) {
     window.history.replaceState(null, "", url);
   }
 
-  function renderVerdict(entry, unit) {
+  function renderVerdict(entry, unit, gone) {
     const node = document.getElementById("aic-verdict");
     const note = document.getElementById("aic-sample-note");
     if (!entry || !hasAi(entry)) {
@@ -135,23 +169,27 @@ export async function setUpAiCompare(t, names, language) {
       note.textContent = "";
       return;
     }
-    const v = aiVerdict(entry);
+    const v = aiVersus(entry, view.opponent);
+    const name = opponentName(entry);
     const provisional = entry.small_sample || view.sample === "validation" || !status.verified;
     node.className = `aic-verdict ${v?.verdict ?? "none"}`;
     const head = el("div", null, "aic-headline");
-    head.append(el("strong", t(v ? `aic.verdict.${v.verdict}` : "aic.noVs")));
+    head.append(el("strong", v ? t(`aic.verdict.${v.verdict ?? "none"}Vs`, { name }) : t("aic.noVs")));
     const lines = [head];
     if (v) {
-      const blend = entry.series.find((s) => s.kind === "outlook");
       const numbers = el("div", null, "aic-numbers");
-      for (const [name, value] of [[t("aic.ai"), v.mae], [t("aic.outlook"), blend?.mae]]) {
+      for (const [text, value] of [[t("aic.ai"), v.ai.mae], [name, v.opponent.mae]]) {
         const box = el("div");
-        box.append(el("span", fmt(value), "big"), el("span", `${unit} · ${name}`, "label"));
+        box.append(el("span", fmt(value), "big"), el("span", `${unit} · ${text}`, "label"));
         numbers.append(box);
       }
       lines.push(numbers);
-      lines.push(el("div", t("aic.verdictDetail", { diff: fmt(v.diff, true), low: fmt(v.low, true), high: fmt(v.high, true), unit }), "detail"));
+      lines.push(el("div", v.verdict
+        ? t("aic.verdictDetailVs", { name, diff: fmt(v.diff, true), low: fmt(v.low, true), high: fmt(v.high, true), unit })
+        : t("aic.verdictDetailNoInt", { name, diff: fmt(v.diff, true), unit }) + " " + t("aic.noInterval"), "detail"));
+      if (v.pAiBetter != null) lines.push(el("div", t("aic.pAiBetter", { p: Math.round(v.pAiBetter * 100) }), "detail"));
     }
+    if (gone) lines.push(el("div", t("aic.opp.gone"), "tag"));
     if (provisional) lines.push(el("div", t("aic.provisionalTag"), "tag"));
     node.replaceChildren(...lines);
     note.textContent = t("aic.sampleNote", {
@@ -161,6 +199,13 @@ export async function setUpAiCompare(t, names, language) {
       + (entry.stations != null && entry.stations < 5 ? " " + t("aic.fewStations", { stations: entry.stations }) : "");
   }
 
+  /** The rows: the AI, the chosen opponent, then our blend, the mean and the best model (no repeats). */
+  function tableRows(entry) {
+    const ai = seriesOf(entry).find((s) => s.kind === "ai");
+    const rows = [ai, opponentSeries(entry, view.opponent), opponentSeries(entry, "outlook"), opponentSeries(entry, "mean"), bestModel(entry)];
+    return [...new Set(rows.filter(Boolean))];
+  }
+
   function renderTable(entry, unit) {
     const table = document.getElementById("aic-table");
     if (!entry || !hasAi(entry)) {
@@ -168,18 +213,19 @@ export async function setUpAiCompare(t, names, language) {
       return;
     }
     const head = el("tr");
-    for (const key of ["aic.col.name", "aic.col.mae", "aic.col.diff"]) head.append(el("th", t(key, { unit })));
-    const body = compareRows(entry).map((r) => {
-      const tr = el("tr", null, r.kind);
+    for (const key of ["aic.col.name", "aic.col.mae", "aic.col.pbest", "aic.col.diff"]) head.append(el("th", t(key, { unit })));
+    const chosen = opponentSeries(entry, view.opponent);
+    const body = tableRows(entry).map((r) => {
+      const tr = el("tr", null, `${r.kind}${r === chosen ? " selected" : ""}`);
       const name = el("td");
       name.append(el("strong", label(r.id, r.kind)));
       if (r.kind === "ai") name.append(el("span", t("aic.badge.ai"), "badge provisional"));
+      if (r === chosen) name.append(el("span", t("aic.selected"), "badge"));
       let diff = "–";
-      if (r.relation) {
-        const { diff: d, low, high, verdict } = r.relation;
-        diff = `${t(`aic.rel.${verdict}`)}: ${fmt(d, true)} [${fmt(low, true)}; ${fmt(high, true)}]`;
-      }
-      tr.append(name, el("td", fmt(r.mae)), el("td", r.kind === "outlook" ? t("aic.reference") : diff));
+      const v = r.kind === "ai" ? null : aiVersus(entry, r.kind === "model" ? r.id : r.kind);
+      if (v?.verdict) diff = `${t(`aic.rel.${v.verdict}`)}: ${fmt(v.diff, true)} [${fmt(v.low, true)}; ${fmt(v.high, true)}]`;
+      else if (v) diff = fmt(v.diff, true);
+      tr.append(name, el("td", fmt(r.mae)), el("td", r.p_best == null ? "–" : `${Math.round(r.p_best * 100)} %`), el("td", diff));
       return tr;
     });
     table.replaceChildren(el("thead"), el("tbody"));
@@ -193,7 +239,7 @@ export async function setUpAiCompare(t, names, language) {
       target.replaceChildren(el("p", t("aic.noChart")));
       return;
     }
-    const ids = defaultSeries(entry);
+    const ids = tableRows(entry).map((r) => r.id);
     const data = dailyRows(entry, ids);
     const kinds = Object.fromEntries(entry.series.map((s) => [s.id, s.kind]));
     const names2 = ids.map((id) => label(id, kinds[id]));
@@ -213,7 +259,7 @@ export async function setUpAiCompare(t, names, language) {
   }
 
   for (const [id, key, parse] of [
-    ["aic-region", "region", String], ["aic-variable", "variable", String],
+    ["aic-opponent", "opponent", String], ["aic-region", "region", String], ["aic-variable", "variable", String],
     ["aic-lead", "lead", Number], ["aic-sample", "sample", String],
   ]) {
     document.getElementById(id).addEventListener("change", (event) => {
