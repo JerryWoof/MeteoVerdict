@@ -70,16 +70,16 @@ export function farmGrid(doc, event, threshold) {
   return { bins, models, cells, perBin };
 }
 
-/** "0.42", "-0.05", "–" (two decimals, English format). */
-export function score(value) {
+/** "0.42", "-0.05", "–" (two decimals; "0,42" with `language` "cs"). */
+export function score(value, language = "en-US") {
   if (value == null || Number.isNaN(value)) return "–";
   const shown = Math.abs(value) < 0.005 ? 0 : value; // no "-0.00"
-  return shown.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return shown.toLocaleString(language, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** Counts with English thousands separators: 12,345. */
-export function count(value) {
-  return value == null ? "–" : value.toLocaleString("en-US");
+/** Counts with thousands separators: 12,345 (12 345 with `language` "cs"). */
+export function count(value, language = "en-US") {
+  return value == null ? "–" : value.toLocaleString(language);
 }
 
 /** "H+13–24" */

@@ -7,13 +7,13 @@ import "./style.css";
 
 import {
   BLEND_TEST_SERIES, BLEND_TEST_VARIABLES, HOME_MODEL, biasByElevation, blendTestLines, blendTestRows, blendTestVariable,
-  blendVerdict, blendVerdicts, fmt, okresVerdictCounts, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
+  blendVerdict, blendVerdicts, fmt as fmtIn, okresVerdictCounts, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
   leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, singleModelVerdicts, unpublishedHours,
   RANK_BY, STATION_SETS, hasValues, sortByEts,
   BAND_RANK_BY, BAND_VARIABLES, BAND_WINDOWS, LEAD_BANDS, LEAD_DAYS, bandBasis, bandRecords, bandSets, bandVariable,
   bandsIn, dayVariable, defaultLead, isBand, krajOf, leadLabel, maeByBand, parseLead,
 } from "./compare.js";
-import { binLabel, count, etsColor, etsTextColor, farmChoices, farmGrid, plain, score } from "./farm.js";
+import { binLabel, count as countIn, etsColor, etsTextColor, farmChoices, farmGrid, plain, score as scoreIn } from "./farm.js";
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
@@ -24,6 +24,11 @@ import {
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
+// numbers in the page language ("1,18" and "4 574" in Czech)
+const LANGUAGE = document.documentElement.lang || "en";
+const fmt = (value, signed) => fmtIn(value, signed, LANGUAGE);
+const count = (value) => countIn(value, LANGUAGE);
+const score = (value) => scoreIn(value, LANGUAGE);
 
 async function getJson(path) {
   try {
