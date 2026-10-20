@@ -12,6 +12,9 @@ export const AI_URL = "data/scores/ai/ai-forecast.json";
 /** Older than this (hours since issue): not offered. The daily run is ~every 24 h. */
 export const MAX_AGE_HOURS = 36;
 const AI_VARIABLES = ["temperature_2m", "wind_speed_10m"];
+// what the AI does not forecast: taken from our blend (labelled "z blendu" on the pages)
+const BLEND_VARIABLES = ["precipitation", "cloud_cover", "sunshine_duration"];
+const BLEND_FIELDS = ["precipitation", "cloud", "sunshine", "symbol", "gust", "gust_over_threshold"];
 
 /**
  * The AI forecast file → {issued (ISO), okresy: {code: {times: [ms], temperature_2m,
@@ -59,6 +62,11 @@ export function withAi(parsed, ai, code) {
     if (own[variable]) series[variable] = parsed.times.map((t) => (at.has(t) ? own[variable][at.get(t)] : null));
   }
   if (!series.temperature_2m.some((v) => v != null)) return parsed;
+  // rain, cloud and sunshine from the blend, on the hours the AI covers
+  for (const variable of BLEND_VARIABLES) {
+    const blend = parsed.combined?.[variable];
+    if (blend?.some((v) => v != null)) series[variable] = blend.map((v, i) => (series.temperature_2m[i] != null ? v : null));
+  }
   return { ...parsed, models: { ...parsed.models, [AI_MODEL]: series }, aiIssued: ai.issued };
 }
 
@@ -85,13 +93,14 @@ export function aiMapView(ai, outlook) {
       const sunTimes = sun ? { sunrise: sun.sunrise, sunset: sun.sunset } : {};
       for (const part of [...PARTS, "day"]) {
         const p = periods.get(`${day}|${part}`);
-        // an okres the AI has no forecast for shows our blend's row (rain in mm, as the AI's),
+        const blend = outlook.rows.get(`${o.code}|${day}|${part}`);
+        const fill = blend ? Object.fromEntries(BLEND_FIELDS.map((f) => [f, blend[f] ?? null])) : {};
+        // an okres the AI has no forecast for shows our blend's row whole (same look, rain in mm),
         // so the map has no gaps; a period beyond the AI's hours stays "–"
-        const blend = own ? null : outlook.rows.get(`${o.code}|${day}|${part}`);
         rows.set(`${o.code}|${day}|${part}`, p
-          ? { ...EMPTY, ...p, single: true, ...sunTimes }
-          : blend
-            ? { ...blend, single: true, fromBlend: true }
+          ? { ...EMPTY, ...p, ...fill, single: true, ...sunTimes }
+          : !own && blend
+            ? { ...blend, single: true }
             : { ...EMPTY, rain_probability: null, single: true, beyond: true, ...sunTimes });
       }
     }
