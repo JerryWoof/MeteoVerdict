@@ -11,7 +11,7 @@ and CSV files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
 | `api/v1/okresy/{code}.json` | everything for one okres (below) |
 | `api/v1/okresy/{code}.csv` | the hourly forecast: `time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration,temperature_2m_lo,temperature_2m_hi` |
 | `api/v1/ai/okresy/{code}.json` | the same forecast with temperature and wind from the MeteoVerdict AI (**experimental**, below) |
-| `api/v1/obce/{okres}/{id}.json` | the forecast of one obec (village or town), **a test** (below) |
+| `api/v1/obce/{okres}/{id}.json` | the forecast of one obec (village or town) (below) |
 | `api/v1/ai/obce/{okres}/{id}.json` | the same with MeteoVerdict AI's obec forecast (`model: "ai"`), on the axis and parts of `ai/okresy/{okres}.json`; same ids |
 | `api/v1/obce/index.json` | every obec as `[okres, id, name, lat, lon]` |
 
@@ -94,7 +94,7 @@ The files are only written when the AI files (`data/scores/ai/`) are in the buil
 The thresholds (`gust_over_threshold`, `frost`, `ground_frost`, `heavy_rain`) are ours,
 **not official warnings** (the `notice` in the file is unchanged).
 
-## The obec files (a test)
+## The obec files
 
 `api/v1/obce/{okres}/{id}.json`: the combined forecast of one obec (`okres` is the code
 as above, `id` a name in lowercase ASCII with dashes: `bila-tremesna`; two obce of the
