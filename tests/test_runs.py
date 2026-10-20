@@ -112,7 +112,10 @@ def budget(calls=10_000):
 
 def test_committed_subset_covers_every_okres():
     subset = runs.load_stations()
-    assert subset.height == runs.TOTAL_STATIONS
+    # the rule's 100, plus a temperature station for each okres without one (Blansko)
+    extra = subset.filter(pl.col("reason") == "temperature")
+    assert extra["name"].to_list() == ["Tišnov, Hájek"]
+    assert subset.height == runs.TOTAL_STATIONS + extra.height
     assert subset["id"].n_unique() == subset.height
     assert subset["okres_code"].n_unique() == 77
     assert subset.filter(pl.col("reason") == "okres").height == 77
@@ -172,6 +175,34 @@ def test_select_stations_rule():
     assert subset["id"].to_list() == ["near", "rain", "low1", "peak", "far"]
     assert subset["reason"].to_list() == ["okres", "okres", "okres", "mountain", "spread"]
     assert subset.equals(runs.select_stations(stations, meta2, points, total=5))
+
+
+def test_an_okres_without_temperature_also_gets_the_nearest_temperature_station():
+    # B (Blansko) has only a rain gauge: it also gets the temperature station nearest
+    # to its point, height from the median of its stations counted 100 m = 10 km
+    stations = pl.DataFrame(
+        {
+            "id": ["a1", "rain", "high", "level"],
+            "name": list("abcd"),
+            "lat": [50.0, 49.0, 49.10, 49.12],
+            "lon": [14.0, 16.0, 16.0, 16.0],
+            "elevation": [300.0, 400.0, 700.0, 420.0],
+            "active": [True] * 4,
+            "okres_code": ["A", "B", "A", "A"],
+            "okres": ["A", "B", "A", "A"],
+            "kraj_code": ["K"] * 4,
+            "elevation_class": ["lowland", "upland", "upland", "upland"],
+        }
+    )
+    full = ("T", "F", "SRA10M")
+    meta2 = _meta2({"a1": full, "rain": ("SRA10M",), "high": full, "level": full})
+    points = pl.DataFrame(
+        {"code": ["A", "B"], "name": ["A", "B"], "lat": [50.0, 49.0], "lon": [14.0, 16.0]}
+    )
+    subset = runs.select_stations(stations, meta2, points, total=2)
+    # high is 11 km away but 300 m up (41 km), level 13 km and 20 m: level; beyond total
+    assert subset["id"].to_list() == ["a1", "rain", "level"]
+    assert subset["reason"].to_list() == ["okres", "okres", "temperature"]
 
 
 # --- which runs --------------------------------------------------------------------------

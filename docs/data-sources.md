@@ -2025,7 +2025,7 @@ the bucket's window. Checked live on 2026-10-13 without an API key (free tier):
   max(1, days / 14))): 121 hours count as 6 days, under 14, so the whole 5 days cost the
   same as one day: variables × models / 10 per station, at least 1. With 4 variables
   (temperature, precipitation, wind and gusts) **760 calls a run of all 19 models** at
-  the 100 stations (720 at 06 and 18 UTC), but **100 for one or two models** (measured
+  the 100 stations (720 at 06 and 18 UTC; 768 and 727 at the 101 since 2026-10-20), but **100 for one or two models** (measured
   live on 2026-10-15: 28.5 calls for 5 stations × 19 models × 3 variables). Requests
   that fail count too (we do not know whether Open-Meteo counts them). One request stays
   at or below 500 calls (`runs.MAX_REQUEST`, Open-Meteo allows 600 a minute): equal
@@ -2081,12 +2081,17 @@ regenerated with `uv run scripts/build_run_stations.py`):
 1. **One per okres** (all 77): among the okres's active stations, those with the most of
    our three elements at 10 minutes in ČHMÚ's `meta2` (`T`, `F`, `SRA10M`), and of
    these the one closest to the okres's forecast point (the same point as the outlook).
-   Blansko has only precipitation stations, so its station verifies precipitation only.
+   Blansko has only precipitation stations, so its station verifies precipitation only;
+   such an okres also gets the station with temperature nearest to its point, 100 m of
+   height from the median of its stations counted as 10 km, beyond the 100 (reason
+   `temperature`; since 2026-10-20 Tišnov, Hájek, 409 m, 15 km), so every okres has a
+   station with temperature among the single runs.
 2. **Mountains:** every other station with all three elements above 800 m (13).
 3. **Spread** up to 100: repeatedly the full station farthest from all chosen ones,
    counting 100 m of height difference as 10 km (10 stations).
 
-Ties go to the lower WIGOS id. Result on 2026-10-13: 100 stations in all 77 okresy,
+Ties go to the lower WIGOS id. Result on 2026-10-13 (plus Tišnov on 2026-10-20, appended
+without rebuilding the rest): 100 stations in all 77 okresy,
 47 lowland, 39 upland and 14 mountain, 99 with all three elements. The CSV records why
 each station is in (`reason`: `okres`, `mountain`, `spread`).
 
