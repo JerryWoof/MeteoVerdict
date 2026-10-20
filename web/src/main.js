@@ -6,7 +6,7 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
 import {
-  NO_DATA, P_BEST_MIN, TOO_FEW, bestByRegion, closeCodes, fillExpression, modelColors, records,
+  NO_DATA, P_BEST_MIN, TOO_FEW, bestByRegion, fillExpression, modelColors, records,
   regionColor, smallSampleCodes, stationFeatures, stationsIn, withKrajFallback,
 } from "./data.js";
 import { HOURS, explainRegion, reasons } from "./explain.js";
@@ -146,9 +146,7 @@ function renderLegend() {
   });
   const small = element("div", null, "legend-item static");
   small.append(element("span", "", "swatch small-sample"), element("span", t("legend.small")));
-  const close = element("div", null, "legend-item static");
-  close.append(element("span", "", "swatch close-win"), element("span", t("legend.close", { pct: percent(current.pBestMin) })));
-  rest.push(close, small);
+  rest.push(small);
   const hint = element("div", t("legend.hint"), "legend-hint");
   box.replaceChildren(title, ...items, ...rest, hint);
 }
@@ -415,34 +413,11 @@ function select(region) {
 }
 
 // --- map layers -------------------------------------------------------------------
-/** White diagonal stripes on a transparent 16 px tile (drawn at pixelRatio 2). */
-function hatchImage() {
-  const size = 16;
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const g = canvas.getContext("2d");
-  g.strokeStyle = "#ffffff";
-  g.lineWidth = 3;
-  for (const o of [-size, 0, size]) {
-    g.beginPath();
-    g.moveTo(o, size);
-    g.lineTo(o + size, 0);
-    g.stroke();
-  }
-  return g.getImageData(0, 0, size, size);
-}
-
 function addLayers(filled) {
   map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
   map.addSource("kraje", { type: "geojson", data: "data/kraje.geojson" });
   map.addSource("stations", { type: "geojson", data: stationFeatures(null, new Map(), current.colors) });
   map.addLayer({ id: "regions-fill", type: "fill", source: filled, paint: { "fill-color": NO_DATA, "fill-opacity": 0.78 } });
-  map.addImage("hatch", hatchImage(), { pixelRatio: 2 });
-  // wins that are not clear (best in under p_best_min of the resamples): hatched
-  map.addLayer({
-    id: "close-hatch", type: "fill", source: filled, filter: ["in", ["get", "code"], ["literal", []]],
-    paint: { "fill-pattern": "hatch", "fill-opacity": 0.55 },
-  });
   map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#ffffff", "line-width": 0.6 } });
   map.addLayer({ id: "kraje-line", type: "line", source: "kraje", paint: { "line-color": "#4b5863", "line-width": 1.2 } });
   // rankings on fewer than 30 days (small_sample): a dashed outline
@@ -525,7 +500,6 @@ map.on("load", async () => {
     if (token !== renderToken) return;
     current.stations = bestByRegion(stationRows, view.leadDay, current.pBestMin);
     map.setPaintProperty("regions-fill", "fill-color", fillExpression(current.regions, current.colors));
-    map.setFilter("close-hatch", ["in", ["get", "code"], ["literal", closeCodes(current.regions)]]);
     map.setFilter("small-sample", ["in", ["get", "code"], ["literal", smallSampleCodes(current.regions)]]);
     map.getSource("stations").setData(stationFeatures(current.stationTable, current.stations, current.colors));
     if (current.highlight && ![...current.regions.values()].some((e) => e.model === current.highlight)) current.highlight = null;
