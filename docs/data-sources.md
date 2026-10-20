@@ -2073,25 +2073,34 @@ mm, 0.006 and 0.017 m/s (IFS HRES 0.226 °C).
 
 ### The station subset
 
-Asking every run at all ~500 stations would cost about 1,650 calls a run, 6,600 a day.
-We use about 100 stations instead (`src/meteoverdict/data/run-stations.csv`, committed,
-so the set does not change from run to run). The rule (`runs.select_stations`,
-regenerated with `uv run scripts/build_run_stations.py`):
+Asking every run at all ~500 stations from the API would cost about 1,650 calls a run,
+6,600 a day. So the API is asked at 100 stations (`runs.api_stations`), and since
+2026-10-20 the bucket, which costs no quota, at **every station that measures
+temperature** (297; `src/meteoverdict/data/run-stations.csv`, committed, so the set does
+not change from run to run). The rule (`runs.select_stations`, regenerated with
+`uv run scripts/build_run_stations.py`):
 
 1. **One per okres** (all 77): among the okres's active stations, those with the most of
    our three elements at 10 minutes in ČHMÚ's `meta2` (`T`, `F`, `SRA10M`), and of
    these the one closest to the okres's forecast point (the same point as the outlook).
    Blansko has only precipitation stations, so its station verifies precipitation only;
-   such an okres also gets the station with temperature nearest to its point, 100 m of
-   height from the median of its stations counted as 10 km, beyond the 100 (reason
-   `temperature`; since 2026-10-20 Tišnov, Hájek, 409 m, 15 km), so every okres has a
-   station with temperature among the single runs.
+   its temperature comes from the stations of step 4 (the nearest, Tišnov, Hájek, 409 m,
+   15 km, is in its pool).
 2. **Mountains:** every other station with all three elements above 800 m (13).
 3. **Spread** up to 100: repeatedly the full station farthest from all chosen ones,
    counting 100 m of height difference as 10 km (10 stations).
+4. **Every other temperature station** (since 2026-10-20, reason `temperature`, 197):
+   every other active station with `T` at 10 minutes, beyond the 100, from the bucket
+   only. The model-runs stored before were filled in at these stations from the bucket
+   (`mvd runs-add-stations`, workflow `runs-add-stations.yml`, sharing the concurrency
+   group of `runs.yml`): every model-run of the bucket's window that was read from the
+   bucket is read again at its missing stations only and merged by run, model and
+   station, newest month first, resumable. Model-runs from the API (the bucket's gaps,
+   the history before its window) stay at the 100. Their bucket cells were appended to
+   `bucket-cells.csv` (three of them, in the far east, are outside ICON-D2's domain).
 
-Ties go to the lower WIGOS id. Result on 2026-10-13 (plus Tišnov on 2026-10-20, appended
-without rebuilding the rest): 100 stations in all 77 okresy,
+Ties go to the lower WIGOS id. Result on 2026-10-20: 297 stations, steps 1-3 the same 100
+as on 2026-10-13 (so no run history ended). The 100 of 2026-10-13: in all 77 okresy,
 47 lowland, 39 upland and 14 mountain, 99 with all three elements. The CSV records why
 each station is in (`reason`: `okres`, `mountain`, `spread`).
 
