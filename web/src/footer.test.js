@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
 
-import { CC_BY, CC_BY_SA, ECCC_LICENCE, JMA_TERMS, OSM_COPYRIGHT, TERRAIN_ATTRIBUTION, footerParts, footerText } from "./footer.js";
+import { CC_BY, CC_BY_SA, ECCC_LICENCE, JMA_TERMS, OSM_COPYRIGHT, SITE_LINKS, TERRAIN_ATTRIBUTION, footerParts, footerText } from "./footer.js";
 import { LANGUAGES, translator } from "./i18n.js";
 
 const links = (parts) => parts.filter((p) => p.href).map((p) => p.href);
@@ -56,6 +56,13 @@ for (const language of LANGUAGES) {
     assert.ok(footerText(parts).includes(t("station.changes")));
   });
 }
+
+test("the footer links Půdoměr in every language", () => {
+  assert.ok(SITE_LINKS.some(([key, href]) => key === "site.pudomer" && href === "https://pudomer.cz/"));
+  for (const language of LANGUAGES) {
+    assert.notEqual(translator(language)("site.pudomer"), "site.pudomer", language);
+  }
+});
 
 test("every page has a footer the shared helper fills", () => {
   const pages = readdirSync(new URL("..", import.meta.url)).filter((name) => name.endsWith(".html"));
