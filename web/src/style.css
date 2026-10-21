@@ -2648,7 +2648,7 @@ body.station [hidden] {
 .ai-map-note { color: var(--ink-soft); font-size: var(--fs-ui); margin-top: 0.3rem; }
 .ai-result-table { font-size: 0.8rem; margin: 0.4rem 0; }
 .ai-result-table td, .ai-result-table th { padding: 0.15rem 0.3rem; }
-.ai-card { overflow-wrap: anywhere; }
+.ai-card { overflow-wrap: anywhere; min-width: 0; }
 .ai-card.wide { grid-column: 1 / -1; }
 .ai-panel .ai-facts { list-style: none; padding: 0; margin: 0.4rem 0; }
 .ai-panel .ai-facts li { display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
@@ -2666,8 +2666,16 @@ body.station [hidden] {
 .ai-score-table .ai-best b { font-weight: 400; white-space: nowrap; }
 .ai-gain.better { color: #1e7a3c; font-weight: 600; }
 .ai-gain.worse { color: #b23f35; }
-.ai-result-table { width: 100%; }
-.ai-result-table td, .ai-result-table th { overflow-wrap: anywhere; }
+/* an experiment's table keeps whole words and numbers and scrolls sideways in its card when it
+   is wider; a shadow on the edge that has more columns behind it says so (ai-extras.js) */
+.ai-table-scroll { overflow-x: auto; max-width: 100%; }
+.ai-table-scroll.more-right { box-shadow: inset -14px 0 12px -12px rgb(0 0 0 / 0.35); }
+.ai-table-scroll.more-left { box-shadow: inset 14px 0 12px -12px rgb(0 0 0 / 0.35); }
+.ai-table-scroll.more-left.more-right {
+  box-shadow: inset -14px 0 12px -12px rgb(0 0 0 / 0.35), inset 14px 0 12px -12px rgb(0 0 0 / 0.35);
+}
+.ai-result-table { width: max-content; min-width: 100%; }
+.ai-result-table td, .ai-result-table th { white-space: nowrap; overflow-wrap: normal; }
 /* a phone: each row of an experiment's table as its own list of "column: value" */
 @media (max-width: 600px) {
   .ai-result-table, .ai-result-table tbody, .ai-result-table tr, .ai-result-table td { display: block; }
@@ -2675,6 +2683,9 @@ body.station [hidden] {
   .ai-result-table tr { padding: 0.3rem 0; border-top: 1px solid var(--theme-line); }
   .ai-result-table td { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.05rem 0; border: 0; text-align: right; }
   .ai-result-table td::before { content: attr(data-label); color: var(--ink-soft); text-align: left; }
+  .ai-result-table { width: 100%; }
+  .ai-result-table td { white-space: normal; }
+  .ai-table-scroll.more-left, .ai-table-scroll.more-right { box-shadow: none; }
 }
 
 /* "Forecast vs measured" on the AI tab (ai-verify-view.js) */
