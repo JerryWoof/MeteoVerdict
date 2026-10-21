@@ -4,6 +4,7 @@
 // in the map's (Web-Mercator) spacing.
 
 import { temp100mPixel } from "./ai-temp100m.js";
+import { parseStamp, toStamp } from "./radar.js";
 
 export const HEAT_INDEX = "data/scores/ai/fc/heat/index.json";
 
@@ -644,6 +645,41 @@ export function heatNearestHour(hours, now) {
   let best = 0;
   for (let i = 1; i < hours.length; i++) if (Math.abs(hours[i].time - now) < Math.abs(hours[best].time - now)) best = i;
   return best;
+}
+
+/** The slider's step (half hours) nearest to `ms` (the first or last one outside the hours). */
+export function heatStepAt(hours, ms) {
+  let best = 0;
+  for (let k = 1; k <= (hours.length - 1) * 2; k++) if (Math.abs(heatTimeAt(hours, k / 2) - ms) < Math.abs(heatTimeAt(hours, best / 2) - ms)) best = k;
+  return best;
+}
+
+const HEAT_COLOURS = ["hour", "all", "fixed"];
+
+/**
+ * The heatmap's view in the address: "#t=202610211430&c=all&p=50.08,14.42", the time as a
+ * UTC stamp (as on the radar page), the colours and the clicked place (2 decimals, about
+ * 1 km). Every part is optional: {time (ms), colours, point {lat, lng}}, null where missing
+ * or not valid.
+ */
+export function heatParseHash(hash) {
+  const params = new URLSearchParams((hash ?? "").replace(/^#/, ""));
+  const time = parseStamp(params.get("t"));
+  const colours = HEAT_COLOURS.includes(params.get("c")) ? params.get("c") : null;
+  const m = /^(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)$/.exec(params.get("p") ?? "");
+  const lat = m ? Number(m[1]) : NaN;
+  const lng = m ? Number(m[2]) : NaN;
+  const point = Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+  return { time, colours, point };
+}
+
+/** The hash of a view (heatParseHash); "" when it has nothing. */
+export function heatHash({ time = null, colours = null, point = null }) {
+  const parts = [];
+  if (time != null) parts.push(`t=${toStamp(time)}`);
+  if (colours) parts.push(`c=${colours}`);
+  if (point) parts.push(`p=${point.lat.toFixed(2)},${point.lng.toFixed(2)}`);
+  return parts.length ? `#${parts.join("&")}` : "";
 }
 
 /** The time (ms) at position `pos` in hours (.5 steps): linear between two hours. */

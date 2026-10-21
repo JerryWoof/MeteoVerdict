@@ -17,7 +17,9 @@ import {
 import {
   FROST_RISK_C, HEAT_INDEX, heatAllRange, heatFrostLevel, heatReadOptions, heatRiskRuns, heatRiskText, heatBlend, heatColourLut, heatDayMarks, heatFixedLut, heatHourRange, heatNearestHour, heatPaint,
   heatRampGradient, heatRampLut, heatSeriesAt, heatTemperatures, heatTimeAt, heatTimeText, heatValueAt, loadHeatModel, parseHeatIndex,
+  heatHash, heatParseHash, heatStepAt,
 } from "./ai-heat.js";
+import { hashHistory } from "./hash-history.js";
 
 // The heatmap tab: MeteoVerdict AI's 100 m temperature over the radar page's base map,
 // a time control above it, and a click's panel with the temperature at that place at every time.
@@ -78,11 +80,13 @@ try {
 }
 const saveOptions = () => {
   try {
-    localStorage.setItem(OPTIONS_KEY, JSON.stringify({ v: 3, ...options }));
+    // the colours remembered are the ones clicked, not a link's
+    localStorage.setItem(OPTIONS_KEY, JSON.stringify({ v: 3, ...options, colours: preferredColours }));
   } catch {
     // not remembered
   }
 };
+let preferredColours = options.colours; // the colours remembered in the browser: a link without colours shows them
 let heatIndex = null; // its index.json, parsed
 let sharpening = null; // percent of the full-size images downloaded while the coarse picture is shown, else null
 let step = 0; // the hourly slider's position, in half hours
@@ -123,7 +127,7 @@ function addLayers() {
   map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
   map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#ffffff", "line-opacity": 0.7, "line-width": 0.5 } });
   for (const layer of topLayers(language)) map.addLayer(layer);
-  map.on("click", (event) => setPoint(event.lngLat.lng, event.lngLat.lat));
+  map.on("click", (event) => pickPoint(event.lngLat.lng, event.lngLat.lat));
   // the hover value only with a mouse: a tap on a phone also sends a mousemove, and that
   // tooltip stayed on the map next to the panel the tap opened
   if (window.matchMedia("(hover: hover)").matches) map.on("mousemove", showTip);
@@ -255,9 +259,57 @@ function renderHourly() {
 /** Moves the hourly slider to `k` half hours (a click on a chart, the buttons move by whole hours). */
 function chooseStep(k) {
   step = Math.max(0, Math.min((heatIndex.hours.length - 1) * 2, Math.round(k)));
+  timeChosen = true;
   renderHourly();
   showHeat();
   renderPanel();
+  writeHashSoon();
+}
+
+// --- the view in the address (ai-heat.js heatParseHash): the time once chosen, the colours
+// once chosen (else the browser's remembered ones), the clicked place. A new place is a step
+// in the history; the slider and the colours replace the current entry.
+let timeChosen = false;
+let coloursChosen = false;
+const address = hashHistory((hash) => applyHash(hash));
+
+function writeHash(push = false) {
+  if (!heatIndex) return; // the older day-part maps keep no state in the address
+  clearTimeout(hashTimer);
+  address.write(heatHash({
+    time: timeChosen ? heatTimeAt(heatIndex.hours, step / 2) : null,
+    colours: coloursChosen ? options.colours : null,
+    point: point && { lat: point.lat, lng: point.lng },
+  }), push);
+}
+// the slider moves in many small steps: the address follows once it rests (browsers limit the writes)
+let hashTimer = 0;
+const writeHashSoon = () => {
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => writeHash(), 300);
+};
+
+/** The view of a hash (on load, Back/Forward, a pasted link); `apply`: draw it (the page is running). */
+function readHash(hash, apply = true) {
+  if (!heatIndex) return;
+  const view = heatParseHash(hash);
+  timeChosen = view.time != null;
+  step = timeChosen ? heatStepAt(heatIndex.hours, view.time) : heatNearestHour(heatIndex.hours, Date.now()) * 2;
+  coloursChosen = view.colours != null;
+  options.colours = view.colours ?? preferredColours;
+  if (!apply) {
+    point = view.point && { ...view.point, name: null };
+    return;
+  }
+  renderHourly();
+  for (const b of document.querySelectorAll("#heat-options .seg-buttons button")) b.setAttribute("aria-pressed", String(b.dataset.mode === options.colours));
+  showHeat();
+  if (view.point) setPoint(view.point.lng, view.point.lat);
+  else closePoint(false);
+  writeHash(); // what is shown (a garbage part dropped)
+}
+function applyHash(hash) {
+  if (map) readHash(hash);
 }
 
 function choose(k) {
@@ -283,10 +335,17 @@ function setPoint(lng, lat, name = null) {
   for (const slot of slots) loader.load(slot.day, slot.part).then(() => renderPanel());
 }
 
-function closePoint() {
+function closePoint(write = true) {
   point = null;
   marker?.remove();
   $("heat-panel").hidden = true;
+  if (write) writeHash();
+}
+
+/** A place clicked or found: the panel, and a step in the browser's history. */
+function pickPoint(lng, lat, name = null) {
+  setPoint(lng, lat, name);
+  writeHash(true);
 }
 
 async function placeName(at) {
@@ -355,7 +414,7 @@ async function renderHourlyPanel() {
   const close = element("button", "×", "close");
   close.type = "button";
   close.setAttribute("aria-label", t("heat.close"));
-  close.addEventListener("click", closePoint);
+  close.addEventListener("click", () => closePoint());
   title.append(element("strong", at.label ?? t("heat.coords", { lat: at.lat.toFixed(2), lon: at.lng.toFixed(2) })), close);
   const value = heatBlend(at.series, step / 2);
   const lines = [
@@ -421,7 +480,7 @@ async function renderPanel() {
 
 // --- find a place -------------------------------------------------------------------------
 function choosePlace(place) {
-  setPoint(place.lon, place.lat, placeLabel(place));
+  pickPoint(place.lon, place.lat, placeLabel(place));
   if (!map.getBounds().contains([place.lon, place.lat])) map.easeTo({ center: [place.lon, place.lat] });
 }
 
@@ -430,6 +489,7 @@ function renderOptions() {
   const box = $("heat-options");
   const change = () => {
     saveOptions();
+    writeHash();
     for (const b of box.querySelectorAll(".seg-buttons button")) b.setAttribute("aria-pressed", String(b.dataset.mode === options.colours));
     showHeat();
   };
@@ -443,6 +503,8 @@ function renderOptions() {
     button.setAttribute("aria-pressed", String(options.colours === mode));
     button.addEventListener("click", () => {
       options.colours = mode;
+      preferredColours = mode;
+      coloursChosen = true;
       change();
     });
     buttons.append(button);
@@ -469,6 +531,7 @@ async function startHourly() {
   const hours = heatIndex.hours;
   heat = null;
   step = heatNearestHour(hours, Date.now()) * 2;
+  readHash(window.location.hash, false); // a link's time, colours and place
   for (const id of ["ribbon", "heat-wrap", "heat-note"]) $(id).hidden = false;
   $("heat-time").hidden = true;
   $("heat-range").hidden = false;
@@ -478,6 +541,8 @@ async function startHourly() {
   map = makeMap();
   await new Promise((resolve) => map.once("style.load", resolve));
   addLayers();
+  if (point) setPoint(point.lng, point.lat, point.name); // the link's place: its marker now, its panel once the map loads
+  writeHash();
   $("heat-range").addEventListener("input", (e) => chooseStep(Number(e.target.value)));
   $("heat-prev").addEventListener("click", () => chooseStep(step - 2));
   $("heat-next").addEventListener("click", () => chooseStep(step + 2));
