@@ -24,9 +24,10 @@ import {
   DEFAULT_SHOWN, dayLabel, displayName, labelFor, okresColours, rampKey, today, valueFor,
 } from "./tv.js";
 import { keepRoomForPanels } from "./panel-room.js";
+import { hashHistory } from "./hash-history.js";
 import {
-  DEFAULT_ERR, DEFAULT_MODEL, DEFAULT_WX, ERROR_VARS, LEADS, AI, WX_MODES, createModelCompare, errorKeyFor, errorLookup, modelOptions,
-  okresErrors, splitModelHash, withModelHash,
+  DEFAULT_MODEL, ERROR_VARS, LEADS, AI, WX_MODES, createModelCompare, errorKeyFor, errorLookup, modelOptions,
+  okresErrors, readModelChoice, splitModelHash, tabChoice, withModelHash,
 } from "./station-model.js";
 
 const t = setUpLanguage();
@@ -65,20 +66,20 @@ const updated = (generated) => {
 
 const models = createModelCompare({ getJson, t, language });
 
-/** The hash of the page without the model choice (";m=…;l=…", station-model.js); a choice in it
- * becomes the page's. */
+const isWeather = (hash) => pageMode(splitModelHash(hash).hash) === "measured";
+
+/** The hash of the page without the model choice (";m=…;l=…", station-model.js); the choice in it
+ * (the defaults without one) becomes the page's. */
 function cleanHash() {
-  const { hash, model, lead, err, wx } = splitModelHash(window.location.hash);
-  if (model) {
-    models.state.model = model;
-    models.state.lead = lead;
-    models.state.err = err === undefined ? DEFAULT_ERR : err;
-    models.state.wx = wx ?? DEFAULT_WX;
-  }
-  return hash;
+  Object.assign(models.state, readModelChoice(window.location.hash, models.state, isWeather(window.location.hash)));
+  return splitModelHash(window.location.hash).hash;
 }
-/** A hash of the page with the model choice appended. */
-const hashWith = (hash) => withModelHash(hash, models.state);
+/** A hash of the page with the model choice appended (each tab with its own colour only). */
+const hashWith = (hash) => withModelHash(hash, tabChoice(models.state, isWeather(hash)));
+
+// Back/Forward and a link pasted on the open page show that view (show() is defined below);
+// the tab, the day, the okres and the station are history entries, the rest replaces the current one
+const address = hashHistory(() => show());
 
 // --- search: the index of all stations ------------------------------------------------
 let index = [];
@@ -144,7 +145,7 @@ function kindsMap() {
     t,
     describe,
     extraFor: (station) => (kindsErr ? errorText(station, kindsErr) : null),
-    onPick: (station) => openStationPanel(station.id),
+    onPick: (station) => openStationPanel(station.id, null, true),
   });
   fillMapTools();
   return stationMap;
@@ -166,10 +167,10 @@ let stationPanelState = null; // {id, day, part, okres}: what the panel shows
 
 /** Open (or, with null, close) a station's panel in the Stations view; the hash follows ("#kinds/<id>"). The
  * panel is the Weather view's okres panel (the okres the station is in), with the station's own block in it. */
-async function openStationPanel(id, change = null) {
+async function openStationPanel(id, change = null, push = false) {
   const station = id && placed.find((s) => s.id === id);
   const token = ++stationPanelToken;
-  window.history.replaceState(null, "", hashWith(station ? `${KINDS_HASH}/${encodeURIComponent(id)}` : KINDS_HASH));
+  address.write(hashWith(station ? `${KINDS_HASH}/${encodeURIComponent(id)}` : KINDS_HASH), push);
   kindsMap().select(station ? id : null, { move: false });
   if (!station) {
     stationPanelState = null;
@@ -199,7 +200,7 @@ async function openStationPanel(id, change = null) {
     const close = el("button", "×", "close");
     close.type = "button";
     close.setAttribute("aria-label", t("map.closePanel"));
-    close.addEventListener("click", () => openStationPanel(null));
+    close.addEventListener("click", () => openStationPanel(null, null, true));
     const okresName = station.okres ? el("p", `${t("control.okres")} ${displayName(station.okres)}`, "when") : "";
     stationPanel.replaceChildren(close, el("h2", station.name ?? station.id), okresName, stationInfo(station), models.stationSection(station.id));
   }
@@ -496,7 +497,7 @@ const stationOkresPanel = createOkresPanel({
   t,
   language,
   dayText,
-  update: (change) => openStationPanel(change.okres === null ? null : stationPanelState?.id, change),
+  update: (change) => (change.okres === null ? openStationPanel(null, null, true) : openStationPanel(stationPanelState?.id, change)),
   stationHref: (id) => stationHref(id, hashWith),
   openStation: (id, event) => openStationFromOkres(id, event),
   stationIndex: async () => stationIndexDoc,
@@ -515,9 +516,11 @@ async function openOkres(code) {
 }
 
 function updateLanding(change) {
+  // another day or okres is a step Back returns from; a part, colour or value is not
+  const push = ("day" in change && change.day !== landing.day) || ("okres" in change && change.okres !== landing.okres);
   landing = { ...landing, ...change };
   if (isDaily(landing.day)) landing.part = "day";
-  window.history.replaceState(null, "", hashWith(landingHash(landing)));
+  address.write(hashWith(landingHash(landing)), push);
   return renderLanding();
 }
 
@@ -788,7 +791,7 @@ function browseMeasured() {
   landing = parseLanding(asked, past, start);
   if (isDaily(landing.day)) landing.part = "day";
   // the address shows the view opened (an old okres link, an unknown part or ending is replaced)
-  if (asked.replace(/^#/, "")) window.history.replaceState(null, "", hashWith(landingHash(landing)));
+  if (asked.replace(/^#/, "")) address.write(hashWith(landingHash(landing)));
   // a link coloured by gusts, sunshine or cloud (no model error exists) shows what was measured
   if (!errorKeyFor(landing.colour, "day")) models.state.wx = "none";
   measuredMap.resize();
@@ -796,10 +799,13 @@ function browseMeasured() {
 }
 
 function browseKinds() {
+  const again = mode === "kinds" && stationMap;
   setMode("kinds");
   document.title = `MeteoVerdict: ${t("measured.mode.kinds")}`;
   const map = kindsMap();
-  map.fitAll();
+  // Back/Forward within the tab keeps the map where it is; the colours may have changed with it
+  if (again) applyKindsColour();
+  else map.fitAll();
   openStationPanel(kindsStation(cleanHash()));
 }
 
@@ -833,7 +839,7 @@ async function fillModelPick() {
 function syncModelHash() {
   const base = splitModelHash(window.location.hash).hash;
   const next = hashWith(base);
-  if (next !== window.location.hash) window.history.replaceState(null, "", `${window.location.search}${next}`);
+  address.write(next);
 }
 
 function modelChanged() {
@@ -856,17 +862,18 @@ function show() {
   if (next === "station") {
     // an old link to a station's own page (#WSI, #WSI/element): the Stations tab on that station
     const id = decodePart(hashNow.replace(/^#/, "").split("/")[0]) ?? "";
-    window.history.replaceState(null, "", `${window.location.pathname}${hashWith(`${KINDS_HASH}/${encodeURIComponent(id)}`)}`);
+    address.write(hashWith(`${KINDS_HASH}/${encodeURIComponent(id)}`));
     browseKinds();
     return;
   }
   syncModelHash();
+  // the selects show the choice of the address (Back may have changed it)
+  if ([...modelSelect.options].some((o) => o.value === models.state.model)) modelSelect.value = models.state.model;
+  leadSelect.value = String(models.state.lead);
   if (next === "measured") browseMeasured();
   else browseKinds();
 }
 
-window.addEventListener("hashchange", show);
-window.addEventListener("popstate", show);
 
 Promise.all([getJson(`${DATA}/index.json`), getJson(`${OBSERVED}/index.json`)]).then(async ([loadedIndex, observedDoc]) => {
   stationIndexDoc = loadedIndex;

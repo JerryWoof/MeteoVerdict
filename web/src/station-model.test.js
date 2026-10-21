@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { compareSeries, errorKeyFor, errorLookup, okresErrors, errorSummary, modelOptions, sizeClass, splitModelHash, withModelHash } from "./station-model.js";
+import { compareSeries, errorKeyFor, errorLookup, okresErrors, errorSummary, modelOptions, readModelChoice, sizeClass, splitModelHash, tabChoice, withModelHash } from "./station-model.js";
 
 const t = (key) => key;
 
@@ -111,4 +111,22 @@ test("the error of an okres is the mean of its stations with a value", () => {
   const stations = [{ id: "a", okres: "X" }, { id: "b", okres: "X" }, { id: "c", okres: "X" }, { id: "d", okres: "Nowhere" }, { id: "z", okres: "X" }];
   const out = okresErrors(byId, stations, (name) => (name === "X" ? "CZ1" : null));
   assert.deepEqual([...out], [["CZ1", { n: 2, bias: 0.5, mae: 1.5 }]]);
+});
+
+test("readModelChoice / tabChoice: each tab of the measured page keeps its own colour in its hashes", () => {
+  const start = { model: "blend", lead: 1, err: "tmax", wx: "bias", key: "tmax" };
+  // the Stations tab coloured by kind (e=none), then the Weather tab: its hash has no ";e="
+  const kinds = readModelChoice("#kinds;m=blend;e=none", start, false);
+  assert.equal(kinds.err, null);
+  assert.equal(withModelHash("#2026-10-18/night/wind/tp", tabChoice(kinds, true)), "#2026-10-18/night/wind/tp");
+  // back on Stations its colour is still there
+  const weather = readModelChoice("#2026-10-18/night/wind/tp;m=blend;w=abs", kinds, true);
+  assert.equal(weather.wx, "abs");
+  assert.equal(weather.err, null);
+  assert.equal(withModelHash("#kinds", tabChoice(weather, false)), "#kinds;m=blend;e=none");
+  assert.equal(withModelHash("#2026-10-18/day/temperature/tp", tabChoice(weather, true)), "#2026-10-18/day/temperature/tp;m=blend;w=abs");
+  // a hash without a choice: the defaults (Back to a plain link)
+  assert.deepEqual(readModelChoice("#kinds", { ...start, model: "ai", lead: 2, err: "r" }, false), start);
+  assert.deepEqual(readModelChoice("#2026-10-18/day", { ...start, model: "ai", lead: 2, wx: "none" }, true), start);
+  assert.equal(readModelChoice("#kinds;m=ai;l=2", start, false).lead, 2);
 });

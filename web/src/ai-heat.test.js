@@ -4,7 +4,7 @@ import { test } from "node:test";
 import {
   heatBlend, heatColLon, heatColourLut, heatCompose, heatDayMarks, heatDecodeElev, heatDecodeGray, heatFieldValue, heatGrid, heatIdw,
   HEAT_RAMP, HIST_MIN, HIST_STEP, NO_TEMP, heatAllRange, FROST_RISK_C, heatFrostLevel, heatReadOptions, heatRiskRuns, heatRiskText, heatHourRange, heatNiceRange, heatPaint, heatWholeRange, heatRampColour, heatRampLut,
-  heatRobustEnds, heatTemperatures, heatModel, heatNearestHour, heatNeighbours, heatPixelValue, heatRowLat, heatSeriesAt, heatTimeAt, heatTimeText, heatValueAt, parseHeatIndex,
+  heatRobustEnds, heatTemperatures, heatModel, heatNearestHour, heatHash, heatParseHash, heatStepAt, heatNeighbours, heatPixelValue, heatRowLat, heatSeriesAt, heatTimeAt, heatTimeText, heatValueAt, parseHeatIndex,
 } from "./ai-heat.js";
 
 const DOC = {
@@ -322,4 +322,27 @@ test("a coarse model works like the full one: its own grid spacing and all-days 
   assert.deepEqual([width, height], [2, 2]);
   assert.ok(values.every((v) => v !== NO_TEMP));
   assert.ok(await heatAllRange(m));
+});
+
+test("heatParseHash / heatHash: time, colours and place in the address, each optional", () => {
+  const time = Date.UTC(2026, 9, 21, 14, 30);
+  const hash = heatHash({ time, colours: "fixed", point: { lat: 50.08123, lng: 14.42456 } });
+  assert.equal(hash, "#t=202610211430&c=fixed&p=50.08,14.42");
+  assert.deepEqual(heatParseHash(hash), { time, colours: "fixed", point: { lat: 50.08, lng: 14.42 } });
+  assert.deepEqual(heatParseHash("#p=49.2,16.61"), { time: null, colours: null, point: { lat: 49.2, lng: 16.61 } });
+  assert.equal(heatHash({}), "");
+  // garbage: nothing of it
+  assert.deepEqual(heatParseHash("#t=2026&c=rainbow&p=95,14"), { time: null, colours: null, point: null });
+  assert.deepEqual(heatParseHash("#%E0%A4%A&p=x,y"), { time: null, colours: null, point: null });
+  assert.deepEqual(heatParseHash(""), { time: null, colours: null, point: null });
+});
+
+test("heatStepAt: the slider's half hour nearest to a time, clamped to the hours", () => {
+  const h0 = Date.UTC(2026, 9, 21, 12);
+  const hours = [0, 1, 2].map((i) => ({ time: h0 + i * 3600000 }));
+  assert.equal(heatStepAt(hours, h0), 0);
+  assert.equal(heatStepAt(hours, h0 + 30 * 60000), 1);
+  assert.equal(heatStepAt(hours, h0 + 100 * 60000), 3);
+  assert.equal(heatStepAt(hours, h0 - 86400000), 0);
+  assert.equal(heatStepAt(hours, h0 + 86400000), 4);
 });
