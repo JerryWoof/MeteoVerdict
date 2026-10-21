@@ -550,7 +550,7 @@ def update_live(
     (root / "README.md").write_text(
         "# MeteoVerdict radar, live\n\nThe radar frames of the last hours (reflectivity, "
         "MERGE precipitation, echo tops, motion fields, storm cells), the newest nowcast "
-        "and Meteosat images for https://jerrywoof.github.io/MeteoVerdict/radar.html, "
+        "and Meteosat images for https://meteoverdict.cz/radar.html, "
         "replaced every 5 minutes by the Radar workflow (this branch has a single "
         "commit). Format: docs/data-sources.md#radar-live-data-contract in the main "
         f"branch.\n\n{ATTRIBUTION}\n\n{index.get('satellite_attribution', '')}\n",
