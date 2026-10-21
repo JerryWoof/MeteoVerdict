@@ -28,6 +28,8 @@ import placesUrl from "./data/obce.json?url";
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
 const language = document.documentElement.lang === "cs" ? "cs" : "en";
+// a number for the page: "0,4" in Czech, "0.4" in English
+const dec = (text) => (language === "cs" ? String(text).replace(".", ",") : String(text));
 
 // Live frames: the branch radar-live (force-pushed by the Radar workflow every ~10 min),
 // served with CORS by raw.githubusercontent.com (cached about 5 min). Archived days:
@@ -64,7 +66,7 @@ const map = new MapLibreMap({
     [18.95, 51.1],
   ],
   fitBoundsOptions: { padding: 20 },
-  attributionControl: { customAttribution: `Radar: ČHMÚ (CC BY 4.0) · Boundaries, places: ČÚZK (CC BY 4.0) · ${BASEMAP_ATTRIBUTION}` },
+  attributionControl: { compact: true, customAttribution: `Radar: ČHMÚ (CC BY 4.0) · Boundaries, places: ČÚZK (CC BY 4.0) · ${BASEMAP_ATTRIBUTION}` },
 });
 map.addControl(new NavigationControl({ showCompass: false }));
 // the style, not its tiles: "load" would wait for every base-map tile before the radar
@@ -540,6 +542,9 @@ function play() {
   lastTick = null;
   rafId = requestAnimationFrame(tick);
   renderPlay();
+  // a playing loop has no moment in the link: a reload or the language switch opens live,
+  // not on the frame where the loop started
+  writeHash();
 }
 
 function stop() {
@@ -635,7 +640,7 @@ function showCell(feature) {
   if (Number.isFinite(dbz)) {
     box.append(element("p", t("radar.cell.maxDbz", { dbz: Math.round(dbz), cat: t(`radar.cat.${categoryOf(dbzLevel(dbz), categories) ?? "drizzle"}`).toLowerCase() })));
   }
-  if (p.echotop_km != null && p.echotop_km !== "null") box.append(element("p", t("radar.cell.echotop", { km: legendNumber(Number(p.echotop_km)) })));
+  if (p.echotop_km != null && p.echotop_km !== "null") box.append(element("p", t("radar.cell.echotop", { km: dec(legendNumber(Number(p.echotop_km))) })));
   if (p.area_km2 != null && p.area_km2 !== "null") box.append(element("p", t("radar.cell.area", { area: Math.round(Number(p.area_km2)) })));
   const speedKmh = Number(p.speed_kmh);
   box.append(
@@ -667,7 +672,7 @@ async function refreshPoint() {
   panel.hidden = false;
   const token = ++pointToken;
   const title = element("div", null, "point-title");
-  const where = { lat: point.lat.toFixed(2), lon: point.lon.toFixed(2) };
+  const where = { lat: dec(point.lat.toFixed(2)), lon: dec(point.lon.toFixed(2)) };
   title.append(element("strong", point.name ? t("radar.point.titlePlace", { name: point.name }) : t("radar.point.title", where)));
   const close = element("button", "×", "close");
   close.type = "button";
@@ -701,7 +706,7 @@ async function refreshPoint() {
     const cat = (key) => t(`radar.cat.${key}`);
     let text;
     if (said.key === "now") {
-      text = t("radar.point.now", { cat: cat(said.cat).toLowerCase(), rate: rateLabel(said.rate) });
+      text = t("radar.point.now", { cat: cat(said.cat).toLowerCase(), rate: dec(rateLabel(said.rate)) });
       if (said.then === "stops") text += ` ${t("radar.point.stops", { min: said.min })}`;
       if (said.then === "continues") text += ` ${t("radar.point.continues", { peak: cat(said.peak).toLowerCase() })}`;
     } else if (said.key === "expected") text = t("radar.point.expected", { cat: cat(said.cat), min: said.min });
@@ -725,8 +730,9 @@ function svg(tag, attrs, text) {
 /** Bars of the class at the place (height by class, so drizzle stays visible), now line. */
 function pointChart(series, anchor, live) {
   const W = 300;
-  const H = 110;
-  const top = 8;
+  const H = 118;
+  // room above the top guide for the unit, so "mm/h" does not sit on its number
+  const top = 16;
   const bottom = 18;
   const left = 30;
   const first = anchor - 2 * 3600000;
@@ -739,9 +745,9 @@ function pointChart(series, anchor, live) {
   for (const dbz of [20, 28, 40, 56]) {
     const level = dbzLevel(dbz);
     chart.append(svg("line", { x1: left, x2: W - 4, y1: y(level), y2: y(level), class: "guide" }));
-    chart.append(svg("text", { x: left - 3, y: y(level) + 3, class: "axis", "text-anchor": "end" }, rateLabel(rainRate(dbz))));
+    chart.append(svg("text", { x: left - 3, y: y(level) + 3, class: "axis", "text-anchor": "end" }, dec(rateLabel(rainRate(dbz)))));
   }
-  chart.append(svg("text", { x: 2, y: top + 2, class: "axis" }, "mm/h"));
+  chart.append(svg("text", { x: 2, y: 9, class: "axis" }, "mm/h"));
   const barW = Math.max(2, ((W - left) / 36) * 0.8);
   const solid = maxzScale(index, null).map((r) => r[1]);
   for (const s of series) {
@@ -783,6 +789,7 @@ function locateMe(button) {
 const dateFormat = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", {
   weekday: "short", day: "numeric", month: language === "cs" ? "long" : "short", timeZone: "Europe/Prague",
 });
+const dayLong = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 const shortDate = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 
 function renderSource() {
@@ -950,7 +957,7 @@ function renderLegend() {
       swatch.style.background = row.colours.length > 1 ? `linear-gradient(90deg, ${row.colours.join(", ")})` : row.colours[0];
       swatch.title = `${row.dbz}${row.dbzTo ? `–${row.dbzTo}` : "+"} dBZ`;
       const words = element("span", row.label.charAt(0).toUpperCase() + row.label.slice(1), "words");
-      const mm = element("span", row.to != null ? t("radar.range", { from: rateLabel(row.from), to: rateLabel(row.to) }) : t("radar.rangeTop", { from: rateLabel(row.from) }), "mm");
+      const mm = element("span", row.to != null ? t("radar.range", { from: dec(rateLabel(row.from)), to: dec(rateLabel(row.to)) }) : t("radar.rangeTop", { from: dec(rateLabel(row.from)) }), "mm");
       item.append(swatch, words, mm);
       list.append(item);
     }
@@ -960,17 +967,17 @@ function renderLegend() {
     swatch.style.background = `linear-gradient(90deg, ${ALOFT_COLOURS.slice(0, 12).join(", ")})`;
     aloft.append(swatch, element("span", t("radar.aloft")));
     box.append(aloft);
-    if (view.filter !== "all") box.append(element("p", t("radar.filterNote", { mm: legendNumber(MM_SCALE[f.rain - 1][0]) }), "note strong"));
+    if (view.filter !== "all") box.append(element("p", t("radar.filterNote", { mm: dec(legendNumber(MM_SCALE[f.rain - 1][0])) }), "note strong"));
     box.append(element("p", `${t("radar.winter")} ${t("radar.dbz")}`, "note"));
     parts.push(box);
   }
   if (has("rain")) {
-    parts.push(scaleBar(simpleScale(index, "merge1h", MM_SCALE), `${t("radar.legendRain")} (mm)`, legendNumber));
+    parts.push(scaleBar(simpleScale(index, "merge1h", MM_SCALE), `${t("radar.legendRain")} (mm)`, (v) => dec(legendNumber(v))));
     parts.push(element("p", t("radar.rainExplain"), "note"));
   }
   if (has("echotop") && index?.echotop?.length) {
     const echotop = simpleScale(index, "echotop", null);
-    if (echotop) parts.push(scaleBar(echotop, t("radar.legendEchotop"), (v) => legendNumber(v)));
+    if (echotop) parts.push(scaleBar(echotop, t("radar.legendEchotop"), (v) => dec(legendNumber(v))));
     parts.push(element("p", t("radar.echotopExplain"), "note"));
   }
   if (has("cells") && index?.cells?.length) parts.push(element("p", t("radar.cellsExplain"), "note"));
@@ -1131,7 +1138,7 @@ function renderStatus() {
   const status = document.getElementById("status");
   status.classList.remove("stale");
   if (view.day !== "live") {
-    status.textContent = t("radar.statusDay", { day: view.day });
+    status.textContent = t("radar.statusDay", { day: dayLong.format(new Date(`${view.day}T12:00:00Z`)) });
     return;
   }
   const observed = lastObserved();
@@ -1290,9 +1297,10 @@ async function main() {
   days = Array.isArray(daysJson) ? daysJson : [];
   // phones: the box starts folded so the map stays visible
   if (window.innerWidth <= 700) document.getElementById("show").open = false;
-  // phones: the credits folded behind (i) (they are in full in the footer too), as MapLibre
-  // folds them on the first drag; open they cover a third of a small map
-  if (window.innerWidth <= 700) map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
+  // the credits folded behind (i) at every width (they are in full in the footer too), as on
+  // the heatmap: open they wrap to two lines up to ~1100 px and run under the legend and the
+  // point panel, and on phones they cover a third of the map
+  map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
   addLayers();
   const linkedTime = view.time != null; // a shared link to one moment stays on that moment
   await update({ day: view.day });
