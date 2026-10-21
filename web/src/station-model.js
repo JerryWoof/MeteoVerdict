@@ -17,6 +17,10 @@ export const BLEND = "blend";
 export const DEFAULT_MODEL = BLEND;
 export const DEFAULT_LEAD = 1;
 export const LEADS = [1, 2];
+// the AI's D+2 run is incomplete (its newest day is missing): only D+1 is offered for it
+export const AI_LEADS = [1];
+/** The station chart and summary show this many of the file's last days. */
+export const CHART_DAYS = 7;
 /** The values of the files, in the order of the selector: key, decimals, unit. */
 export const VARIABLES = [
   { key: "tmax", digits: 1, unit: "°C" },
@@ -138,6 +142,13 @@ export function compareSeries(doc, ai, model, lead, key) {
     return { o, f, e: o == null || f == null ? null : Math.round((f - o) * 10) / 10 };
   });
   return { days, obs: rows.map((r) => r.o), fc: rows.map((r) => r.f), err: rows.map((r) => r.e), hasModel: fc != null };
+}
+
+/** The last `n` days of a series (compareSeries), or the series itself when it is null. */
+export function lastDays(series, n = CHART_DAYS) {
+  if (!series) return series;
+  const cut = (list) => list.slice(-n);
+  return { ...series, days: cut(series.days), obs: cut(series.obs), fc: cut(series.fc), err: cut(series.err) };
 }
 
 /** Over the days with both values: {n, mae, bias} (null without any). */
@@ -268,7 +279,7 @@ export function createModelCompare({ getJson, t, language }) {
         picker.append(button);
       }
       children.push(picker);
-      const series = compareSeries(doc, ai, model, lead, key);
+      const series = lastDays(compareSeries(doc, ai, model, lead, key));
       const reason = await unavailable(id, model, lead, key, doc, ai);
       if (doc && series) {
         const info = errorSummary(series);
