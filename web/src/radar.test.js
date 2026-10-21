@@ -4,7 +4,7 @@ import { test } from "node:test";
 import {
   DBZ_SCALE, GRID, MM_SCALE, boundsOf, clock, closestStep, dayFolder, frameUrl, imageCoordinates,
   latestAtOrBefore, legendNumber, localDay, minutesBetween, parseStamp, parseView, rainRate,
-  sourceUrl, timeline, toStamp, viewHash,
+  sourceUrl, timeline, toStamp, viewHash, frameFolder, pragueDayIndex, pragueDayWindow, previousDay,
 } from "./radar.js";
 
 test("stamps are UTC and round-trip", () => {
@@ -118,4 +118,45 @@ test("timeline: an old nowcast is left out, the animation ends at now", () => {
   assert.ok(timeline(at("202610151010")).every((s) => !s.forecast));
   // no nowcast at all
   assert.equal(timeline({ maxz: INDEX.maxz }).at(-1).radar, "202610151035");
+});
+
+test("pragueDayWindow: a calendar day in Prague, summer, winter and the clock changes", () => {
+  const iso = ({ from, to }) => [new Date(from).toISOString(), new Date(to).toISOString()];
+  // summer time: 00:00 in Prague is 22:00 UTC of the day before
+  assert.deepEqual(iso(pragueDayWindow("2026-10-19")), ["2026-10-18T22:00:00.000Z", "2026-10-19T22:00:00.000Z"]);
+  // the autumn change (25 October 2026): a 25-hour day
+  assert.deepEqual(iso(pragueDayWindow("2026-10-25")), ["2026-10-24T22:00:00.000Z", "2026-10-25T23:00:00.000Z"]);
+  // winter: one hour
+  assert.deepEqual(iso(pragueDayWindow("2026-12-31")), ["2026-12-30T23:00:00.000Z", "2026-12-31T23:00:00.000Z"]);
+  // the spring change (29 March 2026): 23 hours
+  assert.deepEqual(iso(pragueDayWindow("2026-03-29")), ["2026-03-28T23:00:00.000Z", "2026-03-29T22:00:00.000Z"]);
+  assert.equal(previousDay("2026-11-01"), "2026-10-31");
+  assert.equal(previousDay("2027-01-01"), "2026-12-31");
+});
+
+test("pragueDayIndex: the Prague day's frames from two UTC days, each from its own folder", () => {
+  const before = {
+    maxz: ["202610182150", "202610182200", "202610182355"],
+    cells: ["202610182300"],
+    satellite: { wv062: { ext: "webp", frames: ["202610182145", "202610182345"] } },
+  };
+  const own = {
+    bounds: [[1, 2], [3, 4]],
+    maxz: ["202610190000", "202610192155", "202610192200", "202610192355"],
+    cells: ["202610190000"],
+    satellite: { wv062: { ext: "webp", frames: ["202610190000", "202610192345"] }, "vis-ir": { ext: "webp", frames: ["202610191200"] } },
+  };
+  const day = pragueDayIndex(own, before, pragueDayWindow("2026-10-19"));
+  // 19 October in Prague: 18 Oct 22:00 UTC up to 19 Oct 21:55 UTC (= 23:55 in Prague), not "20 Oct 01:55"
+  assert.deepEqual(day.maxz, ["202610182200", "202610182355", "202610190000", "202610192155"]);
+  assert.deepEqual(day.cells, ["202610182300", "202610190000"]);
+  assert.deepEqual(day.satellite.wv062.frames, ["202610182345", "202610190000"]);
+  assert.deepEqual(day.satellite["vis-ir"], { ext: "webp", frames: ["202610191200"] });
+  assert.deepEqual(day.bounds, own.bounds);
+  // the first archived day has no day before: from 02:00; no index of its own: nothing
+  assert.deepEqual(pragueDayIndex(own, null, pragueDayWindow("2026-10-19")).maxz, ["202610190000", "202610192155"]);
+  assert.equal(pragueDayIndex(null, before, pragueDayWindow("2026-10-19")), null);
+  assert.equal(frameFolder("202610182200", "2026-10-19", "live/"), "radar/days/20261018/");
+  assert.equal(frameFolder("202610190000", "2026-10-19", "live/"), "radar/days/20261019/");
+  assert.equal(frameFolder("202610190000", "live", "https://x/live/"), "https://x/live/");
 });
