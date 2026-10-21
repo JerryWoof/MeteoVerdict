@@ -53,6 +53,12 @@ test("a model without values is reported, AI comes only from its own file", () =
   assert.equal(compareSeries(null, null, "blend", 1, "tmax"), null);
 });
 
+test("the AI's own window is lined up with the station file's days", () => {
+  // the AI file starts a day later and runs a day longer
+  const ai = { from: "2026-10-02", series: { tmax: { 1: { ai: [12, 12, 8, 7] } } } };
+  assert.deepEqual(compareSeries(doc, ai, "ai", 1, "tmax").fc, [null, 12, 12, 8]);
+});
+
 test("size of a difference", () => {
   assert.equal(sizeClass(0.8, "°C"), "small");
   assert.equal(sizeClass(-2.5, "°C"), "medium");
