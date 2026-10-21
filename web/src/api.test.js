@@ -156,14 +156,16 @@ test("an AI okres file: AI temperature and wind on the blend's axis, the rest co
   assert.equal(h.temperature_2m[12], 22);
   // the AI has no value for hour 13: the blend's stays, with its range
   assert.equal(h.temperature_2m[13], HOURLY_DOC.okresy.CZ0201.temperature_2m[13]);
-  assert.equal(h.temperature_2m_lo[10], null);
+  const B = HOURLY_DOC.okresy.CZ0201;
+  assert.equal(h.temperature_2m_lo[10], Number((20 - (B.temperature_2m[10] - B.temperature_2m_lo[10])).toFixed(1)), "the blend's width around the AI temperature");
+  assert.equal(h.temperature_2m_hi[10], Number((20 + (B.temperature_2m_hi[10] - B.temperature_2m[10])).toFixed(1)));
   assert.equal(h.temperature_2m_lo[13], HOURLY_DOC.okresy.CZ0201.temperature_2m_lo[13]);
   assert.equal(h.temperature_2m_lo[0], HOURLY_DOC.okresy.CZ0201.temperature_2m_lo[0]);
   assert.equal(h.wind_speed_10m[10], 7);
-  assert.deepEqual(h.precipitation, HOURLY_DOC.okresy.CZ0201.precipitation);
   assert.equal(AI_DOC.forecast.sources.temperature_2m, "ai");
   assert.equal(AI_DOC.forecast.sources.precipitation, "ai", "the part field; the hourly series is the blend's");
-  assert.equal(AI_DOC.forecast.sources.cloud_cover, "blend");
+  assert.equal(AI_DOC.forecast.sources.cloud_cover, "ai");
+  assert.equal(AI_DOC.forecast.sources.temperature_2m_lo, "blend");
   assert.equal(AI_DOC.forecast.sources.tmin, "ai");
   assert.equal(AI_DOC.forecast.sources.symbol, "ai");
   assert.equal(AI_DOC.forecast.sources.frost, "ai");
@@ -185,6 +187,33 @@ test("an AI okres file: parts take every field the AI outlook has a value for", 
   assert.deepEqual(morning, (({ gust_warning, ...rest }) => rest)(DOC.forecast.parts[1]));
   assert.ok(!("gust_warning" in night));
   assert.equal(aiOkresDoc({ okres: { code: "CZ9999" }, outlook: OUTLOOK, hourly: HOURLY_DOC, aiForecast: AI_FORECAST, aiOutlook: AI_OUTLOOK, meta: META }), null);
+});
+
+test("an AI okres file: hourly precipitation, cloud and sunshine fitted to the AI's value of each part of day", () => {
+  const day = "2026-10-12"; // CEST: the morning is 04:00Z to 10:00Z
+  const time = Array.from({ length: 24 }, (_, i) => `${day}T${String(i).padStart(2, "0")}:00Z`);
+  const hourly = {
+    time,
+    generated: "x",
+    variables: {},
+    okresy: { CZ0201: {
+      temperature_2m: time.map(() => 10), wind_speed_10m: time.map(() => 2),
+      precipitation: time.map((_, i) => (i >= 5 && i <= 10 ? [0, 1, 1, 2, 0, 0][i - 5] : 0)),
+      cloud_cover: time.map(() => 50), sunshine_duration: time.map((_, i) => (i >= 5 && i <= 10 ? 1800 : 0)),
+      temperature_2m_lo: time.map(() => 8), temperature_2m_hi: time.map(() => 12),
+    } },
+  };
+  const aiOutlook = { columns: ["okres", "day", "part", "tmin", "tmax", "wind", "precipitation", "cloud", "sunshine"], rows: [["CZ0201", day, "morning", 8, 12, 2, 8, 80, 3]] };
+  const outlook = { generated: "x", time_zone: "Europe/Prague", columns: ["okres", "day", "part", "tmin", "tmax", "precipitation", "wind", "cloud", "sunshine"], rows: [["CZ0201", day, "morning", 8, 12, 4, 2, 50, 3]] };
+  const aiForecast = { issued: "x", okresy: { CZ0201: { time, temperature_2m: { ai: time.map(() => 11) }, wind_speed_10m: { ai: time.map(() => 3) } } } };
+  const { forecast: f } = aiOkresDoc({ okres: BENESOV, outlook, hourly, aiForecast, aiOutlook, meta: META });
+  const sum = (a, from, to) => a.slice(from, to).reduce((x, y) => x + y, 0);
+  // hours ending at 05:00Z..10:00Z are the hours inside the local morning (06:00-12:00)
+  assert.equal(Number(sum(f.hourly.precipitation, 5, 11).toFixed(2)), 8, "adds up to the AI's mm");
+  assert.equal(f.hourly.precipitation[8], 4, "keeps the shape (2 of 4 mm → 4 of 8)");
+  assert.equal(sum(f.hourly.sunshine_duration, 5, 11), 3 * 3600, "adds up to the AI's hours");
+  assert.equal(f.hourly.cloud_cover[4], 80, "mean shifted to the AI's 80 %");
+  assert.equal(f.hourly.precipitation[20], 0, "a part the AI has no row for keeps the blend's hours");
 });
 
 // ---- obce ----

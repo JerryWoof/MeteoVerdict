@@ -10,7 +10,7 @@ and CSV files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
 | `api/v1/index.json` | all 77 okresy: `code`, `name`, `lat`, `lon` and the URLs of their files |
 | `api/v1/okresy/{code}.json` | everything for one okres (below) |
 | `api/v1/okresy/{code}.csv` | the hourly forecast: `time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration,temperature_2m_lo,temperature_2m_hi` |
-| `api/v1/ai/okresy/{code}.csv` | the hourly forecast with the same columns as the combined `okresy` CSV (temperature and wind are the AI's, the other columns the blend's) |
+| `api/v1/ai/okresy/{code}.csv` | the hourly forecast with the same columns as the combined `okresy` CSV (all filled: temperature and wind are the AI's hourly forecast, precipitation, cloud and sunshine the blend's hourly shape fitted to the AI's part-of-day values) |
 | `api/v1/ai/okresy/{code}.json` | the same file with the MeteoVerdict AI's values: everything by part of day, temperature and wind hourly (**experimental**, below) |
 | `api/v1/obce/{okres}/{id}.json` | the forecast of one obec (village or town) (below) |
 | `api/v1/ai/obce/{okres}/{id}.json` | the same with MeteoVerdict AI's obec forecast (`model: "ai"`), on the axis and parts of `ai/okresy/{okres}.json`; same ids and the same fields as the combined obec file |
@@ -90,9 +90,11 @@ in a sentence, `forecast.ai_issued` is when the AI issued its forecast and
 - `hourly`: the axis and series of the okres file; `temperature_2m` and `wind_speed_10m`
   are the AI's on every hour it has a value for (hour-matched by time), the combined
   forecast's elsewhere. `temperature_2m_lo` and `temperature_2m_hi` (the range of the
-  combined temperature) are `null` on the hours that now have the AI's temperature.
-  Hourly `precipitation`, `cloud_cover` and `sunshine_duration` are the combined forecast's: the AI
-  forecasts them by part of day only, so the hourly precipitation need not add up to the part's.
+  combined temperature) are the combined forecast's width around the AI's temperature.
+  The AI forecasts precipitation, cloud and sunshine by part of day only, so the hourly `precipitation`,
+  `cloud_cover` and `sunshine_duration` are the combined forecast's hour-to-hour shape fitted to the AI's
+  value of each part (night, morning, afternoon, evening): the precipitation and sunshine of its hours add
+  up to the AI's, the cloud has the AI's mean. A part the AI has no row for keeps the combined forecast's hours.
 
 The files are only written when the AI files (`data/scores/ai/`) are in the build.
 The thresholds (`gust_over_threshold`, `frost`, `ground_frost`, `heavy_rain`) are ours,
