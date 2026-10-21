@@ -218,11 +218,12 @@ def test_satellite_web_frames(tmp_path):
     assert (tmp_path / "satellite" / "wv062" / "202610151300.webp").exists()
     assert not any("_cz." in p or "_eu." in p for p in seen)  # only the ce region
     client, seen = satellite_server(times)
-    later = satellite.web_frames(client, tmp_path, T0 + timedelta(minutes=60), log=lambda _: None)
-    assert later["wv062"]["frames"] == ["202610151300", "202610151315"]
+    later = satellite.web_frames(client, tmp_path, T0 + timedelta(minutes=75), log=lambda _: None)
+    # out of the window, but kept for PRUNE_GRACE (30 min): 12:30 goes, 12:45 stays
+    assert later["wv062"]["frames"] == ["202610151245", "202610151300", "202610151315"]
     assert all(p.endswith("/") for p in seen)  # nothing downloaded again
     index = radar.frame_index(tmp_path)
-    assert index["satellite"]["wv062"]["frames"] == ["202610151300", "202610151315"]
+    assert index["satellite"]["wv062"]["frames"] == ["202610151245", "202610151300", "202610151315"]
     assert "EUMETSAT" in index["satellite_attribution"] and "2026" in index["satellite_attribution"]
 
 
