@@ -543,7 +543,6 @@ def test_band_rankings_windows_documents_and_default():
     )
     assert set(docs) == {
         "leads-bands-all.json",
-        "leads-bands-all-kraj.json",
         "leads-bands-all-okres.json",
     }
     doc = docs["leads-bands-all.json"]
@@ -552,7 +551,6 @@ def test_band_rankings_windows_documents_and_default():
     assert doc["members"]["h1-6"]["hourly"]["temperature_2m"] == ["a", "b"]
     assert doc["preliminary_days"] == leads.PRELIMINARY_DAYS
     assert doc["first_run"] == "2026-08-01T00:00Z"
-    assert docs["leads-bands-all-kraj.json"]["rows"] == []
     assert docs["leads-bands-all-okres.json"]["rows"] == []  # stations without okres_code
     assert len(doc["rows"]) == table.height
 
