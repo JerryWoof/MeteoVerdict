@@ -3266,3 +3266,53 @@ footer .site-links {
     font-size: 0.78rem;
   }
 }
+
+/* the day tabs scroll sideways without a scroll bar: the edge that has more days fades out,
+   so a phone shows that Saturday and Sunday (or the older days) are there. A scroll-driven
+   animation sets the fades from the scroll position; a row that does not scroll has no
+   timeline and no fade, and a browser without scroll timelines shows the plain row */
+@property --fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes daytabs-fade {
+  from {
+    --fade-start: 0px;
+    --fade-end: 2rem;
+  }
+  8% {
+    --fade-start: 2rem;
+  }
+  92% {
+    --fade-end: 2rem;
+  }
+  to {
+    --fade-start: 2rem;
+    --fade-end: 0px;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .daytabs {
+    mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+    animation: daytabs-fade linear both;
+    animation-timeline: scroll(self inline);
+  }
+}
+
+/* keyboard focus: one clear ring on every control, also on the dark pressed buttons and on
+   the tinted strips (the browser's thin default ring was barely visible there) */
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--theme-accent, #2662a6);
+  outline-offset: 2px;
+}
