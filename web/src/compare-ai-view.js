@@ -5,7 +5,9 @@ import {
   SOURCES, LEADS, VARIABLES, aiStatus, aiVersus, availableModels, bestModel, dailyRows, entryKey, formatView, hasAi,
   opponentSeries, parseView, regionGroups, seriesOf,
 } from "./compare-ai.js";
+import { dayTick, numberTick, tipText } from "./compare.js";
 import { displayName } from "./tv.js";
+import { dayCount, stationCount } from "./view.js";
 
 const COLORS = { ai: "#c0392b", outlook: "#1f78b4", mean: "#1d2329", model: "#6a3d9a" };
 // in the page language: "0,92" in Czech
@@ -197,10 +199,11 @@ export async function setUpAiCompare(t, names, language) {
     if (provisional) lines.push(el("div", t("aic.provisionalTag"), "tag"));
     node.replaceChildren(...lines);
     note.textContent = t("aic.sampleNote", {
-      days: entry.days, hours: entry.hours, stations: entry.stations ?? "?", from: entry.dates[0], to: entry.dates[1],
+      days: dayCount(entry.days, t), hours: entry.hours?.toLocaleString(language) ?? "?", from: entry.dates[0], to: entry.dates[1],
+      stations: entry.stations == null ? "?" : stationCount(entry.stations, t),
       block: valIndex?.block_days ?? 4,
     }) + (entry.small_sample ? " " + t("aic.smallSample", { days: valIndex?.small_sample_days ?? 30 }) : "")
-      + (entry.stations != null && entry.stations < 5 ? " " + t("aic.fewStations", { stations: entry.stations }) : "");
+      + (entry.stations != null && entry.stations < 5 ? " " + t("aic.fewStations", { stations: stationCount(entry.stations, t) }) : "");
   }
 
   /** The rows: the AI, the chosen opponent, then our blend, the mean and the best model (no repeats). */
@@ -248,15 +251,17 @@ export async function setUpAiCompare(t, names, language) {
     const kinds = Object.fromEntries(entry.series.map((s) => [s.id, s.kind]));
     const names2 = ids.map((id) => label(id, kinds[id]));
     const width = Math.min(900, document.querySelector(".content").clientWidth);
+    const day = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-US", { dateStyle: "long", timeZone: "UTC" });
     target.replaceChildren(Plot.plot({
       width,
       height: 300,
       marginLeft: 44,
-      x: { label: null, type: "utc" },
-      y: { label: `MAE (${unit})`, grid: true, zero: true },
+      x: { label: null, type: "utc", tickFormat: dayTick(language) },
+      y: { label: `MAE (${unit})`, grid: true, zero: true, tickFormat: numberTick(language) },
       color: { domain: names2, range: ids.map((id) => COLORS[kinds[id]]), legend: true },
       marks: [
-        Plot.lineY(data, { x: "date", y: "mae", z: (r) => `${r.id}${r.segment}`, stroke: (r) => label(r.id, r.kind), strokeWidth: (r) => (r.kind === "model" ? 1.5 : 2.5), strokeDasharray: (r) => (r.kind === "mean" ? "5,4" : null), tip: true }),
+        Plot.lineY(data, { x: "date", y: "mae", z: (r) => `${r.id}${r.segment}`, stroke: (r) => label(r.id, r.kind), strokeWidth: (r) => (r.kind === "model" ? 1.5 : 2.5), strokeDasharray: (r) => (r.kind === "mean" ? "5,4" : null),
+          title: (r) => tipText(label(r.id, r.kind), day.format(r.date), `MAE ${fmt(r.mae)} ${unit}`), tip: true }),
         Plot.dot(data.filter((r) => r.mae != null), { x: "date", y: "mae", fill: (r) => label(r.id, r.kind), r: 2.5 }),
       ],
     }));

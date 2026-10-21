@@ -7,7 +7,7 @@ import {
   biasByElevation, blendTestLines, blendTestRows, blendTestVariable, blendVerdict, blendVerdicts, fmt, singleModelVerdicts,
   okresVerdictCounts, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
   leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, unpublishedHours,
-  RANK_BY, STATION_SETS, hasValues, sortByEts,
+  RANK_BY, STATION_SETS, hasValues, sortByEts, dayTick, numberTick, tipText,
 } from "./compare.js";
 import { records } from "./data.js";
 
@@ -65,7 +65,7 @@ test("bias by elevation class, in order, without the blend", () => {
 test("number format", () => {
   assert.equal(fmt(1.234), "1.23");
   assert.equal(fmt(0.5, true), "+0.50");
-  assert.equal(fmt(-0.5, true), "-0.50");
+  assert.equal(fmt(-0.5, true), "−0.50");
   assert.equal(fmt(null), "–");
   assert.equal(fmt(1.234, false, "cs"), "1,23");
   assert.equal(fmt(1234.5, true, "cs"), "+1234,50");
@@ -389,4 +389,14 @@ test("band files read like D+N score records", async () => {
   assert.deepEqual(bandBasis(rows, "h13-24", "cz"), { runs: 340, stations: 98, days: 20, preliminary: true });
   assert.equal(bandBasis(rows, "h13-24", "CZ010"), null);
   assert.deepEqual(maeByBand(rows.filter((r) => r.set === "hourly")).map((r) => [r.model, r.lead_day]), [["a", 3], ["b", 3]]);
+});
+
+test("chart text in the page language", () => {
+  const tick = numberTick("cs");
+  assert.deepEqual([0, 0.5, 1].map((v, i, all) => tick(v, i, all)), ["0,0", "0,5", "1,0"]);
+  assert.equal(tick(-2, 0, [-2, 0, 2]), "−2");
+  assert.equal(numberTick("en")(1.5, 0, [1, 1.5]), "1.5");
+  assert.equal(dayTick("cs")(new Date("2026-09-13T12:00:00Z")), "13. září");
+  assert.equal(dayTick("en")(new Date("2026-09-13T12:00:00Z")), "Sep 13");
+  assert.equal(tipText("A", null, "", "B"), "A\nB");
 });

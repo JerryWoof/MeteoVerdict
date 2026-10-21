@@ -121,9 +121,18 @@ export function formatRange(from, to, language) {
 }
 
 /** "39 days" / "39 dní" (Czech: 1 den, 2–4 dny, 5+ dní) */
+/** The Czech plural form of a count, for i18n keys ending .one, .few or .many. */
+export function pluralForm(n) {
+  return n === 1 ? "one" : n >= 2 && n <= 4 ? "few" : "many";
+}
+
+/** "3 stanice" / "5 stanic" (stations). */
+export function stationCount(n, t) {
+  return t(`compare.stationCount.${pluralForm(n)}`, { n });
+}
+
 export function dayCount(days, t) {
-  const form = days === 1 ? "one" : days >= 2 && days <= 4 ? "few" : "many";
-  return t(`window.days.${form}`, { n: days });
+  return t(`window.days.${pluralForm(days)}`, { n: days });
 }
 
 /**
