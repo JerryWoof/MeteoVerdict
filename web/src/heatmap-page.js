@@ -124,7 +124,9 @@ function addLayers() {
   map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#ffffff", "line-opacity": 0.7, "line-width": 0.5 } });
   for (const layer of topLayers(language)) map.addLayer(layer);
   map.on("click", (event) => setPoint(event.lngLat.lng, event.lngLat.lat));
-  map.on("mousemove", showTip);
+  // the hover value only with a mouse: a tap on a phone also sends a mousemove, and that
+  // tooltip stayed on the map next to the panel the tap opened
+  if (window.matchMedia("(hover: hover)").matches) map.on("mousemove", showTip);
   map.getCanvas().addEventListener("mouseleave", () => tip?.remove());
 }
 
