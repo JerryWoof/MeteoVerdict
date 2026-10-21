@@ -6,6 +6,8 @@ import "./style.css";
 import { COMBINED, weightTable } from "./forecast.js";
 import { drawIcon, glyph, iconCanvas } from "./icons.js";
 import { setUpLanguage } from "./i18n.js";
+import { addLocateControl } from "./locate-control.js";
+import { OUTSIDE_KM, nearestPlace } from "./home-place.js";
 import { mapModelOptions, modelHorizon, modelPeriods, parseModelParts, parseModels } from "./models.js";
 import { MIN_ZOOM, addObceLayers, goToObec, nearestObec, obceDrawn, obcePartRows, paintObce } from "./obce-map.js";
 import { obceFor } from "./obce-test.js";
@@ -74,6 +76,15 @@ const map = new MapLibreMap({
 new ResizeObserver(() => map.resize()).observe(map.getContainer());
 keepRoomForPanels(map.getContainer().parentElement, map.getContainer(), [document.getElementById("okres-panel")]);
 map.addControl(new NavigationControl({ showCompass: false }));
+// my location: the obec nearest to the position, selected with its panel open (as a search)
+addLocateControl(map, {
+  t,
+  places: () => loadPlaces(),
+  onFix: async ({ lat, lon, places }) => {
+    await mapLoaded; // the layers are there once the map has loaded (a click before it is possible)
+    await chooseObec(nearestPlace(places, lat, lon, OUTSIDE_KM));
+  },
+});
 // registered at once: the map may finish loading while the forecast is still on its way
 const mapLoaded = new Promise((resolve) => map.on("load", resolve));
 // on a phone the attribution (compact there) starts open and covers half the map: fold it

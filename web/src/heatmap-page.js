@@ -4,6 +4,7 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
 
 import { setUpLanguage } from "./i18n.js";
+import { addLocateControl, locationDot } from "./locate-control.js";
 import { placeSearch } from "./place-search.js";
 import { placeLabel, placesLoader } from "./places.js";
 import placesUrl from "./data/obce.json?url";
@@ -113,6 +114,16 @@ function makeMap() {
   // the credits start folded (their open box would cover a phone's small map)
   m.once("load", () => m.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show"));
   m.addControl(new NavigationControl({ showCompass: false }));
+  const myDot = locationDot(m);
+  addLocateControl(m, {
+    t,
+    places: () => loadPlaces(),
+    onFix: ({ lat, lon }) => {
+      myDot.show(lon, lat);
+      m.easeTo({ center: [lon, lat], zoom: Math.max(m.getZoom(), 8.5) });
+      setPoint(lon, lat, null, true); // the panel, as for a click on the map
+    },
+  });
   // the country fills the map until someone moves it (the frame's size settles after the first draw)
   const moved = userMoved(m);
   new ResizeObserver(() => {
@@ -279,7 +290,7 @@ function writeHash(push = false) {
   address.write(heatHash({
     time: timeChosen ? heatTimeAt(heatIndex.hours, step / 2) : null,
     colours: coloursChosen ? options.colours : null,
-    point: point && { lat: point.lat, lng: point.lng },
+    point: point && !point.own && { lat: point.lat, lng: point.lng },
   }), push);
 }
 // the slider moves in many small steps: the address follows once it rests (browsers limit the writes)
@@ -321,8 +332,9 @@ function choose(k) {
 }
 
 // --- the point: where someone clicked or searched -----------------------------------------
-function setPoint(lng, lat, name = null) {
-  point = { lng, lat, name };
+// `own`: my location, kept out of the address (links share clicked places, not where someone is)
+function setPoint(lng, lat, name = null, own = false) {
+  point = { lng, lat, name, own };
   marker ??= new Marker({ color: "#6a4fb3" });
   marker.setLngLat([lng, lat]).addTo(map);
   if (heatIndex && !heat) return;
@@ -541,7 +553,7 @@ async function startHourly() {
   map = makeMap();
   await new Promise((resolve) => map.once("style.load", resolve));
   addLayers();
-  if (point) setPoint(point.lng, point.lat, point.name); // the link's place: its marker now, its panel once the map loads
+  if (point) setPoint(point.lng, point.lat, point.name, point.own); // the link's place: its marker now, its panel once the map loads
   writeHash();
   $("heat-range").addEventListener("input", (e) => chooseStep(Number(e.target.value)));
   $("heat-prev").addEventListener("click", () => chooseStep(step - 2));
@@ -581,7 +593,7 @@ async function startHourly() {
     renderOptions();
     if (options.colours === "all") await ensureAllRange();
     showHeat();
-    if (point) setPoint(point.lng, point.lat, point.name);
+    if (point) setPoint(point.lng, point.lat, point.name, point.own);
     try {
       await loadFull();
     } catch {
@@ -590,7 +602,7 @@ async function startHourly() {
     sharpening = null;
     renderHourly();
     showHeat();
-    if (point) setPoint(point.lng, point.lat, point.name);
+    if (point) setPoint(point.lng, point.lat, point.name, point.own);
     return;
   }
   try {
@@ -604,7 +616,7 @@ async function startHourly() {
   // the colours of "All 5 days" must not change while scrubbing: wait for the range before the first picture
   if (options.colours === "all") await ensureAllRange();
   showHeat();
-  if (point) setPoint(point.lng, point.lat, point.name);
+  if (point) setPoint(point.lng, point.lat, point.name, point.own);
 }
 
 async function main() {
