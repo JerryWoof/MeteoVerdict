@@ -396,7 +396,7 @@ const movedByUser = userMoved(map);
  * once someone has moved the map themselves. */
 function fitView() {
   const open = Boolean(panel().childElementCount) && window.innerWidth > 900;
-  const right = open ? panelRoom() : 20;
+  const right = open ? panelRoom(28) : 20;
   if (padding && padding.right === right) return;
   if (padding && movedByUser()) return;
   const first = padding === null;

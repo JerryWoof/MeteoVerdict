@@ -293,9 +293,9 @@ select:disabled {
   width: 21rem;
   padding: 0.6rem 0.9rem 0.8rem;
 }
-/* a clicked okres's panel is never a scroll box: a long one reaches below the map, the map
-   keeps its size (so Czechia does not move from okres to okres) and the page grows
-   (web/src/panel-room.js makes room under the map) */
+/* the home map's okres panel (#detail) scrolls inside the map's height, like the station
+   panel (see "Stations" below); the map keeps its size so Czechia does not move from okres
+   to okres */
 .map-box:empty {
   display: none;
 }
@@ -3252,6 +3252,38 @@ footer .site-links {
 @media (min-width: 701px) {
   #station-panel {
     max-height: calc(var(--map-height) - 1.5rem);
+    overflow-y: auto;
+  }
+}
+
+/* the home map's okres panel: wider than the others (rankings and tables fit), a long one
+   scrolls inside the map's height, the close button stays in view */
+@media (min-width: 701px) {
+  #detail {
+    width: 28rem;
+    max-width: calc(100% - 4.5rem);
+    max-height: calc(var(--map-height) - 2.5rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-sizing: border-box;
+  }
+}
+/* the map is not shifted for the panel below 900px: keep it narrow there */
+@media (min-width: 701px) and (max-width: 900px) {
+  #detail {
+    width: 21rem;
+  }
+}
+#detail .close {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--box-bg);
+  border-radius: 4px;
+}
+@media (max-width: 700px) {
+  #detail {
+    max-height: 70vh;
     overflow-y: auto;
   }
 }
