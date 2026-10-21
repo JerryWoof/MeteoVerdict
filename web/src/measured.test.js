@@ -30,6 +30,12 @@ test("which view a hash opens", () => {
   assert.equal(pageMode(KINDS_HASH), "kinds");
   assert.equal(pageMode("#0-20000-0-11518"), "station");
   assert.equal(pageMode("#0-20000-0-11518/T"), "station");
+  // an old okres link opens the Weather tab on it; a malformed escape breaks nothing
+  assert.equal(pageMode("#CZ0631"), "measured");
+  assert.equal(parseLanding("#CZ0631", ["2026-10-15", "2026-10-16"], FALLBACK).okres, "CZ0631");
+  assert.equal(parseLanding("#CZ0631", ["2026-10-15", "2026-10-16"], FALLBACK).day, "2026-10-16");
+  assert.equal(kindsStation("#kinds/%E0%A4%A"), null);
+  assert.equal(kindsStation("#kinds/a%20b"), "a b");
 });
 
 test("days: the newest measured day first, older ones only when chosen", () => {
