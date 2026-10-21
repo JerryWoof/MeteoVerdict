@@ -255,6 +255,15 @@ test("obec hours: own value, straight line across a gap of 3 h or less, else okr
   assert.equal(far.hourly.temperature_2m[j], Number((okres.temperature_2m[j] + 2).toFixed(1)));
 });
 
+test("obec files carry the okres's own values for what the obec has none of (cloud, sunshine, symbol, rain, gusts)", () => {
+  const [{ doc }] = obceDocs({ okresDoc: DOC, obceFile: obceOf(0, 1), meta: META });
+  assert.deepEqual(doc.hourly.cloud_cover, DOC.forecast.hourly.cloud_cover);
+  assert.deepEqual(doc.hourly.sunshine_duration, DOC.forecast.hourly.sunshine_duration);
+  const row = DOC.forecast.parts[0];
+  for (const k of ["rain_probability", "cloud", "sunshine", "symbol", "sunrise", "sunset", "heavy_rain_probability", "gust"]) assert.equal(doc.parts[0][k] ?? null, row[k] ?? null, k);
+  assert.ok(doc.sources.okres.includes("cloud") && doc.sources.obec);
+});
+
 test("obec frost fields follow the okres's night minimum plus the obec's difference", () => {
   const columns = [...OUTLOOK.columns, "night_min", "ground_min"];
   const rows = OUTLOOK.rows.map((r) => [...r, 0.4, -1.2]);

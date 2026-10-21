@@ -12,7 +12,7 @@ and CSV files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
 | `api/v1/okresy/{code}.csv` | the hourly forecast: `time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration,temperature_2m_lo,temperature_2m_hi` |
 | `api/v1/ai/okresy/{code}.json` | the same file with the MeteoVerdict AI's values: everything by part of day, temperature and wind hourly (**experimental**, below) |
 | `api/v1/obce/{okres}/{id}.json` | the forecast of one obec (village or town) (below) |
-| `api/v1/ai/obce/{okres}/{id}.json` | the same with MeteoVerdict AI's obec forecast (`model: "ai"`), on the axis and parts of `ai/okresy/{okres}.json`; same ids |
+| `api/v1/ai/obce/{okres}/{id}.json` | the same with MeteoVerdict AI's obec forecast (`model: "ai"`), on the axis and parts of `ai/okresy/{okres}.json`; same ids and the same fields as the combined obec file |
 | `api/v1/obce/index.json` | every obec as `[okres, id, name, lat, lon]` |
 
 The CSV files are plain CSV: one header row, no comment line, so that Google Sheets'
@@ -114,6 +114,11 @@ layout may change.
   end of the 6 days) the okres value plus the obec's mean difference from the okres over
   the hours both have (wind not below 0); precipitation then is the okres value.
   Where the okres has no value, neither has the obec.
+- `sources.okres` lists the fields that are the okres's value (the rest is the obec's own); a copied field is missing on a row where the okres has none.
+- `hourly` also has `cloud_cover` and `sunshine_duration` (the okres's, as in the okres file: nothing is
+  forecast for an obec itself) and `parts` also `rain_probability`, `cloud`, `sunshine`, `symbol`,
+  `sunrise`, `sunset`, `heavy_rain_probability`, `heavy_rain`, `gust`, `gust_over_threshold`,
+  `frost_probability`, `coldest_site` and `coldest_min`, copied from the okres's row.
 - `parts`: the rows of the okres file's `parts` (same `day`, `part`, order) with `tmin`,
   `tmax`, `precipitation`, `wind`, computed from the obec's hourly series by the rules of the
   okres parts (Prague time: night 0–6 … evening 18–24 and the whole day; `tmin`/`tmax` the lowest and
@@ -124,7 +129,7 @@ layout may change.
   18–06 UTC) and `frost` (`night_min` ≤ 1 °C), `ground_frost` (`ground_min` ≤ 0 °C);
   the keys are missing on the other rows. These flags are our thresholds, **not official warnings**.
 
-An obec file is about 6 kB (6 days hourly), so the whole set is large; fetch only the
+An obec file is about 13 kB (6 days hourly), so the whole set is large; fetch only the
 obce you need, at most once an hour.
 
 ## Every model's own forecast (outside `api/v1`)
@@ -182,7 +187,7 @@ e-ink display, from the combined forecast (`okresy`) or the MeteoVerdict AI (`ai
 them from the data the pages use: `outlook.json` and `outlook-hourly.json` (`mvd
 outlook`, four times a day), `forecast/<okres>.json` and `90d/okres/<variable>.json` (`mvd
 aggregate`, daily). The Pages workflow runs after the Daily and the Outlook workflows,
-so the files follow both. The okres files are about 3.4 MB in total, 25 kB per okres (the AI files add 21 kB per okres); the obce files about 6 kB per obec.
+so the files follow both. The okres files are about 3.4 MB in total, 25 kB per okres (the AI files add 21 kB per okres); the obce files about 13 kB per obec.
 
 ## Terms
 
