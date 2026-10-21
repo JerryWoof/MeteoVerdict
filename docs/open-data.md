@@ -171,7 +171,7 @@ and served under `data/scores/ai/`. The AI's issue times are in the files (`ai_i
 - `fc/stations/index.json`, `fc/stations/validation/{id}.json` and `fc/stations/fc/{id}.json` (from the daily run after 2026-10-21): the AI at the station points (temperature and wind on the validation sample; `tmax`, `tmin`, `wind` for D+1 and D+2 over the last 35 days next to the measurements).
 - `fc/heat/`, `fc/temp100m/`: the inputs of the 100 m heatmap (the browser composes the hour).
 
-They carry no `licence` or `attribution` field yet. The licence of the AI output is not decided; until it is, treat it as CC BY-SA 4.0 like our other outputs
+They carry no `licence` or `attribution` field yet. The AI output is CC BY-SA 4.0 like our other outputs
 ([licensing.md](licensing.md)). The [Data page](https://meteoverdict.cz/data.html) lists
 every file, release, schedule and licence.
 

@@ -1227,7 +1227,7 @@ is "better" or "worse" than our blend only when both agree, otherwise "≈".
 
 Two samples exist and are never mixed. The **validation sample** is the AI's out-of-sample
 hindcast: it was trained on what was known at each issue day, but the model was chosen on
-the same days (about 9 experiments), so its numbers are optimistic and the page says so.
+the same days, so its numbers are optimistic and the page says so.
 The **live sample** (since the launch on 2026-10-19) is the AI's real forecasts at the okres
 point against the okres mean of the stations, hourly, D+1 to D+3, with every series on the
 same okres-hours; it counts as verified only from 28 measured days. Until then the AI is
