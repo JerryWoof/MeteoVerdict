@@ -219,14 +219,21 @@ function intervalChart(facts) {
       high: r.rank === 1 || !r.ci ? null : best.mae + r.ci[1],
       tied: r.tied || r.rank === 1,
     }));
+  // as wide as the panel's content, and a left margin that fits the longest model name
+  const wrapWidth = document.getElementById("map").parentElement.clientWidth;
+  const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const panelWidth = window.innerWidth <= 700 ? wrapWidth : window.innerWidth <= 900 ? 21 * rem : wrapWidth * 0.5;
+  const chartWidth = Math.max(280, Math.round(panelWidth - 2 * 0.9 * rem - 6));
+  const longest = Math.max(...data.map((d) => d.label.length));
+  const nameMargin = Math.min(Math.round(chartWidth * 0.6), Math.round(longest * 5.6 + 14));
   return Plot.plot({
-    width: 340,
+    width: chartWidth,
     height: 28 + 19 * data.length,
-    marginLeft: 145,
+    marginLeft: nameMargin,
     marginRight: 10,
     style: { fontSize: "10px" },
     x: { label: `MAE (${unitOf(current.view.variable)}) →`, grid: true, zero: true },
-    y: { label: null, domain: data.map((d) => d.label), tickFormat: (l) => (l.length > 24 ? `${l.slice(0, 23)}…` : l) },
+    y: { label: null, domain: data.map((d) => d.label) },
     marks: [
       Plot.ruleX([best.mae], { stroke: "#1d2329", strokeDasharray: "3,3" }),
       Plot.ruleY(data.filter((d) => d.low != null), {
