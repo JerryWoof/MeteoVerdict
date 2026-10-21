@@ -27,8 +27,6 @@ import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 import { aiPath } from "./ai-source.js";
 import { seatName, seatOkres } from "./seats.js";
 import { AI_MODEL, aiMapView, aiPeriods, hasAi, loadAi, withAi } from "./ai-model.js";
-import { renderAiExtras } from "./ai-extras.js";
-import { renderAiVerify } from "./ai-verify-view.js";
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
 const DETAIL = "forecast-detail.html";
@@ -805,10 +803,6 @@ function update(change = {}, { fromPlay = false, replace = false } = {}) {
   if ("okres" in change && change.okres !== state.okres) panelModel = panelStart(change.okres);
   // test: an obec's panel (change.obec) or its okres's; any other okres change closes it
   if ("okres" in change) panelObec = change.okres ? change.obec ?? null : null;
-  // the AI section's "forecast vs measured" follows the okres opened on the map
-  if (change.okres && change.okres !== state.okres) {
-    document.dispatchEvent(new CustomEvent("mv:okres", { detail: change.okres }));
-  }
   const { obec: _obec, ...rest } = change;
   state = { ...state, ...rest };
   const after = { ...state, obec: panelObec };
@@ -818,7 +812,7 @@ function update(change = {}, { fromPlay = false, replace = false } = {}) {
     else window.history.replaceState(null, "", hash);
   }
   const view = shownView();
-  renderAiBlock();
+  paintMeasuredLink();
   renderWhen(outlook);
   renderShow();
   paintFill(okresColours(view, state.day, state.part, state.colour));
@@ -950,10 +944,9 @@ function defaultToAi() {
   setMapModel(AI_MODEL);
 }
 
-/** The sections below the map: only while the AI is shown. */
-function renderAiBlock() {
-  const on = mapModel === AI_MODEL;
-  document.getElementById("ai-extras-block").hidden = !on;
+/** The link below the map to the measured page, for the okres open in the panel (measured.html#CZxxxx). */
+function paintMeasuredLink() {
+  document.getElementById("measured-link-a").href = state.okres ? `measured.html#${state.okres}` : "measured.html";
 }
 
 /** After the map's model changed: the obce of the open okres and of those in view, for the new source. */
@@ -1175,9 +1168,6 @@ async function main() {
   loadObceInView();
   // MeteoVerdict AI (shown below the map while the AI is the map's model): forecast vs
   // measured, its scores against our blend and its experiments
-  renderAiVerify(t, fetchJson, state.okres);
-  renderAiExtras(t, fetchJson);
-  renderAiBlock();
   document.getElementById("obce-search").replaceChildren(
     placeSearch({ t, load: loadPlaces, choose: chooseObec }),
   );
