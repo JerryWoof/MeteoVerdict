@@ -4,6 +4,7 @@
 // swap from a tiny inline script before first paint (keys of that page only), so nothing
 // blinks when the page script (src/i18n.js, loaded later) applies the language again.
 import { STRINGS } from "../src/i18n.js";
+import { injectSeo } from "./seo.mjs";
 
 const NAV_LINK = /<a\b[^>]*\bhref="([^"]*)"[^>]*>/g;
 const TEXT_ELEMENT = /<(\w+)\b([^>]*?\bdata-i18n="([^"]+)"[^>]*)>([^<]*)<\/\1>/g;
@@ -39,7 +40,7 @@ export function prerenderI18nPlugin() {
       order: "pre",
       handler(html, ctx) {
         const file = ctx.filename.split(/[\\/]/).pop();
-        return prerenderI18n(html, file);
+        return injectSeo(prerenderI18n(html, file), file);
       },
     },
   };
