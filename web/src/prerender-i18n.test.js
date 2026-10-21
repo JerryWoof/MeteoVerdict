@@ -13,6 +13,7 @@ test("menu and language button are Czech in the HTML, the active item follows th
   assert.match(out, /id="language" data-i18n="language.switch">English</);
   assert.ok(!out.includes("aria-current"));
   assert.match(prerenderI18n(PAGE, "forecast.html"), /href="forecast.html"[^>]*aria-current="page"/);
+  assert.match(prerenderI18n(PAGE.replace("forecast.html", "compare.html"), "compare-models.html"), /href="compare.html"[^>]*aria-current="page"/);
   assert.match(prerenderI18n(PAGE, "index.html"), /href="\.\/"[^>]*aria-current="page"/);
 });
 
