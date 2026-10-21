@@ -3,8 +3,8 @@
 // station measured. Data: data/scores/station-fc/<station>.json (`mvd station-fc`,
 // src/meteoverdict/station_fc.py: the single runs at the ~300 run stations, per day, lead
 // day D+1 and D+2, with the measured values taken the same way). MeteoVerdict AI has no
-// values published yet: data/scores/ai/fc/stations/fc/<station>.json would have the same
-// layout with the model "ai" (absent: the page says so). Pure helpers first, then the
+// values for days before the daily run stored them: data/scores/ai/fc/stations/fc/<station>.json
+// has the same layout with the model "ai" (its own `from`, a hindcast before the launch). Pure helpers first, then the
 // panels (station chart and the okres's stations table).
 
 import * as Plot from "@observablehq/plot";
@@ -103,10 +103,13 @@ const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * DAY_MS
 export function compareSeries(doc, ai, model, lead, key) {
   if (!doc) return null;
   const source = model === AI ? ai : doc;
-  const fc = source?.series?.[key]?.[String(lead)]?.[model] ?? null;
+  const raw = source?.series?.[key]?.[String(lead)]?.[model] ?? null;
   const obs = doc.obs?.[key] ?? null;
   const n = Math.round((Date.parse(`${doc.to}T00:00:00Z`) - Date.parse(`${doc.from}T00:00:00Z`)) / DAY_MS) + 1;
   const days = Array.from({ length: n }, (_, i) => addDays(doc.from, i));
+  // the AI's file has its own window (`from`): line its days up with the station file's days
+  const shift = source?.from && source.from !== doc.from ? Math.round((Date.parse(`${doc.from}T00:00:00Z`) - Date.parse(`${source.from}T00:00:00Z`)) / DAY_MS) : 0;
+  const fc = raw && shift ? days.map((_, i) => raw[i + shift] ?? null) : raw;
   const at = (list, i) => list?.[i] ?? null;
   const rows = days.map((_, i) => {
     const o = at(obs, i);
@@ -179,7 +182,10 @@ export function createModelCompare({ getJson, t, language }) {
   const loadStation = (id) => once(`s|${id}`, () => getJson(`data/scores/station-fc/${id}.json`));
   const loadAi = (id) => once(`a|${id}`, () => getJson(`data/scores/ai/fc/stations/fc/${id}.json`));
 
-  const loadErrors = (day) => once(`e|${day}`, () => getJson(`data/scores/station-fc/err-${day}.json`));
+  // the AI's per-day error files are its own (same layout, the model key "ai")
+  const loadErrors = (day, model = state.model) =>
+    once(`e|${model === AI ? "ai|" : ""}${day}`, () =>
+      getJson(model === AI ? `data/scores/ai/fc/stations/err-${day}.json` : `data/scores/station-fc/err-${day}.json`));
 
   // `err`: the value whose model error colours the map's dots (null: the measured values)
   const state = { model: DEFAULT_MODEL, lead: DEFAULT_LEAD, key: "tmax", err: DEFAULT_ERR, wx: DEFAULT_WX };
