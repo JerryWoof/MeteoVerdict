@@ -6,7 +6,7 @@
 import "./style.css";
 
 import { setUpLanguage } from "./i18n.js";
-import { formatNumber, searchStations } from "./station.js";
+import { formatFixed, formatNumber, formatSigned, searchStations } from "./station.js";
 import {
   KIND_COLORS, classifyStation, elevationGradient, ELEVATION_STOPS, filterStations, hasElements,
   kindCounts, measureCounts, withCoordinates,
@@ -14,7 +14,7 @@ import {
 import { createStationMap } from "./station-map-view.js";
 import { glyph } from "./icons.js";
 import {
-  KINDS_HASH, dayTabs, defaultDay, kindsStation, landingHash, okresRows, pageMode, parseLanding, stationHref,
+  KINDS_HASH, dayTabs, decodePart, defaultDay, kindsStation, landingHash, okresRows, pageMode, parseLanding, stationHref,
 } from "./measured.js";
 import { createMeasuredMap } from "./measured-map-view.js";
 import { BEYOND, colorFor, errorRampKey, renderScale } from "./palette.js";
@@ -31,6 +31,10 @@ import {
 
 const t = setUpLanguage();
 const language = document.documentElement.lang;
+// day and month in English as on the rest of the site ("19/10", not the US "10/19")
+const dateLanguage = language === "en" ? "en-GB" : language;
+/** Counts and heights in the page's language ("1 600" in Czech). */
+const num = (v) => formatNumber(v, language);
 const DATA = "data/scores/station"; // only index.json: the stations' names and places
 const OBSERVED = "data/scores/observed";
 const $ = (id) => document.getElementById(id);
@@ -92,9 +96,13 @@ function fillSearch() {
   const input = $("search");
   const go = () => {
     const [hit] = searchStations(index, input.value, 1);
+    // a name that matches no station says so (the open station stays)
+    input.setCustomValidity(hit || !input.value.trim() ? "" : t("station.noMatch"));
     if (hit) window.location.hash = hashWith(`${KINDS_HASH}/${encodeURIComponent(hit.id)}`);
+    else input.reportValidity();
   };
   input.addEventListener("change", go);
+  input.addEventListener("input", () => input.setCustomValidity(""));
   $("controls").addEventListener("submit", (event) => {
     event.preventDefault();
     go();
@@ -104,7 +112,7 @@ function fillSearch() {
 // --- one station's facts (the Stations tab's panel) -------------------------------------
 function facts(station) {
   const parts = [station.id];
-  if (station.elevation != null) parts.push(t("station.elevation", { m: formatNumber(Math.round(station.elevation)) }));
+  if (station.elevation != null) parts.push(t("station.elevation", { m: num(Math.round(station.elevation)) }));
   if (station.lat != null) parts.push(`${station.lat.toFixed(4)}° N, ${station.lon.toFixed(4)}° E`);
   if (station.okres) parts.push(`${t("control.okres")} ${displayName(station.okres)}`);
   if (station.active != null) parts.push(t(station.active ? "station.active" : "station.closed"));
@@ -120,7 +128,7 @@ const top = $("station-top");
 function describe(station) {
   const { kind, automatic } = classifyStation(station);
   const parts = [];
-  if (station.elevation != null) parts.push(`${formatNumber(Math.round(station.elevation))} m`);
+  if (station.elevation != null) parts.push(`${num(Math.round(station.elevation))} m`);
   parts.push(t(`map.one.${kind}`));
   // the manual kinds say "daily" already
   if (!automatic && !["precipitation", "climate_manual"].includes(kind)) parts.push(t("map.daily"));
@@ -149,7 +157,7 @@ keepRoomForPanels($("station-map-wrap"), $("station-map"), [stationPanel]);
 /** The station's own block at the top of its panel: kind and facts. */
 function stationInfo(station) {
   const box = el("div", null, "station-info");
-  box.append(el("strong", `${t("map.stationLabel")}: ${station.name ?? station.id}`), el("p", describe(station), "when"), el("p", facts(station), "model-note"));
+  box.append(el("p", describe(station), "when"), el("p", facts(station), "model-note"));
   return box;
 }
 
@@ -179,18 +187,25 @@ async function openStationPanel(id, change = null) {
   if (token !== stationPanelToken || mode !== "kinds") return;
   if (data) {
     stationOkresPanel.render(data, { day, part, okres });
-    stationPanel.querySelector(".when")?.after(stationInfo(station));
-    stationPanel.querySelector(".station-info")?.after(models.stationSection(station.id));
+    // the station is the panel's heading, its okres below it; the okres's measured values
+    // follow under a heading of their own
+    const okresHeading = stationPanel.querySelector("h2");
+    const okresName = `${t("control.okres")} ${okresHeading?.textContent ?? ""}`;
+    okresHeading?.replaceWith(
+      el("h2", station.name ?? station.id), el("p", okresName, "when"), stationInfo(station),
+      models.stationSection(station.id), el("h3", okresName),
+    );
   } else {
     const close = el("button", "×", "close");
     close.type = "button";
     close.setAttribute("aria-label", t("map.closePanel"));
     close.addEventListener("click", () => openStationPanel(null));
-    stationPanel.replaceChildren(close, el("h2", station.name ?? station.id), stationInfo(station), models.stationSection(station.id));
+    const okresName = station.okres ? el("p", `${t("control.okres")} ${displayName(station.okres)}`, "when") : "";
+    stationPanel.replaceChildren(close, el("h2", station.name ?? station.id), okresName, stationInfo(station), models.stationSection(station.id));
   }
   kindsMap().fitBeside(true);
-  // phones: the panel is under the map; bring it into view
-  if (window.innerWidth <= 700) stationPanel.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  // phones and narrow screens: the panel is under the map; bring it into view
+  if (window.innerWidth <= 900) stationPanel.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 function legendItem(swatch, label) {
@@ -215,7 +230,7 @@ function kindsErrNote(v) {
   if (!v.hasModel && models.state.model === AI) return t("fc.noAi");
   if (!v.hasModel) return t("fc.noModelValue", { model: v.name, value });
   const have = placed.filter((s) => v.byId.get(s.id) != null).length;
-  return t("map.err.note", { model: v.name, lead: models.state.lead, value, unit: v.unit, day: v.day, n: formatNumber(have), of: formatNumber(placed.length) });
+  return t("map.err.note", { model: v.name, lead: models.state.lead, value, unit: v.unit, day: v.day, n: num(have), of: num(placed.length) });
 }
 
 function renderLegend(shown) {
@@ -231,14 +246,14 @@ function renderLegend(shown) {
     const item = el("span", null, "station-map-legend-item");
     item.append(
       el("span", t("map.elevation")),
-      el("span", formatNumber(ELEVATION_STOPS[0][0])),
+      el("span", num(ELEVATION_STOPS[0][0])),
       bar,
-      el("span", formatNumber(ELEVATION_STOPS.at(-1)[0])),
+      el("span", num(ELEVATION_STOPS.at(-1)[0])),
     );
     items.push(item);
   } else {
     for (const [kind, count] of kindCounts(shown)) {
-      items.push(legendItem(dot(KIND_COLORS[kind]), `${t(`map.kind.${kind}`)} (${formatNumber(count)})`));
+      items.push(legendItem(dot(KIND_COLORS[kind]), `${t(`map.kind.${kind}`)} (${num(count)})`));
     }
   }
   const neutral = "#5b6670";
@@ -278,7 +293,7 @@ function applyFilter() {
   if (compared) shown = shown.filter((s) => kindsErr.byId.get(s.id) != null);
   stationMap.setStations(placed, shown);
   $("map-count").textContent =
-    measure || compared ? t("map.count", { shown: formatNumber(shown.length), all: formatNumber(placed.length) }) : "";
+    measure || compared ? t("map.count", { shown: num(shown.length), all: num(placed.length) }) : "";
   renderLegend(shown);
 }
 
@@ -292,7 +307,7 @@ function fillMapTools() {
     select.replaceChildren(
       all,
       ...measureCounts(placed).map(([m, n]) => {
-        const option = el("option", `${t(`map.measure.${m}`)} (${formatNumber(n)})`);
+        const option = el("option", `${t(`map.measure.${m}`)} (${num(n)})`);
         option.value = m;
         return option;
       }),
@@ -359,8 +374,9 @@ const loading = new Map(); // day → its promise
 let okresyList = null; // promise of the okresy (outlook.json: code, name, point)
 
 const todayIso = () => today(Date.now());
-const fmt = (v, digits = 0) => (v == null ? "–" : v.toFixed(digits));
-const fmt1 = (v) => (v == null ? "–" : v.toLocaleString(language, { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
+// in the page's language ("0,5" in Czech), never "-0", with a true minus sign
+const fmt = (v, digits = 0) => formatFixed(v, language, digits);
+const fmt1 = (v) => formatFixed(v, language, 1);
 
 const loadOkresy = () => (okresyList ??= getJson("data/scores/outlook.json").then((d) => d?.okresy ?? []));
 
@@ -386,10 +402,10 @@ function startView() {
 const isDaily = (day) => observedIndex.byDay.get(day)?.source === "daily";
 
 function dayName(day) {
-  const label = dayLabel(day, todayIso(), language);
+  const label = dayLabel(day, todayIso(), dateLanguage);
   return label.key ? t(label.key) : label.name;
 }
-const dayText = (day) => `${dayName(day)} ${dayLabel(day, todayIso(), language).short}`;
+const dayText = (day) => `${dayName(day)} ${dayLabel(day, todayIso(), dateLanguage).short}`;
 
 const okresPanel = createOkresPanel({
   panel: $("okres-panel"),
@@ -460,7 +476,7 @@ async function buildErrView(day, forKey = models.state.err, abs = false) {
   const lookup = errorLookup(doc, model, lead, key);
   const name = modelOptions(index, t).find((o) => o.id === model)?.name ?? model;
   const variable = key === "r" ? "mm" : key === "wind" ? "m/s" : "°C";
-  const label = (e) => `${e > 0 ? "+" : e < 0 ? "−" : ""}${fmt1(Math.abs(e))} ${variable}`;
+  const label = (e) => `${formatSigned(e, language, 1)} ${variable}`;
   return { key, ramp: errorRampKey(key, abs), unit: variable, name, noFile: !doc, day, label, ...lookup };
 }
 
@@ -492,10 +508,10 @@ function openStationFromOkres(id, event) {
   window.location.hash = hashWith(`${KINDS_HASH}/${encodeURIComponent(id)}`);
 }
 
-/** Open an okres's panel (okres layer); on phones it is under the map: bring it into view. */
+/** Open an okres's panel (okres layer); up to 900 px it is under the map: bring it into view. */
 async function openOkres(code) {
   await updateLanding({ okres: code });
-  if (window.innerWidth <= 700) $("okres-panel").scrollIntoView({ block: "start", behavior: "smooth" });
+  if (window.innerWidth <= 900) $("okres-panel").scrollIntoView({ block: "start", behavior: "smooth" });
 }
 
 function updateLanding(change) {
@@ -518,7 +534,7 @@ function olderControl(past) {
     const day = nearestDay({ days: past }, input.value);
     if (day) updateLanding({ day });
   });
-  const short = (day) => dayLabel(day, todayIso(), language).short;
+  const short = (day) => dayLabel(day, todayIso(), dateLanguage).short;
   box.title = t("obs.pickHint", { first: short(past[0].day), last: short(past.at(-1).day) });
   box.append(el("strong", t("obs.older")), input);
   return box;
@@ -534,7 +550,7 @@ function renderWhen() {
     const button = el("button", null, "daytab past");
     button.type = "button";
     button.setAttribute("aria-pressed", String(day === landing.day));
-    button.append(el("strong", dayName(day)), el("small", t("obs.tabDate", { date: dayLabel(day, now, language).date })));
+    button.append(el("strong", dayName(day)), el("small", t("obs.tabDate", { date: dayLabel(day, now, dateLanguage).date })));
     button.addEventListener("click", () => updateLanding({ day }));
     return button;
   });
@@ -544,8 +560,13 @@ function renderWhen() {
   const pressed = days.querySelector('.daytab[aria-pressed="true"]');
   if (pressed && scrolledTo !== landing.day) {
     scrolledTo = landing.day;
-    // the chosen tab in view (the newest are on the right)
-    pressed.scrollIntoView({ block: "nearest", inline: "nearest" });
+    // the chosen tab in view (the newest are on the right): the row is scrolled itself, as
+    // scrollIntoView would also move the browser's Tab starting point here (Chrome), and the
+    // first Tab of a keyboard user would skip the whole header
+    const row = days.getBoundingClientRect();
+    const tab = pressed.getBoundingClientRect();
+    if (tab.right > row.right) days.scrollLeft += tab.right - row.right;
+    else if (tab.left < row.left) days.scrollLeft -= row.left - tab.left;
   }
   const daily = isDaily(landing.day);
   const parts = $("parts");
@@ -763,8 +784,11 @@ function browseMeasured() {
     return;
   }
   const past = observedIndex.days.map((d) => d.day).filter((d) => d < todayIso());
-  landing = parseLanding(cleanHash(), past, start);
+  const asked = cleanHash();
+  landing = parseLanding(asked, past, start);
   if (isDaily(landing.day)) landing.part = "day";
+  // the address shows the view opened (an old okres link, an unknown part or ending is replaced)
+  if (asked.replace(/^#/, "")) window.history.replaceState(null, "", hashWith(landingHash(landing)));
   // a link coloured by gusts, sunshine or cloud (no model error exists) shows what was measured
   if (!errorKeyFor(landing.colour, "day")) models.state.wx = "none";
   measuredMap.resize();
@@ -831,7 +855,7 @@ function show() {
   const next = pageMode(hashNow);
   if (next === "station") {
     // an old link to a station's own page (#WSI, #WSI/element): the Stations tab on that station
-    const id = decodeURIComponent(hashNow.replace(/^#/, "").split("/")[0]);
+    const id = decodePart(hashNow.replace(/^#/, "").split("/")[0]) ?? "";
     window.history.replaceState(null, "", `${window.location.pathname}${hashWith(`${KINDS_HASH}/${encodeURIComponent(id)}`)}`);
     browseKinds();
     return;
