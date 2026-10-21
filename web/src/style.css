@@ -2315,7 +2315,7 @@ body.radar #show-box {
 }
 
 /* compare.html: each part says what it covers; the ranking's controls sit right above
-   the parts they drive (sticky within that part on wide screens) */
+   the parts they drive (sticky within that part on tall wide screens) */
 .content .section-title {
   font-size: 1.25rem;
   margin: 1.6rem 0 0.3rem;
@@ -2364,8 +2364,10 @@ body.radar #show-box {
   background: var(--paper);
   font-weight: 600;
 }
-@media (min-width: 701px) {
-  .ranking-controls {
+/* compare-models only (#controls): its long page scrolls under the strip. Not on
+   compare.html (short page) and not on low windows, where the strip would cover too much */
+@media (min-width: 701px) and (min-height: 801px) {
+  #controls.ranking-controls {
     position: sticky;
     top: 0;
     z-index: 3;
