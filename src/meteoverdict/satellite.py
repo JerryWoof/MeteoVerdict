@@ -135,6 +135,10 @@ def fetch_all(client: httpx.Client, files: list[SatFile], workers: int = 8) -> l
         return list(pool.map(lambda f: radar.download(client, file_url(f)), files))
 
 
+# frames kept this long after they leave the window (see web_frames)
+PRUNE_GRACE = timedelta(minutes=30)
+
+
 def web_frames(
     client: httpx.Client,
     root: Path,
@@ -175,8 +179,10 @@ def web_frames(
                     log(f"skipped satellite {product} {name}: {exc}")
             log(f"satellite {product}: {len(missing)} new, {len(wanted)} in the window")
         if prune:
+            # a little past the window: a browser may still hold the previous index.json
+            # (raw.githubusercontent caches it for minutes) and ask for its oldest frames
             for path in folder.glob(f"*.{EXT}"):
-                if radar.parse_stamp(path.stem) < since:
+                if radar.parse_stamp(path.stem) < since - PRUNE_GRACE:
                     path.unlink()
     return index_entry(root)
 
