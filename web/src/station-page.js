@@ -26,7 +26,7 @@ import {
 import { keepRoomForPanels } from "./panel-room.js";
 import { hashHistory } from "./hash-history.js";
 import {
-  DEFAULT_MODEL, ERROR_VARS, LEADS, AI_LEADS, AI, WX_MODES, createModelCompare, errorKeyFor, errorLookup, modelOptions,
+  DEFAULT_MODEL, ERROR_VARS, LEADS, AI, WX_MODES, createModelCompare, errorKeyFor, errorLookup, modelOptions,
   okresErrors, readModelChoice, splitModelHash, tabChoice, withModelHash,
 } from "./station-model.js";
 
@@ -825,15 +825,8 @@ async function fillModelPick() {
       return option;
     }),
   );
-  fillLeadPick();
-}
-
-/** The lead options of the chosen model (the AI only has D+1). */
-function fillLeadPick() {
-  const leads = models.state.model === AI ? AI_LEADS : LEADS;
-  if (!leads.includes(models.state.lead)) models.state.lead = leads[0];
   leadSelect.replaceChildren(
-    ...leads.map((n) => {
+    ...LEADS.map((n) => {
       const option = el("option", t(`fc.lead.${n}`));
       option.value = String(n);
       option.selected = n === models.state.lead;
@@ -852,7 +845,6 @@ function syncModelHash() {
 function modelChanged() {
   models.state.model = modelSelect.value;
   models.state.lead = Number(leadSelect.value);
-  fillLeadPick();
   syncModelHash();
   if (mode === "measured") renderLanding();
   else if (mode === "kinds") {
