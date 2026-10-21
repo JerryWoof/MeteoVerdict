@@ -76,7 +76,13 @@ function cell(tag, text, className) {
 }
 
 const pct = (v) => (v == null ? "–" : `${v > 0 ? "+" : ""}${Math.round(v * 100)} %`.replace("-", "−"));
-const width = () => Math.min(900, document.querySelector(".content").clientWidth);
+// the charts fill the text column up to 1200 px (as on forecast-detail); clientWidth
+// counts the column's side padding, so that comes off or the chart is wider than the column
+const width = () => {
+  const column = document.querySelector(".content");
+  const style = getComputedStyle(column);
+  return Math.min(1200, column.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
+};
 const PRECIPITATION = new Set(["precipitation_24h", "precipitation_daily"]);
 
 // --- view, kept in the URL: #variable/lead/window/region/blend-test variable/stations/sort/set
