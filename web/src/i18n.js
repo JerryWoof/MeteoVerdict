@@ -374,7 +374,7 @@ export const STRINGS = {
     "radar.cat.hail": "Přívalový déšť, možné kroupy",
     "radar.aloft": "Světlé barvy: odraz ve výšce. Déšť nebo sníh se vypaří dřív, než dopadne na zem (virga). Nejde o varování před mrazem ani namrzáním.",
     "radar.winter": "Intenzity platí pro déšť; v zimě tytéž barvy ukazují sníh.",
-    "radar.dbz": "Barvy: radarová odrazivost 4–60 dBZ (škála ČHMÚ); intenzita v mm/h podle Z = 200 R^1.6.",
+    "radar.dbz": "Barvy: radarová odrazivost 4–60 dBZ (škála ČHMÚ); intenzita v mm/h podle Z = 200 R^1,6.",
     "radar.rainExplain": "Radar zpřesněný srážkoměry ČHMÚ (MERGE), po 10 min, 20 min až 1,5 h po skončení hodiny. 1 mm = 1 litr vody na m². Pár mm za hodinu udělá louže; 20 mm a víc za hodinu je přívalový déšť, který může zaplavit ulice a malé potoky.",
     "radar.echotopExplain": "Jak vysoko sahají srážkové oblaky. Přeháňky 3–6 km; nad 10 km vysoké bouřkové oblaky, často s kroupami a blesky.",
     "radar.cellsExplain": "Bouřkové buňky: šipka ukazuje, kam se buňka posune za 30 min, čárkovaně odkud přišla; červený kruh znamená možné kroupy. Klepněte na buňku pro podrobnosti.",
