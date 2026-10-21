@@ -1,5 +1,5 @@
-// Build-time prerender of the page chrome: every plain-text [data-i18n] element (the menu, the
-// language button, headings) gets its Czech text in the HTML, and the menu item of the page
+// Build-time prerender of the page chrome: every plain-text [data-i18n] element (the menu,
+// headings) gets its Czech text in the HTML, and the menu item of the page
 // gets aria-current, so the first paint is already final. English readers get the same
 // swap from a tiny inline script before first paint (keys of that page only), so nothing
 // blinks when the page script (src/i18n.js, loaded later) applies the language again.
@@ -11,9 +11,7 @@ const TEXT_ELEMENT = /<(\w+)\b([^>]*?\bdata-i18n="([^"]+)"[^>]*)>([^<]*)<\/\1>/g
 
 export function prerenderI18n(html, file) {
   const keys = new Set();
-  // the language button is translated like everything else
-  let out = html.replace(/<button\b([^>]*\bid="language"[^>]*)>/, (m, attrs) =>
-    attrs.includes("data-i18n") ? m : `<button${attrs} data-i18n="language.switch">`);
+  let out = html;
   out = out.replace(TEXT_ELEMENT, (m, tag, attrs, key) => {
     const cs = STRINGS.cs[key];
     if (cs === undefined || /[<>&]/.test(cs)) return m;
@@ -28,7 +26,7 @@ export function prerenderI18n(html, file) {
   if (keys.size === 0) return out;
   const en = Object.fromEntries([...keys].map((key) => [key, STRINGS.en[key] ?? STRINGS.cs[key]]));
   const script = `<script>(function(){try{if(localStorage.getItem("meteoverdict.language")!=="en")return;`
-    + `var d=document,e=${JSON.stringify(en).replace(/</g, "\\u003c")};d.documentElement.lang="en";`
+    + `var d=document,e=${JSON.stringify(en).replace(/</g, "\\u003c")};d.documentElement.lang="en";d.querySelectorAll("#language [data-lang]").forEach(function(b){b.setAttribute("aria-pressed",String(b.dataset.lang==="en"))});`
     + `d.querySelectorAll("[data-i18n]").forEach(function(n){var t=e[n.dataset.i18n];if(t!==undefined&&!n.children.length)n.textContent=t})}catch(_){}})()</script>`;
   return out.replace("</body>", `    ${script}\n  </body>`);
 }
