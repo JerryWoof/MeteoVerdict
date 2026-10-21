@@ -38,7 +38,11 @@ const MODEL_ORDER = [
   "jma_gsm", "cma_grapes_global",
 ];
 
-const SUFFIX = /;m=([a-z0-9_]+)(?:;l=(\d))?(?:;e=([a-z]+))?$/;
+/** The Weather map's colour: the model's error ("bias": ±, "abs": absolute) or the measured values ("none"). */
+export const WX_MODES = ["bias", "abs", "none"];
+export const DEFAULT_WX = "bias";
+
+const SUFFIX = /;m=([a-z0-9_]+)(?:;l=(\d))?(?:;e=([a-z]+))?(?:;w=([a-z]+))?$/;
 
 /** "#day/…;m=dwd_icon_d2;l=2;e=tmax" → {hash: "#day/…", model, lead, err}; without the suffix
  * the choice of the page is left as it is (`model`/`lead` null); `err` (the map coloured by
@@ -48,19 +52,22 @@ export function splitModelHash(hash) {
   const m = SUFFIX.exec(text);
   if (!m) return { hash: text, model: null, lead: null };
   const lead = Number(m[2] ?? DEFAULT_LEAD);
-  const out = { hash: text.slice(0, m.index), model: m[1], lead: LEADS.includes(lead) ? lead : DEFAULT_LEAD };
-  if (m[3] === "none") return { ...out, err: null };
-  return ERROR_VARS.includes(m[3]) ? { ...out, err: m[3] } : out;
+  let out = { hash: text.slice(0, m.index), model: m[1], lead: LEADS.includes(lead) ? lead : DEFAULT_LEAD };
+  if (m[3] === "none") out = { ...out, err: null };
+  else if (ERROR_VARS.includes(m[3])) out = { ...out, err: m[3] };
+  // `wx`: how the Weather map is coloured (";w=abs", ";w=none"), only when given
+  return WX_MODES.includes(m[4]) ? { ...out, wx: m[4] } : out;
 }
 
 /** The hash with the model choice appended (nothing for the defaults, to keep plain links plain). */
-export function withModelHash(hash, { model, lead, err }) {
+export function withModelHash(hash, { model, lead, err, wx = DEFAULT_WX }) {
   const base = splitModelHash(hash).hash || "#";
   const parts = [];
-  if (model !== DEFAULT_MODEL || lead !== DEFAULT_LEAD || (err ?? null) !== DEFAULT_ERR) {
+  if (model !== DEFAULT_MODEL || lead !== DEFAULT_LEAD || (err ?? null) !== DEFAULT_ERR || wx !== DEFAULT_WX) {
     parts.push(`;m=${model}`);
     if (lead !== DEFAULT_LEAD) parts.push(`;l=${lead}`);
     if ((err ?? null) !== DEFAULT_ERR) parts.push(`;e=${err ?? "none"}`);
+    if (wx !== DEFAULT_WX) parts.push(`;w=${wx}`);
   }
   return `${base}${parts.join("")}`;
 }
@@ -129,6 +136,33 @@ export function errorLookup(doc, model, lead, key) {
   return { byId: new Map(doc.stations.map((id, i) => [id, column[i] == null ? null : column[i] / scale])), hasModel: true };
 }
 
+/** The error value the Weather map shows for a colour layer and part of day (null: no model error exists). */
+export function errorKeyFor(layer, part) {
+  if (layer === "temperature") return part === "night" ? "tmin" : "tmax";
+  if (layer === "precipitation") return "r";
+  return layer === "wind" ? "wind" : null;
+}
+
+/**
+ * The model's error per okres: the mean error (bias) and mean absolute error of its stations
+ * with a value, {code → {n, bias, mae}}. `stations`: [{id, okres}], `codeOf` maps a station's
+ * okres name to the okres code (null: unknown).
+ */
+export function okresErrors(byId, stations, codeOf) {
+  const sums = new Map();
+  for (const s of stations) {
+    const e = byId.get(s.id);
+    const code = e == null ? null : codeOf(s.okres);
+    if (!code) continue;
+    const a = sums.get(code) ?? { n: 0, sum: 0, abs: 0 };
+    a.n += 1;
+    a.sum += e;
+    a.abs += Math.abs(e);
+    sums.set(code, a);
+  }
+  return new Map([...sums].map(([code, a]) => [code, { n: a.n, bias: a.sum / a.n, mae: a.abs / a.n }]));
+}
+
 /**
  * @param {object} o
  * @param {(path: string) => Promise<object|null>} o.getJson
@@ -148,7 +182,7 @@ export function createModelCompare({ getJson, t, language }) {
   const loadErrors = (day) => once(`e|${day}`, () => getJson(`data/scores/station-fc/err-${day}.json`));
 
   // `err`: the value whose model error colours the map's dots (null: the measured values)
-  const state = { model: DEFAULT_MODEL, lead: DEFAULT_LEAD, key: "tmax", err: DEFAULT_ERR };
+  const state = { model: DEFAULT_MODEL, lead: DEFAULT_LEAD, key: "tmax", err: DEFAULT_ERR, wx: DEFAULT_WX };
   const fmt = (v, digits = 1) =>
     v == null ? "–" : v.toLocaleString(language, { minimumFractionDigits: digits, maximumFractionDigits: digits });
   const signed = (v, digits = 1) => (v == null ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmt(Math.abs(v), digits)}`);

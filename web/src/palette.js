@@ -17,6 +17,11 @@ const diverging = (max) => [
   [max / 6, [253, 219, 199]], [max / 2, [239, 138, 98]], [max, [178, 24, 43]],
 ];
 
+/** A scale for the size of an error: pale at 0, saturated at `max`. */
+const sequential = (max) => [
+  [0, [244, 241, 234]], [max / 4, [253, 224, 160]], [max / 2, [244, 143, 66]], [max, [140, 20, 40]],
+];
+
 export const RAMPS = {
   temperature: [
     [-15, [49, 54, 149]], [-5, [69, 117, 180]], [0, [171, 217, 233]], [5, [224, 243, 248]],
@@ -37,6 +42,10 @@ export const RAMPS = {
   errTemp: diverging(4),
   errRain: diverging(8),
   errWind: diverging(4),
+  // the same as a size only (mean absolute error per okres): from none to large
+  absTemp: sequential(4),
+  absRain: sequential(8),
+  absWind: sequential(4),
   sunshine: CLOUD.map(([v, rgb]) => [((100 - v) / 100) * SUNNY_HOURS, rgb]).reverse(),
 };
 
@@ -44,7 +53,10 @@ export const RAMPS = {
 export const rampKey = (layer, mm) => (layer === "precipitation" && mm ? "precipitationMm" : layer);
 
 /** The error scale of a value of the per-day error files ("tmax", "tmin", "r", "wind"). */
-export const errorRampKey = (value) => ({ r: "errRain", wind: "errWind" })[value] ?? "errTemp";
+export const errorRampKey = (value, abs = false) => {
+  const name = { r: "Rain", wind: "Wind" }[value] ?? "Temp";
+  return `${abs ? "abs" : "err"}${name}`;
+};
 
 /** Fill of an okres without a value (beyond a single model's horizon; nothing measured). */
 export const BEYOND = "#c9c9c9";
@@ -73,6 +85,7 @@ export function colorFor(value, layer) {
 export function scaleValue(key, v) {
   if (key === "temperature") return `${v}°`;
   if (key === "precipitation") return `${Math.round(v * 100)} %`;
+  if (key.startsWith("abs")) return `${Math.round(v)} ${{ absTemp: "°C", absRain: "mm", absWind: "m/s" }[key]}`;
   if (key.startsWith("err")) {
     const unit = { errTemp: "°C", errRain: "mm", errWind: "m/s" }[key];
     return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(Math.round(v))} ${unit}`;
