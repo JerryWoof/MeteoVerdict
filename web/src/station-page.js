@@ -223,9 +223,7 @@ function renderLegend(shown) {
   if (kindsErr) {
     const box = el("div", null, "station-map-error-scale");
     renderScale(box, kindsErr.ramp, t(`measured.scale.${kindsErr.ramp}`));
-    const note = el("p", kindsErrNote(kindsErr), "muted small");
-    note.classList.toggle("missing", kindsErr.noFile || !kindsErr.hasModel);
-    items.push(box, note);
+    items.push(box);
   } else if ($("map-colour").value === "elevation") {
     const bar = el("span", null, "station-map-ramp");
     bar.style.background = elevationGradient();
@@ -246,6 +244,11 @@ function renderLegend(shown) {
   const neutral = "#5b6670";
   items.push(legendItem(dot(neutral), t("map.automatic")), legendItem(dot(neutral, true), t("map.manual")));
   $("map-legend").replaceChildren(...items);
+  // what the error colours mean and where they are missing: under the map, not in the box
+  const note = $("map-note");
+  note.textContent = kindsErr ? kindsErrNote(kindsErr) : "";
+  note.hidden = !kindsErr;
+  note.classList.toggle("missing", Boolean(kindsErr && (kindsErr.noFile || !kindsErr.hasModel)));
 }
 
 let plainColour = "kind"; // the colour choice when not coloured by error
@@ -257,6 +260,7 @@ async function applyKindsColour() {
   const token = ++kindsColourToken;
   const select = $("map-colour");
   select.value = models.state.err ?? plainColour;
+  for (const radio of $("map-colours").querySelectorAll("input")) radio.checked = radio.value === select.value;
   const err = models.state.err;
   const day = startView().day ?? (await models.loadIndex())?.to;
   const next = err && day ? await buildErrView(day) : null;
@@ -295,6 +299,23 @@ function fillMapTools() {
     );
     select.addEventListener("change", applyFilter);
   }
+  // the colour choice as radios in the map's legend box (the hidden select keeps the value)
+  $("map-colours").replaceChildren(
+    ...[...$("map-colour").options].map((option) => {
+      const label = el("label", null, "check");
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = "map-colour";
+      radio.value = option.value;
+      radio.addEventListener("change", () => {
+        $("map-colour").value = radio.value;
+        $("map-colour").dispatchEvent(new Event("change"));
+      });
+      label.append(radio, el("span", option.textContent));
+      return label;
+    }),
+  );
+  if (window.innerWidth <= 700) $("kinds-show").open = false;
   $("map-colour").addEventListener("change", () => {
     const value = $("map-colour").value;
     models.state.err = ERROR_VARS.includes(value) ? value : null;
@@ -564,8 +585,9 @@ function renderShow() {
       return label;
     }),
   );
+  // the model's error exists for temperature, rain and wind only: the others are not offered then
   $("colours").replaceChildren(
-    ...OBSERVED_LAYERS.map((colour) => {
+    ...OBSERVED_LAYERS.filter((colour) => models.state.wx === "none" || errorKeyFor(colour, "day")).map((colour) => {
       const label = el("label", null, "check");
       const radio = document.createElement("input");
       radio.type = "radio";
@@ -601,7 +623,9 @@ function renderWxModes() {
       radio.addEventListener("change", () => {
         models.state.wx = mode;
         syncModelHash();
-        renderLanding();
+        // a colour without a model error (gusts, sunshine, cloud) falls back to temperature
+        if (mode !== "none" && !errorKeyFor(landing.colour, "day")) updateLanding({ colour: "temperature" });
+        else renderLanding();
       });
       label.append(radio, el("span", t(`measured.wx.${mode}`)));
       return label;
@@ -741,6 +765,8 @@ function browseMeasured() {
   const past = observedIndex.days.map((d) => d.day).filter((d) => d < todayIso());
   landing = parseLanding(cleanHash(), past, start);
   if (isDaily(landing.day)) landing.part = "day";
+  // a link coloured by gusts, sunshine or cloud (no model error exists) shows what was measured
+  if (!errorKeyFor(landing.colour, "day")) models.state.wx = "none";
   measuredMap.resize();
   renderLanding();
 }
