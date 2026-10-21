@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title data-i18n-page="api.title">MeteoVerdict: data</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <meta name="description" content="Free open data: forecast and ranking of weather models per okres (JSON, CSV), release archives, licences and update times." />
+    <meta name="description" content="Free open data: forecast and ranking of weather models per okres (JSON), release archives, licences and update times." />
   </head>
   <body class="page theme-data">
     <header>
@@ -55,7 +55,6 @@ for time, temp in zip(hourly["time"][:6], hourly["temperature_2m"][:6]):
 const okres = await (await fetch(url)).json();
 const best = okres.models.variables.temperature_2m.lead_days[1][0];
 console.log(`best model for tomorrow's temperature: ${best.name}`);</pre>
-      <pre class="code">=IMPORTDATA("https://jerrywoof.github.io/MeteoVerdict/api/v1/okresy/CZ0201.csv")</pre>
 
       <h2 id="trmnl" data-i18n="api.eink">On an e-ink display</h2>
       <p data-i18n="api.einkText"></p>

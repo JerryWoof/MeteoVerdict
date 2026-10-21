@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { SCORE_VARIABLES, VERSION, aiOkresDoc, indexDoc, obceDocs, obceIndexDoc, okresCsv, okresDoc } from "../src/api.js";
+import { SCORE_VARIABLES, VERSION, aiOkresDoc, indexDoc, obceDocs, obceIndexDoc, okresDoc } from "../src/api.js";
 import { records } from "../src/data.js";
 
 const web = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -38,12 +38,10 @@ let aiCount = 0;
 for (const okres of okresy) {
   const doc = okresDoc({ okres, outlook, hourly, weightsDoc: read(`forecast/${okres.code}.json`), scores, meta });
   writeFileSync(join(out, "okresy", `${okres.code}.json`), JSON.stringify(doc));
-  writeFileSync(join(out, "okresy", `${okres.code}.csv`), okresCsv(doc));
   if (withAi) {
     const ai = aiOkresDoc({ okres, outlook, hourly, aiForecast, aiOutlook, meta });
     if (ai) {
       writeFileSync(join(out, "ai", "okresy", `${okres.code}.json`), JSON.stringify(ai));
-      writeFileSync(join(out, "ai", "okresy", `${okres.code}.csv`), okresCsv(ai));
       aiCount++;
       // the AI's obce (a test, as the combined ones): on the axis and parts of the AI's okres file
       const aiObceFile = read(`ai/fc/forecast/obce-${okres.code}.json`);
