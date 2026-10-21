@@ -55,7 +55,8 @@ export function fillPicker(select, { table, names, available, selected, t }) {
 export function issuedText(iso) {
   const at = iso ? new Date(iso) : null;
   if (!at || Number.isNaN(at.getTime())) return null;
-  return new Intl.DateTimeFormat(document.documentElement.lang, {
-    dateStyle: "short", timeStyle: "short", timeZone: "Europe/Prague",
+  // as in every page's header: "21. 10. 2026 1:32", "21 Oct 2026, 01:32"
+  return new Intl.DateTimeFormat(document.documentElement.lang === "cs" ? "cs-CZ" : "en-GB", {
+    dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Prague",
   }).format(at);
 }
