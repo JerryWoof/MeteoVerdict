@@ -2831,7 +2831,18 @@ body.station [hidden] {
 }
 .heat-options .seg-buttons {
   display: inline-flex;
-  flex-wrap: wrap;
+}
+/* phones: the buttons stay one joined row and go under their label when they do not fit
+   beside it (they wrapped into two ragged rows at 320–375 px) */
+@media (max-width: 480px) {
+  .heat-options .seg {
+    flex-wrap: wrap;
+  }
+  .heat-options .seg-buttons button {
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+    white-space: nowrap;
+  }
 }
 .heat-options .seg-buttons button {
   padding: 0.15rem 0.55rem;
@@ -2880,6 +2891,11 @@ body.station [hidden] {
 }
 #heat-panel .heat-chart .risk-label {
   fill: #4575b4;
+  /* a halo of the box colour: the label stays readable where the temperature line crosses it */
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 #heat-panel .heat-risk {
   font-weight: 600;
