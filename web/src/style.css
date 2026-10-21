@@ -1074,7 +1074,7 @@ body.tv [hidden] {
     font-size: 0.8rem;
   }
   /* pinch to zoom */
-  body.tv .maplibregl-ctrl-top-right {
+  body.tv .maplibregl-ctrl-group:has(.maplibregl-ctrl-zoom-in) {
     display: none;
   }
   /* phones: day tabs and parts of the day each take a full row (the tabs scroll),
@@ -1998,10 +1998,10 @@ body.radar.forecast #map::after {
 body.radar #show-box {
   left: auto;
   right: 0.75rem;
-  top: 5.2rem;
+  top: 8.2rem; /* under the zoom and my-location buttons */
   bottom: auto;
   width: 19rem;
-  max-height: calc(100% - 8.2rem);
+  max-height: calc(100% - 11.2rem);
   overflow-y: auto;
   /* a shadow at the edge that has more to scroll to (overlay scroll bars show nothing):
      the box colour covers it once scrolled to that end */
@@ -2018,13 +2018,52 @@ body.radar #show-box {
   border-bottom: 1px solid var(--line, #e3ddd0);
   font-size: 0.78rem;
 }
-#point-hint .locate {
-  font: inherit;
-  padding: 0.1rem 0.5rem;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: var(--surface);
-  cursor: pointer;
+/* my location: an icon under the zoom buttons (locate-control.js), a note at the map's top */
+.maplibregl-ctrl-group button.mv-locate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+}
+.mv-locate.loading svg {
+  animation: mv-locate-pulse 1s ease-in-out infinite;
+}
+@keyframes mv-locate-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mv-locate.loading svg {
+    animation: none;
+    opacity: 0.5;
+  }
+}
+.locate-note {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  max-width: calc(100% - 100px);
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  font-size: 0.78rem;
+  line-height: 1.3;
+  text-align: center;
+  color: #222;
+  pointer-events: none;
+}
+.my-location-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #1a73e8;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 6px rgba(26, 115, 232, 0.22), 0 1px 3px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
 }
 /* find a place: the results open under the field, inside the box (it scrolls) */
 .place-search {
