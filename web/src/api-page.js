@@ -5,7 +5,7 @@ import { setUpLanguage } from "./i18n.js";
 import { renderBlocks } from "./info-page.js";
 import { SCHEDULE, pragueClocks } from "./schedule.js";
 import { displayName } from "./tv.js";
-import { obecCsvLines } from "./api.js";
+import { hourlyPreview } from "./api.js";
 import { obceOf, setUpBuilder } from "./trmnl.js";
 
 const t = setUpLanguage();
@@ -98,14 +98,12 @@ async function main() {
     if (obec) {
       const href = `api/v1/${ai ? "ai/obce" : "obce"}/${code}/${obec}.json`;
       links.replaceChildren(linkItem("JSON", href), Object.assign(document.createElement("li"), { textContent: t("api.obecNote") }));
-      const lines = obecCsvLines(await get(href));
-      preview.textContent = lines.length ? `${lines.join("\n")}\n…` : "";
+      preview.textContent = hourlyPreview(await get(href));
     } else {
       const base = `api/v1/${ai ? "ai/okresy" : "okresy"}/${code}`;
-      links.replaceChildren(linkItem("JSON", `${base}.json`), linkItem("CSV", `${base}.csv`),
+      links.replaceChildren(linkItem("JSON", `${base}.json`),
         ...(ai ? [Object.assign(document.createElement("li"), { textContent: t("api.aiNote") })] : []));
-      const csv = await get(`${base}.csv`, "text");
-      preview.textContent = csv ? `${csv.split("\n").slice(0, 8).join("\n")}\n…` : "";
+      preview.textContent = hourlyPreview(await get(`${base}.json`));
     }
     if (remember) window.history.replaceState(null, "", `#${code}${obec ? `/${obec}` : ""}`);
   }

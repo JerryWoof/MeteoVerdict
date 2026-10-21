@@ -119,10 +119,8 @@ What the project does about it (since October 2026):
 - The pages say "Gusts over 13.5 m/s (MeteoVerdict threshold, not an ČHMÚ warning)"
   instead of "Watch for strong gusts", and next to every flag "Not an official ČHMÚ
   warning; official warnings: chmi.cz" with a link to https://www.chmi.cz/. Every JSON
-  file of `api/v1` carries the same `notice`, and so does `api/v1/index.json`. The CSV
-  files of `api/v1` hold the hourly series only, with no flag, so they carry no notice;
-  they stay plain CSV without a comment line, which `=IMPORTDATA` and Excel would show as
-  a data row ([open-data.md](open-data.md)).
+  file of `api/v1` carries the same `notice`, and so does `api/v1/index.json` (the open
+  data are JSON only, [open-data.md](open-data.md)).
 - Scores of event forecasts (POD, FAR on the comparison page) speak of *event
   forecasts* (*předpovědi jevu*), not warnings.
 
