@@ -75,8 +75,6 @@ export async function setUpAiCompare(t, names, language) {
   const status = aiStatus(liveIndex ? { days: liveIndex.days, measured_hours: liveIndex.hours } : aiDoc?.test);
   const query = new URLSearchParams(window.location.search).get("cmp");
   const view = parseView(query, valIndex?.regions);
-  // an old link to a kraj (no longer offered): Czechia
-  if (valIndex?.regions?.[view.region]?.[0] === "kraj") view.region = "cz";
   if (view.sample === "live" && !liveIndex) view.sample = "validation";
   const modelName = (id) => names[id] ?? valIndex?.models?.[id] ?? id;
   let bestId = null;
@@ -121,8 +119,8 @@ export async function setUpAiCompare(t, names, language) {
     };
     select.replaceChildren(
       Object.assign(el("option", t("region.cz")), { value: "cz", selected: view.region === "cz" }),
-      // okresy, not kraje (the owner's choice, as on compare-models)
-      ...(groups.okresy.length ? [group(t("compare.okresy"), groups.okresy)] : []),
+      ...(groups.kraje.length ? [group(t("compare.kraje"), groups.kraje)] : []),
+
     );
   }
 
@@ -158,8 +156,7 @@ export async function setUpAiCompare(t, names, language) {
     ], view.sample);
     document.getElementById("aic-sample").querySelector('[value="live"]').disabled = !liveIndex;
     banner(index);
-    // an okres stands on its 1–2 stations: say so
-    document.getElementById("aic-region-note").hidden = view.region === "cz";
+    document.getElementById("aic-region-note").hidden = false;
     const unit = valIndex?.units?.[view.variable] ?? "";
     renderVerdict(entry, unit, gone);
     renderTable(entry, unit);
