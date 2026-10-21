@@ -62,9 +62,10 @@ function fillSelect(id, options, current) {
 export async function setUpAiCompare(t, names, language) {
   const root = document.getElementById("ai-compare");
   if (!root) return;
-  const [aiDoc, liveIndex, valIndex] = await Promise.all([
-    getJson("data/scores/ai/ai.json"), load("live", "index.json"), load("validation", "index.json"),
-  ]);
+  const [aiDoc, valIndex] = await Promise.all([getJson("data/scores/ai/ai.json"), load("validation", "index.json")]);
+  // the live sample exists only once a day since the launch is measured (ai.json says how
+  // many): no request for a file that is not there yet
+  const liveIndex = aiDoc?.test?.days === 0 ? null : await load("live", "index.json");
   if (!valIndex && !liveIndex) {
     root.hidden = true;
     return;
