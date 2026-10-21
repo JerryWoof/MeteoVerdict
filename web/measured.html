@@ -86,7 +86,7 @@
           <h3 id="map-title" class="sr-only" data-i18n="map.title">Map of stations</h3>
           <p id="map-hint" class="note" data-i18n="map.hint">Click a station on the map or search by name.</p>
           <form id="map-tools" class="station-map-tools strip attached">
-            <label class="field"><span data-i18n="map.colour">Colour</span>
+            <label class="field" hidden><span data-i18n="map.colour">Colour</span>
               <select id="map-colour">
                 <option value="tmax" data-i18n="map.colour.err.tmax">model error: maximum</option>
                 <option value="tmin" data-i18n="map.colour.err.tmin">model error: minimum</option>
@@ -101,9 +101,19 @@
           </form>
           <div id="station-map-wrap" class="map-wrap">
             <div id="station-map" class="map-frame station-map"></div>
+            <aside id="kinds-box" class="map-box legend">
+              <details id="kinds-show" open>
+                <summary data-i18n="tv.onMap">On the map</summary>
+                <fieldset>
+                  <legend data-i18n="map.colour">Colour</legend>
+                  <div id="map-colours"></div>
+                </fieldset>
+                <div id="map-legend" class="station-map-legend"></div>
+              </details>
+            </aside>
             <aside id="station-panel" class="map-box panel past" aria-live="polite"></aside>
           </div>
-          <div id="map-legend" class="station-map-legend legend-card"></div>
+          <p id="map-note" class="muted small station-map-note" hidden></p>
           <p class="muted small station-map-network" data-i18n="map.network">All are ČHMÚ's official network (no amateur stations).</p>
           <p class="muted small station-map-keys" data-i18n="map.keys">Keyboard: focus the map, move it with the arrow keys, zoom with + and −; Enter opens the station in the middle.</p>
         </section>
