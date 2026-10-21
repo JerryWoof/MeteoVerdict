@@ -319,6 +319,10 @@ function onAxis(times, okres, sample, { interpolate, offset: useOffset, floor, d
   return [values, offset];
 }
 
+// what the obec has no value of its own for: the okres's value, as it is in the okres file
+const OKRES_HOURLY = ["cloud_cover", "sunshine_duration"];
+const OKRES_PART_FIELDS = ["rain_probability", "cloud", "sunshine", "symbol", "sunrise", "sunset", "heavy_rain_probability", "heavy_rain", "coldest_site", "coldest_min", "frost_probability", "gust", "gust_over_threshold"];
+
 /** Hourly series and parts of day of one place on the axis of an okres file. */
 export function obecForecast(place, times, okresHourly, okresParts) {
   const stamp = (t) => Date.parse(t); // "2026-10-20T12:00Z" and "2026-10-20T12:00+00:00"
@@ -355,12 +359,15 @@ export function obecForecast(place, times, okresHourly, okresParts) {
       precipitation: enough && row.precipitation != null ? round(P.reduce((x, y) => x + y, 0), 1) : null,
       wind: enough && row.wind != null ? Math.max(...W) : null,
     };
+    for (const k of OKRES_PART_FIELDS) if (row[k] != null) out[k] = row[k]; // like the frost fields: missing where the okres row has none
     const dn = row.night_min != null || row.ground_min != null ? nightDiff(row.day) : null;
     if (row.night_min != null && dn != null) { out.night_min = round(row.night_min + dn, 1); out.frost = out.night_min <= 1; }
     if (row.ground_min != null && dn != null) { out.ground_min = round(row.ground_min + dn, 1); out.ground_frost = out.ground_min <= 0; }
     return out; // night_min, frost, ground_min, ground_frost only on the rows that have them
   });
-  return { hourly: { start: times[0], step_hours: 1, hours: times.length, temperature_2m, precipitation, wind_speed_10m }, parts, temperature_offset: tOffset };
+  const hourly = { start: times[0], step_hours: 1, hours: times.length, temperature_2m, precipitation, wind_speed_10m };
+  for (const k of OKRES_HOURLY) if (okresHourly[k]) hourly[k] = [...okresHourly[k]];
+  return { hourly, parts, temperature_offset: tOffset };
 }
 
 /** The files of the obce of one okres: [{id, doc}] (docs/open-data.md). */
@@ -380,6 +387,7 @@ export function obceDocs({ okresDoc: doc, obceFile, meta }) {
         notice: NOTICE,
         obec: { id: ids[i], name: place.name, okres: doc.okres.code, lat: place.lat, lon: place.lon, elevation: place.elevation ?? null },
         generated: obceFile.generated ?? null,
+        sources: { okres: [...OKRES_HOURLY, ...OKRES_PART_FIELDS], obec: "all other fields" },
         hourly: f.hourly,
         parts: f.parts,
       },
