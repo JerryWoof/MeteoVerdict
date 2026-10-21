@@ -3425,6 +3425,25 @@ summary:focus-visible,
     margin: 0.5rem 0 0;
   }
 }
+/* forecast map, tablets up to 1024 px (where the map does not move aside for a panel,
+   tv-page.js PANEL_BESIDE): the okres or obec panel goes under the map, as on the measured
+   page, instead of covering the east of Czechia */
+@media (min-width: 701px) and (max-width: 1024px) {
+  body.tv .map-wrap > #okres-panel {
+    position: static;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    margin: 0.5rem 0 0;
+  }
+  /* the legend stays at the map's bottom-left, not over the panel under it */
+  body.tv .map-wrap > .map-box.legend {
+    top: calc(var(--map-height) - 1.6rem);
+    bottom: auto;
+    transform: translateY(-100%);
+  }
+}
 @media (max-width: 700px) {
   #station-panel {
     width: auto;
