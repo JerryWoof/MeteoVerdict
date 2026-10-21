@@ -1,8 +1,10 @@
 import { defineConfig } from "vite";
+import { prerenderI18nPlugin } from "./scripts/prerender-i18n.mjs";
 
 // Relative asset paths, so the site works at any root (https://meteoverdict.cz/, or a subpath)
 export default defineConfig({
   base: "./",
+  plugins: [prerenderI18nPlugin()],
   // MapLibre alone is about 1 MB minified (280 kB gzipped)
   build: {
     outDir: "dist",
