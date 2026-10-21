@@ -10,7 +10,7 @@ and CSV files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
 | `api/v1/index.json` | all 77 okresy: `code`, `name`, `lat`, `lon` and the URLs of their files |
 | `api/v1/okresy/{code}.json` | everything for one okres (below) |
 | `api/v1/okresy/{code}.csv` | the hourly forecast: `time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration,temperature_2m_lo,temperature_2m_hi` |
-| `api/v1/ai/okresy/{code}.json` | the same forecast with temperature and wind from the MeteoVerdict AI (**experimental**, below) |
+| `api/v1/ai/okresy/{code}.json` | the same forecast with temperature and wind from the MeteoVerdict AI; the rest is still the blend's here (**experimental**, below) |
 | `api/v1/obce/{okres}/{id}.json` | the forecast of one obec (village or town) (below) |
 | `api/v1/ai/obce/{okres}/{id}.json` | the same with MeteoVerdict AI's obec forecast (`model: "ai"`), on the axis and parts of `ai/okresy/{okres}.json`; same ids |
 | `api/v1/obce/index.json` | every obec as `[okres, id, name, lat, lon]` |
@@ -90,6 +90,8 @@ in a sentence, `forecast.ai_issued` is when the AI issued its forecast and
   a value; `symbol`, `cloud`, `sunshine`, `gust`, rain and the frost fields are the combined
   forecast's.
 
+The AI forecasts more than this file shows: precipitation, probability of rain and heavy rain, cloud, sunshine, gusts and the symbol are in `ai/fc/outlook.json` (below), by part of day. This file does not use them yet.
+
 The files are only written when the AI files (`data/scores/ai/`) are in the build.
 The thresholds (`gust_over_threshold`, `frost`, `ground_frost`, `heavy_rain`) are ours,
 **not official warnings** (the `notice` in the file is unchanged).
@@ -150,11 +152,19 @@ without our correction. Public, but not part of `api/v1` either.
 
 ## Files for the AI forecast and the heatmap (outside `api/v1`)
 
-Experimental, published daily with the release `ai-latest` (`ai.zip`, from about 08:30 Prague time)
-and served under `data/scores/ai/`: `ai.json` (status, verification rule, scores and validation,
-counted from the launch on 2026-10-19), `ai-forecast.json` (hourly forecast by okres), `fc/outlook.json`,
-`fc/verify/{code}.json`, `fc/compare/`, and the inputs of the 100 m heatmap (`fc/heat/`, `fc/temp100m/`;
-the browser composes the hour). They carry no `licence` or `attribution` field yet; they are CC BY-SA 4.0 like our other outputs
+Experimental, computed daily and published with the release `ai-latest` (`ai.zip`)
+and served under `data/scores/ai/`. The AI's issue times are in the files (`ai_issued`, `sky_issued`,
+`rain_issued`; now around 08:30 and 17:30 Prague time); the site shows them after its next build.
+
+- `ai.json`: status (`unverified` for every variable until the AI beats the blend on 28 measured days), the verification rule, scores and validation, counted from the launch on 2026-10-19.
+- `ai-forecast.json`: the AI's **hourly temperature and wind** (°C, m/s) by okres, at the station points, about 5 days from the issue hour; `parts` names the files below.
+- `fc/outlook.json`: the complete AI forecast by part of day (`night`, `morning`, `afternoon`, `evening`, `day`; today and 5 more days), in the layout of `outlook.json`. `sources` says `ai` for `tmin`, `tmax` (°C), `wind` (m/s), `cloud` (%), `sunshine` (h), `gust` (m/s, with the `gust_over_threshold` flag at 13.5 m/s), `precipitation` (mm), `rain_probability` (P ≥ 0.2 mm), `heavy_rain_probability` (P ≥ 5 mm), `heavy_rain` and `symbol`, and `astronomy` for `sunrise` and `sunset`. Frost fields are our thresholds, not listed as AI.
+- `fc/sky/ai-sky.json` (cloud, sunshine, gusts) and `fc/sky/ai-rain.json` (`rain_probability`, `p1` for P ≥ 1 mm, `heavy_rain_probability`, `precipitation`): the AI's values by okres, marked `shadow: true` (trial output).
+- `fc/verify/{code}.json`, `fc/compare/`: comparison with observations and with the other models.
+- `fc/stations/index.json`, `fc/stations/validation/{id}.json` and `fc/stations/fc/{id}.json` (from the daily run after 2026-10-21): the AI at the station points (temperature and wind on the validation sample; `tmax`, `tmin`, `wind` for D+1 and D+2 over the last 35 days next to the measurements).
+- `fc/heat/`, `fc/temp100m/`: the inputs of the 100 m heatmap (the browser composes the hour).
+
+They carry no `licence` or `attribution` field yet. The licence of the AI output is not decided; until it is, treat it as CC BY-SA 4.0 like our other outputs
 ([licensing.md](licensing.md)). The [Data page](https://jerrywoof.github.io/MeteoVerdict/data.html) lists
 every file, release, schedule and licence.
 
