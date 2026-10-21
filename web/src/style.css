@@ -3215,8 +3215,15 @@ footer .site-links {
   padding: 0.25rem 0.55rem;
 }
 @media (max-width: 700px) {
+  /* one row whatever the language: the names (Maximum … Nárazy) never wrap */
+  .model-compare .model-var {
+    display: flex;
+    flex-wrap: nowrap;
+  }
   .model-compare .model-var button {
-    padding: 0.3rem 0.35rem;
-    font-size: 0.8rem;
+    flex: 1 1 auto;
+    padding: 0.3rem 0.25rem;
+    font-size: 0.72rem;
+    white-space: nowrap;
   }
 }
