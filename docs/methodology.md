@@ -162,7 +162,7 @@ The comparison page can rank the models by **hours ahead** as well as by D+1 …
 (the "Lead time" choice: *Hours ahead (from every run)* H+1–6, H+7–12, H+13–24,
 H+25–48, H+49–72, and *Days ahead* D+1 … D+5). `mvd leads` writes
 `leads-bands-<window>.json` (Czechia and the station kinds) and
-`leads-bands-<window>-kraj.json` (kraje) for the windows `90d` (the last 90 days of
+`leads-bands-<window>-kraj.json` (kraje) and `leads-bands-<window>-okres.json` (okresy; an okres needs one station, most have one or none) for the windows `90d` (the last 90 days of
 runs) and `all` (every run), from the same single runs and observations as `leads.json`
 (`leads.band_rankings`):
 
