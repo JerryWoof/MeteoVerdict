@@ -429,6 +429,7 @@ def summarise(hourly: pl.DataFrame, chances: pl.DataFrame) -> pl.DataFrame:
     ]
     sum_stats = [
         pl.col("precipitation").sum().alias("precipitation"),
+        pl.col("precipitation").sort_by("time").last().is_not_null().alias("last_rain"),
         # null without any sunshine value
         pl.when(pl.col("sunshine_duration").count() > 0)
         .then(pl.col("sunshine_duration").sum() / 3600)
@@ -758,7 +759,10 @@ MODEL_PARTS_NOTES = (
     "0-24; precipitation and sunshine belong to the hour before their time; tmin/tmax, "
     "precipitation total (mm), highest hourly wind (m/s), mean cloud cover (%, a whole "
     "day: of 6-18), hours of sunshine. A period the model does not cover in full (beyond "
-    "its horizon) is null. Symbol: rain (sleet, snow at a mean of <= 2 / <= 0.5 °C) when "
+    "its horizon) is null; a part whose every hour the model has, with only the "
+    "precipitation of its last hour missing (the model's last hour), counts with the "
+    "precipitation it has, a whole day not. Symbol: rain (sleet, snow at a mean of "
+    "<= 2 / <= 0.5 °C) when "
     "the model's own total is at least 0.3 mm, else the sky from its cloud cover (clear < "
     "30 %, partly cloudy < 65 %, else cloudy); never showers. No probability of "
     "precipitation from one model (rain_probability null). Values per okres: one list per "
@@ -792,7 +796,11 @@ def model_periods(fc: pl.DataFrame) -> pl.DataFrame:
     values. Only periods the model covers in full: every hour of the period that the
     forecast has (at least ``MIN_PART_HOURS`` / ``MIN_DAY_HOURS``) with a temperature and,
     for a model with precipitation, every hour of its sums; so nothing beyond the model's
-    horizon or where it ends inside a period (its rain would be undercounted)."""
+    horizon or where it ends inside a period (its rain would be undercounted). One
+    exception (as web/src/models.js modelPeriods): a part of the day whose every hour the
+    model has, with only the precipitation of its very last hour missing (ICON-D2 ending
+    at 23:00 has no rain for 23-24), counts, its precipitation the hours it has; a whole
+    day stays null then, so a day's total is never short."""
     keys = ["okres", "model", "day", "part"]
     grid = fc.select("okres", "time").unique()
     full = grid.join(fc.select("model").unique(), how="cross").join(
@@ -815,6 +823,7 @@ def model_periods(fc: pl.DataFrame) -> pl.DataFrame:
         pl.len().alias("sum_hours"),
         pl.col("precipitation").count().alias("p_hours"),
         pl.col("precipitation").sum().alias("precipitation"),
+        pl.col("precipitation").sort_by("time").last().is_not_null().alias("last_rain"),
         pl.when(pl.col("sunshine_duration").count() > 0)
         .then(pl.col("sunshine_duration").sum() / 3600)
         .alias("sunshine"),
@@ -835,10 +844,16 @@ def model_periods(fc: pl.DataFrame) -> pl.DataFrame:
         .with_columns(pl.col("sum_hours", "p_hours").fill_null(0))
     )
     least = pl.when(pl.col("part") == "day").then(MIN_DAY_HOURS).otherwise(MIN_PART_HOURS)
+    # a part only its last hour of rain short (the model's last hour) still counts
+    last_hour_short = (
+        (pl.col("part") != "day")
+        & (pl.col("p_hours") == pl.col("sum_hours") - 1)
+        & ~pl.col("last_rain").fill_null(False)
+    )
     table = table.filter(
         (pl.col("t_hours") >= least)
         & (pl.col("t_hours") == pl.col("hours"))
-        & (~pl.col("rainy") | (pl.col("p_hours") == pl.col("sum_hours")))
+        & (~pl.col("rainy") | (pl.col("p_hours") == pl.col("sum_hours")) | last_hour_short)
     ).with_columns(pl.when(pl.col("rainy")).then(pl.col("precipitation")).alias("precipitation"))
     symbols = [
         model_symbol(c, p, t)
