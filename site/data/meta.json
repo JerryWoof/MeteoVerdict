@@ -1,17 +1,17 @@
 {
- "generated": "2026-10-21T00:54:13+00:00",
+ "generated": "2026-10-21T10:32:40+00:00",
  "as_of": "2026-10-20",
  "windows": {
   "90d": {
-   "from": "2026-08-10",
+   "from": "2026-08-09",
    "to": "2026-10-20"
   },
   "all": {
-   "from": "2026-08-10",
+   "from": "2026-08-09",
    "to": "2026-10-20"
   },
   "jja": {
-   "from": "2026-08-10",
+   "from": "2026-08-09",
    "to": "2026-08-31"
   },
   "season": {
@@ -91,61 +91,37 @@
  "short_record": {
   "90d": {
    "cma_grapes_global": {
-    "coverage": 0.789,
-    "days": 56,
+    "coverage": 0.792,
+    "days": 57,
     "variables": [
-     "precipitation_24h"
+     "temperature_2m_00utc",
+     "temperature_2m_06utc"
     ]
    },
    "gem_global": {
-    "coverage": 0.797,
-    "days": 55,
+    "coverage": 0.778,
+    "days": 56,
     "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "jma_gsm": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "ncep_aigfs025": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
-     "precipitation_24h"
+     "temperature_2m_06utc",
+     "temperature_2m_18utc"
     ]
    }
   },
   "all": {
    "cma_grapes_global": {
-    "coverage": 0.789,
-    "days": 56,
+    "coverage": 0.792,
+    "days": 57,
     "variables": [
-     "precipitation_24h"
+     "temperature_2m_00utc",
+     "temperature_2m_06utc"
     ]
    },
    "gem_global": {
-    "coverage": 0.797,
-    "days": 55,
+    "coverage": 0.778,
+    "days": 56,
     "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "jma_gsm": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "ncep_aigfs025": {
-    "coverage": 0.797,
-    "days": 55,
-    "variables": [
-     "precipitation_24h"
+     "temperature_2m_06utc",
+     "temperature_2m_18utc"
     ]
    }
   },
@@ -154,28 +130,57 @@
     "coverage": 0.364,
     "days": 8,
     "variables": [
-     "precipitation_24h"
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
+     "temperature_2m_18utc",
+     "temperature_2m_hourly",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
     ]
    },
    "gem_global": {
     "coverage": 0.364,
     "days": 8,
     "variables": [
-     "precipitation_24h"
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
+     "temperature_2m_18utc",
+     "temperature_2m_hourly",
+     "temperature_max",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
     ]
    },
    "jma_gsm": {
     "coverage": 0.364,
     "days": 8,
     "variables": [
-     "precipitation_24h"
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
+     "temperature_2m_18utc",
+     "temperature_2m_hourly",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
     ]
    },
    "ncep_aigfs025": {
     "coverage": 0.364,
     "days": 8,
     "variables": [
-     "precipitation_24h"
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
+     "temperature_2m_18utc",
+     "temperature_2m_hourly",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
     ]
    }
   }
@@ -191,7 +196,7 @@
  "attribution": "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com (CC BY 4.0) from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, KNMI, DMI, ČHMÚ, Environment and Climate Change Canada, the Japan Meteorological Agency, the China Meteorological Administration and the UK Met Office (CC BY-SA 4.0). Boundaries: ČÚZK (CC BY 4.0).",
  "sources": {
   "previous_runs": {
-   "from": "2026-08-10",
+   "from": "2026-08-09",
    "to": "2026-10-18"
   },
   "single_runs": {
