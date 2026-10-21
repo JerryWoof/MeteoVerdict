@@ -3,6 +3,7 @@
 // launch on; right of "now" the latest forecast (data/scores/ai/fc/verify/). Hidden without its index.
 import * as Plot from "@observablehq/plot";
 
+import { dateText as isoDateText, numText } from "./ai-format.js";
 import { chartRows, measuredHours, modelsByMae, okresyByName, pickModel, startOkres } from "./ai-verify.js";
 
 const BASE = "data/scores/ai/fc/verify";
@@ -13,11 +14,7 @@ export const COLORS = { measured: "#1d2329", ai: "#6a4fb3", model: "#e08a1e" };
 
 const lang = () => document.documentElement.lang;
 
-function fmt(value, digits = 2) {
-  return value == null || Number.isNaN(value)
-    ? "–"
-    : value.toLocaleString(lang(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
-}
+const fmt = (value, digits = 2) => numText(value, digits, lang());
 
 function el(tag, text, className) {
   const e = document.createElement(tag);
@@ -26,9 +23,7 @@ function el(tag, text, className) {
   return e;
 }
 
-function dateText(iso) {
-  return new Intl.DateTimeFormat(lang(), { day: "numeric", month: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
-}
+const dateText = (iso) => isoDateText(iso, lang());
 
 // the day ticks: Prague midnights from the first to the last time, at most `count` of them
 function dayTicks(first, last, count) {
