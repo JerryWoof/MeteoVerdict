@@ -21,6 +21,7 @@ export const PAGES = {
   "about.html": ["about.html", "Co je MeteoVerdict, odkud má data a jak nás kontaktovat.", "What MeteoVerdict is, where its data comes from and how to contact us."],
   "methodology.html": ["methodology.html", "Jak MeteoVerdict počítá přesnost modelů, jak skládá předpověď a kde jsou hranice.", "How MeteoVerdict measures model accuracy, how it builds the forecast and where the limits are."],
   "collaboration.html": ["collaboration.html", "MeteoVerdict je open-source a zdarma; jsme otevřeni spolupráci.", "MeteoVerdict is open source and free; we are open to collaboration."],
+  "nejpresnejsi-model.html": ["nejpresnejsi-model.html", "Který model počasí je v Česku nejpřesnější? Žádný nevyhrává všude: ALADIN, ICON a ECMWF se liší podle místa, veličiny a předstihu. Jak to měříme a kde je aktuální pořadí.", "Which weather model is the most accurate in Czechia? None wins everywhere: ALADIN, ICON and ECMWF differ by place, variable and lead time. How we measure it and where the current ranking is.", "Který model počasí je nejpřesnější?"],
   "report.html": ["report.html", "Který model předpovídal Česko v uplynulém měsíci nejlépe: čísla, grafy a výhrady.", "Which model forecast Czechia best last month: numbers, charts and caveats."],
 };
 
