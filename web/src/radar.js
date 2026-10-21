@@ -40,6 +40,70 @@ export function toStamp(ms) {
 /** "2026-10-14" → "20261014" (the folder of an archived day). */
 export const dayFolder = (day) => day.replaceAll("-", "");
 
+// The archive's folders are UTC days (ČHMÚ's stamps are UTC), but a day picked on the page is a
+// day in Prague: 00:00–24:00 there is 22:00 (21:00 in winter) of the UTC day before to 22:00
+// (21:00) of the day. So the page reads the day's folder and the one before, keeps the frames
+// of the Prague day from both (pragueDayIndex), and takes each frame from the folder of its own
+// UTC day (frameFolder). The day's last two hours in its folder belong to the next Prague day.
+
+/** Milliseconds Prague's clock is ahead of UTC at `ms` (1 or 2 hours). */
+function zoneOffset(ms, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  }).formatToParts(ms);
+  const get = (type) => Number(parts.find((p) => p.type === type).value);
+  return Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute")) - Math.floor(ms / 60000) * 60000;
+}
+
+/** The calendar day "2026-10-19" in Prague as UTC milliseconds {from, to}, `to` excluded (23, 24 or 25 hours). */
+export function pragueDayWindow(day, timeZone = "Europe/Prague") {
+  const [y, m, d] = day.split("-").map(Number);
+  // local midnight: UTC midnight less the offset there (midnight is never in a clock change)
+  const midnight = (dd) => {
+    let ms = Date.UTC(y, m - 1, dd);
+    for (let i = 0; i < 2; i++) ms = Date.UTC(y, m - 1, dd) - zoneOffset(ms, timeZone);
+    return ms;
+  };
+  return { from: midnight(d), to: midnight(d + 1) };
+}
+
+/** "2026-10-19" → "2026-10-18". */
+export function previousDay(day) {
+  return new Date(Date.parse(`${day}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+}
+
+const STAMP_LISTS = ["maxz", "merge1h", "echotop", "motion", "cells"];
+
+/**
+ * The index of a Prague day from the index.json of its UTC day (`own`) and of the UTC day
+ * before (`before`, may be null): every frame list, the satellite's too, cut to `window`
+ * ({from, to}, pragueDayWindow). Null when the day's own index is missing.
+ */
+export function pragueDayIndex(own, before, { from, to }) {
+  if (!own) return null;
+  const inDay = (stamp) => {
+    const ms = parseStamp(stamp);
+    return ms != null && ms >= from && ms < to;
+  };
+  const merge = (a, b) => [...new Set([...(a ?? []), ...(b ?? [])])].filter(inDay).sort();
+  const out = { ...own };
+  for (const key of STAMP_LISTS) if (own[key] || before?.[key]) out[key] = merge(before?.[key], own[key]);
+  if (own.satellite || before?.satellite) {
+    out.satellite = {};
+    for (const product of new Set([...Object.keys(before?.satellite ?? {}), ...Object.keys(own.satellite ?? {})])) {
+      const meta = own.satellite?.[product] ?? before.satellite[product];
+      out.satellite[product] = { ...meta, frames: merge(before?.satellite?.[product]?.frames, own.satellite?.[product]?.frames) };
+    }
+  }
+  return out;
+}
+
+/** The folder of a frame: the live one, or the archived UTC day the frame's stamp is in. */
+export function frameFolder(stamp, day, liveBase, siteBase = "radar/") {
+  if (day === "live") return liveBase;
+  return `${siteBase}days/${String(stamp).slice(0, 8)}/`;
+}
+
 /** URL of one frame: `<base><layer>/<stamp>.png`. */
 export const frameUrl = (base, layer, stamp) => `${base}${layer}/${stamp}.png`;
 

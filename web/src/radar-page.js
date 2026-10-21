@@ -7,7 +7,9 @@ import { setUpLanguage } from "./i18n.js";
 import {
   HOURS, MM_SCALE, boundsOf, clock, frameUrl, imageCoordinates, latestAtOrBefore, legendNumber,
   minutesBetween, parseStamp, parseView, rainRate, sourceUrl, timeline, toStamp, viewHash,
+  frameFolder, pragueDayIndex, pragueDayWindow, previousDay,
 } from "./radar.js";
+import { hashHistory } from "./hash-history.js";
 import {
   ALOFT_COLOURS, CATEGORIES, FILTER_KEYS, NODATA, buildLut, categoriesFrom, categoryOf, decodePixels, dbzLevel,
   filterLevels, labelKey, legendRows, maxzScale, parseFilter, rateLabel, simpleScale,
@@ -79,6 +81,9 @@ if (!hadHash) view.layers = DEFAULT_LAYERS;
 view.filter = parseFilter(view.filter ?? stored("filter", "all"));
 let index = null; // index.json of the shown source
 let base = null; // its folder
+let sourceDay = null; // the day of the shown source ("live" or an archived day)
+/** The folder of a frame of the shown source (an archived Prague day spans two UTC folders). */
+const folderOf = (stamp) => frameFolder(stamp, sourceDay, base);
 let steps = [];
 let allSteps = []; // every frame of the source, for the rain at a place
 let days = [];
@@ -111,7 +116,7 @@ const has = (layer) => view.layers.includes(layer);
 const firstTime = () => steps[0]?.time ?? 0;
 const lastTime = () => steps.at(-1)?.time ?? 0;
 const lastObserved = () => steps.findLast((s) => !s.forecast)?.time ?? null;
-const radarUrl = (s) => frameUrl(base, s.forecast ? "nowcast" : "maxz", s.radar);
+const radarUrl = (s) => frameUrl(folderOf(s.radar), s.forecast ? "nowcast" : "maxz", s.radar);
 
 // --- decoded frames -----------------------------------------------------------------------
 // url → Promise<{codes, w, h} | null>, least recently used dropped beyond cacheSize():
@@ -175,7 +180,7 @@ function motion(stamp) {
   if (!motions.has(stamp)) {
     motions.set(
       stamp,
-      getJson(`${base}motion/${stamp}.json`).then((m) => {
+      getJson(`${folderOf(stamp)}motion/${stamp}.json`).then((m) => {
         const ok = validMotion(m) ? m : null;
         motionReady.set(stamp, ok);
         return ok;
@@ -333,7 +338,7 @@ function drawRain() {
     rainCanvas?.hide();
     return true;
   }
-  const url = frameUrl(base, "merge1h", current.rain);
+  const url = frameUrl(folderOf(current.rain), "merge1h", current.rain);
   const R = ready.get(url);
   if (!R) {
     frame(url).then(() => requestDraw());
@@ -406,7 +411,7 @@ function satelliteInfo() {
   return { product, meta, around: { a: before[0], b: null, tau: 0 } };
 }
 function satUrl(product, meta, stamp) {
-  return `${base}satellite/${product}/${stamp}.${meta?.ext ?? "jpg"}`;
+  return `${folderOf(stamp)}satellite/${product}/${stamp}.${meta?.ext ?? "jpg"}`;
 }
 function drawSatellite() {
   const info = satelliteInfo();
@@ -431,7 +436,7 @@ function drawSatellite() {
 
 function drawEchotop() {
   const stamp = has("echotop") && !isForecastTime() ? latestAtOrBefore(index?.echotop, shownMs, 10) : null;
-  showImage("echotop", stamp ? frameUrl(base, "echotop", stamp) : null, 0.85, imageCoordinates(boundsOf(index)), "rain-canvas-slot");
+  showImage("echotop", stamp ? frameUrl(folderOf(stamp), "echotop", stamp) : null, 0.85, imageCoordinates(boundsOf(index)), "rain-canvas-slot");
 }
 
 let cellsData = new Map(); // stamp → Promise<cells>
@@ -442,7 +447,7 @@ function drawCells() {
     source?.setData({ type: "FeatureCollection", features: [] });
     return;
   }
-  if (!cellsData.has(stamp)) cellsData.set(stamp, getJson(`${base}cells/${stamp}.json`));
+  if (!cellsData.has(stamp)) cellsData.set(stamp, getJson(`${folderOf(stamp)}cells/${stamp}.json`));
   const forMs = shownMs;
   cellsData.get(stamp).then((cells) => {
     if (forMs !== shownMs) return;
@@ -495,7 +500,7 @@ function prefetch() {
   if (playing && i >= steps.length - 4) ahead.push(...steps.slice(0, 4));
   for (const s of ahead) {
     if (has("radar")) frame(radarUrl(s));
-    if (has("rain") && s.rain) frame(frameUrl(base, "merge1h", s.rain));
+    if (has("rain") && s.rain) frame(frameUrl(folderOf(s.rain), "merge1h", s.rain));
   }
 }
 
@@ -1160,10 +1165,19 @@ function renderPlay() {
   button.disabled = steps.length < 2;
 }
 
-function writeHash() {
+// Back/Forward and a link pasted on the open page show that view; another day (live or an
+// archived one) is a step in the history, the other choices replace the current entry
+const address = hashHistory((hash) => {
+  const next = parseView(hash);
+  next.filter = parseFilter(next.filter ?? view.filter);
+  if (viewHash(next) !== viewHash(view)) update(next, false);
+  else writeHash(); // the same view: the address as the page writes it
+});
+
+function writeHash(push = false) {
   const time = !playing && shownMs != null && steps.length && shownMs !== lastObserved() && !isForecastTime() ? toStamp(shownMs) : null;
   view.time = time;
-  history.replaceState(null, "", viewHash({ ...view, time }));
+  address.write(viewHash({ ...view, time }), push);
 }
 
 // --- state ----------------------------------------------------------------------------
@@ -1171,13 +1185,15 @@ function writeHash() {
 let loadToken = 0;
 async function load(fresh = false) {
   const token = ++loadToken;
-  const nextBase = sourceUrl(view.day, LIVE);
+  const day = view.day;
+  const nextBase = sourceUrl(day, LIVE);
   // a day missing from the archive's list (typed into the date field): no request, the page says there are no images
-  const archived = view.day === "live" || !days.length || days.includes(view.day);
-  const next = archived ? await getJson(`${nextBase}index.json`, fresh) : null;
+  const archived = day === "live" || !days.length || days.includes(day);
+  const next = !archived ? null : day === "live" ? await getJson(`${nextBase}index.json`, fresh) : await loadPragueDay(day);
   if (token !== loadToken) return false;
   if (!next && fresh && nextBase === base && index) return false;
   base = nextBase;
+  sourceDay = day;
   index = next;
   steps = timeline(index, { hours: view.day === "live" ? view.hours : null });
   allSteps = timeline(index);
@@ -1189,6 +1205,16 @@ async function load(fresh = false) {
   return true;
 }
 
+/** An archived day as a day in Prague (radar.js pragueDayIndex): its UTC folder's index and the day before's. */
+async function loadPragueDay(day) {
+  const before = previousDay(day);
+  const [own, earlier] = await Promise.all([
+    getJson(`${sourceUrl(day, LIVE)}index.json`),
+    days.includes(before) ? getJson(`${sourceUrl(before, LIVE)}index.json`) : null,
+  ]);
+  return pragueDayIndex(own, earlier, pragueDayWindow(day));
+}
+
 function initialTime() {
   if (!steps.length) return null;
   const wanted = view.time ? parseStamp(view.time) : null;
@@ -1196,8 +1222,10 @@ function initialTime() {
   return Math.min(lastTime(), Math.max(firstTime(), quantize(at)));
 }
 
-async function update(change) {
+/** Apply a change of the view; `step`: another day is a new history entry (false for Back/Forward). */
+async function update(change, step = true) {
   const reload = "day" in change || "hours" in change;
+  const push = step && "day" in change && change.day !== view.day;
   view = { ...view, ...change };
   view.filter = parseFilter(view.filter);
   if (reload) {
@@ -1212,7 +1240,7 @@ async function update(change) {
   renderStatus();
   renderPlay();
   if (!drawAll()) requestDraw();
-  writeHash();
+  writeHash(push);
   if (reload || "filter" in change) refreshPoint();
 }
 
@@ -1222,11 +1250,6 @@ slider.addEventListener("input", () => goTo(firstTime() + Number(slider.value) *
 slider.addEventListener("change", () => refreshPoint());
 document.getElementById("day").addEventListener("change", (event) => {
   if (event.target.value) update({ day: event.target.value, time: null });
-});
-window.addEventListener("hashchange", () => {
-  const next = parseView(window.location.hash);
-  next.filter = parseFilter(next.filter ?? view.filter);
-  if (viewHash(next) !== viewHash(view)) update(next);
 });
 
 // keyboard: space plays, arrows step by frame, Home/End jump to the first frame / now

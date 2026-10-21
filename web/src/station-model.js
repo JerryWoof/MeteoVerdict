@@ -74,6 +74,25 @@ export function withModelHash(hash, { model, lead, err, wx = DEFAULT_WX }) {
   return `${base}${parts.join("")}`;
 }
 
+/**
+ * The measured page's model choice after reading `hash` on one of its tabs (`weather`: the
+ * Weather tab, else Stations). The model and lead come from the hash, the defaults when it has
+ * none (Back to a plain link shows the plain view); of the two colours only the tab's own is
+ * read (`wx` on Weather, `err` on Stations): the other tab's stays as chosen there.
+ */
+export function readModelChoice(hash, state, weather) {
+  const { model, lead, err, wx } = splitModelHash(hash);
+  const next = { ...state, model: model ?? DEFAULT_MODEL, lead: model ? lead : DEFAULT_LEAD };
+  if (weather) next.wx = wx ?? DEFAULT_WX;
+  else next.err = err === undefined ? DEFAULT_ERR : err;
+  return next;
+}
+
+/** The choice as a tab's hash carries it: the other tab's colour left out (";e=none" in a Weather link meant nothing there). */
+export function tabChoice(state, weather) {
+  return weather ? { ...state, err: DEFAULT_ERR } : { ...state, wx: DEFAULT_WX };
+}
+
 /** The selector's options: [{id, name}], MeteoVerdict AI, the blend, then the models. */
 export function modelOptions(index, t) {
   const names = index?.models ?? {};
