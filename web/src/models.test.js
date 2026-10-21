@@ -102,6 +102,38 @@ test("horizon: no part or day the model does not cover whole (shown as –)", ()
   assert.equal(modelPeriods(parsed, "nothing").size, 0);
 });
 
+test("a model ending one hour short of a day: its parts shown, the whole day –", () => {
+  // the model's last hour 13 Dec 22:00 UTC = 23:00 Prague: every hour of that evening,
+  // but no rain for 23-24
+  const parsed = synthetic(72, (times) => ({
+    temperature_2m: times.map(() => 5).slice(0, 47),
+    precipitation: times.map(() => 0.1).slice(0, 47),
+    cloud_cover: times.map(() => 50).slice(0, 47),
+  }));
+  const rows = modelPeriods(parsed, "m");
+  assert.equal(modelHorizon(parsed, "m"), Date.parse("2026-12-13T22:00Z"));
+  for (const part of ["night", "morning", "afternoon"]) assert.ok(rows.get(`2026-12-13|${part}`), part);
+  const evening = rows.get("2026-12-13|evening");
+  assert.ok(evening);
+  // the rain of the five hours it has
+  assert.ok(Math.abs(evening.precipitation - 0.5) < 1e-9);
+  assert.equal(rows.get("2026-12-13|day"), undefined);
+  // two hours short: the evening is not covered (its 23:00 is missing)
+  const shorter = modelPeriods(synthetic(72, (times) => ({
+    temperature_2m: times.map(() => 5).slice(0, 46),
+    precipitation: times.map(() => 0.1).slice(0, 46),
+  })), "m");
+  assert.equal(shorter.get("2026-12-13|evening"), undefined);
+  assert.ok(shorter.get("2026-12-13|afternoon"));
+  // a gap inside a part (not at the model's end) still leaves it out
+  const gap = modelPeriods(synthetic(72, (times) => ({
+    temperature_2m: times.map(() => 5),
+    precipitation: times.map((_, i) => (i === 43 ? null : 0.1)),
+  })), "m");
+  assert.equal(gap.get("2026-12-13|evening"), undefined);
+  assert.ok(gap.get("2026-12-14|night"));
+});
+
 test("a real short model (ICON-D2, 48 h) ends with its horizon, a global one runs on", () => {
   const short = modelPeriods(PARSED, "dwd_icon_d2");
   const long = modelPeriods(PARSED, "ecmwf_ifs025");

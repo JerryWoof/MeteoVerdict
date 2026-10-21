@@ -7,7 +7,7 @@
 // A single model's parts of day and days follow the outlook's rules (outlook.summarise):
 // Prague time, night 0-6, morning 6-12, afternoon 12-18, evening 18-24; precipitation
 // and sunshine belong to the hour before their time; a part needs at least 4 hours, a day
-// 18; tmin/tmax, the precipitation total, the highest hourly wind, the mean cloud cover
+// 18 (a part the model ends in its last hour still counts, see modelPeriods); tmin/tmax, the precipitation total, the highest hourly wind, the mean cloud cover
 // (a whole day: of 6-18). What one model cannot give: the probability of precipitation
 // (the share of wet models) is null, and its symbol is simplified (modelSymbol).
 
@@ -94,7 +94,10 @@ const mean = (values) => (values.length ? sum(values) / values.length : null);
  * {tmin, tmax, precipitation, rain_probability: null, wind, cloud, sunshine, symbol}.
  * A period is there only when the model covers all of its hours in the file (and at
  * least MIN_PART_HOURS / MIN_DAY_HOURS): beyond the model's horizon, or where it ends
- * inside a period, there is no row (the page shows "–").
+ * inside a period, there is no row (the page shows "–"). One exception: a part of the
+ * day whose every hour the model has, with only the rain of its very last hour missing
+ * (ICON-D2 ending at 23:00 has no rain for 23-24) is shown, its rain the hours it has; a
+ * whole day stays "–" then, so a day's total is never short.
  */
 export function modelPeriods(parsed, model) {
   const series = parsed?.models?.[model];
@@ -103,7 +106,7 @@ export function modelPeriods(parsed, model) {
   const periods = new Map();
   const entry = (key) => {
     if (!periods.has(key)) {
-      periods.set(key, { hours: 0, sumHours: 0, t: [], w: [], c: [], p: [], s: [] });
+      periods.set(key, { hours: 0, sumHours: 0, t: [], w: [], c: [], p: [], s: [], lastRain: false });
     }
     return periods.get(key);
   };
@@ -125,16 +128,20 @@ export function modelPeriods(parsed, model) {
     for (const key of [`${before.day}|${before.part}`, `${before.day}|day`]) {
       const e = entry(key);
       e.sumHours += 1;
-      if (series.precipitation?.[i] != null) e.p.push(series.precipitation[i]);
+      e.lastRain = series.precipitation?.[i] != null;
+      if (e.lastRain) e.p.push(series.precipitation[i]);
       if (series.sunshine_duration?.[i] != null) e.s.push(series.sunshine_duration[i]);
     }
   });
   const rainy = has("precipitation");
   for (const [key, e] of periods) {
-    const least = key.endsWith("|day") ? MIN_DAY_HOURS : MIN_PART_HOURS;
+    const whole = key.endsWith("|day");
+    const least = whole ? MIN_DAY_HOURS : MIN_PART_HOURS;
     // the whole period, or nothing: a model ending inside it would undercount the rain
     if (e.t.length < least || e.t.length < e.hours) continue;
-    if (rainy && e.p.length < e.sumHours) continue;
+    // a part only one hour of rain short, at its end (the model's last hour): shown
+    const lastHourShort = !whole && e.p.length === e.sumHours - 1 && !e.lastRain;
+    if (rainy && e.p.length < e.sumHours && !lastHourShort) continue;
     const tmean = mean(e.t);
     const precipitation = rainy ? sum(e.p) : null;
     const cloud = mean(e.c);
