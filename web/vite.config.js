@@ -14,7 +14,7 @@ export default defineConfig({
     // forecast per okres; the old names (tv, station, api) redirect from public/
     rollupOptions: {
       input: {
-        map: "index.html", forecast: "forecast.html", detail: "forecast-detail.html", radar: "radar.html", measured: "measured.html", compare: "compare.html", compareModels: "compare-models.html", heatmap: "heatmap.html", data: "data.html", about: "about.html", methodology: "methodology.html", collaboration: "collaboration.html", report: "report.html",
+        map: "index.html", forecast: "forecast.html", detail: "forecast-detail.html", radar: "radar.html", measured: "measured.html", compare: "compare.html", compareModels: "compare-models.html", heatmap: "heatmap.html", data: "data.html", about: "about.html", methodology: "methodology.html", collaboration: "collaboration.html", models: "nejpresnejsi-model.html", report: "report.html",
       },
     },
   },
