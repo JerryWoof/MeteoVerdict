@@ -17,14 +17,17 @@ import {
   KINDS_HASH, dayTabs, defaultDay, kindsStation, landingHash, okresRows, pageMode, parseLanding, stationHref,
 } from "./measured.js";
 import { createMeasuredMap } from "./measured-map-view.js";
-import { errorRampKey, renderScale } from "./palette.js";
+import { BEYOND, colorFor, errorRampKey, renderScale } from "./palette.js";
 import { createOkresPanel } from "./measured-okres.js";
 import { OBSERVED_LAYERS, nearestDay, observedSummary, parseObservedDay, parseObservedIndex } from "./observed.js";
 import {
   DEFAULT_SHOWN, dayLabel, displayName, labelFor, okresColours, rampKey, today, valueFor,
 } from "./tv.js";
 import { keepRoomForPanels } from "./panel-room.js";
-import { DEFAULT_ERR, DEFAULT_MODEL, ERROR_VARS, LEADS, AI, createModelCompare, errorLookup, modelOptions, splitModelHash, withModelHash } from "./station-model.js";
+import {
+  DEFAULT_ERR, DEFAULT_MODEL, DEFAULT_WX, ERROR_VARS, LEADS, AI, WX_MODES, createModelCompare, errorKeyFor, errorLookup, modelOptions,
+  okresErrors, splitModelHash, withModelHash,
+} from "./station-model.js";
 
 const t = setUpLanguage();
 const language = document.documentElement.lang;
@@ -61,11 +64,12 @@ const models = createModelCompare({ getJson, t, language });
 /** The hash of the page without the model choice (";m=…;l=…", station-model.js); a choice in it
  * becomes the page's. */
 function cleanHash() {
-  const { hash, model, lead, err } = splitModelHash(window.location.hash);
+  const { hash, model, lead, err, wx } = splitModelHash(window.location.hash);
   if (model) {
     models.state.model = model;
     models.state.lead = lead;
     models.state.err = err === undefined ? DEFAULT_ERR : err;
+    models.state.wx = wx ?? DEFAULT_WX;
   }
   return hash;
 }
@@ -381,9 +385,27 @@ const okresPanel = createOkresPanel({
     const where = new Map(placed.map((s) => [s.id, s]));
     const ids = [...(row?.stations ?? []), ...(row?.high ?? []).map((h) => h.id)];
     const stations = [...new Set(ids)].map((id) => where.get(id)).filter(Boolean);
-    return models.okresSection(stations, state.day, (id, event) => openStationFromOkres(id, event));
+    const section = models.okresSection(stations, state.day, (id, event) => openStationFromOkres(id, event));
+    const mine = wxView && wxErrorBlock(state.okres);
+    if (!mine) return section;
+    const box = el("div");
+    box.append(mine, ...(section ? [section] : []));
+    return box;
   },
 });
+
+/** The model's error in the okres (Weather map's error colours): its mean, size and number of stations. */
+function wxErrorBlock(code) {
+  const w = wxView;
+  const e = w.by.get(code);
+  const box = el("div", null, "model-note wx-error");
+  const what = t(`fc.var.${w.key}`).toLowerCase();
+  box.append(el("strong", t("measured.wx.panelTitle", { model: w.view.name, lead: models.state.lead, what })));
+  box.append(el("p", e
+    ? t("measured.wx.panelLine", { bias: signedText(e.bias, w.view), mae: w.view.label(e.mae).replace(/^[+−]?/, ""), n: e.n })
+    : t(w.view.noFile ? "measured.wx.noFile" : "measured.wx.panelNone")));
+  return box;
+}
 
 /** One line of an okres's values, for its tooltip and its label's name. */
 function describeRow(row, part) {
@@ -409,8 +431,8 @@ function errorText(row, v) {
 }
 
 /** The error view for a day, from the per-day error file: null when the colour is the measured values. */
-async function buildErrView(day) {
-  const key = models.state.err;
+async function buildErrView(day, forKey = models.state.err, abs = false) {
+  const key = forKey;
   if (!key) return null;
   const [doc, index] = await Promise.all([models.loadErrors(day), models.loadIndex()]);
   const { model, lead } = models.state;
@@ -418,7 +440,7 @@ async function buildErrView(day) {
   const name = modelOptions(index, t).find((o) => o.id === model)?.name ?? model;
   const variable = key === "r" ? "mm" : key === "wind" ? "m/s" : "°C";
   const label = (e) => `${e > 0 ? "+" : e < 0 ? "−" : ""}${fmt1(Math.abs(e))} ${variable}`;
-  return { key, ramp: errorRampKey(key), unit: variable, name, noFile: !doc, day, label, ...lookup };
+  return { key, ramp: errorRampKey(key, abs), unit: variable, name, noFile: !doc, day, label, ...lookup };
 }
 
 const measuredMap = createMeasuredMap({
@@ -554,9 +576,86 @@ function renderShow() {
       return label;
     }),
   );
-  // the forecast map's scales and legend (palette.js); rain in mm
+  renderWxModes();
+  // the forecast map's scales and legend (palette.js); rain in mm; with the error colours the
+  // scale is drawn by renderLanding once the errors are loaded
+  if (wxKey()) return;
   const key = rampKey(landing.colour, true);
   renderScale($("scale"), key, t(`obs.scale.${key}`));
+}
+
+// --- the okresy coloured by the model's error (the default) or by the measured values -----------------
+/** The error value coloured now (tmax, tmin, r, wind), or null: the measured values are shown. */
+const wxKey = () => (models.state.wx === "none" ? null : errorKeyFor(landing.colour, landing.part));
+let wxView = null; // {view (buildErrView), by (okres code → {n, bias, mae}), abs} of the drawn map, or null
+
+function renderWxModes() {
+  $("wx-legend").textContent = t("measured.wx.legend");
+  $("wx-modes").replaceChildren(
+    ...["none", "bias", "abs"].map((mode) => {
+      const label = el("label", null, "check");
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = "wx";
+      radio.checked = mode === models.state.wx;
+      radio.addEventListener("change", () => {
+        models.state.wx = mode;
+        syncModelHash();
+        renderLanding();
+      });
+      label.append(radio, el("span", t(`measured.wx.${mode}`)));
+      return label;
+    }),
+  );
+}
+
+/** The errors per okres for the drawn day (null: measured values), with the okres code of a station by its name. */
+async function buildWxView(day) {
+  const key = wxKey();
+  if (!key) return null;
+  const abs = models.state.wx === "abs";
+  const [view, okresy] = await Promise.all([buildErrView(day, key, abs), loadOkresy()]);
+  const codes = new Map(okresy.map((o) => [displayName(o.name), o.code]));
+  const by = view.hasModel && !view.noFile ? okresErrors(view.byId, placed, (name) => codes.get(displayName(name ?? "")) ?? null) : new Map();
+  return { view, by, abs, key, okresy };
+}
+
+const signedText = (v, view) => view.label(Math.abs(v) < 0.05 ? 0 : v);
+
+/** The fill (okres → colour) and tooltips of the error view; grey without a value. */
+function wxFill(w) {
+  const fill = new Map();
+  const tips = new Map();
+  for (const o of w.okresy) {
+    const e = w.by.get(o.code);
+    const title = displayName(o.name);
+    if (!e) {
+      fill.set(o.code, BEYOND);
+      tips.set(o.code, { title, text: t(w.view.noFile ? "measured.wx.noFile" : w.view.hasModel ? "measured.wx.tipNone" : "measured.wx.noModel") });
+      continue;
+    }
+    fill.set(o.code, colorFor(w.abs ? e.mae : e.bias, w.view.ramp));
+    tips.set(o.code, { title, text: t("measured.wx.tip", { bias: signedText(e.bias, w.view), mae: w.view.label(e.mae).replace(/^[+−]?/, ""), n: e.n }) });
+  }
+  return { fill, tips };
+}
+
+/** The legend under the map and its note for the shown colours. */
+function renderWxLegend(w) {
+  const box = $("scale");
+  if (!w) {
+    const key = rampKey(landing.colour, true);
+    renderScale(box, key, t(`obs.scale.${key}`));
+    if (models.state.wx !== "none") box.append(el("p", t("measured.wx.noVar"), "muted small"));
+    return;
+  }
+  const title = t(w.abs ? "measured.wx.scaleAbs" : "measured.wx.scaleBias", { model: w.view.name, lead: models.state.lead, unit: w.view.unit });
+  renderScale(box, w.view.ramp, title);
+  const notes = [];
+  if (w.view.noFile) notes.push(t("measured.wx.noFile"));
+  else if (!w.view.hasModel) notes.push(models.state.model === AI ? t("fc.noAi") : t("measured.wx.noModel"));
+  if (landing.part !== "day") notes.push(t("measured.wx.wholeDay"));
+  for (const n of notes) box.append(el("p", n, "muted small"));
 }
 
 function headlineStart() {
@@ -612,10 +711,16 @@ async function renderLanding() {
   }
   const data = await dayData(day);
   if (token !== landingToken || mode !== "measured") return;
+  const w = data ? await buildWxView(day) : null;
+  if (token !== landingToken || mode !== "measured") return;
+  wxView = w;
+  const wxMap = w ? wxFill(w) : null;
   const view = {
     part, shown: landing.shown, colour: landing.colour, okres: landing.okres,
-    fill: data ? okresColours(data, day, part, landing.colour) : null,
+    fill: wxMap?.fill ?? (data ? okresColours(data, day, part, landing.colour) : null),
+    tips: wxMap?.tips ?? null,
   };
+  renderWxLegend(w);
   measuredMap.set(okresRows(data, part), view);
   renderOkresHeadline(data);
   okresPanel.render(data, landing);
