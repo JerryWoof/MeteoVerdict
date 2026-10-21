@@ -10,7 +10,7 @@ function element(tag, text, className) {
   return e;
 }
 
-export function placeSearch({ t, load, choose, placeholder = t("radar.place.placeholder") }) {
+export function placeSearch({ t, load, choose }) {
   const box = element("div", null, "place-search");
   const label = element("label", t("radar.place.label"));
   const input = document.createElement("input");
@@ -18,7 +18,7 @@ export function placeSearch({ t, load, choose, placeholder = t("radar.place.plac
   input.id = "place";
   input.autocomplete = "off";
   input.spellcheck = false;
-  input.placeholder = placeholder;
+  input.placeholder = t("radar.place.placeholder");
   input.setAttribute("role", "combobox");
   input.setAttribute("aria-autocomplete", "list");
   input.setAttribute("aria-expanded", "false");

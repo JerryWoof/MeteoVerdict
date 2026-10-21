@@ -1,5 +1,5 @@
-// The home page's "forecast for my place": a place (search or position) → the detailed
-// forecast of its okres, at the obec nearest to it. Pure helpers; home-search.js does the I/O.
+// "Forecast for my place": a place (search or position) → the detailed forecast of its okres,
+// at the obec nearest to it. Pure helpers; the radar page uses locateErrorKey.
 
 /** The outlook's okres for a place of obce.json (ČÚZK names Prague's okres the city). */
 export function okresOf(place, okresy) {
