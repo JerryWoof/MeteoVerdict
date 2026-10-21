@@ -3,6 +3,7 @@
 // 95 % interval of the difference, the best public model only as context, and the cards of the
 // experiments that work, that are not verified yet and that are still under evaluation.
 import { dateRangeText, dateText, experimentTexts, numText, ruleText } from "./ai-format.js";
+import { dayCount } from "./view.js";
 
 const VARIABLES = ["temperature_2m", "wind_speed_10m"];
 const UNITS = { temperature_2m: "°C", wind_speed_10m: "m/s" };
@@ -189,8 +190,9 @@ export async function renderAiExtras(t, getJson) {
   const intro = document.getElementById("ai-score-intro");
   if (doc.scores?.length && renderScores(doc, t, { ...meta?.models })) {
     intro.textContent = t("ai.scoreIntro", {
-      range: test.from && test.to ? dateRangeText(test.from, test.to, lang()) : "–",
-      days: test.days ?? "–",
+      // one measured day has no "to" yet: the range is that day
+      range: test.from ? dateRangeText(test.from, test.to, lang()) : "–",
+      days: test.days != null ? dayCount(test.days, t) : "–",
     });
   } else {
     document.getElementById("ai-scores").replaceChildren();
