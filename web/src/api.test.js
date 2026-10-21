@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { FLAGS, HOURLY, NOTICE, SITE, aiOkresDoc, indexDoc, obceDocs, obceIndexDoc, obecIds, okresCsv, okresDoc, okresModels, slug } from "./api.js";
+import { FLAGS, HOURLY, NOTICE, SITE, aiOkresDoc, indexDoc, obceDocs, obecCsvLines, obceIndexDoc, obecIds, okresCsv, okresDoc, okresModels, slug } from "./api.js";
 import { records } from "./data.js";
 
 const load = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
@@ -315,4 +315,14 @@ test("obce index and the file patterns in index.json", () => {
   assert.equal(files.ai_okres_csv, `${SITE}/api/v1/ai/okresy/{code}.csv`);
   assert.equal(files.obec_json, `${SITE}/api/v1/obce/{okres}/{id}.json`);
   assert.equal(files.ai_obec_json, `${SITE}/api/v1/ai/obce/{okres}/{id}.json`);
+});
+
+test("obec CSV preview: the okres CSV's columns the obec file has, on its start + i hours axis", () => {
+  const doc = { hourly: { start: "2026-10-21T22:00Z", step_hours: 1, hours: 3, temperature_2m: [5, 4.5, null], precipitation: [0, 0.2, 0], wind_speed_10m: [1, 2, 3], cloud_cover: [50, 60, 70] } };
+  assert.deepEqual(obecCsvLines(doc, 2), [
+    "time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover",
+    "2026-10-21T22:00Z,5,0,1,50",
+    "2026-10-21T23:00Z,4.5,0.2,2,60",
+  ]);
+  assert.deepEqual(obecCsvLines(null), []);
 });
