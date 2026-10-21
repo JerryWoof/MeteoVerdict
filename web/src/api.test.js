@@ -238,7 +238,7 @@ test("an AI okres file: the AI's own hourly rain, cloud, sunshine and range when
   assert.equal(f.hourly.precipitation[20], 0.5, "a part the AI has no row for keeps the blend's hours");
   assert.equal(f.sources.temperature_2m_lo, "ai");
   assert.equal(f.sources.cloud_cover, "ai");
-  assert.match(f.method, /own hourly models/);
+  assert.match(f.method, /own hourly values/);
 });
 
 // ---- obce ----
