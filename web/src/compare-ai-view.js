@@ -133,7 +133,7 @@ export async function setUpAiCompare(t, names, language) {
     node.replaceChildren(
       el("strong", t(status.verified ? "aic.verified" : "aic.provisional")),
       document.createTextNode(" " + t(live ? "aic.sampleLive" : "aic.sampleValidation", {
-        from: index?.from, to: index?.to, days: index?.test_days ?? index?.days,
+        from: index?.from, to: index?.to, days: (index?.test_days ?? index?.days) != null ? dayCount(index.test_days ?? index.days, t) : "–",
       })),
     );
   }
