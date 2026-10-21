@@ -80,7 +80,7 @@ export async function renderAiVerify(t, getJson, open) {
 
   const controls = document.getElementById("ai-verify-controls");
   const okresSelect = el("select");
-  for (const [code, name] of okresyByName(index.okresy, lang())) {
+  for (const [code, name] of okresyByName(index.okresy)) {
     const option = el("option", name);
     option.value = code;
     okresSelect.append(option);

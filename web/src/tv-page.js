@@ -481,8 +481,13 @@ const rainText = (row) => {
   return row.rain_probability == null ? "–" : percent(row.rain_probability);
 };
 
+// a part of the day in the panel's strip: a button showing that part on the map and in
+// the panel, as the part buttons above the map do
 function partCell(row, part, single) {
-  const cell = element("div", null, "part");
+  const cell = element("button", null, part === state.part ? "part current" : "part");
+  cell.type = "button";
+  cell.setAttribute("aria-pressed", String(part === state.part));
+  cell.addEventListener("click", () => update({ part }));
   cell.append(
     element("span", t(`part.${part}`), "part-name"),
     iconCanvas(row ? iconName(row.symbol, part, row) : "", 34, symbolText(row?.symbol)),
@@ -1004,6 +1009,17 @@ async function loadObceInView() {
   declutter();
 }
 
+/**
+ * Phones: the panel is below the map, out of sight after a search or a link to an obec.
+ * Scroll so the map (the obec in its middle) is at the top and the panel's top below it.
+ */
+function revealPanel() {
+  const frame = document.getElementById("map").getBoundingClientRect();
+  const panel = document.getElementById("okres-panel").getBoundingClientRect();
+  if (panel.top < frame.bottom - 1 || panel.top + 80 <= window.innerHeight) return;
+  window.scrollTo({ top: window.scrollY + frame.top - 8, behavior: "smooth" });
+}
+
 /** A place found in the search: its okres's file, the obec there nearest to it, its panel. */
 async function chooseObec(place) {
   // the places list names Prague's okres as the city, ČÚZK's okresy as its territory
@@ -1016,6 +1032,7 @@ async function chooseObec(place) {
   if (!obceShown()) await setMapModel(COMBINED);
   update({ okres: info.code, obec: obec.name });
   goToObec(map, [obec.lon, obec.lat]);
+  revealPanel();
 }
 
 async function main() {
@@ -1074,6 +1091,8 @@ async function main() {
       goToObec(map, [place.lon, place.lat]);
     }
   }
+  // a link to an okres or an obec: its panel in sight on phones too
+  if (state.okres) revealPanel();
   // test: the obce of the okresy in view, loaded once zoomed in, and the search above
   map.on("moveend", loadObceInView);
   loadObceInView();

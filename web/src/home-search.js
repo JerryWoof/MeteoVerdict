@@ -1,6 +1,6 @@
 // The home page's top: "Najít místo" and "Předpověď pro moji polohu", both leading to the
 // detailed forecast of the place (home-place.js).
-import { forecastLink, nearestPlace, okresOf } from "./home-place.js";
+import { OUTSIDE_KM, forecastLink, locateErrorKey, nearestPlace, okresOf } from "./home-place.js";
 import { nearestObec } from "./obce-map.js";
 import { placeSearch } from "./place-search.js";
 import { placesLoader } from "./places.js";
@@ -40,19 +40,20 @@ export function setUpHomeSearch(t) {
   const button = document.getElementById("home-locate");
   button.addEventListener("click", () => {
     if (!navigator.geolocation) {
-      note.textContent = t("radar.point.denied", { reason: "—" });
+      note.textContent = t("locate.unsupported");
       return;
     }
     note.textContent = t("radar.point.locating");
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
         const places = await loadPlaces();
-        const place = nearestPlace(places, coords.latitude, coords.longitude);
-        if (!place) note.textContent = t("radar.place.unavailable");
+        const place = nearestPlace(places, coords.latitude, coords.longitude, OUTSIDE_KM);
+        if (!places.length) note.textContent = t("radar.place.unavailable");
+        else if (!place) note.textContent = t("home.outside");
         else await go(place);
       },
       (error) => {
-        note.textContent = t("radar.point.denied", { reason: error.message || error.code });
+        note.textContent = t(locateErrorKey(error));
       },
       { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 },
     );

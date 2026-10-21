@@ -63,7 +63,7 @@ test("parsePlaces skips rows that are not a place in Czechia", () => {
     obce: [["Ok", 0, 49.7, 14.7], ["", 0, 49.7, 14.7], ["No okres", 3, 49.7, 14.7], ["Far", 0, 10, 14.7], "junk", ["Nan", 0, null, 14]],
   });
   assert.deepEqual(parsed.map((p) => p.name), ["Ok"]);
-  assert.deepEqual(parsed[0], { name: "Ok", okres: "Benešov", lat: 49.7, lon: 14.7, key: "ok", okresKey: "benesov" });
+  assert.deepEqual(parsed[0], { name: "Ok", okres: "Benešov", lat: 49.7, lon: 14.7, key: "ok", okresKey: "benesov", population: 0 });
 });
 
 test("placesLoader fetches once and retries after a failure", async () => {
@@ -97,4 +97,32 @@ test("the committed municipalities: all of them, small enough", () => {
   assert.deepEqual(searchPlaces(all, "trebon").slice(0, 2).map(placeLabel), ["Třeboň (Jindřichův Hradec)", "Třebonín (Kutná Hora)"]);
   assert.equal(placeLabel(searchPlaces(all, "brno")[0]), "Brno (Brno-město)");
   assert.equal(searchPlaces(all, "praha")[0].okres, "Hlavní město Praha");
+  // bigger places first: what people mean, and what Enter picks
+  const first = (query) => searchPlaces(all, query)[0].name;
+  assert.equal(first("treb"), "Třebíč");
+  assert.equal(first("usti"), "Ústí nad Labem");
+  assert.equal(first("prah"), "Praha");
+  assert.equal(first("ces"), "České Budějovice");
+  assert.equal(first("hradec"), "Hradec Králové");
+  assert.equal(first("most"), "Most");
+  assert.ok(data.obce.every((row) => Number.isInteger(row[4])), "population of every obec");
+});
+
+test("search: bigger places first within a group, the whole name before a small town", () => {
+  const towns = parsePlaces({
+    okresy: ["Cheb", "Třebíč", "Jindřichův Hradec", "Jihlava", "Ústí nad Labem"],
+    obce: [
+      ["Třebeň", 0, 50.12, 12.43, 600],
+      ["Třebíč", 1, 49.21, 15.88, 35000],
+      ["Třeboň", 2, 49.0, 14.77, 8000],
+      ["Ústí", 3, 49.4, 15.6, 200],
+      ["Ústí nad Labem", 4, 50.66, 14.04, 90000],
+      ["Ústí nad Orlicí", 4, 49.97, 16.39, 14000],
+    ],
+  });
+  const names = (query) => searchPlaces(towns, query).map((p) => p.name);
+  assert.deepEqual(names("treb"), ["Třebíč", "Třeboň", "Třebeň"]);
+  // a big town counts as the whole name; a small one comes after the exact match
+  assert.deepEqual(names("usti"), ["Ústí nad Labem", "Ústí", "Ústí nad Orlicí"]);
+  assert.deepEqual(names("trebon"), ["Třeboň"]);
 });

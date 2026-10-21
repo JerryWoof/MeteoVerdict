@@ -1,6 +1,8 @@
 // "Forecast vs measured" on the AI tab (data/scores/ai/fc/verify/): the pure helpers;
 // the section itself is drawn by ai-verify-view.js. Only public models are compared.
 
+import { displayName } from "./tv.js";
+
 /** The public models with data in this series, lowest MAE first ({id, name, mae}). */
 export function modelsByMae(series, names) {
   return Object.keys(series?.models ?? {})
@@ -33,9 +35,16 @@ export function measuredHours(series) {
   return (series?.measured ?? []).filter((v) => v != null).length;
 }
 
-/** The okresy of index.json sorted by name ([[code, name]]), in the page's language. */
-export function okresyByName(okresy, language = "cs") {
-  return Object.entries(okresy ?? {}).sort((a, b) => a[1].localeCompare(b[1], language));
+/**
+ * The okresy of index.json sorted by name ([[code, name]]). Praha by its short name, not
+ * "území Hlavního města Prahy" (which sorted under Ú); the names are Czech, so Czech
+ * order (Č after C, Ch after H) in either language.
+ */
+export function okresyByName(okresy) {
+  const collator = new Intl.Collator("cs");
+  return Object.entries(okresy ?? {})
+    .map(([code, name]) => [code, displayName(name)])
+    .sort((a, b) => collator.compare(a[1], b[1]));
 }
 
 /** The okres to show first: the one open in the map's panel if it is listed, else Praha. */
