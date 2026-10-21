@@ -3273,11 +3273,11 @@ footer .site-links {
   }
 }
 
-/* the home map's okres panel: wider than the others (rankings and tables fit), a long one
+/* the home map's okres panel: half the map's width (rankings and tables fit), a long one
    scrolls inside the map's height, the close button stays in view */
 @media (min-width: 701px) {
   #detail {
-    width: 28rem;
+    width: 50%;
     max-width: calc(100% - 4.5rem);
     max-height: calc(var(--map-height) - 2.5rem);
     overflow-y: auto;
