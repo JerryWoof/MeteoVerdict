@@ -17,6 +17,7 @@ import { binLabel, count as countIn, etsColor, etsTextColor, farmChoices, farmGr
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
+import { setUpTips } from "./tip-popover.js";
 import { displayName } from "./tv.js";
 import {
   availableLeadDays, availableVariables, availableWindows, dayCount, filesWindow, formatRange, parseHash, pickWindow, pluralForm,
@@ -25,6 +26,8 @@ import {
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
+// the cells' details (blend test, farm ranking) and the "?": on hover, tap and focus
+setUpTips();
 // numbers in the page language ("1,18" and "4 574" in Czech)
 const LANGUAGE = document.documentElement.lang || "en";
 const fmt = (value, signed) => fmtIn(value, signed, LANGUAGE);
@@ -540,7 +543,7 @@ function verdictTable(id, verdicts, leads, unit, modelName, against) {
     if (!v) return cell("td", "–");
     const td = cell("td", null, `verdict ${v.verdict}`);
     const model = against === "cz" ? modelName(v.best) : null;
-    td.title = `${verdictText(v, unit(variable), true, model)} · ${v.days} d`;
+    td.dataset.tip = `${verdictText(v, unit(variable), true, model)} · ${v.days} d`;
     td.tabIndex = 0;
     td.append(cell("strong", `${MARK[v.verdict]} ${verdictText(v, unit(variable))}`), document.createElement("br"));
     const range = v.verdict === "same"
@@ -614,7 +617,7 @@ function renderSingleModels(doc, variable, leads, unit, modelName) {
       const v = c.verdict === "better"
         ? { verdict: "better", amount: -c.diff, low: -c.high, high: -c.low }
         : { verdict: c.verdict, amount: c.diff, low: c.low, high: c.high };
-      td.title = t("blendTest.modelTip", {
+      td.dataset.tip = t("blendTest.modelTip", {
         verdict: verdictText(v, unit(variable), true, modelName(m.model)), ours: fmt(c.maeCombined),
         theirs: fmt(c.mae), model: modelName(m.model), unit: unit(variable), days: c.days,
       });
@@ -877,7 +880,7 @@ async function renderFarm(names) {
       const td = cell("td", `${best ? "★ " : ""}${score(row.ets)}`, `num${best ? " best" : ""}`);
       td.style.background = etsColor(row.ets);
       td.style.color = etsTextColor(row.ets);
-      td.title = farmTip(row, choice, label);
+      td.dataset.tip = farmTip(row, choice, label);
       td.tabIndex = 0;
       tr.append(td);
     });

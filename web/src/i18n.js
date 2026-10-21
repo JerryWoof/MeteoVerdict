@@ -2223,6 +2223,11 @@ export function setUpLanguage() {
     element.title = t(element.dataset.i18nTitle);
     element.setAttribute("aria-label", element.title);
   }
+  // the same text in a popover instead of a title (tip-popover.js)
+  for (const element of document.querySelectorAll("[data-i18n-tip]")) {
+    element.dataset.tip = t(element.dataset.i18nTip);
+    element.setAttribute("aria-label", element.dataset.tip);
+  }
   // the tab title in the page language (<title data-i18n-page="key">)
   const title = document.querySelector("title[data-i18n-page]");
   if (title) document.title = `MeteoVerdict: ${t(title.dataset.i18nPage)}`;
