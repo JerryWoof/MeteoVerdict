@@ -72,26 +72,22 @@ async function main() {
     Object.assign(document.createElement("option"), { value: "blend", textContent: t("api.modelBlend") }),
     Object.assign(document.createElement("option"), { value: "ai", textContent: t("api.modelAi") }),
   );
-  let aiFile; // data/scores/ai/ai-forecast.json, fetched once when the AI is chosen
-  const AI_URL = "data/scores/ai/ai-forecast.json";
   async function show(code, remember = true) {
     const okres = okresy.find((o) => o.code === code);
     const links = document.getElementById("links");
     const preview = document.getElementById("preview");
     if (model.value === "ai") {
-      aiFile ??= await get(AI_URL);
-      const ai = aiFile?.okresy?.[code];
-      const li = Object.assign(document.createElement("li"), { textContent: "JSON: " });
-      li.append(Object.assign(document.createElement("a"), { href: AI_URL, textContent: AI_URL }));
-      const apiUrl = `api/v1/ai/okresy/${code}.json`;
-      const apiLi = Object.assign(document.createElement("li"), { textContent: "JSON (API v1): " });
-      apiLi.append(Object.assign(document.createElement("a"), { href: apiUrl, textContent: apiUrl }));
-      links.replaceChildren(apiLi, li, Object.assign(document.createElement("li"), { textContent: t("api.aiNote") }));
-      preview.textContent = ai
-        ? ["time_utc,temperature_2m,wind_speed_10m",
-          ...ai.time.slice(0, 7).map((time, i) => `${time},${ai.temperature_2m?.ai?.[i] ?? ""},${ai.wind_speed_10m?.ai?.[i] ?? ""}`),
-          "…"].join("\n")
-        : "";
+      const base = `api/v1/ai/okresy/${code}`;
+      links.replaceChildren(
+        ...[["JSON", `${base}.json`], ["CSV", `${base}.csv`]].map(([label, href]) => {
+          const li = document.createElement("li");
+          li.append(`${label}: `, Object.assign(document.createElement("a"), { href, textContent: href }));
+          return li;
+        }),
+        Object.assign(document.createElement("li"), { textContent: t("api.aiNote") }),
+      );
+      const csv = await get(`${base}.csv`, "text");
+      preview.textContent = csv ? `${csv.split("\n").slice(0, 8).join("\n")}\n…` : "";
     } else {
       links.replaceChildren(
         ...[["JSON", okres.json], ["CSV", okres.csv]].map(([label, href]) => {

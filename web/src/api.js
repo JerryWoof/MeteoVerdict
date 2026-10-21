@@ -3,7 +3,7 @@
 //   api/v1/index.json             all okresy and where their files are
 //   api/v1/okresy/<code>.json     forecast (hourly and by part of day) and model ranking
 //   api/v1/okresy/<code>.csv      the hourly forecast as CSV
-//   api/v1/ai/okresy/<code>.json  the same file with the MeteoVerdict AI's values (experimental)
+//   api/v1/ai/okresy/<code>.json|csv  the same file with the MeteoVerdict AI's values (experimental)
 //   api/v1/obce/<okres>/<id>.json hourly forecast and parts of day of one obec
 //   api/v1/obce/index.json        every obec: okres, id, name, position
 // GitHub Pages serves them with "Access-Control-Allow-Origin: *", so browsers can fetch
@@ -158,6 +158,7 @@ export function indexDoc(okresy, meta, generated) {
       okres_json: `${SITE}/api/${VERSION}/okresy/{code}.json`,
       okres_csv: `${SITE}/api/${VERSION}/okresy/{code}.csv`,
       ai_okres_json: `${SITE}/api/${VERSION}/ai/okresy/{code}.json`,
+      ai_okres_csv: `${SITE}/api/${VERSION}/ai/okresy/{code}.csv`,
       obec_json: `${SITE}/api/${VERSION}/obce/{okres}/{id}.json`,
       ai_obec_json: `${SITE}/api/${VERSION}/ai/obce/{okres}/{id}.json`,
       obce_index: `${SITE}/api/${VERSION}/obce/index.json`,

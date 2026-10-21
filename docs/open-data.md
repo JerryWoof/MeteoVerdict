@@ -10,6 +10,7 @@ and CSV files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
 | `api/v1/index.json` | all 77 okresy: `code`, `name`, `lat`, `lon` and the URLs of their files |
 | `api/v1/okresy/{code}.json` | everything for one okres (below) |
 | `api/v1/okresy/{code}.csv` | the hourly forecast: `time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration,temperature_2m_lo,temperature_2m_hi` |
+| `api/v1/ai/okresy/{code}.csv` | the hourly forecast with the same columns as the combined `okresy` CSV (temperature and wind are the AI's, the other columns the blend's) |
 | `api/v1/ai/okresy/{code}.json` | the same file with the MeteoVerdict AI's values: everything by part of day, temperature and wind hourly (**experimental**, below) |
 | `api/v1/obce/{okres}/{id}.json` | the forecast of one obec (village or town) (below) |
 | `api/v1/ai/obce/{okres}/{id}.json` | the same with MeteoVerdict AI's obec forecast (`model: "ai"`), on the axis and parts of `ai/okresy/{okres}.json`; same ids and the same fields as the combined obec file |
