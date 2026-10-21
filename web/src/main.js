@@ -220,7 +220,7 @@ function intervalChart(facts) {
   // as wide as the panel's content, and a left margin that fits the longest model name
   const wrapWidth = document.getElementById("map").parentElement.clientWidth;
   const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  const panelWidth = window.innerWidth <= 700 ? wrapWidth : window.innerWidth <= 900 ? 21 * rem : wrapWidth * 0.5;
+  const panelWidth = window.innerWidth <= 700 ? wrapWidth : window.innerWidth <= 900 ? 21 * rem : wrapWidth * 0.4;
   const chartWidth = Math.max(280, Math.round(panelWidth - 2 * 0.9 * rem - 6));
   const longest = Math.max(...data.map((d) => d.label.length));
   const nameMargin = Math.min(Math.round(chartWidth * 0.6), Math.round(longest * 5.6 + 14));
@@ -401,7 +401,7 @@ const movedByUser = userMoved(map);
  * once someone has moved the map themselves. */
 function fitView() {
   const open = Boolean(panel().childElementCount) && window.innerWidth > 900;
-  const right = open ? panelRoom(21, 0.5, map.getContainer().parentElement.clientWidth) : 20;
+  const right = open ? panelRoom(21, 0.4, map.getContainer().parentElement.clientWidth) : 20;
   if (padding && padding.right === right) return;
   if (padding && movedByUser()) return;
   const first = padding === null;
