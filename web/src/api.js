@@ -3,7 +3,7 @@
 //   api/v1/index.json             all okresy and where their files are
 //   api/v1/okresy/<code>.json     forecast (hourly and by part of day) and model ranking
 //   api/v1/okresy/<code>.csv      the hourly forecast as CSV
-//   api/v1/ai/okresy/<code>.json  the same forecast with temperature and wind from the AI (experimental)
+//   api/v1/ai/okresy/<code>.json  the same file with the MeteoVerdict AI's values (experimental)
 //   api/v1/obce/<okres>/<id>.json hourly forecast and parts of day of one obec
 //   api/v1/obce/index.json        every obec: okres, id, name, position
 // GitHub Pages serves them with "Access-Control-Allow-Origin: *", so browsers can fetch
@@ -174,19 +174,20 @@ export function indexDoc(okresy, meta, generated) {
 }
 
 // ---------------------------------------------------------------------------------------
-// AI okres files: our combined forecast with temperature and wind from the MeteoVerdict AI
+// AI okres files: the same file as the combined forecast's, with the MeteoVerdict AI's values
 
 export const AI_METHOD =
-  "Temperature and wind from the MeteoVerdict AI (experimental, unverified); everything else (precipitation, cloud, sunshine, symbol, gusts, frost, rain probability) from the combined forecast";
+  "MeteoVerdict AI (experimental, unverified): hourly temperature and wind, and by part of day temperature, wind, gusts, cloud, sunshine, symbol, precipitation, rain probability and heavy rain; the hourly precipitation, cloud and sunshine series, the 80 % range of the temperature and any part the AI has no row for are the combined forecast's";
 const AI_HOURLY = ["temperature_2m", "wind_speed_10m"];
-const AI_PART_FIELDS = ["tmin", "tmax", "wind"];
+const ASTRONOMY = ["sunrise", "sunset"];
 
 /**
  * The AI file of one okres, or null where the AI has no hourly series for it. Hourly:
  * the combined series with temperature and wind replaced by the AI's where it has a value
  * for the same hour (the 80 % range of the temperature is null on those hours: it belongs
- * to the combined forecast). Parts: the combined parts with tmin, tmax and wind from the
- * AI outlook where it has a value.
+ * to the combined forecast). Parts: the AI outlook's row (every field it has a value for,
+ * including precipitation, cloud, sunshine, symbol, gusts and rain) for each day and part; a
+ * field the AI has no value for, or a part it has no row for, keeps the combined forecast's.
  */
 export function aiOkresDoc({ okres, outlook, hourly, aiForecast, aiOutlook, meta }) {
   const series = hourly?.okresy?.[okres.code];
@@ -208,15 +209,18 @@ export function aiOkresDoc({ okres, outlook, hourly, aiForecast, aiOutlook, meta
   }
   for (const k of RANGE) if (h[k]) h[k] = h[k].map((x, i) => (usedTemperature[i] ? null : x));
   const aiRows = new Map(records(aiOutlook).filter((r) => r.okres === okres.code).map((r) => [`${r.day}|${r.part}`, r]));
+  const fields = PART_FIELDS.filter((k) => !["day", "part", "gust_warning"].includes(k));
+  const fromAi = new Set(Object.entries(aiOutlook?.sources ?? {}).filter(([, v]) => v === "ai").map(([k]) => k));
+  for (const row of aiRows.values()) for (const k of row.ai ?? []) fromAi.add(k);
   const parts = blendParts(outlook, okres.code).map((part) => {
     const row = aiRows.get(`${part.day}|${part.part}`);
-    for (const k of AI_PART_FIELDS) if (row && row[k] != null) part[k] = row[k];
+    if (row) for (const k of fields) if (row[k] != null && !ASTRONOMY.includes(k)) part[k] = row[k];
     delete part.gust_warning;
     return part;
   });
   const sources = {
     ...Object.fromEntries(HOURLY.map((v) => [v, AI_HOURLY.includes(v) ? "ai" : "blend"])),
-    ...Object.fromEntries(PART_FIELDS.filter((k) => k !== "gust_warning" && !["day", "part", "sunrise", "sunset"].includes(k)).map((k) => [k, AI_PART_FIELDS.includes(k) ? "ai" : "blend"])),
+    ...Object.fromEntries(fields.map((k) => [k, ASTRONOMY.includes(k) ? "astronomy" : fromAi.has(k) ? "ai" : "blend"])),
   };
   return {
     api: `MeteoVerdict open data ${VERSION}`,

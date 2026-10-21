@@ -10,7 +10,7 @@ and CSV files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
 | `api/v1/index.json` | all 77 okresy: `code`, `name`, `lat`, `lon` and the URLs of their files |
 | `api/v1/okresy/{code}.json` | everything for one okres (below) |
 | `api/v1/okresy/{code}.csv` | the hourly forecast: `time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration,temperature_2m_lo,temperature_2m_hi` |
-| `api/v1/ai/okresy/{code}.json` | the same forecast with temperature and wind from the MeteoVerdict AI; the rest is still the blend's here (**experimental**, below) |
+| `api/v1/ai/okresy/{code}.json` | the same file with the MeteoVerdict AI's values: everything by part of day, temperature and wind hourly (**experimental**, below) |
 | `api/v1/obce/{okres}/{id}.json` | the forecast of one obec (village or town) (below) |
 | `api/v1/ai/obce/{okres}/{id}.json` | the same with MeteoVerdict AI's obec forecast (`model: "ai"`), on the axis and parts of `ai/okresy/{okres}.json`; same ids |
 | `api/v1/obce/index.json` | every obec as `[okres, id, name, lat, lon]` |
@@ -76,21 +76,22 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
 `api/v1/ai/okresy/{code}.json` has the layout of the okres file (`okres`, `forecast`
 with `generated`, `time_zone_of_parts`, `units`, `hourly`, `parts`, and `licence`,
 `attribution`, `notice`), without `models` and without the deprecated `gust_warning`.
-It is our combined forecast with **temperature and wind from the MeteoVerdict AI**
+It is the same file with **the MeteoVerdict AI's values**
 (experimental, still unverified): `forecast.model` is `"ai"`, `forecast.method` says so
 in a sentence, `forecast.ai_issued` is when the AI issued its forecast and
-`forecast.sources` says `ai` or `blend` for every hourly series and part field.
+`forecast.sources` says `ai`, `blend` or `astronomy` for every hourly series and part field.
 
+- `parts`: the rows of the AI outlook (`ai/fc/outlook.json`): `tmin`, `tmax`, `wind`, `gust`
+  and `gust_over_threshold`, `cloud`, `sunshine`, `symbol`, `precipitation`, `rain_probability`,
+  `heavy_rain_probability`, `heavy_rain` and the frost fields (derived from the AI's temperature)
+  are the AI's where it has a value. `sunrise` and `sunset` are astronomy, `coldest_site` and a part
+  of day the AI has no row for are the combined forecast's.
 - `hourly`: the axis and series of the okres file; `temperature_2m` and `wind_speed_10m`
   are the AI's on every hour it has a value for (hour-matched by time), the combined
   forecast's elsewhere. `temperature_2m_lo` and `temperature_2m_hi` (the range of the
   combined temperature) are `null` on the hours that now have the AI's temperature.
-  Precipitation, cloud and sunshine are the combined forecast's.
-- `parts`: `tmin`, `tmax` and `wind` from the AI outlook (`ai/fc/outlook.json`) where it has
-  a value; `symbol`, `cloud`, `sunshine`, `gust`, rain and the frost fields are the combined
-  forecast's.
-
-The AI forecasts more than this file shows: precipitation, probability of rain and heavy rain, cloud, sunshine, gusts and the symbol are in `ai/fc/outlook.json` (below), by part of day. This file does not use them yet.
+  Hourly `precipitation`, `cloud_cover` and `sunshine_duration` are the combined forecast's: the AI
+  forecasts them by part of day only, so the hourly precipitation need not add up to the part's.
 
 The files are only written when the AI files (`data/scores/ai/`) are in the build.
 The thresholds (`gust_over_threshold`, `frost`, `ground_frost`, `heavy_rain`) are ours,

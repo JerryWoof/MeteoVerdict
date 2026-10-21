@@ -55,8 +55,7 @@ after it. What the results mean and where they can mislead:
 computed once a day from this project's data; their code is kept
 in a private repository, and the site publishes only their results, scored like every
 other model. The AI forecasts temperature, wind and gusts, cloud, sunshine, weather symbol,
-precipitation (mm), probability of rain and heavy rain; only sunrise and sunset are astronomy. The API v1 AI files
-(`api/v1/ai/`) still take only temperature and wind from it; the rest is in `ai/fc/outlook.json`
+precipitation (mm), probability of rain and heavy rain; only sunrise and sunset are astronomy. `api/v1/ai/okresy` is the same file as the combined forecast's with the AI's values
 ([open data](docs/open-data.md)).
 
 ## Models
