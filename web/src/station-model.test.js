@@ -49,6 +49,11 @@ test("a model without values is reported, AI comes only from its own file", () =
   assert.equal(compareSeries(doc, null, "ai", 1, "tmax").hasModel, false);
   const ai = { series: { tmax: { 1: { ai: [9, 12, 12, 8] } } } };
   assert.deepEqual(compareSeries(doc, ai, "ai", 1, "tmax").err, [-1, 0, null, 0]);
+  // the AI's file has its own window: lined up by date (it starts a day later here)
+  const later = { from: "2026-10-02", series: { tmax: { 1: { ai: [12, 12, 8, 7] } } } };
+  assert.deepEqual(compareSeries(doc, later, "ai", 1, "tmax").fc, [null, 12, 12, 8]);
+  const earlier = { from: "2026-09-30", series: { tmax: { 1: { ai: [1, 9, 12, 12, 8] } } } };
+  assert.deepEqual(compareSeries(doc, earlier, "ai", 1, "tmax").err, [-1, 0, null, 0]);
   assert.equal(errorSummary(compareSeries(doc, null, "ecmwf_ifs", 1, "tmax")), null);
   assert.equal(compareSeries(null, null, "blend", 1, "tmax"), null);
 });
