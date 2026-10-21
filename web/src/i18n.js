@@ -2110,10 +2110,22 @@ export function pickLanguage(stored) {
 /** t(key, {name: value}) in one language, falling back to English, then to the key. */
 export function translator(language) {
   const strings = STRINGS[language] ?? STRINGS.en;
+  const date = dateFormat(language);
   return (key, params = {}) =>
-    (strings[key] ?? STRINGS.en[key] ?? key).replace(/\{(\w+)\}/g, (_, name) =>
-      String(params[name] ?? ""),
-    );
+    (strings[key] ?? STRINGS.en[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => {
+      const value = params[name] ?? "";
+      const day = ISO_DAY.exec(value);
+      return day ? `${date.format(new Date(`${day[1]}T12:00:00Z`))}${day[2] ?? ""}` : String(value);
+    });
+}
+
+// a day "2026-10-19" (or a run "2026-10-19 00 UTC") in a text is shown in the language:
+// "19. 10. 2026", "19 Oct 2026"
+const ISO_DAY = /^(\d{4}-\d{2}-\d{2})( \d{2} UTC)?$/;
+function dateFormat(language) {
+  return language === "cs"
+    ? new Intl.DateTimeFormat("cs", { day: "numeric", month: "numeric", year: "numeric", timeZone: "UTC" })
+    : new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
 const STORAGE_KEY = "meteoverdict.language";
