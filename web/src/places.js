@@ -1,6 +1,6 @@
 // "Find a place" on the radar page: every Czech municipality (obec) with its okres, from
 // ČÚZK RÚIAN (CC BY 4.0), built by scripts/build_municipalities.py into data/obce.json:
-// {"okresy": [name, ...], "obce": [[name, okres index, lat, lon], ...]}.
+// {"okresy": [name, ...], "obce": [[name, okres index, lat, lon, population], ...]}.
 
 /** Lower case without diacritics: "Třeboň" → "trebon", "Ústí" → "usti". */
 export function fold(text) {
@@ -22,21 +22,26 @@ export function parsePlaces(data) {
   const places = [];
   for (const row of data.obce) {
     if (!Array.isArray(row) || row.length < 4) continue;
-    const [name, k, lat, lon] = row;
+    const [name, k, lat, lon, population] = row;
     const okres = data.okresy[k];
     if (typeof name !== "string" || !name || typeof okres !== "string") continue;
     if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < 47 || lat > 52 || lon < 11 || lon > 20) continue;
     const key = fold(name);
-    places.push({ name, okres, lat, lon, key, okresKey: fold(okres) });
+    places.push({ name, okres, lat, lon, key, okresKey: fold(okres), population: Number.isFinite(population) ? population : 0 });
   }
   return places;
 }
 
+// a town this big whose name starts with what was typed counts as the whole name: "Ústí"
+// means Ústí nad Labem rather than the village Ústí, "Hradec" Hradec Králové
+const BIG_TOWN = 20000;
+
 /**
  * Up to `limit` places for what was typed, diacritics and case ignored. Best first: the
- * whole name, then names starting with it, then a word of the name starting with it
- * ("labem" finds "Ústí nad Labem"), then anywhere in the name; shorter names first
- * within a group. "Nová Ves Lit" narrows the many Nová Ves by the okres.
+ * whole name (and big towns starting with it), then names starting with it, then a word
+ * of the name starting with it ("labem" finds "Ústí nad Labem"), then anywhere in the
+ * name; bigger places first within a group, so "Třeb" + Enter is Třebíč, not a hamlet.
+ * "Nová Ves Lit" narrows the many Nová Ves by the okres.
  */
 export function searchPlaces(places, query, limit = 8) {
   const q = fold(query);
@@ -44,6 +49,7 @@ export function searchPlaces(places, query, limit = 8) {
   const scored = [];
   for (const place of places) {
     let rank = rankOf(place.key, q);
+    if (rank === 1 && place.population >= BIG_TOWN) rank = 0;
     if (rank == null) {
       // the end of the query may be the okres: "nova ves lito"
       for (let cut = q.lastIndexOf(" "); cut > 0; cut = q.lastIndexOf(" ", cut - 1)) {
@@ -59,6 +65,7 @@ export function searchPlaces(places, query, limit = 8) {
   scored.sort(
     (a, b) =>
       a.rank - b.rank ||
+      b.place.population - a.place.population ||
       a.place.name.length - b.place.name.length ||
       a.place.name.localeCompare(b.place.name, "cs") ||
       a.place.okres.localeCompare(b.place.okres, "cs"),

@@ -43,6 +43,9 @@ test("models without any MAE yet: alphabetical", () => {
 test("okresy by name and the one to start with", () => {
   const okresy = { CZ0100: "Praha", CZ0201: "Benešov", CZ0642: "Brno-město" };
   assert.deepEqual(okresyByName(okresy).map(([code]) => code), ["CZ0201", "CZ0642", "CZ0100"]);
+  // Praha by its short name, in Czech order (Ch after H)
+  const real = { CZ0100: "území Hlavního města Prahy", CZ0209: "Praha-východ", CZ0411: "Cheb", CZ0631: "Havlíčkův Brod", CZ0321: "Domažlice" };
+  assert.deepEqual(okresyByName(real).map(([, name]) => name), ["Domažlice", "Havlíčkův Brod", "Cheb", "Praha", "Praha-východ"]);
   assert.equal(startOkres(okresy, "CZ0642"), "CZ0642");
   assert.equal(startOkres(okresy, "CZ9999"), "CZ0100");
   assert.equal(startOkres(okresy, null), "CZ0100");

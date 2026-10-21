@@ -175,15 +175,20 @@ function chart(forecast, combined, table, variable, colors, names, nights, selec
     best.push({ time: new Date(forecast.times[i]), value, model, segment });
   });
   const figure = document.createElement("figure");
-  figure.append(cell("figcaption", `${t(`forecast.${variable}`)} (${UNITS[variable]})`));
+  figure.className = "forecast-chart";
+  // "Teplota (2 m), °C": the name has its own parentheses
+  figure.append(cell("figcaption", `${t(`forecast.${variable}`)}, ${UNITS[variable]}`));
   const step = variable === "precipitation";
   const curve = step ? "step-before" : "linear";
-  const width = Math.min(900, document.body.clientWidth - 32);
+  // the width of the text column (the figure has no indent, forecast-chart in style.css)
+  const width = Math.min(1200, document.body.clientWidth - 32);
   figure.append(
     Plot.plot({
       width,
       height: 220,
       marginLeft: 40,
+      // room for the last day's label at the right edge
+      marginRight: 28,
       x: {
         label: null,
         type: "time",
