@@ -17,8 +17,6 @@ export const BLEND = "blend";
 export const DEFAULT_MODEL = BLEND;
 export const DEFAULT_LEAD = 1;
 export const LEADS = [1, 2];
-// the AI's D+2 run is incomplete (its newest day is missing): only D+1 is offered for it
-export const AI_LEADS = [1];
 /** The station chart and summary show this many of the file's last days. */
 export const CHART_DAYS = 7;
 /** The values of the files, in the order of the selector: key, decimals, unit. */
