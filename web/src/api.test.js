@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { FLAGS, HOURLY, NOTICE, SITE, aiOkresDoc, indexDoc, obceDocs, obecCsvLines, obceIndexDoc, obecIds, okresCsv, okresDoc, okresModels, slug } from "./api.js";
+import { FLAGS, HOURLY, NOTICE, SITE, aiOkresDoc, hourlyPreview, indexDoc, obceDocs, obceIndexDoc, obecIds, okresDoc, okresModels, slug } from "./api.js";
 import { records } from "./data.js";
 
 const load = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
@@ -98,30 +98,16 @@ test("the probability of being best and the small-sample flag are passed on", ()
   assert.deepEqual(lead.map((r) => [r.model, r.p_best, r.small_sample]), [["icon", 0.723, true], ["ifs", 0.277, true]]);
 });
 
-test("CSV of the hourly forecast", () => {
-  const lines = okresCsv(DOC).trim().split("\n");
-  assert.equal(lines[0], "time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration,temperature_2m_lo,temperature_2m_hi");
-  assert.equal(lines.length, 145);
-  const first = lines[1].split(",");
-  assert.equal(first[0], HOURLY_DOC.time[0]);
-  assert.equal(Number(first[1]), HOURLY_DOC.okresy.CZ0201.temperature_2m[0]);
-  const empty = okresDoc({ okres: { code: "X", name: "X" }, outlook: OUTLOOK, hourly: null, weightsDoc: null, scores: {}, meta: META });
-  assert.equal(okresCsv(empty), "time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration\n");
-});
-
-test("the CSV has no threshold flags, so it stays plain (no notice line)", () => {
-  const header = okresCsv(DOC).split("\n")[0].split(",");
-  assert.deepEqual(header, ["time_utc", ...HOURLY]);
-  for (const flag of FLAGS) assert.ok(!header.includes(flag), `${flag} in the CSV needs the notice`);
-  // the JSON files and the index carry it, for every flag
+test("every JSON file and the index carry the notice for every threshold flag", () => {
   for (const flag of FLAGS.filter((f) => f !== "gust_warning")) assert.match(NOTICE, new RegExp(flag));
   assert.equal(indexDoc([BENESOV], META, null).notice, NOTICE);
+  assert.equal(DOC.notice, NOTICE);
 });
 
 test("index: every okres with the addresses of its files", () => {
   const index = indexDoc([BENESOV], META, "2026-10-12T10:49+00:00");
   assert.equal(index.okresy[0].json, `${SITE}/api/v1/okresy/CZ0201.json`);
-  assert.equal(index.okresy[0].csv, `${SITE}/api/v1/okresy/CZ0201.csv`);
+  assert.ok(!("csv" in index.okresy[0]), "JSON only");
   assert.equal(index.files.okres_json, `${SITE}/api/v1/okresy/{code}.json`);
   assert.equal(index.generated, "2026-10-12T10:49+00:00");
 });
@@ -351,17 +337,24 @@ test("obce index and the file patterns in index.json", () => {
   assert.deepEqual(idx.obce[0], ["CZ0201", "ves", "Ves", 49.5, 14.5]);
   const files = indexDoc([BENESOV], META, null).files;
   assert.equal(files.ai_okres_json, `${SITE}/api/v1/ai/okresy/{code}.json`);
-  assert.equal(files.ai_okres_csv, `${SITE}/api/v1/ai/okresy/{code}.csv`);
+  assert.ok(!Object.keys(files).some((k) => k.includes("csv")), "JSON only");
   assert.equal(files.obec_json, `${SITE}/api/v1/obce/{okres}/{id}.json`);
   assert.equal(files.ai_obec_json, `${SITE}/api/v1/ai/obce/{okres}/{id}.json`);
 });
 
-test("obec CSV preview: the okres CSV's columns the obec file has, on its start + i hours axis", () => {
+test("the Data page's preview: the first hours of an okres or obec file as JSON lines", () => {
   const doc = { hourly: { start: "2026-10-21T22:00Z", step_hours: 1, hours: 3, temperature_2m: [5, 4.5, null], precipitation: [0, 0.2, 0], wind_speed_10m: [1, 2, 3], cloud_cover: [50, 60, 70] } };
-  assert.deepEqual(obecCsvLines(doc, 2), [
-    "time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover",
-    "2026-10-21T22:00Z,5,0,1,50",
-    "2026-10-21T23:00Z,4.5,0.2,2,60",
-  ]);
-  assert.deepEqual(obecCsvLines(null), []);
+  assert.equal(hourlyPreview(doc, 2), [
+    '"hourly": {',
+    '  "time": ["2026-10-21T22:00Z","2026-10-21T23:00Z"],',
+    '  "temperature_2m": [5,4.5],',
+    '  "precipitation": [0,0.2],',
+    '  "wind_speed_10m": [1,2],',
+    '  "cloud_cover": [50,60],',
+    "  …",
+    "}",
+  ].join("\n"));
+  const okres = hourlyPreview(DOC, 3).split("\n");
+  assert.equal(okres[1], `  "time": ${JSON.stringify(HOURLY_DOC.time.slice(0, 3))},`);
+  assert.equal(hourlyPreview(null), "");
 });

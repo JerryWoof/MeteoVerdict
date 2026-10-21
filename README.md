@@ -21,7 +21,7 @@ of the 6,258 obce.
 | [Measured](https://jerrywoof.github.io/MeteoVerdict/measured.html) | what ČHMÚ's stations measured, as a map like the forecast's: each station (or each okres, next to what our forecast had said) by day and part of day for the last 30 days, the whole day for 60; and for one station what the weather was like there, day by day back to the start of its records (weather symbol, max/min, precipitation, snow, sunshine, gusts, phenomena; week and month views with a summary; the course of recent days), and every element it measures, with its history. Zoomed in, the map shows the stations by name over relief and rivers. A model selector (MeteoVerdict AI, the blend or any single model, D+1 or D+2) puts a model's forecast at the station's own point and height next to what it measured, with the error, in the station panel and the okres's station list |
 | [Radar](https://jerrywoof.github.io/MeteoVerdict/radar.html) | ČHMÚ weather radar over Czechia: the last hours with the nowcast for the next hour, hourly precipitation from radar and rain gauges, and archived days |
 | [AI heatmap](https://jerrywoof.github.io/MeteoVerdict/heatmap.html) | experimental: MeteoVerdict AI's temperature at 100 m from the terrain (valleys, slopes, frost hollows), hour by hour; click anywhere for the forecast at that place |
-| [Data](https://jerrywoof.github.io/MeteoVerdict/data.html) | the forecast and the ranking of every okres as JSON or CSV, free, no key |
+| [Data](https://jerrywoof.github.io/MeteoVerdict/data.html) | the forecast and the ranking of every okres as JSON, free, no key |
 
 ## How it works
 
@@ -91,7 +91,7 @@ write-up of the findings ([roadmap](ROADMAP.md)).
 curl -s https://jerrywoof.github.io/MeteoVerdict/api/v1/okresy/CZ0201.json
 ```
 
-Every okres has a JSON and a CSV file with the combined hourly forecast, the parts of
+Every okres has a JSON file with the combined hourly forecast, the parts of
 the day and the model ranking with weights. Codes, fields and examples:
 [open data](docs/open-data.md). Licence CC BY-SA 4.0 (credit MeteoVerdict, Open-Meteo.com
 and ČHMÚ).

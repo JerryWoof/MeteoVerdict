@@ -288,7 +288,7 @@ export const STRINGS = {
       "Podle nezávislých živých hodnocení nejpřesnější globální model (září 2026). Není otevřený; přidáme ho, až dostaneme přístup.",
     "api.title": "Otevřená data",
     "api.intro":
-      "Naši kombinovanou předpověď a pořadí modelů si můžete stáhnout pro každý okres jako JSON nebo CSV, zdarma, bez registrace a bez klíče; velké archivy jsou v releasech na GitHubu. Soubory jsou statické a dají se načíst i přímo z prohlížeče na jiném webu (CORS povolený). Stránka níže popisuje API, další soubory, archivy, licence a jak data citovat.",
+      "Naši kombinovanou předpověď a pořadí modelů si můžete stáhnout pro každý okres jako JSON, zdarma, bez registrace a bez klíče; velké archivy jsou v releasech na GitHubu. Soubory jsou statické a dají se načíst i přímo z prohlížeče na jiném webu (CORS povolený). Stránka níže popisuje API, další soubory, archivy, licence a jak data citovat.",
     "api.when":
       "Aktualizováno denně: skóre modelů v {daily} a předpověď čtyřikrát denně v {outlook} (pražský čas, teď {zone}; po každém běhu modelů); ostatní archivy v tabulce níže. Čas vytvoření je v každém souboru.",
     "api.try": "Váš okres",
@@ -296,7 +296,7 @@ export const STRINGS = {
     "api.model": "Předpověď",
     "api.modelBlend": "Kombinace modelů (API v1)",
     "api.modelAi": "MeteoVerdict AI (experiment)",
-    "api.aiNote": "AI: stejné soubory a sloupce jako u kombinace modelů. Všechny sloupce jsou vyplněné: teplotu, vítr, srážky, oblačnost a svit AI předpovídá hodinově (srážky, oblačnost a svit sedí na její hodnoty po částech dne) a rozpětí teploty z vlastních chyb AI. Experiment, není oficiální předpověď.",
+    "api.aiNote": "AI: stejné soubory a pole jako u kombinace modelů. Všechny hodinové řady jsou vyplněné: teplotu, vítr, srážky, oblačnost a svit AI předpovídá hodinově (srážky, oblačnost a svit sedí na její hodnoty po částech dne) a rozpětí teploty z vlastních chyb AI. Experiment, není oficiální předpověď.",
     "api.obec": "Obec",
     "api.obecWhole": "celý okres",
     "api.obecNote": "Obec: hodinová teplota (přepočtená na výšku obce), srážky a vítr; oblačnost, svit a ostatní pole jsou hodnoty okresu (pole sources v souboru). Test, struktura se může změnit. Jen JSON.",
@@ -1366,7 +1366,7 @@ export const STRINGS = {
       "The most accurate global model in independent live evaluations (September 2026). Not open; we add it once we get access.",
     "api.title": "Open data",
     "api.intro":
-      "Our combined forecast and the ranking of the models can be downloaded for every okres as JSON or CSV, free, without registration or a key; the large archives are in the releases on GitHub. The files are static and can be fetched straight from a browser on another site (CORS allowed). The page below describes the API, more files, the archives, the licences and how to cite the data.",
+      "Our combined forecast and the ranking of the models can be downloaded for every okres as JSON, free, without registration or a key; the large archives are in the releases on GitHub. The files are static and can be fetched straight from a browser on another site (CORS allowed). The page below describes the API, more files, the archives, the licences and how to cite the data.",
     "api.when":
       "Updated daily: the model scores at {daily} and the forecast four times a day at {outlook} (Prague time, now {zone}; after each model run); the other archives in the table below. The time of creation is in every file.",
     "api.try": "Your okres",
@@ -1374,7 +1374,7 @@ export const STRINGS = {
     "api.model": "Forecast",
     "api.modelBlend": "Combination of models (API v1)",
     "api.modelAi": "MeteoVerdict AI (experiment)",
-    "api.aiNote": "AI: the same files and columns as the combination of models. All columns are filled: the AI forecasts temperature, wind, precipitation, cloud and sunshine hourly (precipitation, cloud and sunshine agree with its part-of-day values), and the temperature range from its own errors. An experiment, not an official forecast.",
+    "api.aiNote": "AI: the same files and fields as the combination of models. Every hourly series is filled: the AI forecasts temperature, wind, precipitation, cloud and sunshine hourly (precipitation, cloud and sunshine agree with its part-of-day values), and the temperature range from its own errors. An experiment, not an official forecast.",
     "api.obec": "Obec",
     "api.obecWhole": "whole okres",
     "api.obecNote": "Obec: hourly temperature (adjusted to the obec's elevation), precipitation and wind; cloud, sunshine and the other fields are the okres's values (sources in the file). A test, the layout may change. JSON only.",

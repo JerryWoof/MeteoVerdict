@@ -1,7 +1,7 @@
 # Open data (roadmap 6.11)
 
 Our combined forecast and the ranking of the models for every okres, as static JSON
-and CSV files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
+files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
 `Access-Control-Allow-Origin: *`). Human-readable page with a picker and examples:
 <https://jerrywoof.github.io/MeteoVerdict/data.html>.
 
@@ -9,19 +9,14 @@ and CSV files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
 |---|---|
 | `api/v1/index.json` | all 77 okresy: `code`, `name`, `lat`, `lon` and the URLs of their files |
 | `api/v1/okresy/{code}.json` | everything for one okres (below) |
-| `api/v1/okresy/{code}.csv` | the hourly forecast: `time_utc,temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration,temperature_2m_lo,temperature_2m_hi` |
-| `api/v1/ai/okresy/{code}.csv` | the hourly forecast with the same columns as the combined `okresy` CSV (all filled: the AI's hourly temperature, wind, precipitation, cloud, sunshine and temperature range, consistent with its part-of-day values) |
 | `api/v1/ai/okresy/{code}.json` | the same file with the MeteoVerdict AI's values: everything by part of day and hourly (**experimental**, below) |
 | `api/v1/obce/{okres}/{id}.json` | the forecast of one obec (village or town) (below) |
 | `api/v1/ai/obce/{okres}/{id}.json` | the same with MeteoVerdict AI's obec forecast (`model: "ai"`), on the axis and parts of `ai/okresy/{okres}.json`; same ids and the same fields as the combined obec file |
 | `api/v1/obce/index.json` | every obec as `[okres, id, name, lat, lon]` |
 
-The CSV files are plain CSV: one header row, no comment line, so that Google Sheets'
-`=IMPORTDATA`, Excel and `pandas.read_csv` read them as they are. They hold the hourly
-series only and **no threshold flags** (`gust_over_threshold`, `frost`, `ground_frost`,
-`heavy_rain` are in the JSON files only), so they need no "not a ČHMÚ warning" notice;
-the notice is in `index.json` and in every JSON file (`notice`). A CSV that gets a flag
-must carry the notice too; a test (`web/src/api.test.js`) fails when one does.
+There are no CSV files (until 2026-10-21 each okres also had a `.csv` of its hourly
+series; JSON carries everything the CSV did, plus the parts of the day, the sources and
+the `notice`).
 
 Base URL: `https://jerrywoof.github.io/MeteoVerdict/`. Codes are LAU 1 (`CZ0201`
 Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).

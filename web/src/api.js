@@ -1,9 +1,8 @@
-// Open data (roadmap 6.11): static JSON and CSV files per okres, built with the site
+// Open data (roadmap 6.11): static JSON files per okres, built with the site
 // from the data the pages already use, so anyone can fetch "their" okres:
 //   api/v1/index.json             all okresy and where their files are
 //   api/v1/okresy/<code>.json     forecast (hourly and by part of day) and model ranking
-//   api/v1/okresy/<code>.csv      the hourly forecast as CSV
-//   api/v1/ai/okresy/<code>.json|csv  the same file with the MeteoVerdict AI's values (experimental)
+//   api/v1/ai/okresy/<code>.json  the same file with the MeteoVerdict AI's values (experimental)
 //   api/v1/obce/<okres>/<id>.json hourly forecast and parts of day of one obec
 //   api/v1/obce/index.json        every obec: okres, id, name, position
 // GitHub Pages serves them with "Access-Control-Allow-Origin: *", so browsers can fetch
@@ -26,8 +25,6 @@ export const DEPRECATED = {
 
 export const SCORE_VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitation_daily", "precipitation_24h"];
 const WEIGHTS_OF = { temperature_2m: "temperature_2m", wind_speed_10m: "wind_speed_10m", precipitation_daily: "precipitation" };
-// the 80 % range of the temperature (`mvd blend-interval`): absent from older outlook files
-const RANGE = ["temperature_2m_lo", "temperature_2m_hi"];
 export const HOURLY = ["temperature_2m", "precipitation", "wind_speed_10m", "cloud_cover", "sunshine_duration", "temperature_2m_lo", "temperature_2m_hi"];
 const PART_FIELDS = [
   "day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol",
@@ -129,22 +126,6 @@ export function okresDoc({ okres, outlook, hourly, weightsDoc, scores, meta }) {
   };
 }
 
-/**
- * The hourly forecast of an okres as CSV (UTC times; empty cells where missing). Plain
- * CSV, one header row and no comment line, so that =IMPORTDATA, Excel and pandas read it
- * as it is. It has none of the threshold FLAGS, so it needs no NOTICE (index.json and
- * every JSON file carry it); a CSV with a flag would need one (docs/open-data.md).
- */
-export function okresCsv(doc) {
-  const h = doc.forecast.hourly;
-  // the 80 % range columns only while the forecast has them
-  const columns = HOURLY.filter((v) => !RANGE.includes(v) || h?.[v]);
-  const header = ["time_utc", ...columns].join(",");
-  if (!h) return `${header}\n`;
-  const lines = h.time.map((time, i) => [time, ...columns.map((v) => h[v]?.[i] ?? "")].join(","));
-  return `${[header, ...lines].join("\n")}\n`;
-}
-
 /** index.json: every okres with the addresses of its files. */
 export function indexDoc(okresy, meta, generated) {
   return {
@@ -156,9 +137,7 @@ export function indexDoc(okresy, meta, generated) {
     generated,
     files: {
       okres_json: `${SITE}/api/${VERSION}/okresy/{code}.json`,
-      okres_csv: `${SITE}/api/${VERSION}/okresy/{code}.csv`,
       ai_okres_json: `${SITE}/api/${VERSION}/ai/okresy/{code}.json`,
-      ai_okres_csv: `${SITE}/api/${VERSION}/ai/okresy/{code}.csv`,
       obec_json: `${SITE}/api/${VERSION}/obce/{okres}/{id}.json`,
       ai_obec_json: `${SITE}/api/${VERSION}/ai/obce/{okres}/{id}.json`,
       obce_index: `${SITE}/api/${VERSION}/obce/index.json`,
@@ -169,7 +148,6 @@ export function indexDoc(okresy, meta, generated) {
       lat: o.lat,
       lon: o.lon,
       json: `${SITE}/api/${VERSION}/okresy/${o.code}.json`,
-      csv: `${SITE}/api/${VERSION}/okresy/${o.code}.csv`,
     })),
   };
 }
@@ -464,19 +442,20 @@ export function obceDocs({ okresDoc: doc, obceFile, meta }) {
 }
 
 /**
- * The first `n` hours of an obec file as CSV lines (header first), with the columns of the
- * okres CSV the obec file has; its time axis is `start` + i hours (UTC, as in the okres files).
+ * The first `n` hours of an okres file (`forecast.hourly`) or an obec file (`hourly`, its axis
+ * `start` + i hours) as JSON text, one series per line: the Data page's preview.
  */
-export function obecCsvLines(doc, n = 7) {
-  const h = doc?.hourly;
-  if (!h?.start) return [];
-  const columns = HOURLY.filter((v) => Array.isArray(h[v]));
-  const start = Date.parse(h.start);
-  const rows = Array.from({ length: Math.min(n, h.hours ?? 0) }, (_, i) => {
-    const time = new Date(start + i * 3600e3).toISOString().slice(0, 16) + "Z";
-    return [time, ...columns.map((v) => h[v][i] ?? "")].join(",");
-  });
-  return [["time_utc", ...columns].join(","), ...rows];
+export function hourlyPreview(doc, n = 6) {
+  const h = doc?.forecast?.hourly ?? doc?.hourly;
+  if (!h) return "";
+  let time = h.time;
+  if (!Array.isArray(time) && h.start) {
+    const start = Date.parse(h.start);
+    time = Array.from({ length: Math.min(n, h.hours ?? 0) }, (_, i) => new Date(start + i * 3600e3).toISOString().slice(0, 16) + "Z");
+  }
+  if (!Array.isArray(time) || !time.length) return "";
+  const rows = [["time", time], ...HOURLY.filter((v) => Array.isArray(h[v])).map((v) => [v, h[v]])];
+  return `"hourly": {\n${rows.map(([k, a]) => `  ${JSON.stringify(k)}: ${JSON.stringify(a.slice(0, n))}`).join(",\n")},\n  …\n}`;
 }
 
 /** api/v1/obce/index.json: every obec as [okres, id, name, lat, lon]. */
