@@ -41,11 +41,12 @@ function make(tag, text, attrs = {}) {
 }
 
 /** Blocks: ["h", text, id?], ["p", text], ["note", text], ["ul", [text, …]],
- * ["table", {head: [..], rows: [[..], …]}], ["code", text], ["slot", id] (an empty
+ * ["h3", text], ["table", {head: [..], rows: [[..], …]}], ["code", text], ["slot", id] (an empty
  * section the page fills from data, `fillSlots`). */
 export function renderBlocks(container, blocks) {
   for (const [kind, body, id] of blocks) {
     if (kind === "h") container.append(make("h2", body, id ? { id } : {}));
+    else if (kind === "h3") container.append(make("h3", body));
     else if (kind === "p") container.append(make("p", body));
     else if (kind === "note") container.append(make("p", body, { class: "note" }));
     else if (kind === "code") container.append(make("pre", body, { class: "code" }));
@@ -98,6 +99,7 @@ function main() {
   const text = page[document.documentElement.lang] ?? page.cs;
   document.title = `MeteoVerdict: ${text.title}`;
   document.getElementById("info-title").textContent = text.title;
+  main.querySelectorAll("[data-prerender]").forEach((n) => n.remove());
   renderBlocks(main, text.blocks);
   // a link to a section (#contact) is built after the load: scroll to it now, and again
   // once the sections from data are there
