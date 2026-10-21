@@ -2315,7 +2315,7 @@ body.radar #show-box {
 }
 
 /* compare.html: each part says what it covers; the ranking's controls sit right above
-   the parts they drive (sticky within that part on wide screens) */
+   the parts they drive (sticky within that part on tall wide screens) */
 .content .section-title {
   font-size: 1.25rem;
   margin: 1.6rem 0 0.3rem;
@@ -2360,12 +2360,36 @@ body.radar #show-box {
 .ranking-options .note {
   margin-top: 0.2rem;
 }
+/* the detail of a table cell or "?" on hover, tap and focus (tip-popover.js); above
+   the sticky strip and the maps */
+.tip-popover {
+  position: absolute;
+  z-index: 20;
+  box-sizing: border-box;
+  max-width: min(22rem, calc(100vw - 16px));
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  font-size: var(--fs-ui);
+  line-height: 1.35;
+  /* the farm details come in lines, as the title had them */
+  white-space: pre-line;
+  pointer-events: none;
+}
+.tip-popover[hidden] {
+  display: none;
+}
 .blend-test-table tr.group th {
   background: var(--paper);
   font-weight: 600;
 }
-@media (min-width: 701px) {
-  .ranking-controls {
+/* compare-models only (#controls): its long page scrolls under the strip. Not on
+   compare.html (short page) and not on low windows, where the strip would cover too much */
+@media (min-width: 701px) and (min-height: 801px) {
+  #controls.ranking-controls {
     position: sticky;
     top: 0;
     z-index: 3;

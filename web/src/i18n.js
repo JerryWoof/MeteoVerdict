@@ -816,7 +816,7 @@ export const STRINGS = {
     "blendTest.okresIntro":
       "„Nejlepší model v okrese“ = v každém okrese model, který tam byl za posledních 90 dní nejlepší, každý den vybraný znovu; v každém okrese může být jiný. Takovou skládačku porazit je těžší než kterýkoli jeden model.",
     "blendTest.vsModel": "proti {model}",
-    "blendTest.cellsNote": "V závorce 95% interval; podrobnosti v bublině po najetí na buňku.",
+    "blendTest.cellsNote": "V závorce 95% interval; podrobnosti v bublině po najetí nebo klepnutí na buňku.",
     "blendTest.betterLongCz": "Lepší než model {model} použitý všude o {amount} {unit} (95% interval {low}–{high})",
     "blendTest.worseLongCz": "Horší než model {model} použitý všude o {amount} {unit} (95% interval {low}–{high})",
     "blendTest.sameLongCz": "Bez významného rozdílu proti modelu {model} použitému všude ({amount} {unit}, 95% interval {low} až {high})",
@@ -925,7 +925,7 @@ export const STRINGS = {
     "leadHours.precipitation": "Hodinové srážky, mm",
     "farm.title": "Pro zemědělce: mráz, nárazy větru, 3hodinové srážky",
     "farm.intro":
-      "Vyplatí se zakrýt plodiny, odložit postřik nebo zajistit fóliovník? Tady je vidět, jak spolehlivě jednotlivé modely předpovídaly mrazivé noci, silné nárazy větru a vydatné 3hodinové srážky na asi 100 stanicích ČHMÚ, podle toho, kolik hodin dopředu předpověď vznikla (každý běh 00, 06, 12 a 18 UTC zvlášť). V tabulce je ETS: 1 = vše trefeno bez planých poplachů, 0 = ne lépe než náhoda; tmavší zelená je lepší, ★ nejlepší model v daném sloupci. Najeďte myší na číslo pro podrobnosti.",
+      "Vyplatí se zakrýt plodiny, odložit postřik nebo zajistit fóliovník? Tady je vidět, jak spolehlivě jednotlivé modely předpovídaly mrazivé noci, silné nárazy větru a vydatné 3hodinové srážky na asi 100 stanicích ČHMÚ, podle toho, kolik hodin dopředu předpověď vznikla (každý běh 00, 06, 12 a 18 UTC zvlášť). V tabulce je ETS: 1 = vše trefeno bez planých poplachů, 0 = ne lépe než náhoda; tmavší zelená je lepší, ★ nejlepší model v daném sloupci. Najeďte myší na číslo nebo na něj klepněte pro podrobnosti.",
     "farm.basis": "{runs} běhů od {first} do {last}, {stations} stanic",
     "farm.event": "Jev",
     "farm.event.frost": "Mráz: noční minimum {op} {value} °C",
@@ -1890,7 +1890,7 @@ export const STRINGS = {
     "blendTest.okresIntro":
       "“Best model in each okres” = in every okres the model that was best there over the last 90 days, picked anew each day; it can be a different model in every okres. That patchwork is harder to beat than any one model.",
     "blendTest.vsModel": "vs {model}",
-    "blendTest.cellsNote": "In brackets the 95 % interval; details in the tooltip of each cell.",
+    "blendTest.cellsNote": "In brackets the 95 % interval; details in the bubble when you hover over or tap a cell.",
     "blendTest.betterLongCz": "Better than {model} used everywhere by {amount} {unit} (95 % interval {low}–{high})",
     "blendTest.worseLongCz": "Worse than {model} used everywhere by {amount} {unit} (95 % interval {low}–{high})",
     "blendTest.sameLongCz": "No significant difference from {model} used everywhere ({amount} {unit}, 95 % interval {low} to {high})",
@@ -1999,7 +1999,7 @@ export const STRINGS = {
     "leadHours.precipitation": "Hourly precipitation, mm",
     "farm.title": "For farmers: frost, gusts, 3-hour rain (run-based)",
     "farm.intro":
-      "Worth covering the crops, postponing spraying or securing the polytunnel? This shows how reliably each model forecast frost nights, strong gusts and heavy 3-hour rain at about 100 ČHMÚ stations, by how many hours ahead the forecast was made (every 00, 06, 12 and 18 UTC run on its own). The table shows the ETS: 1 = every event caught without false alarms, 0 = no better than chance; darker green is better, ★ marks the best model in a column. Hover over a number for details.",
+      "Worth covering the crops, postponing spraying or securing the polytunnel? This shows how reliably each model forecast frost nights, strong gusts and heavy 3-hour rain at about 100 ČHMÚ stations, by how many hours ahead the forecast was made (every 00, 06, 12 and 18 UTC run on its own). The table shows the ETS: 1 = every event caught without false alarms, 0 = no better than chance; darker green is better, ★ marks the best model in a column. Hover over or tap a number for details.",
     "farm.basis": "{runs} runs from {first} to {last}, {stations} stations",
     "farm.event": "Event",
     "farm.event.frost": "Frost: night minimum {op} {value} °C",
@@ -2222,6 +2222,11 @@ export function setUpLanguage() {
   for (const element of document.querySelectorAll("[data-i18n-title]")) {
     element.title = t(element.dataset.i18nTitle);
     element.setAttribute("aria-label", element.title);
+  }
+  // the same text in a popover instead of a title (tip-popover.js)
+  for (const element of document.querySelectorAll("[data-i18n-tip]")) {
+    element.dataset.tip = t(element.dataset.i18nTip);
+    element.setAttribute("aria-label", element.dataset.tip);
   }
   // the tab title in the page language (<title data-i18n-page="key">)
   const title = document.querySelector("title[data-i18n-page]");
