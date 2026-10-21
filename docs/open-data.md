@@ -85,8 +85,8 @@ in a sentence, `forecast.ai_issued` is when the AI issued its forecast and
 - `hourly`: the axis and series of the okres file. `temperature_2m`, `wind_speed_10m`,
   `precipitation`, `cloud_cover`, `sunshine_duration`, `temperature_2m_lo` and
   `temperature_2m_hi` are the AI's on every hour it has a value for (hour-matched by time), the
-  combined forecast's elsewhere. The AI's hourly precipitation, cloud and sunshine come from its own
-  hourly models and are made to agree with its value of each part of day (night, morning, afternoon,
+  combined forecast's elsewhere. The AI's hourly precipitation, cloud and sunshine are its own
+  hourly values, consistent with its value of each part of day (night, morning, afternoon,
   evening): the precipitation and sunshine of the hours add up to the AI's, the cloud has the AI's
   mean. Its 80 % range comes from its own past errors (the combined forecast's method). Hours
   without an AI value of their own (and every hour when an older AI file lacks them) take the
