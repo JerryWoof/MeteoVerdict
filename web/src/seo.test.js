@@ -40,3 +40,8 @@ test("a text page carries its Czech text in the HTML, the About page also FAQPag
   assert.ok(!injectInfoText(page.replace("about", "methodology")).includes("FAQPage"));
   assert.equal(injectInfoText("<main data-page=\"nope\"></main>"), "<main data-page=\"nope\"></main>");
 });
+
+test("the cookieless analytics beacon is on the known pages only", () => {
+  assert.match(injectSeo(PAGE, "radar.html"), /static\.cloudflareinsights\.com\/beacon\.min\.js/);
+  assert.ok(!injectSeo(PAGE, "tv.html").includes("cloudflareinsights"));
+});
