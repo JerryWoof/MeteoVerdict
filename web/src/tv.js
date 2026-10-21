@@ -275,8 +275,9 @@ export function dayLabel(day, todayIso, language) {
 export function parseView(hash, outlook, fallback) {
   // outlook.days: every day offered (the measured page passes its measured days)
   let parts = hash.replace(/^#/, "").split("/");
-  // "#CZ0423/Obec": an okres and an obec, the rest as default
-  if (/^CZ\d{4}$/.test(parts[0]) && parts.length === 2) parts = ["", "", "", undefined, parts[0], parts[1]];
+  // "#CZ0423/Obec": an okres and an obec, the rest as default; the codes of the
+  // okresy around Prague end in a letter (CZ020A, CZ020B, CZ020C)
+  if (/^CZ\w{4}$/.test(parts[0]) && parts.length === 2) parts = ["", "", "", undefined, parts[0], parts[1]];
   const [day, part, colour] = parts;
   let [, , , values, okres] = parts;
   let obec = parts[5];

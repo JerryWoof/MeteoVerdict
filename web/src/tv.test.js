@@ -172,6 +172,11 @@ test("the view in the URL, including old links", () => {
   });
   // the home page's short link "#okres/obec": the default values on the map, not none
   assert.deepEqual(parseView("#CZ0201/Benešov", OUTLOOK, fallback).shown, DEFAULT_SHOWN);
+  // the okresy around Prague have a letter at the end of their code
+  const west = parseView("#CZ020A/J%C3%ADlov%C3%A9%20u%20Prahy", OUTLOOK, fallback);
+  assert.equal(west.okres, "CZ020A");
+  assert.equal(west.obec, "Jílové u Prahy");
+  assert.equal(parseView("#CZ020B/Příbram", OUTLOOK, fallback).okres, "CZ020B");
 });
 
 test("play: the four parts of one day, or of every day of the week", () => {
