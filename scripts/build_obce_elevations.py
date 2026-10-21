@@ -107,7 +107,7 @@ def main(names: list[str]) -> None:
     year, people = population()
     chosen = set(names) if names else set(doc["okresy"])
     places = []
-    for name, index, lat, lon in doc["obce"]:
+    for name, index, lat, lon, *_ in doc["obce"]:  # a fifth value: the population
         okres = doc["okresy"][index]
         if okres not in chosen:
             continue
