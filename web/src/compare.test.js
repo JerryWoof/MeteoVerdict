@@ -339,7 +339,7 @@ test("sorting by ETS: higher first, numbered; no score, the mean and short recor
 });
 
 test("lead bands and lead days: parsing, labels, variables", async () => {
-  const { bandVariable, dayVariable, defaultLead, isBand, leadLabel, parseLead } = await import("./compare.js");
+  const { bandVariable, dayVariable, defaultLead, isBand, krajOf, leadLabel, parseLead } = await import("./compare.js");
   assert.equal(parseLead("h13-24"), "h13-24");
   assert.equal(parseLead("2"), 2);
   assert.equal(parseLead("h1-5"), null);
@@ -356,6 +356,9 @@ test("lead bands and lead days: parsing, labels, variables", async () => {
   assert.equal(dayVariable("precipitation", days), "precipitation_daily");
   assert.equal(dayVariable("wind_gusts_10m", days), "wind_speed_10m");
   assert.equal(dayVariable("wind_speed_10m", days), "wind_speed_10m");
+  assert.equal(krajOf("CZ0642"), "CZ064");
+  assert.equal(krajOf("CZ020A"), "CZ020");
+  assert.equal(krajOf("CZ064"), "CZ064");
   assert.equal(defaultLead({ default_band: "h13-24" }), "h13-24");
   assert.equal(defaultLead({ default_band: null }), 1);
   assert.equal(defaultLead(null), 1);
