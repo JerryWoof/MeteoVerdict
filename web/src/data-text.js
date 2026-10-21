@@ -3,7 +3,7 @@
 // from schedule.js (checked against the workflows); licences from docs/licensing.md.
 
 const REPO = "https://github.com/JerryWoof/MeteoVerdict";
-const SITE = "https://jerrywoof.github.io/MeteoVerdict";
+const SITE = "https://meteoverdict.cz";
 const BY = "https://creativecommons.org/licenses/by/4.0/";
 const BY_SA = "https://creativecommons.org/licenses/by-sa/4.0/";
 

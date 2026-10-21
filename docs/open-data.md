@@ -3,7 +3,7 @@
 Our combined forecast and the ranking of the models for every okres, as static JSON
 files on GitHub Pages: free, no key, CORS allowed (GitHub Pages sends
 `Access-Control-Allow-Origin: *`). Human-readable page with a picker and examples:
-<https://jerrywoof.github.io/MeteoVerdict/data.html>.
+<https://meteoverdict.cz/data.html>.
 
 | File | Contains |
 |---|---|
@@ -18,7 +18,7 @@ There are no CSV files (until 2026-10-21 each okres also had a `.csv` of its hou
 series; JSON carries everything the CSV did, plus the parts of the day, the sources and
 the `notice`).
 
-Base URL: `https://jerrywoof.github.io/MeteoVerdict/`. Codes are LAU 1 (`CZ0201`
+Base URL: `https://meteoverdict.cz/`. Codes are LAU 1 (`CZ0201`
 Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
 
 ## An okres file
@@ -136,7 +136,7 @@ obce you need, at most once an hour.
 ## Every model's own forecast (outside `api/v1`)
 
 The forecast pages read `data/scores/forecast/models/{code}.json` (e.g.
-`https://jerrywoof.github.io/MeteoVerdict/data/scores/forecast/models/CZ0201.json`),
+`https://meteoverdict.cz/data/scores/forecast/models/CZ0201.json`),
 written by `mvd outlook` with each of its four runs a day: every model's hourly
 forecast at the okres point as Open-Meteo gave it (no correction, rounded), and our
 combined series, in columns: `generated`, `okres`, `time` (UTC hours), `variables`
@@ -148,7 +148,7 @@ archive of every run's full answer is in the releases `outlook-models-YYYY-MM`
 (`outlook-models-YYYY-MM-DD.parquet`, one file per UTC day).
 
 The forecast map's model switch reads `data/scores/forecast/models-parts/{model}.json`
-(e.g. `https://jerrywoof.github.io/MeteoVerdict/data/scores/forecast/models-parts/ecmwf_ifs.json`)
+(e.g. `https://meteoverdict.cz/data/scores/forecast/models-parts/ecmwf_ifs.json`)
 and `data/scores/forecast/models-parts/index.json`, also written by `mvd outlook` with
 each run: one model's parts of day and whole days for all 77 okresy by the outlook's
 rules (tmin, tmax, precipitation in mm, wind, cloud, sunshine and a simplified symbol;
@@ -172,7 +172,7 @@ and served under `data/scores/ai/`. The AI's issue times are in the files (`ai_i
 - `fc/heat/`, `fc/temp100m/`: the inputs of the 100 m heatmap (the browser composes the hour).
 
 They carry no `licence` or `attribution` field yet. The licence of the AI output is not decided; until it is, treat it as CC BY-SA 4.0 like our other outputs
-([licensing.md](licensing.md)). The [Data page](https://jerrywoof.github.io/MeteoVerdict/data.html) lists
+([licensing.md](licensing.md)). The [Data page](https://meteoverdict.cz/data.html) lists
 every file, release, schedule and licence.
 
 ## On an e-ink display

@@ -11,7 +11,7 @@
 import { records } from "./data.js";
 
 export const VERSION = "v1";
-export const SITE = "https://jerrywoof.github.io/MeteoVerdict";
+export const SITE = "https://meteoverdict.cz";
 export const DOCS = `${SITE}/data.html`;
 export const LICENCE = "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)";
 // the scores published per okres, and which weights of the combination belong to them
