@@ -171,8 +171,8 @@ export function dataBlocks(language, c) {
       "Prosíme, stahujte nejvýš jednou za hodinu: předpověď se mění jen čtyřikrát denně.",
       "Please fetch at most once an hour: the forecast changes only four times a day anyway.")],
     ["p", L(
-      "Předpověď je statistická kombinace modelů, ne oficiální předpověď ČHMÚ; zda je lepší než nejlepší jednotlivý model, zpětně ověřujeme každý den na stránce [Porovnání](compare.html). Prahy (mráz, přízemní mrazík, vydatný déšť, nárazy) nejsou výstrahy: oficiální výstrahy vydává jen [ČHMÚ](https://www.chmi.cz/). Za použití dat neručíme.",
-      "The forecast is a statistical combination of models, not an official ČHMÚ forecast; whether it beats the best single model is tested every day on the [Compare](compare.html) page. The thresholds (frost, ground frost, heavy rain, gusts) are not warnings: only [ČHMÚ](https://www.chmi.cz/) issues official warnings. Use the data at your own risk.")],
+      "Předpověď je statistická kombinace modelů, ne oficiální předpověď ČHMÚ; zda je lepší než nejlepší jednotlivý model, zpětně ověřujeme každý den na stránce [Porovnání](compare-models.html). Prahy (mráz, přízemní mrazík, vydatný déšť, nárazy) nejsou výstrahy: oficiální výstrahy vydává jen [ČHMÚ](https://www.chmi.cz/). Za použití dat neručíme.",
+      "The forecast is a statistical combination of models, not an official ČHMÚ forecast; whether it beats the best single model is tested every day on the [Compare](compare-models.html) page. The thresholds (frost, ground frost, heavy rain, gusts) are not warnings: only [ČHMÚ](https://www.chmi.cz/) issues official warnings. Use the data at your own risk.")],
   ];
   const split = all.findIndex((block) => block[2] === "files");
   return { api: all.slice(0, split), more: all.slice(split) };

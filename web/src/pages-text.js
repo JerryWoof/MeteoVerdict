@@ -12,7 +12,7 @@ export const PAGES = {
         ["h", "Co tu najdete"],
         ["ul", [
           "**[Předpověď](forecast.html)** pro každý okres a pro 6 258 obcí. Skládáme ji z modelů podle toho, jak přesně v daném okrese v poslední době předpovídaly.",
-          "**[Mapa přesnosti](./)** a **[Porovnání](compare.html)**: který model vede kde, pro jakou veličinu a jak jisté to pořadí je.",
+          "**[Mapa přesnosti](./)** a **[Porovnání](compare-models.html)**: který model vede kde, pro jakou veličinu a jak jisté to pořadí je.",
           "**[Radar](radar.html)** a **[Naměřeno](measured.html)**: radar ČHMÚ a měření stanic.",
           "**[Heatmapa](heatmap.html)** a **MeteoVerdict AI**, výchozí model v [Předpovědi](forecast.html): experimentální modely, které ověřujeme stejně přísně jako ostatní.",
           "**[Otevřená data](data.html)**: předpověď a skóre modelů pro každý okres jako JSON a CSV, zdarma.",
@@ -33,7 +33,7 @@ export const PAGES = {
         ["h", "What you will find"],
         ["ul", [
           "**[Forecast](forecast.html)** for every okres and for 6,258 municipalities. We combine the models by how accurately each has forecast that okres lately.",
-          "**[The accuracy map](./)** and **[Compare](compare.html)**: which model leads where, for which variable, and how sure that ranking is.",
+          "**[The accuracy map](./)** and **[Compare](compare-models.html)**: which model leads where, for which variable, and how sure that ranking is.",
           "**[Radar](radar.html)** and **[Measured](measured.html)**: ČHMÚ's radar and the stations' measurements.",
           "**[Heatmap](heatmap.html)** and **MeteoVerdict AI**, the default model of the [Forecast](forecast.html): experimental models, checked as strictly as the others.",
           "**[Open data](data.html)**: the forecast and the model scores for every okres as JSON and CSV, free.",
@@ -144,7 +144,7 @@ export const PAGES = {
         ["h", "Co je k dispozici"],
         ["ul", [
           "**[Otevřená data](data.html)**: předpověď a pořadí modelů pro 77 okresů jako JSON a CSV, bez klíče a registrace.",
-          "**[Skóre přesnosti](compare.html)** a **[měsíční report](report.html)**: který model měl pravdu a jak jistě. Postup je v [metodice](methodology.html).",
+          "**[Skóre přesnosti](compare-models.html)** a **[měsíční report](report.html)**: který model měl pravdu a jak jistě. Postup je v [metodice](methodology.html).",
           "Žádná předpověď tu není oficiální a nic nezaručujeme (bez SLA).",
         ]],
         ["h", "Open-source a licence"],
@@ -160,7 +160,7 @@ export const PAGES = {
         ["h", "What is available"],
         ["ul", [
           "**[Open data](data.html)**: the forecast and the model ranking for 77 okresy as JSON and CSV, no key or registration.",
-          "**[Accuracy scores](compare.html)** and the **[monthly report](report.html)**: which model was right and how surely. The method is in the [methodology](methodology.html).",
+          "**[Accuracy scores](compare-models.html)** and the **[monthly report](report.html)**: which model was right and how surely. The method is in the [methodology](methodology.html).",
           "No forecast here is official and we guarantee nothing (no SLA).",
         ]],
         ["h", "Open source and licences"],
