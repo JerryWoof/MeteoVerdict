@@ -58,8 +58,9 @@ async function main() {
     return;
   }
   status.textContent = t("tv.updated", {
-    time: new Intl.DateTimeFormat(document.documentElement.lang, {
-      dateStyle: "short", timeStyle: "short", timeZone: "Europe/Prague",
+    // the same date and time as in every page's header: "21. 10. 2026 1:32", "21 Oct 2026, 01:32"
+    time: new Intl.DateTimeFormat(document.documentElement.lang === "cs" ? "cs-CZ" : "en-GB", {
+      dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Prague",
     }).format(new Date(index.generated)),
   });
   const okresy = index.okresy.slice().sort((a, b) => displayName(a.name).localeCompare(displayName(b.name), "cs"));

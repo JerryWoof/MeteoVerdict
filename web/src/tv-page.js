@@ -1028,7 +1028,8 @@ async function main() {
   const generated = outlook.generated ? new Date(outlook.generated) : null;
   status.textContent = generated && !Number.isNaN(generated.getTime())
     ? t("tv.updated", {
-      time: new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Prague" }).format(generated),
+      // the same date and time as in every page's header: "21. 10. 2026 1:32", "21 Oct 2026, 01:32"
+      time: new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Prague" }).format(generated),
     })
     : "";
   const now = Date.now();
