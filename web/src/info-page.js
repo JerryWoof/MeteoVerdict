@@ -13,7 +13,11 @@ function inline(parent, text) {
       const a = document.createElement("a");
       a.href = part.href;
       a.textContent = part.text;
-      parent.append(a);
+      if (part.bold) {
+        const b = document.createElement("strong");
+        b.append(a);
+        parent.append(b);
+      } else parent.append(a);
     } else if (part.code) {
       const code = document.createElement("code");
       code.textContent = part.text;

@@ -172,6 +172,11 @@ export const STRINGS = {
     "heat.status": "Vydáno {issued}",
     "heat.note": "Experiment: hodnoty jsou odhad pro mřížku 100 m, ne měření.",
     "heat.map": "Mapa teploty po 100 m v Česku",
+    "map.aria": "Mapa Česka",
+    "radar.mapAria": "Radarová mapa Česka",
+    "api.eink24": "MeteoVerdict na e-inkovém displeji TRMNL: příštích 24 hodin v Praze",
+    "api.einkToday": "MeteoVerdict na e-inkovém displeji TRMNL: dnes a zítra v Praze",
+    "api.einkFive": "MeteoVerdict na e-inkovém displeji TRMNL: pět dní v Praze",
     "heat.loadingMap": "Načítám mapu… {pct} %",
     "heat.loadFailed": "Mapu se nepodařilo načíst. Zkuste to později.",
     "heat.sharpening": "zaostřuji… {pct} %",
@@ -1220,6 +1225,11 @@ export const STRINGS = {
     "heat.status": "Issued {issued}",
     "heat.note": "Experiment: values are an estimate for a 100 m grid, not measurements.",
     "heat.map": "Map of the 100 m temperature in Czechia",
+    "map.aria": "Map of Czechia",
+    "radar.mapAria": "Radar map of Czechia",
+    "api.eink24": "MeteoVerdict on a TRMNL e-ink display: the next 24 hours in Prague",
+    "api.einkToday": "MeteoVerdict on a TRMNL e-ink display: today and tomorrow in Prague",
+    "api.einkFive": "MeteoVerdict on a TRMNL e-ink display: five days in Prague",
     "heat.loadingMap": "Loading the map… {pct} %",
     "heat.loadFailed": "The map could not be loaded. Please try again later.",
     "heat.sharpening": "sharpening… {pct} %",
@@ -2163,6 +2173,9 @@ export function setUpLanguage() {
   }
   for (const element of document.querySelectorAll("[data-i18n-placeholder]")) {
     element.placeholder = t(element.dataset.i18nPlaceholder);
+  }
+  for (const element of document.querySelectorAll("[data-i18n-alt]")) {
+    element.alt = t(element.dataset.i18nAlt);
   }
   for (const element of document.querySelectorAll("[data-i18n-title]")) {
     element.title = t(element.dataset.i18nTitle);
