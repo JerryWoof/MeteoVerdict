@@ -25,6 +25,8 @@ export const PAGES = {
   "report.html": ["report.html", "Který model předpovídal Česko v uplynulém měsíci nejlépe: čísla, grafy a výhrady.", "Which model forecast Czechia best last month: numbers, charts and caveats."],
 };
 
+const ANALYTICS = `<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "bfd729fcbbdf4e3094786a0ff9e359c8"}'></script>`;
+
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
 export function injectSeo(html, file) {
@@ -64,7 +66,9 @@ export function injectSeo(html, file) {
   const script = `<script>(function(){try{if(localStorage.getItem("meteoverdict.language")!=="en")return;`
     + `var d=document,t=${JSON.stringify(en).replace(/</g, "\\u003c")};`
     + `["meta[name=description]","meta[property='og:description']","meta[name='twitter:description']"].forEach(function(s){var m=d.querySelector(s);if(m)m.setAttribute("content",t)})}catch(_){}})()</script>`;
-  return out.includes("</body>") ? out.replace("</body>", `    ${script}\n  </body>`) : out;
+  out = out.includes("</body>") ? out.replace("</body>", `    ${script}\n  </body>`) : out;
+  // Cloudflare Web Analytics: cookieless page views and Web Vitals, no personal data (the site token is public)
+  return out.includes("</body>") ? out.replace("</body>", `    ${ANALYTICS}\n  </body>`) : out;
 }
 
 // The text pages (About, Methodology, Collaboration): their Czech text in the HTML, replaced by
