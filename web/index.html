@@ -28,11 +28,12 @@
     <main class="content map-page">
       <!-- the first thing: the weather at my place -->
       <section id="home-find" class="home-find" aria-labelledby="home-title">
-        <h2 id="home-title" class="page-title" data-i18n="home.title">Počasí ve vašem místě</h2>
-        <p class="page-intro" data-i18n="home.intro"></p>
+        <h2 id="home-title" class="sr-only" data-i18n="home.title">Počasí ve vašem místě</h2>
         <div class="home-find-row">
           <div id="home-search"></div>
-          <button type="button" id="home-locate" data-i18n="home.locate"></button>
+          <button type="button" id="home-locate" data-i18n-aria="home.locate" data-i18n-title="home.locate">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+          </button>
         </div>
         <p id="home-note" class="note" role="status"></p>
       </section>
