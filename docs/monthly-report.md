@@ -1,7 +1,7 @@
 # Monthly accuracy report
 
 `mvd monthly-report YYYY-MM` writes the accuracy report of one finished calendar month
-from the scores we already have; <https://jerrywoof.github.io/MeteoVerdict/report.html>
+from the scores we already have; <https://meteoverdict.cz/report.html>
 draws it (Czech and English, printable, with a PDF).
 
 ```

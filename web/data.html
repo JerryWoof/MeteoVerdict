@@ -43,15 +43,15 @@
       <div id="doc-api"></div>
 
       <h2 data-i18n="api.examples">Examples</h2>
-      <pre class="code">curl -s https://jerrywoof.github.io/MeteoVerdict/api/v1/okresy/CZ0201.json</pre>
+      <pre class="code">curl -s https://meteoverdict.cz/api/v1/okresy/CZ0201.json</pre>
       <pre class="code">import json, urllib.request
 
-url = "https://jerrywoof.github.io/MeteoVerdict/api/v1/okresy/CZ0201.json"
+url = "https://meteoverdict.cz/api/v1/okresy/CZ0201.json"
 okres = json.load(urllib.request.urlopen(url))
 hourly = okres["forecast"]["hourly"]
 for time, temp in zip(hourly["time"][:6], hourly["temperature_2m"][:6]):
     print(time, temp, "°C")</pre>
-      <pre class="code">const url = "https://jerrywoof.github.io/MeteoVerdict/api/v1/okresy/CZ0201.json";
+      <pre class="code">const url = "https://meteoverdict.cz/api/v1/okresy/CZ0201.json";
 const okres = await (await fetch(url)).json();
 const best = okres.models.variables.temperature_2m.lead_days[1][0];
 console.log(`best model for tomorrow's temperature: ${best.name}`);</pre>

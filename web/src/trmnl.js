@@ -1,6 +1,6 @@
 // The polling-URL builder of the TRMNL section on the Data page.
 
-export const SITE = "https://jerrywoof.github.io/MeteoVerdict/api/v1";
+export const SITE = "https://meteoverdict.cz/api/v1";
 export const TEMPLATE_URL = `${SITE}/{{ forecast_model }}/{{ okres_code }}.json`;
 export const FORECASTS = ["okresy", "ai/okresy"];
 

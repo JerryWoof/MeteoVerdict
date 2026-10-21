@@ -9,19 +9,19 @@ weather models forecast what ČHMÚ stations then measured, ranks them in every 
 and combines them into its own forecast: for every okres and, as a test, for every one
 of the 6,258 obce.
 
-**→ [jerrywoof.github.io/MeteoVerdict](https://jerrywoof.github.io/MeteoVerdict/)** (Czech and English)
+**→ [meteoverdict.cz](https://meteoverdict.cz/)** (Czech and English)
 
 | Page | What you get |
 |---|---|
-| [Forecast](https://jerrywoof.github.io/MeteoVerdict/forecast.html) (the experimental MeteoVerdict AI forecast is its default model, with its verification and experiments below the map) | TV-style weather map for the next six days: temperature, rain, wind and cloud in every okres, by night, morning, afternoon and evening, with sunrise and sunset and play buttons. Zoom in for relief, rivers and town names, and the forecast for every obec, biggest places first; "Find a place" goes to any obec and opens its panel |
+| [Forecast](https://meteoverdict.cz/forecast.html) (the experimental MeteoVerdict AI forecast is its default model, with its verification and experiments below the map) | TV-style weather map for the next six days: temperature, rain, wind and cloud in every okres, by night, morning, afternoon and evening, with sunrise and sunset and play buttons. Zoom in for relief, rivers and town names, and the forecast for every obec, biggest places first; "Find a place" goes to any obec and opens its panel |
 | [On an e-ink display](https://github.com/JerryWoof/MeteoVerdict-TRMNL) | today and tomorrow, the next 24 hours, five days or the weekend on a TRMNL display, in Czech or English; combined or AI forecast |
-| [Score map](https://jerrywoof.github.io/MeteoVerdict/) | the most accurate model in every okres, or "no clear winner" where the data cannot tell; click an okres to see why it wins |
-| [Compare](https://jerrywoof.github.io/MeteoVerdict/compare.html) | all models ranked for Czechia, a kraj or an okres, with confidence intervals, and every model's error hour by hour after each run (H+1 to H+120) |
-| [Forecast per okres](https://jerrywoof.github.io/MeteoVerdict/forecast-detail.html) | the hourly combined forecast for an okres town next to the best single model, with sunrise, sunset and the nights shaded |
-| [Measured](https://jerrywoof.github.io/MeteoVerdict/measured.html) | what ČHMÚ's stations measured, as a map like the forecast's: each station (or each okres, next to what our forecast had said) by day and part of day for the last 30 days, the whole day for 60; and for one station what the weather was like there, day by day back to the start of its records (weather symbol, max/min, precipitation, snow, sunshine, gusts, phenomena; week and month views with a summary; the course of recent days), and every element it measures, with its history. Zoomed in, the map shows the stations by name over relief and rivers. A model selector (MeteoVerdict AI, the blend or any single model, D+1 or D+2) puts a model's forecast at the station's own point and height next to what it measured, with the error, in the station panel and the okres's station list |
-| [Radar](https://jerrywoof.github.io/MeteoVerdict/radar.html) | ČHMÚ weather radar over Czechia: the last hours with the nowcast for the next hour, hourly precipitation from radar and rain gauges, and archived days |
-| [AI heatmap](https://jerrywoof.github.io/MeteoVerdict/heatmap.html) | experimental: MeteoVerdict AI's temperature at 100 m from the terrain (valleys, slopes, frost hollows), hour by hour; click anywhere for the forecast at that place |
-| [Data](https://jerrywoof.github.io/MeteoVerdict/data.html) | the forecast and the ranking of every okres as JSON, free, no key |
+| [Score map](https://meteoverdict.cz/) | the most accurate model in every okres, or "no clear winner" where the data cannot tell; click an okres to see why it wins |
+| [Compare](https://meteoverdict.cz/compare.html) | all models ranked for Czechia, a kraj or an okres, with confidence intervals, and every model's error hour by hour after each run (H+1 to H+120) |
+| [Forecast per okres](https://meteoverdict.cz/forecast-detail.html) | the hourly combined forecast for an okres town next to the best single model, with sunrise, sunset and the nights shaded |
+| [Measured](https://meteoverdict.cz/measured.html) | what ČHMÚ's stations measured, as a map like the forecast's: each station (or each okres, next to what our forecast had said) by day and part of day for the last 30 days, the whole day for 60; and for one station what the weather was like there, day by day back to the start of its records (weather symbol, max/min, precipitation, snow, sunshine, gusts, phenomena; week and month views with a summary; the course of recent days), and every element it measures, with its history. Zoomed in, the map shows the stations by name over relief and rivers. A model selector (MeteoVerdict AI, the blend or any single model, D+1 or D+2) puts a model's forecast at the station's own point and height next to what it measured, with the error, in the station panel and the okres's station list |
+| [Radar](https://meteoverdict.cz/radar.html) | ČHMÚ weather radar over Czechia: the last hours with the nowcast for the next hour, hourly precipitation from radar and rain gauges, and archived days |
+| [AI heatmap](https://meteoverdict.cz/heatmap.html) | experimental: MeteoVerdict AI's temperature at 100 m from the terrain (valleys, slopes, frost hollows), hour by hour; click anywhere for the forecast at that place |
+| [Data](https://meteoverdict.cz/data.html) | the forecast and the ranking of every okres as JSON, free, no key |
 
 ## How it works
 
@@ -88,7 +88,7 @@ write-up of the findings ([roadmap](ROADMAP.md)).
 ## Use the data
 
 ```bash
-curl -s https://jerrywoof.github.io/MeteoVerdict/api/v1/okresy/CZ0201.json
+curl -s https://meteoverdict.cz/api/v1/okresy/CZ0201.json
 ```
 
 Every okres has a JSON file with the combined hourly forecast, the parts of
