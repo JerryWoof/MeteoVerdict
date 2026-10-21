@@ -1,7 +1,8 @@
 // Numbers, dates and backend texts of the AI tab (ai-extras.js, ai-verify-view.js) in the
-// page's language. data/scores/ai/ai.json is written by the engine with English number formats,
-// ISO dates and some "cs / en" labels; these helpers turn what can be parsed safely into the
-// page's language and leave anything else as it came.
+// page's language. data/scores/ai/ai.json now carries the card texts finished per language
+// (`texts.cs` / `texts.en`, see experimentTexts); an older ai.json has only English number
+// formats, ISO dates and some "cs / en" labels, and these helpers turn what can be parsed
+// safely into the page's language and leave anything else as it came.
 
 const MINUS = "−";
 
@@ -112,4 +113,63 @@ export function proseText(text, language = "en") {
       .replace(/(\d)\.(\d+)(?!\d|°| ?km\b)/g, "$1,$2");
   }
   return out;
+}
+
+/** A dict row's value for a column: the raw value first ("temperature_2m" via `translate`), then the language's twin ("regime_cs"), then the column's own. */
+function rowValue(row, key, language, translate) {
+  const base = key.replace(/_(cs|en)$/, "");
+  return translate(row[base]) ?? row[`${base}_${language}`] ?? row[key];
+}
+
+/**
+ * An old-style experiment table ({columns: [{key, cs, en}], rows as arrays or dicts}) as
+ * finished strings in `language`: {columns, rows, numeric}, the shape the engine now writes
+ * itself (`texts.<lang>.table`); `numeric` marks the columns of numbers. Null without rows.
+ */
+export function tableTexts(table, { language = "en", translate = () => null, worst = "worst" } = {}) {
+  if (!table?.columns?.length || !table.rows?.length) return null;
+  // the engine writes "AI - blend": a minus, not a hyphen
+  const columns = table.columns.map((c) => (c[language] ?? c.en ?? c.key).replace(/ - /g, " − "));
+  const raw = table.rows.map((row) =>
+    Array.isArray(row) ? row : table.columns.map((c) => rowValue(row, c.key, language, translate)),
+  );
+  // the same decimals down a column: "2,00" next to "1,75", whole counts without any
+  const digits = table.columns.map((_, i) => columnDigits(raw.map((r) => r[i])));
+  return {
+    columns,
+    rows: raw.map((values) => values.map((v, i) => cellText(v, { digits: digits[i], language, translate, worst }))),
+    numeric: table.columns.map((_, i) => raw.some((r) => typeof r[i] === "number")),
+  };
+}
+
+/** The engine's finished table when it has the right shape (else null: format the old one). */
+function finishedTable(table) {
+  const ok =
+    Array.isArray(table?.columns) &&
+    Array.isArray(table.rows) &&
+    table.rows.length > 0 &&
+    table.rows.every((r) => Array.isArray(r) && r.length === table.columns.length);
+  return ok ? { ...table, numeric: Array.isArray(table.numeric) ? table.numeric : table.columns.map(() => false) } : null;
+}
+
+/**
+ * An experiment card's headline, technology line and table in `language`: the engine's
+ * finished `texts[language]` where it wrote them, else the old fields formatted here
+ * (`tech` is then null: the caller has its own wording). Missing parts are null.
+ */
+export function experimentTexts(e, { language = "en", translate = () => null, worst = "worst" } = {}) {
+  const own = e?.texts?.[language] ?? {};
+  const headline = e?.headline?.[language];
+  return {
+    headline: typeof own.headline === "string" ? own.headline : headline ? proseText(headline, language) : null,
+    tech: typeof own.tech === "string" ? own.tech : null,
+    table: finishedTable(own.table) ?? tableTexts(e?.table, { language, translate, worst }),
+  };
+}
+
+/** The rule behind the labels in `language`: the engine's finished text, else the old one formatted here. */
+export function ruleText(doc, language = "en") {
+  const own = doc?.texts?.[language]?.rule;
+  if (typeof own === "string") return own;
+  return doc?.rule?.[language] ? proseText(doc.rule[language], language) : null;
 }

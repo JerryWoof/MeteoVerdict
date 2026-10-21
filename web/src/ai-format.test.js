@@ -1,7 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { cellText, columnDigits, dateRangeText, dateText, intervalText, numText, pickLang, proseText, signedText } from "./ai-format.js";
+import {
+  cellText,
+  columnDigits,
+  dateRangeText,
+  dateText,
+  experimentTexts,
+  intervalText,
+  numText,
+  pickLang,
+  proseText,
+  ruleText,
+  signedText,
+  tableTexts,
+} from "./ai-format.js";
 
 // Intl puts a no-break space into Czech numbers and ranges; compare with plain spaces
 const plain = (s) => s.replace(/[  ]/g, " ");
@@ -72,4 +85,75 @@ test("backend sentences: dates, minus, Czech decimals, model names kept", () => 
   assert.equal(plain(proseText("2026-09-07 až 2026-10-17 (32 dní)", "cs")), "7. září – 17. října (32 dní)");
   assert.equal(proseText("(3-5 day block bootstrap), ICON-D2, D+1", "en"), "(3–5 day block bootstrap), ICON-D2, D+1");
   assert.equal(proseText("at 12 UTC 0.92 vs 0.98 °C (-0.06 [-0.09, -0.01])", "en"), "at 12 UTC 0.92 vs 0.98 °C (−0.06 [−0.09, −0.01])");
+});
+
+// an experiment as an older ai.json has it (before the engine wrote `texts`)
+const OLD = {
+  id: "regimes",
+  tech: "Weather regimes, own hardware",
+  headline: { cs: "Medián 1.38 °C (-0.50), 2026-08-24…2026-10-17.", en: "Median 1.38 °C (-0.50), 2026-08-24…2026-10-17." },
+  table: {
+    columns: [
+      { key: "regime", cs: "Situace", en: "Regime" },
+      { key: "variable_cs", cs: "Veličina", en: "Variable" },
+      { key: "days", cs: "Dní", en: "Days" },
+      { key: "temp", cs: "Nejlepší na teplotu", en: "Best for temperature" },
+      { key: "diff", cs: "AI - blend", en: "AI - blend" },
+    ],
+    rows: [
+      { regime: "proměnlivo / changeable", regime_cs: "proměnlivo", regime_en: "changeable", variable: "temperature_2m", variable_cs: "teplota", days: 22, temp: "DWD ICON-D2 1.06 °C (worst 1.63, CMA GRAPES Global)", diff: -0.004 },
+      { regime: "inverze / inversion", variable: "temperature_2m", days: 13, temp: "-", diff: 2 },
+    ],
+  },
+};
+// the same card as the engine now writes it: finished texts per language next to the old fields
+const NEW = {
+  ...OLD,
+  texts: {
+    cs: {
+      headline: "Medián 1,38 °C (−0,50), 24. srpna – 17. října.",
+      tech: "povětrnostní situace, own hardware",
+      table: { columns: ["Situace", "Dní"], rows: [["proměnlivo", "22"]], numeric: [false, true] },
+    },
+    en: { headline: "Median 1.38 °C (−0.50), 24 August – 17 October." },
+  },
+};
+const translate = (v) => ({ temperature_2m: "Teplota" })[v] ?? null;
+
+test("an experiment's texts: the engine's finished ones first", () => {
+  const cs = experimentTexts(NEW, { language: "cs", translate });
+  assert.equal(cs.headline, "Medián 1,38 °C (−0,50), 24. srpna – 17. října.");
+  assert.equal(cs.tech, "povětrnostní situace, own hardware");
+  assert.deepEqual(cs.table, { columns: ["Situace", "Dní"], rows: [["proměnlivo", "22"]], numeric: [false, true] });
+  // English has only a headline: the table is formatted from the old fields, no tech of its own
+  const en = experimentTexts(NEW, { language: "en" });
+  assert.equal(en.headline, "Median 1.38 °C (−0.50), 24 August – 17 October.");
+  assert.equal(en.tech, null);
+  assert.equal(en.table.rows[0][0], "changeable");
+});
+
+test("an experiment's texts from an older ai.json, formatted here", () => {
+  const cs = experimentTexts(OLD, { language: "cs", translate, worst: "nejhorší" });
+  assert.equal(plain(cs.headline), "Medián 1,38 °C (−0,50), 24. srpna – 17. října.");
+  assert.equal(cs.tech, null);
+  assert.deepEqual(cs.table.columns, ["Situace", "Veličina", "Dní", "Nejlepší na teplotu", "AI − blend"]);
+  assert.deepEqual(cs.table.rows[0], ["proměnlivo", "Teplota", "22", "DWD ICON-D2 1,06 °C (nejhorší 1,63, CMA GRAPES Global)", "0,00"]);
+  // a regime without its twins: the Czech half of the pair; a whole 2 among decimals as "2,00"
+  assert.deepEqual(cs.table.rows[1], ["inverze", "Teplota", "13", "-", "2,00"]);
+  assert.deepEqual(cs.table.numeric, [false, false, true, false, true]);
+  assert.equal(experimentTexts(OLD, { language: "en" }).table.rows[0][1], "teplota");
+  assert.equal(experimentTexts({ id: "x" }, { language: "cs" }).table, null);
+});
+
+test("a malformed finished table falls back to the old one", () => {
+  const broken = { ...OLD, texts: { cs: { table: { columns: ["A"], rows: [["1", "2"]] } } } };
+  assert.equal(experimentTexts(broken, { language: "cs", translate }).table.columns[0], "Situace");
+  assert.equal(tableTexts({ columns: [], rows: [] }), null);
+});
+
+test("the rule: the engine's text first, else the old one formatted", () => {
+  const rule = { cs: "blokový bootstrap 3 až 5 dní", en: "(3-5 day block bootstrap)" };
+  assert.equal(ruleText({ rule, texts: { en: { rule: "(3–5 day block bootstrap)" } } }, "en"), "(3–5 day block bootstrap)");
+  assert.equal(ruleText({ rule }, "en"), "(3–5 day block bootstrap)");
+  assert.equal(ruleText({}, "cs"), null);
 });
