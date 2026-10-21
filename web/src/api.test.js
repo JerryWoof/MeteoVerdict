@@ -283,6 +283,7 @@ test("obce index and the file patterns in index.json", () => {
   assert.deepEqual(idx.obce[0], ["CZ0201", "ves", "Ves", 49.5, 14.5]);
   const files = indexDoc([BENESOV], META, null).files;
   assert.equal(files.ai_okres_json, `${SITE}/api/v1/ai/okresy/{code}.json`);
+  assert.equal(files.ai_okres_csv, `${SITE}/api/v1/ai/okresy/{code}.csv`);
   assert.equal(files.obec_json, `${SITE}/api/v1/obce/{okres}/{id}.json`);
   assert.equal(files.ai_obec_json, `${SITE}/api/v1/ai/obce/{okres}/{id}.json`);
 });
