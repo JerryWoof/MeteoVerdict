@@ -522,16 +522,51 @@ table#days,
 #ranking tr.short {
   color: var(--muted);
 }
-#language {
+/* CS | EN switch, the same as on pudomer.cz */
+.langsw {
   margin-left: auto;
-  font: inherit;
-  font-size: 0.8rem;
-  padding: 0.2rem 0.6rem;
+  display: flex;
+  flex: 0 0 auto;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
+  overflow: hidden;
   background: var(--surface);
-  color: var(--ink);
+}
+.langsw button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  padding: 0 0.5rem;
+  height: 28px;
   cursor: pointer;
+}
+.langsw button + button {
+  border-left: 1px solid var(--line-strong);
+}
+.langsw button:hover {
+  color: var(--ink);
+}
+.langsw button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--surface);
+  cursor: default;
+}
+/* on a phone the switch sits beside the title instead of taking a row of its own */
+@media (max-width: 700px) {
+  header #language {
+    order: -2;
+  }
+}
+@media (max-width: 460px) {
+  .langsw button {
+    font-size: 0.72rem;
+    padding: 0 6px;
+    height: 30px;
+  }
 }
 
 /* TV-style forecast map (forecast.html) */

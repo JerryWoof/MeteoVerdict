@@ -25,7 +25,7 @@
           <input id="search" type="search" list="station-list" data-i18n-placeholder="station.placeholder" placeholder="name, e.g. Libuš" /></label>
         <datalist id="station-list"></datalist>
       </form>
-      <button type="button" id="language">Česky</button>
+      <div id="language" class="langsw" role="group" aria-label="Jazyk / Language"><button type="button" data-lang="cs" lang="cs" aria-pressed="true" title="Čeština" aria-label="Čeština">CS</button><button type="button" data-lang="en" lang="en" aria-pressed="false" title="English" aria-label="English">EN</button></div>
     </header>
     <main class="content station-page">
       <!-- the Weather tab: what the stations measured per okres, as the forecast map (measured.js) -->
