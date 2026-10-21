@@ -2,6 +2,8 @@
 // card, and the Czech title/description in the HTML (the English ones are swapped in by a tiny
 // inline script, like the rest of the prerendered text). Crawlers without JavaScript read this.
 import { STRINGS } from "../src/i18n.js";
+import { blocksHtml, inlineHtml } from "../src/blocks-html.js";
+import { PAGES as TEXTS } from "../src/pages-text.js";
 
 export const SITE = "https://meteoverdict.cz/";
 
@@ -62,4 +64,24 @@ export function injectSeo(html, file) {
     + `var d=document,t=${JSON.stringify(en).replace(/</g, "\\u003c")};`
     + `["meta[name=description]","meta[property='og:description']","meta[name='twitter:description']"].forEach(function(s){var m=d.querySelector(s);if(m)m.setAttribute("content",t)})}catch(_){}})()</script>`;
   return out.includes("</body>") ? out.replace("</body>", `    ${script}\n  </body>`) : out;
+}
+
+// The text pages (About, Methodology, Collaboration): their Czech text in the HTML, replaced by
+// src/info-page.js at load; the About page also gets FAQPage structured data from its Q&A blocks.
+export function injectInfoText(html) {
+  const key = html.match(/<main\b[^>]*\bdata-page="([^"]+)"/)?.[1];
+  const text = key && TEXTS[key]?.cs;
+  if (!text) return html;
+  let out = html.replace(/(<h2 id="info-title"[^>]*>)[^<]*(<\/h2>)/, `$1${esc(text.title)}$2\n        <div data-prerender>\n${blocksHtml(text.blocks)}        </div>`);
+  const faq = [];
+  text.blocks.forEach(([kind, body], i) => {
+    if (kind === "h3" && text.blocks[i + 1]?.[0] === "p") {
+      faq.push({ "@type": "Question", name: body, acceptedAnswer: { "@type": "Answer", text: inlineHtml(text.blocks[i + 1][1]).replace(/<[^>]+>/g, "") } });
+    }
+  });
+  if (faq.length) {
+    const ld = JSON.stringify({ "@context": "https://schema.org", "@type": "FAQPage", mainEntity: faq }).replace(/</g, "\\u003c");
+    out = out.replace("</head>", `    <script type="application/ld+json">${ld}</script>\n  </head>`);
+  }
+  return out;
 }
