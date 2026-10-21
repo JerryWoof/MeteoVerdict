@@ -36,6 +36,23 @@ test("withAi aligns the series to the model times, null outside", () => {
   assert.equal(withAi({ times, models: {} }, ai, "B").models[AI_MODEL], undefined);
 });
 
+test("withAi: the AI's own hourly rain, cloud and sunshine, else the blend's on the AI's hours", () => {
+  const times = hours(72).map(Date.parse);
+  const combined = { precipitation: times.map(() => 0.4), cloud_cover: times.map(() => 50), sunshine_duration: times.map(() => 0) };
+  const own = doc();
+  own.okresy.A.precipitation = { ai: hours(48).map((_, i) => (i === 3 ? 1.5 : 0)) };
+  own.okresy.A.cloud_cover = { ai: hours(48).map(() => 90) };
+  const m = withAi({ times, models: {}, combined }, parseAi(own, NOW), "A").models[AI_MODEL];
+  assert.equal(m.precipitation[3], 1.5);
+  assert.equal(m.precipitation[4], 0);
+  assert.equal(m.cloud_cover[10], 90);
+  assert.equal(m.precipitation[60], null, "beyond the AI's hours");
+  assert.equal(m.sunshine_duration[10], 0, "no AI sunshine: the blend's");
+  const old = withAi({ times, models: {}, combined }, parseAi(doc(), NOW), "A").models[AI_MODEL];
+  assert.equal(old.precipitation[3], 0.4, "an older file: the blend's");
+  assert.equal(old.precipitation[60], null);
+});
+
 test("aiMapView: rows for covered periods, beyond for the rest and for okresy without AI", () => {
   const ai = parseAi(doc(), NOW);
   const outlook = {
