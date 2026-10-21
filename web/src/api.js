@@ -440,6 +440,22 @@ export function obceDocs({ okresDoc: doc, obceFile, meta }) {
   });
 }
 
+/**
+ * The first `n` hours of an obec file as CSV lines (header first), with the columns of the
+ * okres CSV the obec file has; its time axis is `start` + i hours (UTC, as in the okres files).
+ */
+export function obecCsvLines(doc, n = 7) {
+  const h = doc?.hourly;
+  if (!h?.start) return [];
+  const columns = HOURLY.filter((v) => Array.isArray(h[v]));
+  const start = Date.parse(h.start);
+  const rows = Array.from({ length: Math.min(n, h.hours ?? 0) }, (_, i) => {
+    const time = new Date(start + i * 3600e3).toISOString().slice(0, 16) + "Z";
+    return [time, ...columns.map((v) => h[v][i] ?? "")].join(",");
+  });
+  return [["time_utc", ...columns].join(","), ...rows];
+}
+
 /** api/v1/obce/index.json: every obec as [okres, id, name, lat, lon]. */
 export function obceIndexDoc(rows, generated) {
   return {
