@@ -1,0 +1,22 @@
+# MeteoVerdict
+
+> MeteoVerdict je nezávislé, nekomerční srovnání přesnosti meteorologických modelů (ALADIN, ICON, ECMWF a další) v České republice proti měření stanic ČHMÚ. Pro každý okres denně ukazuje, který model se za zvolené období nejméně lišil od měření, a nabízí předpověď pro 77 okresů a 6 258 obcí. Skóre a data jsou otevřená (CC BY-SA 4.0, zdroje CC BY 4.0). Kód je na GitHubu: https://github.com/JerryWoof/MeteoVerdict
+
+Web je v češtině (výchozí) a angličtině. Nejde o oficiální předpověď; oficiální výstrahy vydává ČHMÚ.
+
+## Hlavní stránky
+- [Mapa přesnosti: který model vede v kterém okrese](https://meteoverdict.cz/)
+- [Porovnání modelů](https://meteoverdict.cz/compare-models.html)
+- [Měsíční report přesnosti](https://meteoverdict.cz/report.html)
+- [Předpověď pro okresy a obce](https://meteoverdict.cz/forecast.html)
+- [Naměřeno: stanice ČHMÚ](https://meteoverdict.cz/measured.html)
+- [Radar srážek](https://meteoverdict.cz/radar.html)
+- [Metodika: jak počítáme přesnost](https://meteoverdict.cz/methodology.html)
+- [O projektu a časté otázky](https://meteoverdict.cz/about.html)
+
+## Otevřená data
+- [Otevřená data a API (JSON, bez klíče)](https://meteoverdict.cz/data.html)
+- [Index API](https://meteoverdict.cz/api/v1/index.json)
+
+## Zdroje a licence
+Měření: otevřená data ČHMÚ (CC BY 4.0). Předpovědi modelů: Open-Meteo.com a poskytovatelé modelů (CC BY 4.0; UK Met Office CC BY-SA 4.0). Skóre MeteoVerdict: CC BY-SA 4.0. Při citaci uveďte zdroj „MeteoVerdict, meteoverdict.cz“.
