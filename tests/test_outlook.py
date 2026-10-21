@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -597,6 +597,68 @@ def test_model_periods_null_beyond_the_horizon():
         pl.col("model") == "ecmwf_ifs025", pl.col("part") == "day"
     )
     assert ifs.filter(pl.col("okres") == "CZ0201").height >= 5
+
+
+def _synthetic(hours, temperature, precipitation, cloud=None):
+    """One okres and model "m" from 12 Dec 2026 00:00 UTC, ``hours`` hours (as
+    web/src/models.test.js synthetic): each variable a function of the hour index,
+    None for no value."""
+    times = [datetime(2026, 12, 12, tzinfo=UTC) + timedelta(hours=i) for i in range(hours)]
+    return pl.DataFrame(
+        {
+            "okres": "CZ0100",
+            "time": times,
+            "model": "m",
+            "temperature_2m": [temperature(i) for i in range(hours)],
+            "precipitation": [precipitation(i) for i in range(hours)],
+            "wind_speed_10m": [None] * hours,
+            "cloud_cover": [cloud(i) if cloud else None for i in range(hours)],
+            "sunshine_duration": [None] * hours,
+        },
+        schema={
+            "okres": pl.String,
+            "time": pl.Datetime("us", "UTC"),
+            "model": pl.String,
+            **{v: pl.Float64 for v in outlook.VARIABLES},
+        },
+    )
+
+
+def _period(periods, day, part):
+    rows = periods.filter(pl.col("day") == date.fromisoformat(day), pl.col("part") == part)
+    return rows.row(0, named=True) if rows.height else None
+
+
+def test_model_periods_one_hour_short_of_a_day():
+    # the model's last hour 13 Dec 22:00 UTC = 23:00 Prague: every hour of that evening,
+    # but no rain for 23-24 (ICON-D2)
+    periods = outlook.model_periods(
+        _synthetic(
+            72,
+            lambda i: 5.0 if i < 47 else None,
+            lambda i: 0.1 if i < 47 else None,
+            lambda i: 50.0 if i < 47 else None,
+        )
+    )
+    for part in ("night", "morning", "afternoon"):
+        assert _period(periods, "2026-12-13", part), part
+    evening = _period(periods, "2026-12-13", "evening")
+    assert evening
+    # the rain of the five hours it has
+    assert evening["precipitation"] == pytest.approx(0.5)
+    # the whole day stays strict
+    assert _period(periods, "2026-12-13", "day") is None
+    assert _period(periods, "2026-12-12", "day")
+    # two hours short: the evening is not covered (its 23:00 is missing)
+    shorter = outlook.model_periods(
+        _synthetic(72, lambda i: 5.0 if i < 46 else None, lambda i: 0.1 if i < 46 else None)
+    )
+    assert _period(shorter, "2026-12-13", "evening") is None
+    assert _period(shorter, "2026-12-13", "afternoon")
+    # a gap inside a part (not at the model's end) still leaves it out
+    gap = outlook.model_periods(_synthetic(72, lambda i: 5.0, lambda i: None if i == 43 else 0.1))
+    assert _period(gap, "2026-12-13", "evening") is None
+    assert _period(gap, "2026-12-14", "night")
 
 
 def test_model_parts_files(tmp_path):
