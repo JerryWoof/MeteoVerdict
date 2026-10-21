@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { compareSeries, errorLookup, errorSummary, modelOptions, sizeClass, splitModelHash, withModelHash } from "./station-model.js";
+import { compareSeries, errorKeyFor, errorLookup, okresErrors, errorSummary, modelOptions, sizeClass, splitModelHash, withModelHash } from "./station-model.js";
 
 const t = (key) => key;
 
@@ -86,4 +86,24 @@ test("the day's errors per station, in the unit (the file has tenths), null wher
   assert.equal(errorLookup(file, "ai", 1, "tmax").hasModel, false);
   assert.equal(errorLookup(file, "blend", 2, "tmax").hasModel, false);
   assert.equal(errorLookup(null, "blend", 1, "tmax").hasModel, false);
+});
+
+test("the Weather map's error mode rides in the hash as ;w= (the model's error is the default)", () => {
+  assert.equal(splitModelHash("#x;m=ai;e=tmax;w=none").wx, "none");
+  assert.equal(splitModelHash("#x;m=ai;w=abs").wx, "abs");
+  assert.equal(splitModelHash("#x;m=ai;e=tmax").wx, undefined); // an old link: the default
+  const base = { model: "blend", lead: 1, err: "tmax" };
+  assert.equal(withModelHash("#d", { ...base, wx: "bias" }), "#d");
+  assert.equal(withModelHash("#d", { ...base, wx: "none" }), "#d;m=blend;w=none");
+  assert.equal(withModelHash("#d", { ...base, err: null, wx: "abs" }), "#d;m=blend;e=none;w=abs");
+});
+
+test("the error of an okres is the mean of its stations with a value", () => {
+  assert.equal(errorKeyFor("temperature", "night"), "tmin");
+  assert.equal(errorKeyFor("temperature", "day"), "tmax");
+  assert.equal(errorKeyFor("sunshine", "day"), null);
+  const byId = new Map([["a", 2], ["b", -1], ["c", null], ["d", 5]]);
+  const stations = [{ id: "a", okres: "X" }, { id: "b", okres: "X" }, { id: "c", okres: "X" }, { id: "d", okres: "Nowhere" }, { id: "z", okres: "X" }];
+  const out = okresErrors(byId, stations, (name) => (name === "X" ? "CZ1" : null));
+  assert.deepEqual([...out], [["CZ1", { n: 2, bias: 0.5, mae: 1.5 }]]);
 });

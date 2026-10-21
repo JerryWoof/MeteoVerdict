@@ -194,9 +194,17 @@ export function createMeasuredMap({ container, t, onPick, describe }) {
     paint();
     const canvas = map.getCanvas();
     map.on("mousemove", (event) => {
-      const okres = map.queryRenderedFeatures(event.point, { layers: ["okresy-fill"] }).length;
+      const [okres] = map.queryRenderedFeatures(event.point, { layers: ["okresy-fill"] });
       canvas.style.cursor = okres ? "pointer" : "";
+      // the okres's own tooltip (the model's error, or why it has none), unless a label's is open
+      const tip = okres && view.tips?.get(okres.properties.code);
+      if (tip && !event.originalEvent?.target?.closest?.(".wx-marker")) {
+        const box = element("div");
+        box.append(element("strong", tip.title), element("div", tip.text));
+        popup.setLngLat(event.lngLat).setDOMContent(box).addTo(map);
+      } else if (!event.originalEvent?.target?.closest?.(".wx-marker")) popup.remove();
     });
+    map.on("mouseout", () => popup.remove());
     map.on("click", (event) => {
       const [okres] = map.queryRenderedFeatures(event.point, { layers: ["okresy-fill"] });
       if (okres) onPick({ okresCode: okres.properties.code });
@@ -225,7 +233,7 @@ export function createMeasuredMap({ container, t, onPick, describe }) {
   }).observe(container);
 
   return {
-    /** The okresy's rows of a day and part, and what to show: {part, shown, colour, fill, okres}. */
+    /** The okresy's rows of a day and part, and what to show: {part, shown, colour, fill, okres, tips (okres code → {title, text}, shown on hover)}. */
     set(nextRows, nextView) {
       rows = nextRows;
       byId = new Map(rows.map((r) => [r.id, r]));
