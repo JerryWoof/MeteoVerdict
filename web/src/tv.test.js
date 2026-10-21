@@ -6,7 +6,7 @@ import {
   CAPITALS, DEFAULT_SHOWN, NEUTRAL, colorFor, currentPart, dayLabel, displayName, ease, iconName, isNightPart,
   labelFor, lerpRow, mixColor, nextColour, okresColours, parseOutlook, parseView, placeMarkers,
   playSteps, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary, today, valueFor,
-  viewHash,
+  historyMode, leaveFor, viewHash,
 } from "./tv.js";
 
 // the real outlook.json of the first run of the Outlook workflow (12 Oct 2026, 08:31 UTC)
@@ -177,6 +177,28 @@ test("the view in the URL, including old links", () => {
   assert.equal(west.okres, "CZ020A");
   assert.equal(west.obec, "Jílové u Prahy");
   assert.equal(parseView("#CZ020B/Příbram", OUTLOOK, fallback).okres, "CZ020B");
+});
+
+test("history: another day, okres or obec is a step back, the rest replaces the address", () => {
+  const view = { day: "2026-10-13", part: "night", colour: "temperature", shown: ["temperature"], okres: null };
+  assert.equal(historyMode(view, { ...view, day: "2026-10-14" }), "push");
+  assert.equal(historyMode(view, { ...view, okres: "CZ0201" }), "push");
+  assert.equal(historyMode({ ...view, okres: "CZ0201" }, view), "push");
+  assert.equal(historyMode({ ...view, okres: "CZ0201" }, { ...view, okres: "CZ0201", obec: "Benešov" }), "push");
+  assert.equal(historyMode(view, { ...view, part: "day" }), "replace");
+  assert.equal(historyMode(view, { ...view, colour: "wind", shown: [] }), "replace");
+  // the same view (an obec missing or null alike): nothing new
+  assert.equal(historyMode(view, { ...view, obec: null }), "replace");
+});
+
+test("hashes that belong to another page: the old okres detail and past days", () => {
+  assert.equal(leaveFor("#CZ0423", "2026-10-17"), "forecast-detail.html#CZ0423");
+  assert.equal(leaveFor("#CZ020A", "2026-10-17"), "forecast-detail.html#CZ020A");
+  assert.equal(leaveFor("#2026-10-16/night/temperature/tp", "2026-10-17"), "measured.html#2026-10-16/night/temperature/tp/okresy");
+  assert.equal(leaveFor("#2026-10-16/morning/wind/w/CZ0100", "2026-10-17"), "measured.html#2026-10-16/morning/wind/w/CZ0100");
+  assert.equal(leaveFor("#2026-10-17/night/temperature/tp", "2026-10-17"), null);
+  assert.equal(leaveFor("#CZ0423/Libotenice", "2026-10-17"), null);
+  assert.equal(leaveFor("", "2026-10-17"), null);
 });
 
 test("play: the four parts of one day, or of every day of the week", () => {
