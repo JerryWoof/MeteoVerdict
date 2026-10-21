@@ -244,7 +244,7 @@ export function createMeasuredMap({ container, t, onPick, describe }) {
     /** Fit Czechia beside an open okres panel on wide screens, and back when it closes
      * (as the forecast map does). */
     fitBeside(panel) {
-      const right = window.innerWidth > 900 && panel && !panel.hidden ? panelRoom() : 10;
+      const right = window.innerWidth > 900 && panel && !panel.hidden ? panelRoom(21, 0.4, map.getContainer().parentElement.clientWidth, 30) : 10;
       if (right === lastRight) return;
       // someone moved the map themselves: leave it where they put it
       if (lastRight !== null && !keepFit) return;
