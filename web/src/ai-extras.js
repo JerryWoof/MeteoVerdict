@@ -2,7 +2,7 @@
 // MeteoVerdict AI against our blend (the combined forecast) per lead day since its launch, with the
 // 95 % interval of the difference, the best public model only as context, and the cards of the
 // experiments that work, that are not verified yet and that are still under evaluation.
-import { cellText, columnDigits, dateRangeText, dateText, numText, proseText } from "./ai-format.js";
+import { dateRangeText, dateText, experimentTexts, numText, ruleText } from "./ai-format.js";
 
 const VARIABLES = ["temperature_2m", "wind_speed_10m"];
 const UNITS = { temperature_2m: "°C", wind_speed_10m: "m/s" };
@@ -117,34 +117,19 @@ function rawKey(t) {
   };
 }
 
-/** A row's value for a column; "variable_cs" and "regime" also have the other language's twin. */
-function rowValue(row, key, translate) {
-  const base = key.replace(/_(cs|en)$/, "");
-  return translate(row[base]) ?? row[`${base}_${lang()}`] ?? row[key];
-}
-
-/** An experiment's own result table ({columns: [{key, cs, en}], rows}), in a box that scrolls sideways. */
-function resultTable(table, t) {
-  const translate = rawKey(t);
-  // the engine writes "AI - blend": a minus, not a hyphen
-  const label = (c) => (c[lang()] ?? c.en ?? c.key).replace(/ - /g, " − ");
-  const rows = table.rows.map((row) => (Array.isArray(row) ? row : table.columns.map((c) => rowValue(row, c.key, translate))));
-  // the same decimals down a column: "2,00" next to "1,75", whole counts without any
-  const digits = table.columns.map((_, i) => columnDigits(rows.map((r) => r[i])));
+/** An experiment's result table ({columns, rows, numeric}: finished strings), in a box that scrolls sideways. */
+function resultTable(table) {
   const el = cell("table", null, "data-table ai-result-table");
   const head = cell("tr");
   // a column of numbers has its heading right-aligned over them
-  const numeric = table.columns.map((_, i) => rows.some((r) => typeof r[i] === "number"));
-  head.append(...table.columns.map((c, i) => cell("th", label(c), numeric[i] ? "num" : null)));
-  const body = rows.map((values) => {
+  head.append(...table.columns.map((label, i) => cell("th", label, table.numeric[i] ? "num" : null)));
+  const body = table.rows.map((values) => {
     const tr = cell("tr");
     tr.append(
-      ...values.map((v, i) => {
-        const text = cellText(v, { digits: digits[i], language: lang(), translate, worst: t("ai.worst") });
-        const td = cell("td", text, typeof v === "number" ? "num" : null);
+      ...values.map((text, i) => {
+        const td = cell("td", text, table.numeric[i] ? "num" : null);
         // a phone shows each row as a list of "column: value" (style.css)
-        const c = table.columns[i];
-        td.dataset.label = c ? label(c) : "";
+        td.dataset.label = table.columns[i] ?? "";
         return td;
       }),
     );
@@ -169,11 +154,11 @@ function scrollCue(box) {
   new ResizeObserver(update).observe(box);
 }
 
-/** "Technologie: …": our own wording where we have it, else the engine's text. */
-function techText(e, t) {
+/** "Technologie: …": the engine's text in this language, else our own wording, else the engine's old English one. */
+function techText(e, tech, t) {
   const key = `ai.exp.${e.id}.tech`;
   const own = t(key);
-  return t("ai.tech", { tech: own === key ? e.tech : own });
+  return t("ai.tech", { tech: tech ?? (own === key ? e.tech : own) });
 }
 
 function renderExperiments(box, experiments, t) {
@@ -183,12 +168,13 @@ function renderExperiments(box, experiments, t) {
       const title = cell("h3");
       title.append(cell("span", t(`ai.exp.${e.id}.name`)), " ", cell("span", t(`ai.status.${e.status}`), `ai-status ${e.status}`));
       card.append(title, cell("p", t(`ai.exp.${e.id}.what`)));
-      if (e.headline?.[lang()]) card.append(cell("p", proseText(e.headline[lang()], lang()), "ai-result"));
-      if (e.table?.columns?.length && e.table.rows?.length) {
-        card.append(resultTable(e.table, t));
+      const texts = experimentTexts(e, { language: lang(), translate: rawKey(t), worst: t("ai.worst") });
+      if (texts.headline) card.append(cell("p", texts.headline, "ai-result"));
+      if (texts.table) {
+        card.append(resultTable(texts.table));
         card.classList.add("wide");
       }
-      if (e.tech) card.append(cell("p", techText(e, t), "ai-tech"));
+      if (e.tech || texts.tech) card.append(cell("p", techText(e, texts.tech, t), "ai-tech"));
       return card;
     }),
   );
@@ -212,7 +198,8 @@ export async function renderAiExtras(t, getJson) {
   }
   // the rule behind the labels ("works" only against our blend, with the whole interval below zero)
   const rule = document.getElementById("ai-score-rule");
-  if (rule && doc.rule?.[lang()]) rule.textContent = proseText(doc.rule[lang()], lang());
+  const ruleLine = ruleText(doc, lang());
+  if (rule && ruleLine) rule.textContent = ruleLine;
   document.getElementById("ai-score-section").hidden = false;
   for (const [status, section, box] of SECTIONS) {
     const shown = experimentsWith(doc.experiments, status);
