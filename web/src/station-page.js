@@ -212,7 +212,7 @@ let kindsErr = null; // the error view of the Stations map's dots (buildErrView)
 function kindsErrNote(v) {
   const value = t(`fc.var.${v.key}`).toLowerCase();
   if (v.noFile) return t("measured.err.noFile");
-  if (models.state.model === AI) return t("fc.noAi");
+  if (!v.hasModel && models.state.model === AI) return t("fc.noAi");
   if (!v.hasModel) return t("fc.noModelValue", { model: v.name, value });
   const have = placed.filter((s) => v.byId.get(s.id) != null).length;
   return t("map.err.note", { model: v.name, lead: models.state.lead, value, unit: v.unit, day: v.day, n: formatNumber(have), of: formatNumber(placed.length) });
