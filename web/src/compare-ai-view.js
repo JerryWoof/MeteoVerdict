@@ -253,7 +253,10 @@ export async function setUpAiCompare(t, names, language) {
     const data = dailyRows(entry, ids);
     const kinds = Object.fromEntries(entry.series.map((s) => [s.id, s.kind]));
     const names2 = ids.map((id) => label(id, kinds[id]));
-    const width = Math.min(900, document.querySelector(".content").clientWidth);
+    // the text column up to 1200 px, without its side padding (as in compare-page.js)
+    const column = document.querySelector(".content");
+    const style = getComputedStyle(column);
+    const width = Math.min(1200, column.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
     const day = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-US", { dateStyle: "long", timeZone: "UTC" });
     target.replaceChildren(Plot.plot({
       width,
