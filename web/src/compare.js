@@ -149,9 +149,35 @@ export function biasByElevation(rows, leadDay) {
 /** "1.23", "+0.45", "–" (in `language`: "1,23" in Czech) */
 export function fmt(value, signed = false, language = "en") {
   if (value == null || Number.isNaN(value)) return "–";
-  const text = value.toLocaleString(language, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
+  // the real minus sign, as in "+0,02": a hyphen next to a plus looks like a dash
+  const text = value.toLocaleString(language, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false }).replace("-", "−");
   return signed && value > 0 ? `+${text}` : text;
 }
+
+// --- chart text in the page language (Plot's defaults are English: "0.5", "Sep 13")
+const decimals = (value) => (String(Number(value.toPrecision(12))).split(".")[1] ?? "").length;
+
+/**
+ * An axis tickFormat for numbers: "0,5" in Czech, the real minus sign, and as many
+ * decimals on every tick ("1,0 1,5 2,0"; Plot passes the ticks as the third argument).
+ */
+export function numberTick(language) {
+  return (value, _, ticks) => {
+    const digits = Math.min(3, Math.max(0, ...(Array.isArray(ticks) ? ticks : [value]).map(decimals)));
+    return value.toLocaleString(language, { minimumFractionDigits: digits, maximumFractionDigits: digits }).replace("-", "−");
+  };
+}
+
+/** An axis tickFormat for days: "13. září" in Czech, "Sep 13" in English. */
+export function dayTick(language) {
+  const format = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-US", {
+    day: "numeric", month: language === "cs" ? "long" : "short", timeZone: "UTC",
+  });
+  return (date) => format.format(date);
+}
+
+/** A chart tooltip (Plot's `title` channel): the lines that are given, one per row. */
+export const tipText = (...lines) => lines.filter((line) => line != null && line !== "").join("\n");
 
 // --- run-based errors by lead hour (leads.json, written by `mvd leads`) -------------
 // Every model from Open-Meteo's single runs; older files hold ALADIN from our archive

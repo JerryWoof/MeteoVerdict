@@ -11,7 +11,7 @@ import {
   leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, singleModelVerdicts, unpublishedHours,
   RANK_BY, STATION_SETS, hasValues, sortByEts,
   BAND_RANK_BY, BAND_VARIABLES, BAND_WINDOWS, LEAD_BANDS, LEAD_DAYS, bandBasis, bandRecords, bandSets, bandVariable,
-  bandsIn, dayVariable, defaultLead, isBand, leadLabel, maeByBand, parseLead,
+  bandsIn, dayVariable, defaultLead, isBand, leadLabel, maeByBand, parseLead, numberTick, tipText,
 } from "./compare.js";
 import { binLabel, count as countIn, etsColor, etsTextColor, farmChoices, farmGrid, plain, score as scoreIn } from "./farm.js";
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
@@ -19,7 +19,8 @@ import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
 import {
-  availableLeadDays, availableVariables, availableWindows, dayCount, filesWindow, formatRange, parseHash, pickWindow, windowLabel,
+  availableLeadDays, availableVariables, availableWindows, dayCount, filesWindow, formatRange, parseHash, pickWindow, pluralForm,
+  stationCount, windowLabel,
 } from "./view.js";
 
 setWorkerUrl(workerUrl);
@@ -29,6 +30,7 @@ const LANGUAGE = document.documentElement.lang || "en";
 const fmt = (value, signed) => fmtIn(value, signed, LANGUAGE);
 const count = (value) => countIn(value, LANGUAGE);
 const score = (value) => scoreIn(value, LANGUAGE);
+const tickNumber = numberTick(LANGUAGE);
 
 async function getJson(path) {
   try {
@@ -73,7 +75,7 @@ function cell(tag, text, className) {
   return element;
 }
 
-const pct = (v) => (v == null ? "–" : `${v > 0 ? "+" : ""}${Math.round(v * 100)} %`);
+const pct = (v) => (v == null ? "–" : `${v > 0 ? "+" : ""}${Math.round(v * 100)} %`.replace("-", "−"));
 const width = () => Math.min(900, document.querySelector(".content").clientWidth);
 const PRECIPITATION = new Set(["precipitation_24h", "precipitation_daily"]);
 
@@ -180,7 +182,9 @@ function fillRegions(okresy, current) {
   cz.value = "cz";
   cz.textContent = t("region.cz");
   cz.selected = current === "cz";
-  select.replaceChildren(cz, group(t("compare.okresy"), okresy));
+  // sorted by the name shown ("Praha", not "Hlavní město Praha"), in the page language
+  const shown = [...okresy].sort((a, b) => displayName(a.name).localeCompare(displayName(b.name), LANGUAGE));
+  select.replaceChildren(cz, group(t("compare.okresy"), shown));
 }
 
 /** Region code → name (okresy), for regions without scores in the view shown. */
@@ -263,10 +267,10 @@ function renderSummary(rows, view, names, colors) {
   const basis = band ? bandBasis(rows, view.leadDay, view.region) : null;
   const lines = [
     `${variable}, ${leadLabel(view.leadDay)}${band ? ` (${t("compare.fromRuns")})` : ""}, ${windowName}`,
-    s.clear ? t("compare.clear") : t("compare.notClear", { n: s.tied }),
+    s.clear ? t("compare.clear") : t(`compare.notClear.${pluralForm(s.tied)}`, { n: s.tied }),
     basis
       ? t("compare.bandBasisShort", basis)
-      : t("compare.basis", { stations: s.stations, days: s.days }) +
+      : t("compare.basis", { stations: stationCount(s.stations, t), days: dayCount(s.days, t) }) +
         (s.borrowed ? ` ${t("compare.borrowed", { n: s.borrowed })}` : ""),
   ];
   const children = [heading, cell("p", lines[0], "note"), best, cell("p", lines[1]), cell("p", lines[2], "note")];
@@ -419,12 +423,17 @@ function renderIntervals(rows, view, names, colors, region = view.region) {
       width: width(),
       height: 40 + 24 * data.length,
       marginLeft: 210,
-      x: { label: t("compare.diffAxis"), grid: true },
+      x: { label: t("compare.diffAxis"), grid: true, tickFormat: tickNumber },
       y: { label: null, domain: data.map((r) => label(r.model)) },
       marks: [
         Plot.ruleX([0], { stroke: "#1d2329" }),
         Plot.ruleY(data, { y: (r) => label(r.model), x1: "low", x2: "high", stroke: (r) => (r.tied ? "#9aa7b1" : "#c0392b"), strokeWidth: 3 }),
-        Plot.dot(data, { y: (r) => label(r.model), x: "diff", fill: (r) => colors[r.model] ?? "#888888", r: 5, tip: true }),
+        Plot.dot(data, {
+          y: (r) => label(r.model), x: "diff", fill: (r) => colors[r.model] ?? "#888888", r: 5, tip: true,
+          title: (r) => tipText(label(r.model), t("compare.tipDiff", {
+            diff: fmt(r.diff, true), interval: r.low === r.high ? "" : t("compare.interval", { low: fmt(r.low, true), high: fmt(r.high, true) }),
+          })),
+        }),
       ],
     }),
   );
@@ -441,6 +450,7 @@ function renderByLead(rows, view, names, colors, region = view.region) {
   }
   const models = [...new Set(data.map((r) => r.model))];
   const label = (m) => (m === "blend" ? t("model.blend") : (names[m] ?? m));
+  const leadTip = (r) => tipText(label(r.model), band ? leadLabel(LEAD_BANDS[r.lead_day - 1]) : `D+${r.lead_day}`, `MAE ${fmt(r.mae)}`);
   target.replaceChildren(
     Plot.plot({
       width: width(),
@@ -450,8 +460,10 @@ function renderByLead(rows, view, names, colors, region = view.region) {
       x: {
         label: band ? t("compare.leadBands") : t("control.lead"), ticks: [1, 2, 3, 4, 5],
         tickFormat: (d) => (band ? leadLabel(LEAD_BANDS[d - 1]) : `D+${d}`),
+        // room at both ends, so the grey column of the first or last lead is drawn whole
+        inset: 12,
       },
-      y: { label: "MAE", grid: true, zero: true },
+      y: { label: "MAE", grid: true, zero: true, tickFormat: tickNumber },
       color: {
         domain: models.map(label),
         range: models.map((m) => (m === "blend" ? "#1d2329" : (colors[m] ?? "#888888"))),
@@ -461,11 +473,11 @@ function renderByLead(rows, view, names, colors, region = view.region) {
         Plot.ruleX([band ? LEAD_BANDS.indexOf(view.leadDay) + 1 : view.leadDay], { stroke: "#ddd8cc", strokeWidth: 8 }),
         Plot.lineY(
           data.filter((r) => r.model !== "blend"),
-          { x: "lead_day", y: "mae", stroke: (r) => label(r.model), strokeWidth: 1.5, marker: "circle", tip: true },
+          { x: "lead_day", y: "mae", stroke: (r) => label(r.model), strokeWidth: 1.5, marker: "circle", tip: true, title: leadTip },
         ),
         Plot.lineY(
           data.filter((r) => r.model === "blend"),
-          { x: "lead_day", y: "mae", stroke: (r) => label(r.model), strokeWidth: 2.5, strokeDasharray: "5,4", tip: true },
+          { x: "lead_day", y: "mae", stroke: (r) => label(r.model), strokeWidth: 2.5, strokeDasharray: "5,4", tip: true, title: leadTip },
         ),
       ],
     }),
@@ -682,11 +694,12 @@ async function renderBlendTest(names) {
       height: 260,
       marginLeft: 45,
       x: { label: t("control.lead"), ticks: leads, tickFormat: (d) => `D+${d}` },
-      y: { label: `MAE (${unit(variable)})`, grid: true },
+      y: { label: `MAE (${unit(variable)})`, grid: true, tickFormat: tickNumber },
       color: { domain: present.map(label), range: present.map((s) => SERIES_COLORS[s]), legend: true },
       marks: SERIES_STYLE.filter(([series]) => present.includes(series)).map(
         ([series, strokeWidth, strokeDasharray]) => Plot.lineY(lines.filter((r) => r.series === series), {
           x: "lead_day", y: "mae", stroke: (r) => label(r.series), marker: "circle", tip: true, strokeWidth,
+          title: (r) => tipText(label(r.series), `D+${r.lead_day}`, `MAE ${fmt(r.mae)} ${unit(variable)}`),
           strokeDasharray,
         }),
       ),
@@ -730,26 +743,39 @@ async function renderLeadHours(view, names, colors) {
   const hidden = unpublishedHours(doc);
   const parts = [
     t(`leadHours.${variable}`),
-    t("compare.leadHoursBasis", basis),
+    t("compare.leadHoursBasis", { ...basis, runs: count(basis.runs), days: basis.days.toLocaleString(LANGUAGE) }),
     basis.stations ? t("compare.leadHoursStations", basis) : null,
   ];
   if (ranking.length > 1) {
     parts.push(t("compare.leadHoursBest", { models: ranking.slice(0, HIGHLIGHT).map((r) => label(r.model)).join(", ") }));
   }
   document.getElementById("lead-hours-basis").textContent = parts.filter(Boolean).join(" · ");
-  const ticks = [1, 6, 12, 18, 24, 36, 48, 60, 72, 84, 96, 108, 120].filter((h) => h <= Math.max(lastLead, 72));
+  const last = Math.max(lastLead, 72);
+  const chartWidth = width();
+  // fewer hour ticks on a narrow screen: "H+108" needs about 40 px
+  const room = (chartWidth - 70) / 40;
+  const ticks = [
+    [1, 6, 12, 18, 24, 36, 48, 60, 72, 84, 96, 108, 120], [1, 12, 24, 36, 48, 60, 72, 84, 96, 108, 120],
+    [1, 12, 24, 48, 72, 96, 120], [1, 24, 48, 72, 96, 120], [24, 48, 72, 96, 120], [24, 72, 120],
+  ].map((list) => list.filter((h) => h <= last)).find((list, i, all) => list.length <= room || i === all.length - 1);
   // bold: the best few; dashed: ALADIN; the others thin and pale
   const lines = (subset, width, opacity, dashed) =>
     Plot.lineY(subset, {
       x: "lead_h", y: "mae", z: "model", stroke: (r) => label(r.model), strokeWidth: width, strokeOpacity: opacity,
       strokeDasharray: dashed ? "5,3" : null,
-      channels: { runs: "runs", n: "n" }, tip: { format: { x: (h) => `H+${h}`, z: false } },
+      tip: true,
+      title: (r) => tipText(label(r.model), `H+${r.lead_h}`, `MAE ${fmt(r.mae)}`,
+        t("compare.leadHoursTip", { runs: count(r.runs), n: count(r.n) })),
     });
   const pick = (bold, dashed) => data.filter((r) => best.has(r.model) === bold && isAladin(r.model) === dashed);
   const marks = [];
   if (aladin.length) {
+    marks.push(Plot.rectX([{ x1: 0, x2: hidden }], { x1: "x1", x2: "x2", fill: "#ddd8cc", fillOpacity: 0.6 }));
+  }
+  // the band's words only where the band is wide enough for them (on a phone it is a few
+  // pixels, and the text would sit on the y axis; the note below the chart says it too)
+  if (aladin.length && (hidden / last) * (chartWidth - 70) >= 14) {
     marks.push(
-      Plot.rectX([{ x1: 0, x2: hidden }], { x1: "x1", x2: "x2", fill: "#ddd8cc", fillOpacity: 0.6 }),
       Plot.text([{ x: hidden / 2 }], {
         x: "x", frameAnchor: "top", dy: 6, rotate: -90, textAnchor: "end",
         text: () => t("compare.leadHoursUnpublished"), fontSize: 10, fill: "#4b5863",
@@ -771,11 +797,11 @@ async function renderLeadHours(view, names, colors) {
   );
   document.getElementById("lead-hours").replaceChildren(
     Plot.plot({
-      width: width(),
+      width: chartWidth,
       height: 380,
       marginLeft: 50,
-      x: { label: t("compare.leadHoursAxis"), domain: [0, Math.max(lastLead, 72)], ticks, tickFormat: (h) => `H+${h}` },
-      y: { label: "MAE", grid: true, zero: true },
+      x: { label: t("compare.leadHoursAxis"), domain: [0, last], ticks, tickFormat: (h) => `H+${h}` },
+      y: { label: "MAE", grid: true, zero: true, tickFormat: tickNumber },
       color: {
         domain: models.map(label),
         range: models.map((m) => colors[m] ?? "#888888"),
@@ -792,7 +818,8 @@ const farmView = { key: null };
 
 function farmEventLabel(choice, doc) {
   const unit = doc.events?.[choice.event];
-  const value = Number(choice.threshold).toLocaleString("en-US");
+  // "0,5" and "−2" in Czech
+  const value = Number(choice.threshold).toLocaleString(LANGUAGE).replace("-", "−");
   return t(`farm.event.${choice.event}`, { value, op: unit?.op === "<=" ? "≤" : "≥" });
 }
 
@@ -888,16 +915,32 @@ function renderBias(rows, view, names, colors) {
     return;
   }
   const models = [...new Set(data.map((r) => r.model))];
+  const elevations = ["lowland", "upland", "mountain"];
+  const chartWidth = width();
+  // the longest model names need about 190 px at the axis' font; the rest is for the bars
+  const marginLeft = chartWidth < 500 ? 192 : 210;
   target.replaceChildren(
     Plot.plot({
-      width: width(),
-      marginLeft: 210,
-      marginRight: 130,
-      x: { label: "Bias", grid: true },
+      width: chartWidth,
+      marginLeft,
+      marginTop: 24,
+      marginRight: 12,
+      x: { label: "Bias", grid: true, tickFormat: tickNumber },
       y: { label: null, tickFormat: (m) => names[m] ?? m },
-      fy: { label: null, domain: ["lowland", "upland", "mountain"], tickFormat: (e) => t(`elevation.${e}`) },
+      // the elevation names as titles above each group: at the side they took the bars' room
+      fy: { label: null, domain: elevations, axis: null, padding: 0.12 },
       color: { domain: models, range: models.map((m) => colors[m] ?? "#888888") },
-      marks: [Plot.barX(data, { x: "bias", y: "model", fy: "elevation", fill: "model", tip: true }), Plot.ruleX([0])],
+      marks: [
+        Plot.text(elevations, {
+          fy: (e) => e, text: (e) => t(`elevation.${e}`), frameAnchor: "top-left", dy: -18, dx: 4 - marginLeft,
+          fontWeight: "bold", fontSize: 12,
+        }),
+        Plot.barX(data, {
+          x: "bias", y: "model", fy: "elevation", fill: "model", tip: true,
+          title: (r) => tipText(names[r.model] ?? r.model, t(`elevation.${r.elevation}`), `Bias ${fmt(r.bias, true)}`),
+        }),
+        Plot.ruleX([0]),
+      ],
     }),
   );
 }
