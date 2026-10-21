@@ -23,9 +23,12 @@ export function keepRoomForPanels(wrap, frame, panels) {
 
 /** The room a map leaves on the right for an open okres panel (its CSS width, 21rem by default, plus
  * the zoom buttons): fixed, so choosing another okres never moves the map. */
-export function panelRoom(widthRem = 21, share = 0, wrapWidth = 0) {
+export function panelRoom(widthRem = 21, share = 0, wrapWidth = 0, maxRem = 0) {
   const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  return Math.round((share ? share * wrapWidth : widthRem * rem) + 70);
+  // with a share: that part of the map's width, kept between widthRem and maxRem (when given)
+  let width = share ? share * wrapWidth : widthRem * rem;
+  if (share && maxRem) width = Math.min(Math.max(width, widthRem * rem), maxRem * rem);
+  return Math.round(width + 70);
 }
 
 /** Whether someone has moved or zoomed `map` themselves: after that the page never moves it. */

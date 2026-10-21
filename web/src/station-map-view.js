@@ -244,7 +244,7 @@ export function createStationMap({ container, t, onPick, describe, extraFor = nu
     /** Room for an open panel on wide screens: the whole country glides beside it (only while
      * it is in view; a map someone has moved or zoomed stays where it is). */
     fitBeside(open) {
-      const next = open && window.innerWidth > 900 ? panelRoom() : 10;
+      const next = open && window.innerWidth > 900 ? panelRoom(24, 0.4, map.getContainer().parentElement.clientWidth, 30) : 10;
       if (next === right) return;
       right = next;
       if (!keepFit) return;
