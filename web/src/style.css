@@ -3278,9 +3278,11 @@ figure.forecast-chart {
   width: clamp(24rem, 40%, 30rem);
   max-width: calc(100% - 4.4rem);
 }
-.measured-map-wrap > #okres-panel {
-  width: clamp(21rem, 40%, 30rem);
-  max-width: calc(100% - 4.4rem);
+@media (min-width: 701px) {
+  .measured-map-wrap > #okres-panel {
+    width: clamp(21rem, 40%, 30rem);
+    max-width: calc(100% - 4.4rem);
+  }
 }
 .model-compare .model-var button {
   padding: 0.25rem 0.55rem;
