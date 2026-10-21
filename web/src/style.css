@@ -3251,3 +3251,18 @@ footer .site-links {
     white-space: nowrap;
   }
 }
+
+/* the narrowest phones: a segmented row that does not fit lets its labels wrap inside the
+   buttons instead of being cut off by the rounded frame ("Whole day" at 320 px in English,
+   "Ostatní (klimatické)" on Porovnání modelů) */
+@media (max-width: 420px) {
+  .segmented button {
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.15;
+    text-align: center;
+    padding-left: 0.2rem;
+    padding-right: 0.2rem;
+    font-size: 0.78rem;
+  }
+}
