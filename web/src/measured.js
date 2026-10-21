@@ -14,18 +14,34 @@ export const MAX_TABS = 3;
  * What the station page shows for a hash: "measured" (the Weather tab: no hash, or
  * "#day/part/colour/values" as on the forecast map), "kinds" (the Stations tab) or "station"
  * (an old link to a station's own page, "#WSI" or "#WSI/element": it opens the Stations tab).
+ * An old okres link ("#CZ0631") opens that okres on the Weather tab.
  */
 export function pageMode(hash) {
   const h = (hash ?? "").replace(/^#/, "");
-  if (!h || /^\d{4}-\d{2}-\d{2}(\/|$)/.test(h)) return "measured";
+  if (!h || /^\d{4}-\d{2}-\d{2}(\/|$)/.test(h) || okresLink(hash)) return "measured";
   if (`#${h}` === KINDS_HASH || h.startsWith("kinds/")) return "kinds";
   return "station";
+}
+
+/** An old link to an okres ("#CZ0631", from before the page had days): its code, or null. */
+export function okresLink(hash) {
+  const m = /^#?(CZ\d{4})$/.exec(hash ?? "");
+  return m ? m[1] : null;
+}
+
+/** A hash part decoded, or null when it is not valid (a mistyped "%E0%A4%A" must not break the page). */
+export function decodePart(text) {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return null;
+  }
 }
 
 /** The station open in the Stations view's panel ("#kinds/<id>"), or null. */
 export function kindsStation(hash) {
   const m = /^#?kinds\/(.+)$/.exec(hash ?? "");
-  return m ? decodeURIComponent(m[1]) : null;
+  return m ? decodePart(m[1]) : null;
 }
 
 /**
@@ -35,6 +51,9 @@ export function kindsStation(hash) {
  * measured days offered, `fallback` {day, part}.
  */
 export function parseLanding(hash, days, fallback) {
+  // an old okres link: that okres on the newest day
+  const code = okresLink(hash);
+  if (code) return { ...parseView("", { days, okresy: [] }, fallback), okres: code };
   const h = (pageMode(hash) === "measured" ? hash ?? "" : "").replace(/^#/, "");
   const segments = h.split("/");
   const isExtra = (s) => ["okresy", "stations"].includes(s) || /^CZ/.test(s ?? "");
