@@ -3129,12 +3129,32 @@ footer .site-links {
   }
 }
 
+.aic-pair {
+  margin: 0.45rem 0;
+  padding-left: 0.6rem;
+  border-left: 4px solid #ddd8cc;
+}
+.aic-pair.better {
+  border-left-color: #2e7d32;
+}
+.aic-pair.worse {
+  border-left-color: #c0392b;
+}
+.swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.4rem;
+  border-radius: 50%;
+  vertical-align: baseline;
+}
 .aic-headline {
   font-size: 1.15rem;
 }
 .aic-numbers {
   display: flex;
-  gap: 2rem;
+  flex-wrap: wrap;
+  gap: 0.6rem 2rem;
   margin: 0.5rem 0 0.2rem;
 }
 .aic-numbers .big {
@@ -3490,4 +3510,22 @@ header {
 #okres-panel .detail-links {
   display: grid;
   gap: 4px;
+}
+
+@media (max-width: 700px) {
+  /* the three MAE numbers stay side by side on a phone */
+  .aic-numbers {
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+  .aic-numbers > div {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .aic-numbers .big {
+    font-size: 1.4rem;
+  }
+  .aic-numbers .label {
+    font-size: 0.7rem;
+  }
 }
