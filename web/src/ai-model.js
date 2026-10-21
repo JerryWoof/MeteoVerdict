@@ -16,8 +16,8 @@ export const SKY_URL = "data/scores/ai/fc/sky/ai-sky.json";
 /** The AI's own outlook (same format as outlook.json) with its per-variable `sources` flag. */
 export const OUTLOOK_URL = "data/scores/ai/fc/outlook.json";
 const AI_VARIABLES = ["temperature_2m", "wind_speed_10m"];
-// what the AI does not forecast hourly: rain, taken from our blend (labelled "z blendu" on the
-// pages); cloud, sunshine and gusts come from its sky file per part of day when it has them
+// hourly rain, cloud and sunshine: the AI's own (``mvai hourly``, made to agree with its parts of
+// the day) where its file has them; an older file without them takes our blend's on the AI's hours
 const BLEND_VARIABLES = ["precipitation", "cloud_cover", "sunshine_duration"];
 /** The outlook's gust warning threshold (m/s). */
 const GUST_THRESHOLD = 13.5;
@@ -25,7 +25,8 @@ const BLEND_FIELDS = ["precipitation", "cloud", "sunshine", "symbol", "gust", "g
 
 /**
  * The AI forecast file → {issued (ISO), okresy: {code: {times: [ms], temperature_2m,
- * wind_speed_10m}}}, or null when it is missing, malformed or older than MAX_AGE_HOURS.
+ * wind_speed_10m, precipitation, cloud_cover, sunshine_duration}}} (a series is null when the
+ * file lacks it), or null when it is missing, malformed or older than MAX_AGE_HOURS.
  * An okres without a usable temperature series is left out.
  */
 export function parseAi(doc, now = Date.now()) {
@@ -38,7 +39,7 @@ export function parseAi(doc, now = Date.now()) {
     const times = o.time.map((s) => Date.parse(s));
     if (times.some(Number.isNaN)) continue;
     const series = { times };
-    for (const variable of AI_VARIABLES) {
+    for (const variable of [...AI_VARIABLES, ...BLEND_VARIABLES]) {
       const values = o[variable]?.ai;
       series[variable] = Array.isArray(values) && values.length === times.length
         ? values.map((v) => (typeof v === "number" && Number.isFinite(v) ? v : null))
@@ -141,8 +142,12 @@ export function withAi(parsed, ai, code) {
     if (own[variable]) series[variable] = parsed.times.map((t) => (at.has(t) ? own[variable][at.get(t)] : null));
   }
   if (!series.temperature_2m.some((v) => v != null)) return parsed;
-  // rain, cloud and sunshine from the blend, on the hours the AI covers
+  // rain, cloud and sunshine: the AI's own hours; without them our blend's, on the hours the AI covers
   for (const variable of BLEND_VARIABLES) {
+    if (own[variable]?.some((v) => v != null)) {
+      series[variable] = parsed.times.map((t) => (at.has(t) ? own[variable][at.get(t)] : null));
+      continue;
+    }
     const blend = parsed.combined?.[variable];
     if (blend?.some((v) => v != null)) series[variable] = blend.map((v, i) => (series.temperature_2m[i] != null ? v : null));
   }

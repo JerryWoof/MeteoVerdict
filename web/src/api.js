@@ -179,7 +179,13 @@ export function indexDoc(okresy, meta, generated) {
 
 export const AI_METHOD =
   "MeteoVerdict AI (experimental, unverified): hourly temperature and wind, and by part of day temperature, wind, gusts, cloud, sunshine, symbol, precipitation, rain probability and heavy rain. The hourly precipitation, cloud and sunshine are the combined forecast's hour-to-hour shape fitted to the AI's value of each part of day; the 80 % range of the temperature is the combined forecast's width around the AI's temperature; a part the AI has no row for is the combined forecast's";
+/** The method when the AI file has its own hourly rain, cloud, sunshine and range (`mvai hourly`). */
+export const AI_METHOD_HOURLY =
+  "MeteoVerdict AI (experimental, unverified): hourly temperature, wind, precipitation, cloud and sunshine, and by part of day temperature, wind, gusts, cloud, sunshine, symbol, precipitation, rain probability and heavy rain. The hourly precipitation, cloud and sunshine come from the AI's own hourly models, made to agree with its value of each part of day (sums of precipitation and sunshine, mean cloud); the 80 % range of the temperature comes from the AI's own past errors (the combined forecast's method). Hours the AI has no value for keep the combined forecast's shape fitted to the AI's parts; a part the AI has no row for is the combined forecast's";
 const AI_HOURLY = ["temperature_2m", "wind_speed_10m"];
+// the AI's own hourly series in newer files (`mvai hourly`), already consistent with its parts
+const AI_OWN_HOURLY = ["precipitation", "cloud_cover", "sunshine_duration"];
+const AI_RANGE = ["temperature_2m_lo", "temperature_2m_hi"];
 const ASTRONOMY = ["sunrise", "sunset"];
 
 const AI_PARTS = ["night", "morning", "afternoon", "evening"];
@@ -189,9 +195,11 @@ const AI_PARTS = ["night", "morning", "afternoon", "evening"];
  * the combined forecast's hour-to-hour shape fitted to the AI's value of each part: precipitation
  * scaled so the hours add up to the part's mm (spread evenly where the shape is dry), cloud
  * shifted to the part's mean, sunshine scaled to the part's hours (at most 3600 s an hour).
- * A part the AI has no value for keeps the combined forecast's hours. Changes `h` in place.
+ * A part the AI has no value for keeps the combined forecast's hours. A variable whose hours of
+ * the part all came from the AI's own hourly series (`own[variable][i]` true) is left as it is:
+ * the engine already made them agree with the part. Changes `h` in place.
  */
-function fitHourlyToParts(h, parts) {
+function fitHourlyToParts(h, parts, own = {}) {
   const ms = h.time.map((t) => Date.parse(t));
   const start = ms.map((m) => local(m)); // hour starting at the time (cloud)
   const ending = ms.map((m) => local(m - 60e3)); // hour ending at the time (precipitation, sunshine)
@@ -201,15 +209,23 @@ function fitHourlyToParts(h, parts) {
     const idx = (hs) => ms.flatMap((_, i) => (hs[i].day === part.day && hs[i].hour >= a && hs[i].hour < b ? [i] : []));
     const ofEnding = idx(ending), ofStart = idx(start);
     const full = (ix) => ix.length === b - a;
-    if (part.precipitation != null && h.precipitation && full(ofEnding) && ofEnding.every((i) => h.precipitation[i] != null)) {
+    const mine = (v, ix) => ix.length > 0 && own[v] && ix.every((i) => own[v][i]);
+    if (mine("precipitation", ofEnding) && mine("cloud_cover", ofStart) && mine("sunshine_duration", ofEnding)) continue;
+    if (!mine("precipitation", ofEnding) && part.precipitation != null && h.precipitation && full(ofEnding) && ofEnding.every((i) => h.precipitation[i] != null)) {
       const sum = ofEnding.reduce((x, i) => x + h.precipitation[i], 0);
       for (const i of ofEnding) h.precipitation[i] = round(sum > 0 ? (h.precipitation[i] * part.precipitation) / sum : part.precipitation / ofEnding.length, 2);
     }
-    if (part.cloud != null && h.cloud_cover && full(ofStart) && ofStart.every((i) => h.cloud_cover[i] != null)) {
-      const shift = part.cloud - ofStart.reduce((x, i) => x + h.cloud_cover[i], 0) / ofStart.length;
-      for (const i of ofStart) h.cloud_cover[i] = round(Math.min(100, Math.max(0, h.cloud_cover[i] + shift)), 1);
+    if (!mine("cloud_cover", ofStart) && part.cloud != null && h.cloud_cover && full(ofStart) && ofStart.every((i) => h.cloud_cover[i] != null)) {
+      // shifted until the mean holds (hours clipped at 0 or 100 leave the rest to move)
+      let v = ofStart.map((i) => h.cloud_cover[i]);
+      for (let k = 0; k < 30; k++) {
+        const shift = part.cloud - v.reduce((x, y) => x + y, 0) / v.length;
+        if (Math.abs(shift) < 0.01) break;
+        v = v.map((x) => Math.min(100, Math.max(0, x + shift)));
+      }
+      ofStart.forEach((i, k) => { h.cloud_cover[i] = round(v[k], 1); });
     }
-    if (part.sunshine != null && h.sunshine_duration && full(ofEnding) && ofEnding.every((i) => h.sunshine_duration[i] != null)) {
+    if (!mine("sunshine_duration", ofEnding) && part.sunshine != null && h.sunshine_duration && full(ofEnding) && ofEnding.every((i) => h.sunshine_duration[i] != null)) {
       const sum = ofEnding.reduce((x, i) => x + h.sunshine_duration[i], 0);
       for (const i of ofEnding) h.sunshine_duration[i] = sum > 0 ? Math.min(3600, Math.round((h.sunshine_duration[i] * part.sunshine * 3600) / sum)) : 0;
     }
@@ -230,23 +246,30 @@ export function aiOkresDoc({ okres, outlook, hourly, aiForecast, aiOutlook, meta
   if (!series || !ai?.time) return null;
   const at = new Map(ai.time.map((t, i) => [t, i]));
   const h = { time: hourly.time, ...Object.fromEntries(Object.entries(series).map(([k, v]) => [k, [...v]])) };
-  const usedTemperature = new Array(hourly.time.length).fill(false);
-  for (const v of AI_HOURLY) {
+  // which hours of each series came from the AI (hourly.time indices)
+  const used = {};
+  for (const v of [...AI_HOURLY, ...AI_OWN_HOURLY, ...AI_RANGE]) {
     const values = ai[v]?.ai;
+    used[v] = new Array(hourly.time.length).fill(false);
     if (!values || !h[v]) continue;
     hourly.time.forEach((t, i) => {
       const j = at.get(t);
       const x = j === undefined ? null : values[j];
       if (x == null) return;
+      if (AI_RANGE.includes(v) && !used.temperature_2m[i]) return;
       h[v][i] = x;
-      if (v === "temperature_2m") usedTemperature[i] = true;
+      used[v][i] = true;
     });
   }
-  // the 80 % range: the combined forecast's width around the AI's temperature
+  const usedTemperature = used.temperature_2m;
+  const ownHourly = AI_OWN_HOURLY.some((v) => used[v].some(Boolean));
+  const ownRange = used.temperature_2m_lo.some(Boolean) && used.temperature_2m_hi.some(Boolean);
+  // the 80 % range elsewhere: the combined forecast's width around the AI's temperature
   const blendT = series.temperature_2m;
   if (h.temperature_2m_lo && h.temperature_2m_hi) {
     const [lo, hi] = [series.temperature_2m_lo, series.temperature_2m_hi];
     hourly.time.forEach((_, i) => {
+      if (used.temperature_2m_lo[i] && used.temperature_2m_hi[i]) return;
       if (!usedTemperature[i] || blendT[i] == null || lo[i] == null || hi[i] == null) return;
       h.temperature_2m_lo[i] = round(h.temperature_2m[i] - (blendT[i] - lo[i]), 1);
       h.temperature_2m_hi[i] = round(h.temperature_2m[i] + (hi[i] - blendT[i]), 1);
@@ -262,9 +285,9 @@ export function aiOkresDoc({ okres, outlook, hourly, aiForecast, aiOutlook, meta
     delete part.gust_warning;
     return part;
   });
-  fitHourlyToParts(h, parts);
+  fitHourlyToParts(h, parts, used);
   const sources = {
-    ...Object.fromEntries(HOURLY.map((v) => [v, AI_HOURLY.includes(v) || ["precipitation", "cloud_cover", "sunshine_duration"].includes(v) ? "ai" : "blend"])),
+    ...Object.fromEntries(HOURLY.map((v) => [v, AI_HOURLY.includes(v) || AI_OWN_HOURLY.includes(v) || (ownRange && AI_RANGE.includes(v)) ? "ai" : "blend"])),
     ...Object.fromEntries(fields.map((k) => [k, ASTRONOMY.includes(k) ? "astronomy" : fromAi.has(k) ? "ai" : "blend"])),
   };
   return {
@@ -278,7 +301,7 @@ export function aiOkresDoc({ okres, outlook, hourly, aiForecast, aiOutlook, meta
       model: "ai",
       generated: hourly?.generated ?? outlook?.generated ?? null,
       ai_issued: aiForecast.issued ?? null,
-      method: AI_METHOD,
+      method: ownHourly ? AI_METHOD_HOURLY : AI_METHOD,
       sources,
       time_zone_of_parts: outlook?.time_zone ?? "Europe/Prague",
       units: hourly?.variables ?? null,
