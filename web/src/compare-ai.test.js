@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  aiStatus, aiVerdict, aiVersus, availableModels, opponentSeries, bestModel, compareRows, dailyRows, defaultSeries, parseView, regionGroups,
+  aiStatus, aiVerdict, defaultOpponent, pairVersus, threeWayPBest, aiVersus, availableModels, opponentSeries, bestModel, compareRows, dailyRows, defaultSeries, parseView, regionGroups,
 } from "./compare-ai.js";
 
 const entry = (aiVs, clear = true) => ({
@@ -53,6 +53,30 @@ describe("the AI against a chosen opponent", () => {
   });
 });
 
+describe("the three series", () => {
+  const e = entry({ diff: -0.1, low: -0.15, high: -0.05, p: 0.001, p_lower: 0.99 });
+  it("compares any two of AI, blend and model, in both directions", () => {
+    const a = pairVersus(e, "ai", "dwd_icon_d2");
+    assert.equal(a.verdict, "better");
+    const b = pairVersus(e, "dwd_icon_d2", "ai");
+    assert.equal(b.verdict, "worse");
+    // the blend against the model: the file has model - blend = +0.2, so blend - model = -0.2
+    const c = pairVersus(e, "outlook", "dwd_icon_d2");
+    assert.ok(Math.abs(c.diff + 0.3) < 1e-9 || c.diff < 0);
+    assert.equal(c.verdict, "better");
+    assert.equal(pairVersus(e, "ai", "outlook").verdict, "better");
+    assert.equal(pairVersus(e, "outlook", "ai").verdict, "worse");
+    assert.equal(pairVersus(e, "ai", "ai"), null);
+  });
+  it("picks the best model as the default and gives shares that add up to 1", () => {
+    assert.equal(defaultOpponent(e), "dwd_icon_d2");
+    const e2 = { ...e, series: e.series.map((s) => ({ ...s, daily: [1, 1, 1, 1, 1, 1].map((x, i) => x + (s.kind === "ai" ? -0.2 : s.kind === "outlook" ? 0 : 0.2) + i * 0.01) })) };
+    const shares = threeWayPBest(e2, "dwd_icon_d2");
+    assert.ok(Math.abs(shares.reduce((x, y) => x + y, 0) - 1) < 1e-9);
+    assert.equal(shares[0], 1);
+  });
+});
+
 describe("comparison rows", () => {
   const e = entry({ diff: -0.1, low: -0.15, high: -0.05, p: 0.001 }, false);
   it("are the AI, the blend, the mean and the best model, each against the blend", () => {
@@ -80,7 +104,9 @@ describe("status and view", () => {
     assert.deepEqual(parseView("wind_speed_10m.3.live.CZ0100.dwd_icon_d2", { CZ0100: 1 }), {
       variable: "wind_speed_10m", lead: 3, sample: "live", region: "CZ0100", opponent: "dwd_icon_d2",
     });
-    assert.deepEqual(parseView("x.9.y.zz", { cz: 1 }), { variable: "temperature_2m", lead: 1, sample: "validation", region: "cz", opponent: "outlook" });
+    assert.deepEqual(parseView("x.9.y.zz", { cz: 1 }), { variable: "temperature_2m", lead: 1, sample: "validation", region: "cz", opponent: "" });
+    // old links naming our blend, the mean or "best" fall back to the default model
+    for (const old of ["outlook", "mean", "best", "blend", "combined", "meteoverdict_ai"]) assert.equal(parseView(`temperature_2m.1.validation.cz.${old}`, { cz: 1 }).opponent, "");
   });
   it("groups the regions by level", () => {
     const g = regionGroups({ regions: { cz: ["cz", "Česko", true], CZ010: ["kraj", "Praha", true], CZ0201: ["okres", "Benešov", false] } });
