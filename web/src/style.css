@@ -539,6 +539,11 @@ table#days,
 body.tv > * {
   min-width: 0;
 }
+/* no scroll anchoring here: on phones the okres panel opens below the map, and the browser
+   kept the content below it in place by scrolling the page down past the panel's top */
+body.tv {
+  overflow-anchor: none;
+}
 .glyph {
   flex: none;
   vertical-align: -0.15em;
@@ -743,6 +748,24 @@ body.tv > * {
     width: auto;
   }
 }
+/* small phones: "Forecast" and "Find a place" only for screen readers, so each field gets
+   its whole row without a taller ribbon ("MeteoVerdict AI (experimental)" and the
+   placeholder were cut); the select and the field say what they are */
+@media (max-width: 420px) {
+  .map-model > span,
+  #obce-search .place-search label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .map-model select,
+  #obce-search .place-search input {
+    flex: 1 1 100%;
+  }
+}
 /* a single model on the map: marked so it is not taken for ours */
 #headline.single {
   box-shadow:
@@ -925,6 +948,19 @@ body.tv > * {
   padding: 0.3rem 0;
   border-radius: 4px;
   background: var(--paper);
+}
+/* the okres panel's parts are buttons (tv-page.js partCell): they switch the part */
+#okres-panel button.part {
+  font: inherit;
+  color: inherit;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+#okres-panel button.part:hover {
+  border-color: var(--line);
+}
+#okres-panel button.part.current {
+  border-color: var(--ink);
 }
 #station-panel .part-name ,
 #okres-panel .part-name {
@@ -2937,6 +2973,11 @@ body.station [hidden] {
   align-items: center;
   gap: 0.6rem 1rem;
 }
+/* may shrink below the field's own width (on a 320 px phone it stuck out of the box) */
+#home-search {
+  min-width: 0;
+  max-width: 100%;
+}
 #home-search .place-search {
   position: relative;
   display: flex;
@@ -3219,6 +3260,10 @@ footer .site-links {
 }
 .model-chart figure {
   margin: 0;
+}
+/* forecast-detail.html: a chart as wide as the text, without the browser's figure indent */
+figure.forecast-chart {
+  margin: 1rem 0;
 }
 .model-table td.num,
 .model-table th {
