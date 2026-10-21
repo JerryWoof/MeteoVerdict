@@ -5,6 +5,7 @@
 import { iconCanvas } from "./icons.js";
 import { borrowedFor, difference } from "./observed.js";
 import { issuedText } from "./picker.js";
+import { formatFixed, formatSigned } from "./station.js";
 import { PARTS, displayName, iconName, labelFor, rowFor } from "./tv.js";
 
 function element(tag, text, className) {
@@ -28,8 +29,9 @@ function element(tag, text, className) {
  *   forecast at the okres's stations (station-model.js), above the okres comparison
  */
 export function createOkresPanel({ panel, t, language, dayText, update, stationHref, openStation, stationIndex, modelSection = null }) {
-  const fmt = (v, digits = 0) => (v == null ? "–" : v.toFixed(digits));
-  const fmt1 = (v) => (v == null ? "–" : v.toLocaleString(language, { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
+  // in the page's language ("0,0 mm" in Czech), never "-0", with a true minus sign
+  const fmt = (v, digits = 0) => formatFixed(v, language, digits);
+  const fmt1 = (v) => formatFixed(v, language, 1);
   const symbolText = (symbol) => (symbol ? t(`symbol.${symbol}`) : "");
   const symbolMeasured = (symbol) => (symbol ? t(`diary.symbol.${symbol}`) : "");
   // "1 stanice", "3 stanice", "12 stanic" / "1 station", "12 stations"
@@ -100,11 +102,7 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
   }
 
   /** "+1.2°": a difference, signed; empty without one. */
-  const signed = (v, digits, unit) => {
-    if (v == null) return "";
-    const text = v.toLocaleString(language, { minimumFractionDigits: digits, maximumFractionDigits: digits });
-    return `${v > 0 ? "+" : ""}${text}${unit}`;
-  };
+  const signed = (v, digits, unit) => (v == null ? "" : `${formatSigned(v, language, digits)}${unit}`);
 
   /** A forecast's row label: "1 day ahead", "same day", with how it came about. */
   function sourceLine(f) {
@@ -185,14 +183,19 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
     }
     const table = element("table", null, "compare-table matrix");
     const head = element("tr");
-    for (const key of ["", "obs.col.symbol", "obs.col.temp", "obs.col.rain", "obs.col.wind"]) head.append(element("th", key ? t(key) : ""));
+    // the numbers' headings right-aligned over them, the symbol's centred
+    const headClass = { "obs.col.symbol": "sym", "obs.col.temp": "num", "obs.col.rain": "num", "obs.col.wind": "num" };
+    for (const key of ["", "obs.col.symbol", "obs.col.temp", "obs.col.rain", "obs.col.wind"]) head.append(element("th", key ? t(key) : "", headClass[key]));
     table.append(head);
     table.append(compareRow(t("obs.measured"), null, measured, measured, state.part, true, "measured"));
     for (const f of shown) {
       const label = t(`obs.lead.${Math.min(f.lead, 3)}`, { n: f.lead });
       table.append(compareRow(label, sourceLine(f), f.rows.get(`${state.okres}|${state.part}`), measured, state.part, false, f.kind));
     }
-    box.append(table);
+    // a phone too narrow for it: the table scrolls on its own instead of widening the page
+    const scroller = element("div", null, "table-scroll");
+    scroller.append(table);
+    box.append(scroller);
     const notes = [t("obs.compareNote")];
     if (shown.some((f) => f.kind === "rebuilt")) notes.push(t("obs.rebuiltNote"));
     for (const note of notes) box.append(element("p", note, "model-note"));

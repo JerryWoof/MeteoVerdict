@@ -1302,6 +1302,7 @@ body.tv.past #ribbon {
 .compare-table.matrix tr.rebuilt th.lead small {
   color: #8a5a00;
 }
+.compare-table.matrix th.sym,
 .compare-table.matrix td.sym {
   text-align: center;
   font-size: 0.7rem;
@@ -3326,4 +3327,92 @@ summary:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid var(--theme-accent, #2662a6);
   outline-offset: 2px;
+}
+
+/* measured page: the legend stays at the map's bottom-left, also when a long panel makes room
+   under the map or sits under it (placed from the map's top, not the grown wrap's bottom) */
+@media (min-width: 701px) {
+  .measured-map-wrap > .map-box.legend,
+  #station-map-wrap > .map-box.legend {
+    top: calc(var(--map-height) - 1.6rem);
+    bottom: auto;
+    transform: translateY(-100%);
+  }
+  #kinds-box {
+    max-height: calc(var(--map-height) - 2.4rem);
+  }
+}
+/* measured page, narrow screens up to 900 px (where the map does not move aside for a panel):
+   the okres or station panel goes under the map instead of covering half of it and the
+   headline; on phones the general rule above already does so */
+@media (min-width: 701px) and (max-width: 900px) {
+  .measured-map-wrap > #okres-panel,
+  #station-map-wrap > #station-panel {
+    position: static;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    margin: 0.5rem 0 0;
+  }
+}
+@media (max-width: 700px) {
+  #station-panel {
+    width: auto;
+    max-width: none;
+  }
+}
+/* the station names of the panels' tables wrap rather than widening the table */
+#okres-panel .model-table tr > th:first-child,
+#station-panel .model-table tr > th:first-child {
+  white-space: normal;
+}
+/* measured page's panels on phones: the tables and the value pickers fit the panel's width
+   instead of widening the page (the station names and the pickers' labels wrap) */
+@media (max-width: 700px) {
+  #okres-panel .compare-table th,
+  #okres-panel .compare-table td,
+  #station-panel .compare-table th,
+  #station-panel .compare-table td {
+    padding: 0.15rem 0.1rem;
+  }
+  #okres-panel .compare-table tr:first-child th,
+  #station-panel .compare-table tr:first-child th {
+    font-size: 0.68rem;
+  }
+  #okres-panel .compare-table.matrix,
+  #station-panel .compare-table.matrix {
+    font-size: 0.75rem;
+  }
+  #okres-panel .compare-table.matrix th.lead,
+  #station-panel .compare-table.matrix th.lead {
+    font-size: 0.75rem;
+    white-space: normal;
+  }
+  #okres-panel .compare-table.matrix .delta,
+  #station-panel .compare-table.matrix .delta {
+    padding: 0 0.2rem;
+    font-size: 0.66rem;
+  }
+  #okres-panel .segmented.compare-parts,
+  #okres-panel .segmented.model-var,
+  #station-panel .segmented.compare-parts,
+  #station-panel .segmented.model-var {
+    display: flex;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  #okres-panel .compare-parts button,
+  #okres-panel .model-var button,
+  #station-panel .compare-parts button,
+  #station-panel .model-var button {
+    flex: 1 1 auto;
+    min-width: 0;
+    /* only narrower: the strip stays as low as before */
+    padding-left: 0.2rem;
+    padding-right: 0.2rem;
+    font-size: 0.75rem;
+    white-space: normal;
+    text-align: center;
+  }
 }

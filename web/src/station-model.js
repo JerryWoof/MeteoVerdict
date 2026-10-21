@@ -10,6 +10,8 @@
 
 import * as Plot from "@observablehq/plot";
 
+import { formatFixed, formatSigned } from "./station.js";
+
 export const AI = "ai";
 export const BLEND = "blend";
 export const DEFAULT_MODEL = BLEND;
@@ -190,9 +192,9 @@ export function createModelCompare({ getJson, t, language }) {
 
   // `err`: the value whose model error colours the map's dots (null: the measured values)
   const state = { model: DEFAULT_MODEL, lead: DEFAULT_LEAD, key: "tmax", err: DEFAULT_ERR, wx: DEFAULT_WX };
-  const fmt = (v, digits = 1) =>
-    v == null ? "–" : v.toLocaleString(language, { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  const signed = (v, digits = 1) => (v == null ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmt(Math.abs(v), digits)}`);
+  // the page's decimal sign, never "-0", a true minus sign
+  const fmt = (v, digits = 1) => formatFixed(v, language, digits);
+  const signed = (v, digits = 1) => (v == null ? "–" : formatSigned(v, language, digits));
   const dayFormat = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", { day: "numeric", month: "numeric", timeZone: "UTC" });
   const dayText = (iso) => dayFormat.format(new Date(`${iso}T00:00:00Z`));
   const variableOf = (key) => VARIABLES.find((v) => v.key === key) ?? VARIABLES[0];
@@ -222,6 +224,13 @@ export function createModelCompare({ getJson, t, language }) {
     const box = element("section", null, "model-compare");
     box.append(element("h3", t("fc.title")), element("p", t("fc.loading"), "model-note"));
     const draw = async () => {
+      // most stations have no stored forecasts (the index lists the ~300 that do): say so,
+      // without asking for a file that is not there or offering values that lead nowhere
+      const listed = await loadIndex();
+      if (listed && !listed.stations?.includes(id)) {
+        box.replaceChildren(element("h3", t("fc.title")), element("p", t("fc.noStation"), "model-note missing"));
+        return;
+      }
       const [index, doc, ai] = await Promise.all([loadIndex(), loadStation(id), state.model === AI ? loadAi(id) : null]);
       const { model, lead, key } = state;
       const name = modelOptions(index, t).find((m) => m.id === model)?.name ?? model;
@@ -296,7 +305,7 @@ export function createModelCompare({ getJson, t, language }) {
     const wrap = element("div", null, "table-scroll");
     const tbl = element("table", null, "compare-table matrix model-table");
     const head = element("tr");
-    for (const key of ["fc.col.day", "fc.col.measured", "fc.col.model", "fc.col.diff"]) head.append(element("th", t(key)));
+    for (const key of ["fc.col.day", "fc.col.measured", "fc.col.model", "fc.col.diff"]) head.append(element("th", t(key), key === "fc.col.day" ? null : "num"));
     tbl.append(head);
     const last = series.days.map((_, i) => i).filter((i) => series.obs[i] != null || series.fc[i] != null).slice(-7).reverse();
     for (const i of last) {
@@ -347,7 +356,8 @@ export function createModelCompare({ getJson, t, language }) {
       const docs = await Promise.all(covered.map((s) => Promise.all([loadStation(s.id), model === AI ? loadAi(s.id) : null])));
       const tbl = element("table", null, "compare-table matrix model-table");
       const head = element("tr");
-      for (const col of ["fc.col.station", "fc.col.measured", "fc.col.model", "fc.col.diff"]) head.append(element("th", t(col)));
+      // the numbers' headings right-aligned over them
+      for (const col of ["fc.col.station", "fc.col.measured", "fc.col.model", "fc.col.diff"]) head.append(element("th", t(col), col === "fc.col.station" ? null : "num"));
       tbl.append(head);
       let anyValue = false;
       covered.forEach((s, n) => {
