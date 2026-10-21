@@ -24,6 +24,7 @@ import { BASEMAP_ATTRIBUTION, GLYPHS, PLACE_LAYERS, baseLayers, basemapSources, 
 import { placeSearch } from "./place-search.js";
 import { placeLabel, placesLoader } from "./places.js";
 import placesUrl from "./data/obce.json?url";
+import { locateErrorKey } from "./home-place.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -766,7 +767,7 @@ function pointChart(series, anchor, live) {
 
 function locateMe(button) {
   if (!navigator.geolocation) {
-    button.nextSibling.textContent = t("radar.point.denied", { reason: "—" });
+    button.nextSibling.textContent = t("locate.unsupported");
     return;
   }
   const note = button.nextSibling;
@@ -779,7 +780,8 @@ function locateMe(button) {
       map.easeTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 8) });
     },
     (error) => {
-      note.textContent = t("radar.point.denied", { reason: error.message || error.code });
+      // our own sentence: the browser's error text is English whatever the page language
+      note.textContent = t(locateErrorKey(error));
     },
     { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 },
   );
