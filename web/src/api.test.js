@@ -216,6 +216,45 @@ test("an AI okres file: hourly precipitation, cloud and sunshine fitted to the A
   assert.equal(f.hourly.precipitation[20], 0, "a part the AI has no row for keeps the blend's hours");
 });
 
+test("an AI okres file: the AI's own hourly rain, cloud, sunshine and range when its file has them", () => {
+  const day = "2026-10-12"; // CEST: the morning is 04:00Z to 10:00Z
+  const time = Array.from({ length: 24 }, (_, i) => `${day}T${String(i).padStart(2, "0")}:00Z`);
+  const hourly = {
+    time,
+    generated: "x",
+    variables: {},
+    okresy: { CZ0201: {
+      temperature_2m: time.map(() => 10), wind_speed_10m: time.map(() => 2),
+      precipitation: time.map(() => 0.5), cloud_cover: time.map(() => 50), sunshine_duration: time.map(() => 0),
+      temperature_2m_lo: time.map(() => 8), temperature_2m_hi: time.map(() => 12),
+    } },
+  };
+  const aiOutlook = { columns: ["okres", "day", "part", "precipitation", "cloud", "sunshine"], rows: [["CZ0201", day, "morning", 3, 80, 2]] };
+  const outlook = { generated: "x", time_zone: "Europe/Prague", columns: ["okres", "day", "part", "precipitation", "cloud", "sunshine"], rows: [["CZ0201", day, "morning", 4, 50, 3]] };
+  // the AI's own hours cover 04:00Z-11:00Z only (the morning), already consistent with its part
+  const own = (f) => time.map((_, i) => (i >= 4 && i <= 11 ? f(i) : null));
+  const aiForecast = { issued: "x", hourly: { version: "hourly-1" }, okresy: { CZ0201: {
+    time,
+    temperature_2m: { ai: own(() => 11) }, wind_speed_10m: { ai: own(() => 3) },
+    precipitation: { ai: own((i) => (i === 7 ? 3 : 0)) },
+    cloud_cover: { ai: own(() => 80) },
+    sunshine_duration: { ai: own((i) => (i >= 5 && i <= 10 ? 1200 : 0)) },
+    temperature_2m_lo: { ai: own(() => 10) }, temperature_2m_hi: { ai: own(() => 13) },
+  } } };
+  const { forecast: f } = aiOkresDoc({ okres: BENESOV, outlook, hourly, aiForecast, aiOutlook, meta: META });
+  assert.equal(f.hourly.precipitation[7], 3, "the AI's own hour, not refitted");
+  assert.equal(f.hourly.precipitation[6], 0);
+  assert.equal(f.hourly.cloud_cover[5], 80);
+  assert.equal(f.hourly.sunshine_duration[6], 1200);
+  assert.equal(f.hourly.temperature_2m_lo[6], 10, "the AI's own range");
+  assert.equal(f.hourly.temperature_2m_hi[6], 13);
+  assert.equal(f.hourly.temperature_2m_lo[20], 8, "no AI hour: the blend's");
+  assert.equal(f.hourly.precipitation[20], 0.5, "a part the AI has no row for keeps the blend's hours");
+  assert.equal(f.sources.temperature_2m_lo, "ai");
+  assert.equal(f.sources.cloud_cover, "ai");
+  assert.match(f.method, /own hourly models/);
+});
+
 // ---- obce ----
 test("slug: ASCII, lowercase, dashes; duplicates numbered by population", () => {
   assert.equal(slug("Bílá Třemešná"), "bila-tremesna");
