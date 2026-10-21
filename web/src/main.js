@@ -357,7 +357,7 @@ async function showRegion(region) {
   if (stations) blocks.push(stations);
   const links = element("p", null, "links");
   const compare = element("a", t("detail.compare"));
-  compare.href = `compare.html#${view.variable}/${view.leadDay}/${view.window}/${region}`;
+  compare.href = `compare-models.html#${view.variable}/${view.leadDay}/${view.window}/${region}`;
   links.append(compare);
   if (current.level === "okres") {
     const forecast = element("a", t("detail.forecast"));
