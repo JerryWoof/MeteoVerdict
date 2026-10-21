@@ -2,16 +2,16 @@
 // at the station point (not the okres value, so no elevation error) next to what the
 // station measured. Data: data/scores/station-fc/<station>.json (`mvd station-fc`,
 // src/meteoverdict/station_fc.py: the single runs at the ~300 run stations, per day, lead
-// day D+1 and D+2, with the measured values taken the same way). MeteoVerdict AI has no
-// values published yet: data/scores/ai/fc/stations/fc/<station>.json would have the same
-// layout with the model "ai" (absent: the page says so). Pure helpers first, then the
+// day D+1 and D+2, with the measured values taken the same way). MeteoVerdict AI has its
+// own files from the private engine (ai.zip): data/scores/ai/fc/stations/fc/<station>.json
+// (the same layout with the model "ai", tmax, tmin and wind only, its own from/to: lined
+// up by date) and ai/fc/stations/err-<day>.json for the maps. Pure helpers first, then the
 // panels (station chart and the okres's stations table).
 
 import * as Plot from "@observablehq/plot";
 
 export const AI = "ai";
 export const BLEND = "blend";
-// the blend: MeteoVerdict AI publishes no station values yet (the page says so when it is chosen)
 export const DEFAULT_MODEL = BLEND;
 export const DEFAULT_LEAD = 1;
 export const LEADS = [1, 2];
@@ -98,7 +98,8 @@ const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * DAY_MS
 /**
  * The measured and forecast values of one variable over the file's days:
  * {days: ["2026-10-01", …], obs: [value|null], fc: [value|null], err: [fc − obs | null]}.
- * `ai` (the AI's file, optional) supplies the model "ai".
+ * `ai` (the AI's file, optional) supplies the model "ai"; its days are lined up by date
+ * (its window is its own).
  */
 export function compareSeries(doc, ai, model, lead, key) {
   if (!doc) return null;
@@ -107,10 +108,12 @@ export function compareSeries(doc, ai, model, lead, key) {
   const obs = doc.obs?.[key] ?? null;
   const n = Math.round((Date.parse(`${doc.to}T00:00:00Z`) - Date.parse(`${doc.from}T00:00:00Z`)) / DAY_MS) + 1;
   const days = Array.from({ length: n }, (_, i) => addDays(doc.from, i));
-  const at = (list, i) => list?.[i] ?? null;
+  const at = (list, i) => (i >= 0 ? list?.[i] ?? null : null);
+  // the AI's file starts on its own day: day i of the station file is day i + shift of it
+  const shift = source !== doc && source?.from ? Math.round((Date.parse(`${doc.from}T00:00:00Z`) - Date.parse(`${source.from}T00:00:00Z`)) / DAY_MS) : 0;
   const rows = days.map((_, i) => {
     const o = at(obs, i);
-    const f = at(fc, i);
+    const f = at(fc, i + shift);
     return { o, f, e: o == null || f == null ? null : Math.round((f - o) * 10) / 10 };
   });
   return { days, obs: rows.map((r) => r.o), fc: rows.map((r) => r.f), err: rows.map((r) => r.e), hasModel: fc != null };
@@ -179,7 +182,11 @@ export function createModelCompare({ getJson, t, language }) {
   const loadStation = (id) => once(`s|${id}`, () => getJson(`data/scores/station-fc/${id}.json`));
   const loadAi = (id) => once(`a|${id}`, () => getJson(`data/scores/ai/fc/stations/fc/${id}.json`));
 
-  const loadErrors = (day) => once(`e|${day}`, () => getJson(`data/scores/station-fc/err-${day}.json`));
+  // the AI's error files come with its station files (ai.zip)
+  const loadErrors = (day, model = state.model) =>
+    model === AI
+      ? once(`ae|${day}`, () => getJson(`data/scores/ai/fc/stations/err-${day}.json`))
+      : once(`e|${day}`, () => getJson(`data/scores/station-fc/err-${day}.json`));
 
   // `err`: the value whose model error colours the map's dots (null: the measured values)
   const state = { model: DEFAULT_MODEL, lead: DEFAULT_LEAD, key: "tmax", err: DEFAULT_ERR, wx: DEFAULT_WX };
@@ -245,6 +252,7 @@ export function createModelCompare({ getJson, t, language }) {
           );
         }
         children.push(chart(series, v, name), table(series, v), element("p", t("fc.note", { lead }), "model-note"));
+        if (model === AI) children.push(element("p", t("fc.aiSample"), "model-note"));
       } else {
         children.push(element("p", reason ?? t("fc.noStation"), "model-note missing"));
       }
@@ -369,6 +377,7 @@ export function createModelCompare({ getJson, t, language }) {
       if (!anyValue) {
         children.push(element("p", model === AI ? t("fc.noAi") : t("fc.noModelValue", { model: name, value: t(`fc.var.${key}`).toLowerCase() }), "model-note missing"));
       }
+      if (model === AI) children.push(element("p", t("fc.aiSample"), "model-note"));
       const skipped = stations.length - covered.length;
       if (skipped > 0) children.push(element("p", t("fc.skipped", { n: skipped }), "model-note"));
       box.replaceChildren(...children);
