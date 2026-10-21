@@ -67,41 +67,7 @@
         </aside>
         <aside id="okres-panel" class="map-box panel" aria-live="polite"></aside>
       </div>
-      <div id="ai-extras-block" hidden>
-        <!-- data/scores/ai/fc/verify/ (src/ai-verify-view.js): hidden until its index loads -->
-        <section id="ai-verify-section" class="ai-extras" hidden>
-          <h2 data-i18n="ai.verifyTitle">Forecast vs measured</h2>
-          <p id="ai-verify-intro" class="note"></p>
-          <form id="ai-verify-controls" class="strip standalone"></form>
-          <p id="ai-verify-legend" class="ai-verify-legend"></p>
-          <div id="ai-verify-chart" class="ai-verify-chart"></div>
-          <p id="ai-verify-mae" class="ai-verify-mae"></p>
-          <p id="ai-verify-stations" class="note"></p>
-        </section>
-        <!-- data/scores/ai/ai.json (src/ai-extras.js): hidden until it loads -->
-        <section id="ai-score-section" class="ai-extras" hidden>
-          <h2 data-i18n="ai.scoreTitle">MeteoVerdict AI vs our blend</h2>
-          <p id="ai-score-intro" class="note"></p>
-          <div id="ai-scores"></div>
-          <p class="note" data-i18n="ai.scoreExplain"></p>
-          <p id="ai-score-rule" class="note"></p>
-        </section>
-        <section id="ai-exp-section" class="ai-extras" hidden>
-          <h2 data-i18n="ai.expTitle">Experiments that work</h2>
-          <p class="note" data-i18n="ai.expIntro"></p>
-          <div id="ai-experiments" class="ai-experiments"></div>
-        </section>
-        <section id="ai-unverified-section" class="ai-extras" hidden>
-          <h2 data-i18n="ai.unverifiedTitle">Not yet verified</h2>
-          <p class="note" data-i18n="ai.unverifiedIntro"></p>
-          <div id="ai-unverified" class="ai-experiments"></div>
-        </section>
-        <section id="ai-testing-section" class="ai-extras" hidden>
-          <h2 data-i18n="ai.testingTitle">Under evaluation</h2>
-          <p class="note" data-i18n="ai.testingIntro"></p>
-          <div id="ai-testing" class="ai-experiments"></div>
-        </section>
-      </div>
+      <p id="measured-link" class="note"><a id="measured-link-a" href="measured.html" data-i18n="tv.measuredLink">How the forecast did → Measured</a></p>
     </main>
     <footer data-footer="tv" data-method="https://github.com/JerryWoof/MeteoVerdict/blob/main/docs/methodology.md#our-own-forecast-roadmap-62-63-64">
       <!-- filled in by src/footer.js (the credits and licences of every page) -->
