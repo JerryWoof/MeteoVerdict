@@ -471,6 +471,7 @@ function drawAll() {
     showImage("sat-b", null);
     showImage("echotop", null);
     map.getSource("cells")?.setData({ type: "FeatureCollection", features: [] });
+    renderWhen(); // "no images for this day"
     return true;
   }
   const done = drawRadar();
@@ -1162,7 +1163,9 @@ let loadToken = 0;
 async function load(fresh = false) {
   const token = ++loadToken;
   const nextBase = sourceUrl(view.day, LIVE);
-  const next = await getJson(`${nextBase}index.json`, fresh);
+  // a day missing from the archive's list (typed into the date field): no request, the page says there are no images
+  const archived = view.day === "live" || !days.length || days.includes(view.day);
+  const next = archived ? await getJson(`${nextBase}index.json`, fresh) : null;
   if (token !== loadToken) return false;
   if (!next && fresh && nextBase === base && index) return false;
   base = nextBase;
