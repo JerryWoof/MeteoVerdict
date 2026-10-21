@@ -3483,3 +3483,11 @@ summary:focus-visible,
     text-align: center;
   }
 }
+
+/* page changes cross-fade in browsers that support it, with the header kept still */
+@view-transition {
+  navigation: auto;
+}
+header {
+  view-transition-name: site-header;
+}
