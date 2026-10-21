@@ -2,6 +2,8 @@
 // test (`mvd obce-loso`, data/scores/obce-loso.json; docs/methodology.md) on the
 // methodology page: the key numbers come from the file, none is written into the text.
 
+import { dayCount } from "./view.js";
+
 export const FILE = "data/scores/obce-loso.json";
 export const ANCHOR = "obce-loso";
 const VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitation_daily"];
@@ -92,7 +94,7 @@ export function losoBlocks(summary, language, t) {
     heading,
     ["p", t("obceLoso.intro", {
       from: dateText(summary.from, language), to: dateText(summary.to, language),
-      days: summary.days, stations: summary.stations,
+      days: dayCount(summary.days, t), stations: summary.stations,
     })],
     ["table", {
       head: [t("obceLoso.head.variable"), t("obceLoso.head.mae"), t("obceLoso.head.okres"), t("obceLoso.head.median"), t("obceLoso.head.mountain")],
