@@ -954,7 +954,6 @@ export const STRINGS = {
     "footer.processed": "Hodnoty zpracoval MeteoVerdict (výběr bodů stanic a okresů, převod jednotek, hodnocení a kombinace modelů)",
     "footer.radarProcessed": "Snímky oříznul a převedl MeteoVerdict; výšku odrazů, pohyb a bouřkové buňky z nich odvodil",
     "footer.ours": "Naše data",
-    "language.switch": "English",
     "site.report": "Měsíční report",
     "report.title": "Měsíční report přesnosti: {month}",
     "report.intro": "Který model předpovídal Česko v měsíci {month} nejlépe? Počítáno z denních skóre proti stanicím ČHMÚ, stejným způsobem a na stejném společném vzorku jako na stránce Porovnání, jen za jediný měsíc.",
@@ -1955,7 +1954,6 @@ export const STRINGS = {
     "footer.processed": "Values processed by MeteoVerdict (extraction at the stations and okres points, unit conversion, scoring and combining the models)",
     "footer.radarProcessed": "Frames cropped and converted by MeteoVerdict; echo tops, motion and storm cells derived from them",
     "footer.ours": "Our data",
-    "language.switch": "Česky",
     "site.report": "Monthly report",
     "report.title": "Monthly accuracy report: {month}",
     "report.intro": "Which model forecast Czechia best in {month}? Computed from the daily scores against the ČHMÚ stations, in the same way and on the same shared sample as the Compare page, for a single month.",
@@ -2088,11 +2086,12 @@ export function setUpLanguage() {
   for (const footer of document.querySelectorAll("footer[data-footer]")) {
     renderFooter(footer, t);
   }
-  const toggle = document.getElementById("language");
-  if (toggle) {
-    toggle.textContent = t("language.switch");
-    toggle.addEventListener("click", () => {
-      storeLanguage(language === "cs" ? "en" : "cs");
+  for (const button of document.querySelectorAll("#language [data-lang]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.lang === language));
+    button.addEventListener("click", () => {
+      if (button.dataset.lang === language) return;
+      storeLanguage(button.dataset.lang);
+      // a reload keeps the URL and hash; the page script reads the stored choice
       window.location.reload();
     });
   }
