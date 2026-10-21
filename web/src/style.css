@@ -3192,3 +3192,31 @@ footer .site-links {
   color: var(--muted);
   font-weight: 400;
 }
+
+/* the Stations map's colour choice and legend: a box on the map, as the Weather map's */
+#kinds-box {
+  width: 17rem;
+  max-height: calc(100% - 2.4rem);
+  overflow-y: auto;
+}
+#kinds-box .station-map-legend {
+  flex-direction: column;
+  margin-top: 0.4rem;
+}
+.station-map-note {
+  margin: 0.4rem 0 0;
+}
+/* a station's or okres's panel: wide enough for the five values of the model chart on one line */
+#station-panel {
+  width: 24rem;
+  max-width: calc(100% - 4.4rem);
+}
+.model-compare .model-var button {
+  padding: 0.25rem 0.55rem;
+}
+@media (max-width: 700px) {
+  .model-compare .model-var button {
+    padding: 0.3rem 0.35rem;
+    font-size: 0.8rem;
+  }
+}
