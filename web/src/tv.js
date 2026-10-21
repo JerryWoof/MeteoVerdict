@@ -36,7 +36,8 @@ export const DEFAULT_SHOWN = ["temperature", "precipitation"];
 const SHORT = { temperature: "t", precipitation: "p", wind: "w", cloud: "c", gust: "g", sunshine: "s" };
 export const TIME_ZONE = "Europe/Prague";
 
-// okresy whose seat is a kraj capital (and Praha): their labels win when markers collide
+// okresy whose seat is a kraj capital (and Praha): their labels win when markers collide;
+// roughly by the town's size, biggest first (a phone's whole-country view shows them in this order)
 export const CAPITALS = [
   "CZ0100", "CZ0642", "CZ0806", "CZ0323", "CZ0513", "CZ0712", "CZ0427", "CZ0521",
   "CZ0311", "CZ0532", "CZ0724", "CZ0632", "CZ0412",
@@ -314,6 +315,28 @@ export function measuredRedirect(hash, todayIso) {
   const rest = [part, colour, /^CZ/.test(values ?? "") ? undefined : values].filter(Boolean);
   while (rest.length < 3) rest.push(["day", "temperature", "tp"][rest.length]);
   return `#${[day, ...rest, layer].join("/")}`;
+}
+
+/**
+ * Where a forecast-map hash belongs when it is not this page's: the old "#CZ0423" (the
+ * detailed forecast per okres, now forecast-detail.html) or a past day (the measured
+ * page, measuredRedirect). The address to open, or null to stay.
+ */
+export function leaveFor(hash, todayIso) {
+  if (/^#CZ\w{4}$/.test(hash ?? "")) return `forecast-detail.html${hash}`;
+  const measured = measuredRedirect(hash, todayIso);
+  return measured ? `measured.html${measured}` : null;
+}
+
+/**
+ * How a change of the view goes into the browser's history: "push" (Back returns to the
+ * view before) for another day, okres or obec, the steps people retrace; "replace" for
+ * the part of the day, the colour and the values, which would only fill the history.
+ * `before` and `after` are views as viewHash takes them.
+ */
+export function historyMode(before, after) {
+  const differs = (key) => (before?.[key] ?? null) !== (after?.[key] ?? null);
+  return ["day", "okres", "obec"].some(differs) ? "push" : "replace";
 }
 
 export function viewHash(view) {

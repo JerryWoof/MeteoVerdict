@@ -19,7 +19,7 @@ import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, currentPart, dayLabel, displayName, ease,
   iconName, labelFor, lerpRow, mixColor, okresColours, parseOutlook, parseView,
   placeMarkers, playSteps, rampKey, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary,
-  today, viewHash, measuredRedirect, gustOver, gustOverText, chmiNotice,
+  today, viewHash, gustOver, gustOverText, chmiNotice, CAPITALS, historyMode, leaveFor, measuredRedirect,
 } from "./tv.js";
 import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
 import { aiPath } from "./ai-source.js";
@@ -45,8 +45,10 @@ const FILL_OPACITY = ["step", ["zoom"], 0.85, BASE_ZOOM, 0.45, MIN_ZOOM, 0.2];
 const HOURS = { night: "0–6", morning: "6–12", afternoon: "12–18", evening: "18–24", day: "0–24" };
 
 // the detailed forecast per okres used to live at forecast.html#CZ0423 (now
-// forecast-detail.html): send those old links there
-if (/^#CZ\w{4}$/.test(window.location.hash)) window.location.replace(`${DETAIL}${window.location.hash}`);
+// forecast-detail.html), the past days moved to the measured page: such links open there
+// (also when pasted into the address bar of the open page, see applyHash)
+const elsewhere = leaveFor(window.location.hash, today(Date.now()));
+if (elsewhere) window.location.replace(elsewhere);
 
 const map = new MapLibreMap({
   container: "map",
@@ -313,13 +315,29 @@ function paintMarkers(outlook) {
   declutter();
 }
 
+// phones: zoomed out to the whole country the 77 markers of a narrow map would cover each
+// other and the okresy: only the kraj towns' (tv.js CAPITALS) until zoomed in by at least
+// half a step (one press of "+" is a whole step). A tap on any okres opens it all the same.
+const PHONE_WIDTH = 700;
+const ALL_MARKERS_ZOOM_IN = 0.5;
+function overview() {
+  if (window.innerWidth > PHONE_WIDTH) return false;
+  const whole = map.cameraForBounds(BOUNDS, { padding: 20 })?.zoom;
+  return whole != null && map.getZoom() < whole + ALL_MARKERS_ZOOM_IN;
+}
+
 function declutter() {
+  const onlyTowns = overview();
   const boxes = [...markers]
     .filter(([, m]) => m.el.style.display !== "none")
+    .filter(([code]) => !onlyTowns || CAPITALS.includes(code) || code === state.okres)
     .map(([code, m]) => {
       m.el.hidden = false;
       const p = map.project(m.lngLat);
-      return { code, x: p.x, y: p.y, w: m.el.offsetWidth, h: m.el.offsetHeight };
+      const box = { code, x: p.x, y: p.y, w: m.el.offsetWidth, h: m.el.offsetHeight };
+      // only the kraj towns: the biggest first (CAPITALS's order, Praha first), as many as fit
+      if (onlyTowns && code !== state.okres) box.priority = 1 + CAPITALS.indexOf(code);
+      return box;
     });
   const shown = placeMarkers(boxes, 4, state.okres);
   // test: zoomed in, the obce stand in for their okres's marker
@@ -737,8 +755,10 @@ let padding = null;
 
 /** Fit Czechia beside the okres panel on wide screens, and back when it closes. */
 const movedByUser = userMoved(map);
+// up to 1024 px the panel sits under the map (style.css), so the map never moves for it
+const PANEL_BESIDE = 1024;
 function fitView() {
-  const right = window.innerWidth > 900 && state.okres ? panelRoom() : 20;
+  const right = window.innerWidth > PANEL_BESIDE && state.okres ? panelRoom() : 20;
   if (padding && padding.right === right) return;
   // someone moved the map themselves: leave it where they put it
   if (padding && movedByUser()) return;
@@ -752,9 +772,24 @@ function paintFill(colours) {
   map.setPaintProperty("okresy-fill", "fill-color", pairs.length ? ["match", ["get", "code"], ...pairs, NEUTRAL] : NEUTRAL);
 }
 
-/** Draw the current state at once (after a click, or at the end of a transition). */
-function update(change = {}, fromPlay = false) {
+/**
+ * Draw the current state at once (after a click, or at the end of a transition). The
+ * address follows: another day, okres or obec as a new step of the browser's history (Back
+ * returns to it), anything else in place (tv.js historyMode); `replace` keeps it in place
+ * (opening a link, Back and Forward themselves).
+ */
+function update(change = {}, { fromPlay = false, replace = false } = {}) {
+  // a past day ("Yesterday", the first tab) is what was measured: the measured page shows
+  // that day, as a link or a reload of that day's address would
+  if (!fromPlay && change.day && change.day < today(Date.now())) {
+    const hash = measuredRedirect(viewHash({ ...state, ...change, obec: null }), today(Date.now()));
+    if (hash) {
+      window.location.assign(`measured.html${hash}`);
+      return;
+    }
+  }
   if (!fromPlay) stopPlay();
+  const before = { ...state, obec: panelObec };
   // another okres (or none) starts on the forecast the map shows
   if ("okres" in change && change.okres !== state.okres) panelModel = panelStart(change.okres);
   // test: an obec's panel (change.obec) or its okres's; any other okres change closes it
@@ -765,7 +800,12 @@ function update(change = {}, fromPlay = false) {
   }
   const { obec: _obec, ...rest } = change;
   state = { ...state, ...rest };
-  window.history.replaceState(null, "", viewHash({ ...state, obec: panelObec }));
+  const after = { ...state, obec: panelObec };
+  const hash = viewHash(after);
+  if (hash !== window.location.hash) {
+    if (!replace && !fromPlay && historyMode(before, after) === "push") window.history.pushState(null, "", hash);
+    else window.history.replaceState(null, "", hash);
+  }
   const view = shownView();
   renderAiBlock();
   renderWhen(outlook);
@@ -828,7 +868,7 @@ async function transition(target, token) {
     }
     if (f >= 1) break;
   }
-  update({}, true);
+  update({}, { fromPlay: true });
   return true;
 }
 
@@ -1035,6 +1075,45 @@ async function chooseObec(place) {
   revealPanel();
 }
 
+/** The view of a hash (tv.js parseView), with this page's defaults: today and its part now. */
+function viewOf(hash) {
+  const now = Date.now();
+  const first = outlook.days.includes(today(now)) ? today(now) : outlook.days[0];
+  const view = parseView(hash, outlook, {
+    day: first,
+    part: first === today(now) ? currentPart(now) : "afternoon",
+  });
+  // gust and sunshine are measured values (the measured page), not the forecast's
+  if (!LAYERS.includes(view.colour)) view.colour = "temperature";
+  view.shown = view.shown.filter((l) => LAYERS.includes(l));
+  return view;
+}
+
+/** A link to an obec ("#okres/obec", from the home page): its panel open, the map on it. */
+async function openObec({ okres, obec: name }) {
+  if (!okres || !name) return;
+  const place = (await obceOf(okres))?.doc.places.find((p) => p.name === name);
+  if (!place) return;
+  if (!obceShown()) await setMapModel(COMBINED);
+  update({ okres, obec: name }, { replace: true });
+  goToObec(map, [place.lon, place.lat]);
+}
+
+/** The view of the address now (pasted, or Back and Forward), unless it is shown already. */
+async function applyHash() {
+  const elsewhere = leaveFor(window.location.hash, today(Date.now()));
+  if (elsewhere) {
+    window.location.replace(elsewhere);
+    return;
+  }
+  const view = viewOf(window.location.hash);
+  const { obec, ...rest } = view;
+  if (viewHash(view) === viewHash({ ...state, obec: panelObec })) return;
+  // the obec's panel once its okres's obce are loaded (openObec); until then the okres's
+  update({ ...rest, obec: null }, { replace: true });
+  await openObec(view);
+}
+
 async function main() {
   outlook = parseOutlook(await getJson("data/scores/outlook.json"));
   const status = document.getElementById("status");
@@ -1049,15 +1128,7 @@ async function main() {
       time: new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Prague" }).format(generated),
     })
     : "";
-  const now = Date.now();
-  const first = outlook.days.includes(today(now)) ? today(now) : outlook.days[0];
-  state = parseView(window.location.hash, outlook, {
-    day: first,
-    part: first === today(now) ? currentPart(now) : "afternoon",
-  });
-  // gust and sunshine are measured values (the measured page), not the forecast's
-  if (!LAYERS.includes(state.colour)) state.colour = "temperature";
-  state.shown = state.shown.filter((l) => LAYERS.includes(l));
+  state = viewOf(window.location.hash);
   // phones: the box starts folded so the map stays visible
   const show = document.getElementById("show");
   if (window.innerWidth <= 700) show.open = false;
@@ -1080,19 +1151,14 @@ async function main() {
   await mapLoaded;
   addLayers();
   buildMarkers(outlook);
-  update();
-  // a link to an obec ("#okres/obec", from the home page): its panel open, the map on it
-  if (state.okres && state.obec) {
-    const { okres, obec: name } = state;
-    const place = (await obceOf(okres))?.doc.places.find((p) => p.name === name);
-    if (place) {
-      if (!obceShown()) await setMapModel(COMBINED);
-      update({ okres, obec: name });
-      goToObec(map, [place.lon, place.lat]);
-    }
-  }
+  update({}, { replace: true });
+  await openObec(state);
   // a link to an okres or an obec: its panel in sight on phones too
   if (state.okres) revealPanel();
+  // an address pasted into the open page, and Back and Forward through the days, okresy
+  // and obce clicked (update pushes those): the view of that address, without a reload
+  window.addEventListener("hashchange", applyHash);
+  window.addEventListener("popstate", applyHash);
   // test: the obce of the okresy in view, loaded once zoomed in, and the search above
   map.on("moveend", loadObceInView);
   loadObceInView();
@@ -1113,7 +1179,4 @@ async function main() {
   defaultToAi();
 }
 
-// the past days moved to the measured page: an old link to a past day opens it there
-const measured = measuredRedirect(window.location.hash, today(Date.now()));
-if (measured) window.location.replace(`measured.html${measured}`);
-else main();
+if (!elsewhere) main();
