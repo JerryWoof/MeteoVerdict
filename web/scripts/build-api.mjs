@@ -43,6 +43,7 @@ for (const okres of okresy) {
     const ai = aiOkresDoc({ okres, outlook, hourly, aiForecast, aiOutlook, meta });
     if (ai) {
       writeFileSync(join(out, "ai", "okresy", `${okres.code}.json`), JSON.stringify(ai));
+      writeFileSync(join(out, "ai", "okresy", `${okres.code}.csv`), okresCsv(ai));
       aiCount++;
       // the AI's obce (a test, as the combined ones): on the axis and parts of the AI's okres file
       const aiObceFile = read(`ai/fc/forecast/obce-${okres.code}.json`);
