@@ -1,7 +1,7 @@
 // The AI heatmap's hourly 100 m map (heatmap.html): the browser downloads a few PNGs and one
-// index.json (data/scores/ai/fc/heat/) once and combines them for any hour, as the index's
-// `formula` says. Everything here is plain arithmetic on the published files; image rows are
-// in the map's (Web-Mercator) spacing.
+// index.json (data/scores/ai/fc/heat/) once and combines them for any hour (heatPixelValue below).
+// Everything here is plain arithmetic on the published files; image rows are in the map's
+// (Web-Mercator) spacing.
 
 import { temp100mPixel } from "./ai-temp100m.js";
 import { parseStamp, toStamp } from "./radar.js";
