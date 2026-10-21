@@ -7,7 +7,7 @@ import {
   biasByElevation, blendTestLines, blendTestRows, blendTestVariable, blendVerdict, blendVerdicts, fmt, singleModelVerdicts,
   okresVerdictCounts, intervalRows, isAladin, leadHourBasis, leadHourLines, leadHourRanking, leadHourRunHours,
   leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, unpublishedHours,
-  RANK_BY, STATION_SETS, hasValues, sortByEts, dayTick, numberTick, tipText,
+  RANK_BY, STATION_SETS, hasValues, sortByEts, dayTick, numberTick, tipText, compareHash, compareIsStep, compareViewFromHash,
 } from "./compare.js";
 import { records } from "./data.js";
 
@@ -399,4 +399,30 @@ test("chart text in the page language", () => {
   assert.equal(dayTick("cs")(new Date("2026-09-13T12:00:00Z")), "13. září");
   assert.equal(dayTick("en")(new Date("2026-09-13T12:00:00Z")), "Sep 13");
   assert.equal(tipText("A", null, "", "B"), "A\nB");
+});
+
+test("compareViewFromHash / compareHash: the view in the URL, back and forth", () => {
+  const view = compareViewFromHash("#wind_speed_10m/3/90d/CZ0642/temperature_2m/main/ets1/6h");
+  assert.equal(compareHash(view), "#wind_speed_10m/3/90d/CZ0642/temperature_2m/main/ets1/6h");
+  assert.equal(view.leadGiven, true);
+  // the last three only when not the defaults; an old link gets the blend test at its variable
+  assert.equal(compareHash(compareViewFromHash("#precipitation_24h/2/all")), "#precipitation_24h/2/all/cz/precipitation_daily");
+  // a band of hours with a band-only variable
+  const band = compareViewFromHash("#wind_gusts_10m/h13-24/all/cz");
+  assert.equal(band.variable, "wind_gusts_10m");
+  assert.equal(band.leadDay, "h13-24");
+  // garbage: the defaults, no lead given (the page picks the data's default lead)
+  const bogus = compareViewFromHash("#bogus");
+  assert.equal(bogus.leadGiven, false);
+  assert.equal(bogus.region, "cz");
+  assert.equal(compareHash(bogus), compareHash(compareViewFromHash("")));
+  assert.equal(compareViewFromHash("#temperature_2m/1/90d/cz/x/y/z/w").stations, "all");
+});
+
+test("compareIsStep: a new variable or region is a history step, the rest is not", () => {
+  const a = compareViewFromHash("#temperature_2m/1/90d/cz");
+  assert.equal(compareIsStep(null, a), false);
+  assert.equal(compareIsStep(a, { ...a, leadDay: 2, window: "all", stations: "main" }), false);
+  assert.equal(compareIsStep(a, { ...a, region: "CZ0642" }), true);
+  assert.equal(compareIsStep(a, { ...a, variable: "wind_speed_10m" }), true);
 });

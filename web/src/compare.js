@@ -1,6 +1,8 @@
 // The model comparison page: ranking for Czechia, a kraj or an okres, the interval of
 // each model's difference to the best, MAE by lead day, and bias by elevation class.
 
+import { parseHash } from "./view.js";
+
 const ELEVATION_ORDER = ["lowland", "upland", "mountain"];
 
 /** The level of a region code: "cz", a kraj (CZ064) or an okres (CZ0642, CZ020A). */
@@ -496,3 +498,40 @@ export function maeByBand(rows, region = "cz") {
 export function defaultLead(doc) {
   return isBand(doc?.default_band) ? doc.default_band : 1;
 }
+
+// --- the view in the URL: #variable/lead/window/region/blend-test variable/stations/sort/set
+// The first four drive the model ranking; the fifth only the blend-test section; the
+// last three only the ranking table (and, for the stations and the set, the charts below
+// it). The lead is a lead day (1…5, D+N scores) or a band of hours ahead (h13-24, run by
+// run). Links from before the fifth existed open the blend test at the ranking's
+// variable, as then; links without the last ones show all stations sorted by MAE.
+
+/** The view of a hash; `leadGiven` false when the hash names no lead (the page picks the data's default). */
+export function compareViewFromHash(hash) {
+  const view = parseHash(hash ?? "");
+  const parts = (hash ?? "").replace(/^#/, "").split("/");
+  const lead = parseLead(parts[1]);
+  view.leadGiven = lead != null;
+  if (lead != null) view.leadDay = lead;
+  // the band variables that are no D+N variable (hourly precipitation, gusts)
+  if (isBand(view.leadDay) && BAND_VARIABLES.includes(parts[0])) view.variable = parts[0];
+  view.region = parts[3] || "cz";
+  view.blendVariable = BLEND_TEST_VARIABLES.includes(parts[4]) ? parts[4] : blendTestVariable(view.variable);
+  view.stations = STATION_SETS.includes(parts[5]) ? parts[5] : "all";
+  view.rankBy = [...RANK_BY, ...BAND_RANK_BY].includes(parts[6]) ? parts[6] : "mae";
+  view.set = parts[7] === "6h" ? "6h" : "hourly";
+  if (BAND_WINDOWS.includes(parts[2])) view.window = parts[2];
+  return view;
+}
+
+/** The hash of a view (the last three only when not the defaults). */
+export function compareHash(view) {
+  const base = `#${view.variable}/${view.leadDay}/${view.window}/${view.region}/${view.blendVariable}`;
+  const extra = view.stations !== "all" || view.rankBy !== "mae" || view.set !== "hourly"
+    ? `/${view.stations}/${view.rankBy}${view.set !== "hourly" ? `/${view.set}` : ""}`
+    : "";
+  return base + extra;
+}
+
+/** Is going from view `a` to view `b` a step of its own in the browser's history (another variable or region)? */
+export const compareIsStep = (a, b) => Boolean(a) && (a.variable !== b.variable || a.region !== b.region);

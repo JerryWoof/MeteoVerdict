@@ -11,8 +11,10 @@ import {
   leadHourVariable, levelOf, maeByLead, rankingTable, regionList, regionSummary, singleModelVerdicts, unpublishedHours,
   RANK_BY, STATION_SETS, hasValues, sortByEts,
   BAND_RANK_BY, BAND_VARIABLES, BAND_WINDOWS, LEAD_BANDS, LEAD_DAYS, bandBasis, bandRecords, bandSets, bandVariable,
-  bandsIn, dayVariable, defaultLead, isBand, leadLabel, maeByBand, parseLead, numberTick, tipText,
+  bandsIn, compareHash, compareIsStep, compareViewFromHash, dayVariable, defaultLead, isBand, leadLabel, maeByBand, parseLead,
+  numberTick, tipText,
 } from "./compare.js";
+import { hashHistory } from "./hash-history.js";
 import { binLabel, count as countIn, etsColor, etsTextColor, farmChoices, farmGrid, plain, score as scoreIn } from "./farm.js";
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
 import { setUpLanguage } from "./i18n.js";
@@ -20,7 +22,7 @@ import { statusText } from "./status.js";
 import { setUpTips } from "./tip-popover.js";
 import { displayName } from "./tv.js";
 import {
-  availableLeadDays, availableVariables, availableWindows, dayCount, filesWindow, formatRange, parseHash, pickWindow, pluralForm,
+  availableLeadDays, availableVariables, availableWindows, dayCount, filesWindow, formatRange, pickWindow, pluralForm,
   stationCount, windowLabel,
 } from "./view.js";
 
@@ -88,35 +90,15 @@ const width = () => {
 };
 const PRECIPITATION = new Set(["precipitation_24h", "precipitation_daily"]);
 
-// --- view, kept in the URL: #variable/lead/window/region/blend-test variable/stations/sort/set
-// The first four drive the model ranking; the fifth only the blend-test section; the
-// last three only the ranking table (and, for the stations and the set, the charts below
-// it). The lead is a lead day (1…5, D+N scores) or a band of hours ahead (h13-24, run by
-// run). Links from before the fifth existed open the blend test at the ranking's
-// variable, as then; links without the last ones show all stations sorted by MAE.
-function readView() {
-  const view = parseHash(window.location.hash);
-  const parts = window.location.hash.replace(/^#/, "").split("/");
-  const lead = parseLead(parts[1]);
-  view.leadGiven = lead != null;
-  if (lead != null) view.leadDay = lead;
-  // the band variables that are no D+N variable (hourly precipitation, gusts)
-  if (isBand(view.leadDay) && BAND_VARIABLES.includes(parts[0])) view.variable = parts[0];
-  view.region = parts[3] || "cz";
-  view.blendVariable = BLEND_TEST_VARIABLES.includes(parts[4]) ? parts[4] : blendTestVariable(view.variable);
-  view.stations = STATION_SETS.includes(parts[5]) ? parts[5] : "all";
-  view.rankBy = [...RANK_BY, ...BAND_RANK_BY].includes(parts[6]) ? parts[6] : "mae";
-  view.set = parts[7] === "6h" ? "6h" : "hourly";
-  if (BAND_WINDOWS.includes(parts[2])) view.window = parts[2];
-  return view;
-}
-
+// --- the view, kept in the URL (compare.js compareViewFromHash): another variable or region
+// is a step in the browser's history (Back returns to the one before), the other choices
+// replace the current entry
+const readView = () => compareViewFromHash(window.location.hash);
+let address = null; // hashHistory, set up by main()
+let written = null; // the view last put in the address (null: the next write replaces)
 function writeView(view) {
-  const base = `#${view.variable}/${view.leadDay}/${view.window}/${view.region}/${view.blendVariable}`;
-  const extra = view.stations !== "all" || view.rankBy !== "mae" || view.set !== "hourly"
-    ? `/${view.stations}/${view.rankBy}${view.set !== "hourly" ? `/${view.set}` : ""}`
-    : "";
-  window.history.replaceState(null, "", base + extra);
+  address?.write(compareHash(view), compareIsStep(written, view));
+  written = { ...view };
 }
 
 // --- the ranking by lead band (leads-bands-<window>[-okres].json; hidden until it exists)
@@ -1097,6 +1079,21 @@ async function main() {
       render();
     });
   }
+  // Back/Forward and a link pasted on the open page: that view, its hash normalised in place
+  address = hashHistory(() => {
+    const next = readView();
+    next.window = pickWindow(next.window, windows);
+    if (!next.leadGiven) next.leadDay = defaultLead(bands90.doc);
+    if (isBand(next.leadDay) && !bandList.includes(next.leadDay)) next.leadDay = 1;
+    if (!known.has(next.region)) next.region = "cz";
+    Object.assign(view, next);
+    written = null;
+    if (blendView.variable !== view.blendVariable) {
+      blendView.variable = view.blendVariable;
+      renderBlendTest(names).then(() => (view.blendVariable = blendView.variable));
+    }
+    render();
+  });
   await render();
   renderFarm(names);
   await mapLoaded;
