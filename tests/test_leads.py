@@ -467,7 +467,13 @@ def test_band_scores_fair_sets_intervals_and_bias():
         .alias("wind_gusts_10m")
     )
     observed = pl.concat([band_obs(MAIN, days), band_obs(OTHER, days)])
-    stations = pl.DataFrame({"id": [MAIN, OTHER], "kraj_code": ["CZ010", "CZ010"]})
+    stations = pl.DataFrame(
+        {
+            "id": [MAIN, OTHER],
+            "kraj_code": ["CZ010", "CZ010"],
+            "okres_code": ["CZ0100", "CZ0100"],
+        }
+    )
     models = [model("good"), model("bad"), model("six", step=6)]
     sums, info = leads.band_sums(rows, observed, models, chunk_runs=4)
     assert info["reach"] == {"bad": 72, "good": 72, "six": 72}
@@ -504,7 +510,10 @@ def test_band_scores_fair_sets_intervals_and_bias():
     # station kinds; the kraj has two stations only: no kraj rows
     assert get("good", region="main")["stations"] == 1
     assert get("good", region="other")["n"] == days * 6
-    assert set(table["level"]) == {"cz", "network"}
+    assert set(table["level"]) == {"cz", "network", "okres"}
+    # an okres needs one station only; same pairs as Czechia here
+    okres = get("good", region="CZ0100")
+    assert okres["stations"] == 2 and okres["mae"] == pytest.approx(good["mae"])
     assert list(table.columns) == leads.BAND_COLUMNS
 
 
@@ -532,7 +541,11 @@ def test_band_rankings_windows_documents_and_default():
     docs = leads.band_documents(
         table, facts, "all", datetime(2026, 10, 17, tzinfo=UTC), {"cz": "Česko"}, {"a": "A"}
     )
-    assert set(docs) == {"leads-bands-all.json", "leads-bands-all-kraj.json"}
+    assert set(docs) == {
+        "leads-bands-all.json",
+        "leads-bands-all-kraj.json",
+        "leads-bands-all-okres.json",
+    }
     doc = docs["leads-bands-all.json"]
     assert doc["columns"] == leads.BAND_COLUMNS
     assert doc["models"] == {"a": "A", "b": "b"}
@@ -540,6 +553,7 @@ def test_band_rankings_windows_documents_and_default():
     assert doc["preliminary_days"] == leads.PRELIMINARY_DAYS
     assert doc["first_run"] == "2026-08-01T00:00Z"
     assert docs["leads-bands-all-kraj.json"]["rows"] == []
+    assert docs["leads-bands-all-okres.json"]["rows"] == []  # stations without okres_code
     assert len(doc["rows"]) == table.height
 
 
