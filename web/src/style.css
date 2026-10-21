@@ -3168,10 +3168,22 @@ footer .site-links {
 
 /* Stations: a long panel scrolls inside the map's height instead of stretching the page */
 @media (min-width: 701px) {
-  #station-panel {
+  #station-panel,
+  .measured-map-wrap > #okres-panel {
     max-height: calc(var(--map-height) - 1.5rem);
     overflow-y: auto;
+    overscroll-behavior: contain;
+    box-sizing: border-box;
   }
+}
+/* the close button stays in view while a long panel scrolls (as the home map's) */
+#station-panel .close,
+.measured-map-wrap > #okres-panel .close {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--box-bg);
+  border-radius: 4px;
 }
 
 /* the home map's okres panel: 40% of the map's width (rankings and tables fit), a long one
@@ -3263,7 +3275,11 @@ figure.forecast-chart {
 }
 /* a station's or okres's panel: wide enough for the five values of the model chart on one line */
 #station-panel {
-  width: 24rem;
+  width: clamp(24rem, 40%, 30rem);
+  max-width: calc(100% - 4.4rem);
+}
+.measured-map-wrap > #okres-panel {
+  width: clamp(21rem, 40%, 30rem);
   max-width: calc(100% - 4.4rem);
 }
 .model-compare .model-var button {
@@ -3395,7 +3411,8 @@ summary:focus-visible,
   }
 }
 @media (max-width: 700px) {
-  #station-panel {
+  #station-panel,
+  #okres-panel {
     width: auto;
     max-width: none;
   }
