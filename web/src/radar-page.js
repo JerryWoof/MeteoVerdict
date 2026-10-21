@@ -26,7 +26,7 @@ import { BASEMAP_ATTRIBUTION, GLYPHS, PLACE_LAYERS, baseLayers, basemapSources, 
 import { placeSearch } from "./place-search.js";
 import { placeLabel, placesLoader } from "./places.js";
 import placesUrl from "./data/obce.json?url";
-import { locateErrorKey } from "./home-place.js";
+import { addLocateControl, locationDot } from "./locate-control.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -72,6 +72,15 @@ const map = new MapLibreMap({
   attributionControl: { compact: true, customAttribution: `Radar: ČHMÚ (CC BY 4.0) · Boundaries, places: ČÚZK (CC BY 4.0) · ${BASEMAP_ATTRIBUTION}` },
 });
 map.addControl(new NavigationControl({ showCompass: false }));
+const myDot = locationDot(map);
+addLocateControl(map, {
+  t,
+  places: () => loadPlaces(),
+  onFix: ({ lat, lon }) => {
+    myDot.show(lon, lat);
+    map.easeTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 8.5) });
+  },
+});
 // the style, not its tiles: "load" would wait for every base-map tile before the radar
 const mapLoaded = new Promise((resolve) => map.once("style.load", resolve));
 
@@ -770,28 +779,6 @@ function pointChart(series, anchor, live) {
   return chart;
 }
 
-function locateMe(button) {
-  if (!navigator.geolocation) {
-    button.nextSibling.textContent = t("locate.unsupported");
-    return;
-  }
-  const note = button.nextSibling;
-  note.textContent = t("radar.point.locating");
-  navigator.geolocation.getCurrentPosition(
-    (position) => {
-      note.textContent = "";
-      const { longitude: lon, latitude: lat } = position.coords;
-      setPoint(lon, lat);
-      map.easeTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 8) });
-    },
-    (error) => {
-      // our own sentence: the browser's error text is English whatever the page language
-      note.textContent = t(locateErrorKey(error));
-    },
-    { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 },
-  );
-}
-
 // --- controls ------------------------------------------------------------------------------
 const dateFormat = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", {
   weekday: "short", day: "numeric", month: language === "cs" ? "long" : "short", timeZone: "Europe/Prague",
@@ -1013,11 +1000,7 @@ function scaleBar(colours, unit, label) {
 
 function renderPointHint() {
   const hint = document.getElementById("point-hint");
-  const button = element("button", t("radar.point.locate"), "locate");
-  button.type = "button";
-  const note = element("span", "", "muted");
-  button.addEventListener("click", () => locateMe(button));
-  hint.replaceChildren(element("span", `${t("radar.point.hint")} `), button, note, placeSearch({ t, load: loadPlaces, choose: choosePlace }));
+  hint.replaceChildren(element("span", `${t("radar.point.hint")} `), placeSearch({ t, load: loadPlaces, choose: choosePlace }));
 }
 
 // --- find a place: every obec with its okres (places.js, data/obce.json) --------------------
