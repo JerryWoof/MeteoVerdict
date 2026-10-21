@@ -13,6 +13,6 @@ test("no scores yet", () => {
 
 test("scores and update date", () => {
   const meta = { generated: "2026-10-12T05:30:00+00:00", as_of: "2026-10-11" };
-  assert.equal(statusText(meta, t), "Scores up to 2026-10-11 · updated 2026-10-12");
-  assert.equal(statusText(meta, translator("cs")), "Skóre do 2026-10-11 · aktualizováno 2026-10-12");
+  assert.equal(statusText(meta, t), "Scores up to 11 Oct 2026 · updated 12 Oct 2026");
+  assert.equal(statusText(meta, translator("cs")), "Skóre do 11. 10. 2026 · aktualizováno 12. 10. 2026");
 });
