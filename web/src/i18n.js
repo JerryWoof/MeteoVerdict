@@ -852,7 +852,6 @@ export const STRINGS = {
     "compare.rankingIn": "Pořadí modelů: {region}",
     "compare.leadBands": "Hodiny dopředu (z každého běhu)",
     "compare.leadDays": "Dny dopředu",
-    "compare.okresyDaysOnly": "Okresy (jen pro D+1 až D+5)",
     "bandVariable.temperature_2m": "Teplota (2 m)",
     "bandVariable.wind_speed_10m": "Vítr (10 m)",
     "bandVariable.precipitation": "Srážky za hodinu",
@@ -863,7 +862,7 @@ export const STRINGS = {
       "{band}: každá hodina tohoto pásma z běhů 00, 06, 12 a 18 UTC proti měření ČHMÚ v čase, pro který platí; {runs} běhů, {stations} stanic, {days} dní.",
     "compare.preliminary": "Předběžné: jen {days} dní.",
     "compare.bandFewStations":
-      "Tento kraj má mezi asi 100 stanicemi, na kterých hodnotíme jednotlivé běhy, méně než 3 stanice, pro pásma hodin ho proto nehodnotíme. Vyberte jiný kraj, Česko, nebo D+1 až D+5.",
+      "V tomto okrese není mezi asi 100 stanicemi, na kterých hodnotíme jednotlivé běhy, žádná stanice, pro pásma hodin ho proto nehodnotíme. Vyberte jiný okres, Česko, nebo D+1 až D+5.",
     "compare.bandSet": "Hodiny v pásmu",
     "compare.bandSet.hourly": "Každá hodina",
     "compare.bandSet.6h": "Každá 6. hodina, všechny modely",
@@ -882,9 +881,9 @@ export const STRINGS = {
     "compare.byBandNote":
       "MAE každého modelu v jednotlivých pásmech hodin v této oblasti. Každé pásmo má vlastní férovou sadu modelů: modely, které skončí dřív (ICON-D2, AROME, …), v pozdějších pásmech chybějí.",
     "compare.mapNoteBand":
-      "Nejlepší model v každém kraji pro zvolené pásmo hodin; kliknutím kraj vyberete, dalším kliknutím zpět na Česko. V závorce počet krajů.",
+      "Nejlepší model v každém okrese pro zvolené pásmo hodin; kliknutím okres vyberete, dalším kliknutím zpět na Česko. V závorce počet okresů.",
     "compare.mapBandNote":
-      "Pásma hodin jen pro Česko a kraje: z asi 100 stanic, na kterých hodnotíme jednotlivé běhy, má většina okresů jednu nebo žádnou. Okresy najdete u D+1 až D+5.",
+      "Z asi 100 stanic, na kterých hodnotíme jednotlivé běhy, má většina okresů jednu nebo žádnou. Okres bez stanice je šedý, okres s jednou stanicí je jen orientační.",
     "compare.intervals": "Jak jisté je pořadí",
     "compare.intervalsNote":
       "O kolik má každý model větší chybu (MAE) než nejlepší, s 95% intervalem z bootstrapu přes bloky 4 po sobě jdoucích dnů. Šedý interval sahá k nule: model není prokazatelně horší než nejlepší. Červený: je prokazatelně horší.",
@@ -1900,7 +1899,6 @@ export const STRINGS = {
     "compare.rankingIn": "Model ranking: {region}",
     "compare.leadBands": "Hours ahead (from every run)",
     "compare.leadDays": "Days ahead",
-    "compare.okresyDaysOnly": "Okresy (D+1 to D+5 only)",
     "bandVariable.temperature_2m": "Temperature (2 m)",
     "bandVariable.wind_speed_10m": "Wind (10 m)",
     "bandVariable.precipitation": "Precipitation per hour",
@@ -1911,7 +1909,7 @@ export const STRINGS = {
       "{band}: every hour of this band of the 00, 06, 12 and 18 UTC runs against the ČHMÚ observation at the time it is for; {runs} runs, {stations} stations, {days} days.",
     "compare.preliminary": "Preliminary: only {days} days.",
     "compare.bandFewStations":
-      "This kraj has fewer than 3 of the about 100 stations where we verify the single runs, so it has no ranking by hours ahead. Choose another kraj, Czechia, or D+1 to D+5.",
+      "This okres has none of the about 100 stations where we verify the single runs, so it has no ranking by hours ahead. Choose another okres, Czechia, or D+1 to D+5.",
     "compare.bandSet": "Hours in the band",
     "compare.bandSet.hourly": "Every hour",
     "compare.bandSet.6h": "Every 6th hour, all models",
@@ -1930,9 +1928,9 @@ export const STRINGS = {
     "compare.byBandNote":
       "Each model's MAE in each band of hours in this region. Every band has its own fair set of models: models that end earlier (ICON-D2, AROME, …) are missing from the later bands.",
     "compare.mapNoteBand":
-      "The best model in each kraj for the chosen band of hours; click a kraj to choose it, click again for all of Czechia. In brackets: number of kraje.",
+      "The best model in each okres for the chosen band of hours; click an okres to choose it, click again for all of Czechia. In brackets: number of okresy.",
     "compare.mapBandNote":
-      "Bands of hours for Czechia and the kraje only: of the about 100 stations where we verify the single runs, most okresy have one or none. The okresy are under D+1 to D+5.",
+      "Of the about 100 stations where we verify the single runs, most okresy have one or none. An okres without a station is grey, an okres with one station is only a rough guide.",
     "compare.intervals": "How sure is the ranking?",
     "compare.intervalsNote":
       "How much larger each model's error (MAE) is than the best one's, with a 95 % bootstrap interval over blocks of 4 consecutive days. A grey interval reaches zero: the model is not shown to be worse than the best. Red: it is significantly worse.",

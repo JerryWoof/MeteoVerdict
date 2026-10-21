@@ -366,10 +366,10 @@ export function singleModelVerdicts(doc, variable) {
   });
 }
 
-// --- ranking by lead band, run by run (leads-bands-<window>[-kraj].json, `mvd leads`) --
+// --- ranking by lead band, run by run (leads-bands-<window>[-okres].json, `mvd leads`) --
 // Every lead hour of the 00/06/12/18 UTC runs against the observation at its valid
 // time, pooled over a band of hours (H+1–6 … H+49–72). Czechia, the station kinds
-// (main WMO / other) and kraje; okresy have too few of the ~100 run stations.
+// (main WMO / other) and okresy (most have one run station or none).
 
 export const LEAD_BANDS = ["h1-6", "h7-12", "h13-24", "h25-48", "h49-72"];
 export const LEAD_DAYS = [1, 2, 3, 4, 5];
@@ -414,9 +414,6 @@ export function dayVariable(variable, available) {
     : variable.startsWith("wind") ? "wind_speed_10m" : "temperature_2m";
   return available.includes(closest) ? closest : available[0];
 }
-
-/** The kraj of a region code (an okres CZ0642 → CZ064; Czechia and kraje unchanged). */
-export const krajOf = (region) => (levelOf(region) === "okres" ? region.slice(0, 5) : region);
 
 /**
  * Rows of a band file as score records like the D+N files (so the ranking table, the
