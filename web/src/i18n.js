@@ -1081,6 +1081,7 @@ export const STRINGS = {
     "site.method": "Metodika",
     "site.business": "Spolupráce",
     "site.contact": "Kontakt",
+    "site.pudomer": "Půdoměr – předpověď teploty a vlhkosti půdy",
   },
   en: {
     "page.station": "Measured",
@@ -2159,6 +2160,7 @@ export const STRINGS = {
     "site.method": "Methodology",
     "site.business": "Collaboration",
     "site.contact": "Contact",
+    "site.pudomer": "Půdoměr – soil temperature & moisture forecast",
   },
 };
 
