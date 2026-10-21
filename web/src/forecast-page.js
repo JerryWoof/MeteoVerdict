@@ -4,7 +4,7 @@ import "./style.css";
 
 import { modelColors, records } from "./data.js";
 import {
-  COMBINED, MAX_LEAD_DAY, VARIABLES, bestPerLeadDay, dailySummary, nightBands, weightTable, winnersByLeadDay,
+  COMBINED, VARIABLES, bestPerLeadDay, dailySummary, nightBands, weightTable, winnersByLeadDay,
 } from "./forecast.js";
 import { setUpLanguage } from "./i18n.js";
 import { glyph } from "./icons.js";
@@ -38,8 +38,7 @@ if (AI) {
   // the AI tab's colours and menu entry; the texts the page sets once
   document.body.classList.replace("theme-forecast", "theme-ai");
   document.querySelector('.site-nav a[href="forecast.html"]')?.classList.remove("current-section");
-  document.getElementById("combined-note").textContent = t("forecast.note");
-  document.getElementById("weights-section").hidden = true;
+  document.querySelector("#combined-note span").textContent = t("forecast.note");
   document.title = "MeteoVerdict: AI forecast by okres";
 }
 
@@ -246,33 +245,6 @@ function offsetText(lo, hi) {
   return `${one(lo)} / ${one(hi)} °C (80 %)`;
 }
 
-function renderWeights(table, names) {
-  const target = document.getElementById("weights");
-  const leads = Array.from({ length: MAX_LEAD_DAY }, (_, i) => i + 1);
-  const head = document.createElement("tr");
-  head.append(cell("th", t("forecast.variable")), ...leads.map((d) => cell("th", `D+${d}`)));
-  const rows = VARIABLES.map((variable) => {
-    const tr = document.createElement("tr");
-    tr.append(cell("td", t(`forecast.${variable}`)));
-    for (const lead of leads) {
-      const td = document.createElement("td");
-      const top = (table.get(`${variable}|${lead}`) ?? [])
-        .slice()
-        .sort((a, b) => b.weight - a.weight)
-        .slice(0, 3);
-      for (const r of top) {
-        const line = cell("div", `${names[r.model] ?? r.model} ${Math.round(r.weight * 100)}\u00a0%`);
-        if (r.rank === 1) line.className = "winner";
-        td.append(line);
-      }
-      if (top.length === 0) td.textContent = "–";
-      tr.append(td);
-    }
-    return tr;
-  });
-  target.replaceChildren(head, ...rows);
-}
-
 // which forecast is shown: MeteoVerdict AI on every page load where the okres has it, else
 // our combination (not remembered, not in the link); `preferred` is the choice kept while the
 // okres changes, `selected` what the okres can offer of it (no AI forecast there: the combination)
@@ -338,7 +310,7 @@ async function show(point, names, colors, outlook) {
   const issued = document.getElementById("issued");
   document.getElementById("title").textContent = t("forecast.titleFor", { town: seatName(point.code, point.name) });
   state = null;
-  for (const id of ["days", "charts", "weights"]) document.getElementById(id).replaceChildren();
+  for (const id of ["days", "charts"]) document.getElementById(id).replaceChildren();
   document.getElementById("model-note").hidden = true;
   document.getElementById("combined-note").hidden = false;
   issued.textContent = "";
@@ -388,7 +360,6 @@ async function show(point, names, colors, outlook) {
   selected = fillPicker(document.getElementById("model"), {
     table, names, available: new Set(Object.keys(parsed.models)), selected: preferred, t,
   });
-  if (!AI) renderWeights(table, names);
   message.textContent = "";
   render(names, colors);
 }
