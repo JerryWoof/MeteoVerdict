@@ -1,0 +1,65 @@
+// Build-time <head> additions for search engines and link previews: canonical, Open Graph, Twitter
+// card, and the Czech title/description in the HTML (the English ones are swapped in by a tiny
+// inline script, like the rest of the prerendered text). Crawlers without JavaScript read this.
+import { STRINGS } from "../src/i18n.js";
+
+export const SITE = "https://meteoverdict.cz/";
+
+// file -> [path on the site, Czech description, English description, Czech title when the page has none]
+export const PAGES = {
+  "index.html": ["", "Předpověď počasí pro každou obec v Česku a denní ověřování, který model se trefuje nejlépe, proti měření stanic ČHMÚ.", "Weather forecast for every municipality in Czechia and a daily check of which model forecasts best, against ČHMÚ station measurements."],
+  "forecast.html": ["forecast.html", "Předpověď počasí na další dny pro každý okres a obec v Česku, složená z modelů podle toho, jak se v daném místě osvědčily.", "The weather of the next days for every okres, combined from all models by how well each did there."],
+  "forecast-detail.html": ["forecast-detail.html", "Předpověď počasí pro okres, složená z modelů podle toho, jak se v okrese osvědčily.", "A forecast per okres that combines the weather models by how well each did there."],
+  "radar.html": ["radar.html", "Meteoradar ČHMÚ nad Českem: posledních pár hodin plynule, výhled na další hodinu, déšť u vás, bouřkové buňky, družicové mraky a archiv dní.", "ČHMÚ weather radar over Czechia: the last hours played smoothly, the nowcast for the next hour, rain at your place, storm cells, satellite clouds, hourly precipitation and archived days."],
+  "heatmap.html": ["heatmap.html", "Experimentální teplotní mapa ve 100 m z terénu (údolí, svahy, mrazové kotliny), počítaná denně. Klikněte kamkoli v Česku pro předpověď v tom místě.", "Experimental: MeteoVerdict AI's temperature at 100 m from the terrain (valleys, slopes, frost hollows), computed daily. Click anywhere in Czechia for the forecast at that place."],
+  "measured.html": ["measured.html", "Co naměřily stanice ČHMÚ: mapa okresů po dnech a částech dne a mapa všech stanic s předpověďmi modelů.", "What ČHMÚ's stations measured, per okres on a map by day and part of day, and the map of all stations with the models' forecasts at them.", "Naměřeno: stanice ČHMÚ a předpovědi modelů"],
+  "compare.html": ["compare.html", "Který model počasí předpovídá v Česku nejlépe: celé Česko, každý kraj a okres, s intervaly spolehlivosti.", "Which weather model forecasts best in Czechia, each kraj and each okres, with confidence intervals."],
+  "compare-models.html": ["compare-models.html", "Který model počasí předpovídá v Česku nejlépe: celé Česko, každý kraj a okres, s intervaly spolehlivosti.", "Which weather model forecasts best in Czechia, each kraj and each okres, with confidence intervals."],
+  "data.html": ["data.html", "Otevřená data zdarma: předpověď a pořadí modelů pro každý okres (JSON), archivy, licence a časy aktualizace.", "Free open data: forecast and ranking of weather models per okres (JSON), release archives, licences and update times."],
+  "about.html": ["about.html", "Co je MeteoVerdict, odkud má data a jak nás kontaktovat.", "What MeteoVerdict is, where its data comes from and how to contact us."],
+  "methodology.html": ["methodology.html", "Jak MeteoVerdict počítá přesnost modelů, jak skládá předpověď a kde jsou hranice.", "How MeteoVerdict measures model accuracy, how it builds the forecast and where the limits are."],
+  "collaboration.html": ["collaboration.html", "MeteoVerdict je open-source a zdarma; jsme otevřeni spolupráci.", "MeteoVerdict is open source and free; we are open to collaboration."],
+  "report.html": ["report.html", "Který model předpovídal Česko v uplynulém měsíci nejlépe: čísla, grafy a výhrady.", "Which model forecast Czechia best last month: numbers, charts and caveats."],
+};
+
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+export function injectSeo(html, file) {
+  const page = PAGES[file];
+  if (!page || !html.includes("</head>")) return html;
+  const [path, cs, en, csTitle] = page;
+  const url = SITE + path;
+  let out = html;
+  const titleKey = out.match(/<title\b[^>]*\bdata-i18n-page="([^"]+)"/)?.[1];
+  if (titleKey && STRINGS.cs[titleKey]) {
+    out = out.replace(/(<title\b[^>]*>)[^<]*(<\/title>)/, `$1MeteoVerdict: ${esc(STRINGS.cs[titleKey])}$2`);
+  } else if (csTitle) {
+    out = out.replace(/(<title\b[^>]*>)[^<]*(<\/title>)/, `$1MeteoVerdict: ${esc(csTitle)}$2`);
+  }
+  const title = out.match(/<title\b[^>]*>([^<]*)<\/title>/)?.[1] ?? "MeteoVerdict";
+  out = out.replace(/<meta\s+name="description"[\s\S]*?\/>/, `<meta name="description" content="${esc(cs)}" />`);
+  const tags = [
+    `<link rel="canonical" href="${url}" />`,
+    `<meta property="og:type" content="website" />`,
+    `<meta property="og:site_name" content="MeteoVerdict" />`,
+    `<meta property="og:locale" content="cs_CZ" />`,
+    `<meta property="og:title" content="${title}" />`,
+    `<meta property="og:description" content="${esc(cs)}" />`,
+    `<meta property="og:url" content="${url}" />`,
+    `<meta property="og:image" content="${SITE}og-image.png" />`,
+    `<meta property="og:image:width" content="1200" />`,
+    `<meta property="og:image:height" content="630" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:title" content="${title}" />`,
+    `<meta name="twitter:description" content="${esc(cs)}" />`,
+    `<meta name="twitter:image" content="${SITE}og-image.png" />`,
+    `<meta name="theme-color" content="#1d2329" />`,
+    `<link rel="apple-touch-icon" href="/apple-touch-icon.png" />`,
+  ].map((t) => `    ${t}\n`).join("");
+  out = out.replace("</head>", `${tags}  </head>`);
+  // English readers: the description (the title is swapped by src/i18n.js, the Czech one stays in the HTML)
+  const script = `<script>(function(){try{if(localStorage.getItem("meteoverdict.language")!=="en")return;`
+    + `var d=document,t=${JSON.stringify(en).replace(/</g, "\\u003c")};`
+    + `["meta[name=description]","meta[property='og:description']","meta[name='twitter:description']"].forEach(function(s){var m=d.querySelector(s);if(m)m.setAttribute("content",t)})}catch(_){}})()</script>`;
+  return out.includes("</body>") ? out.replace("</body>", `    ${script}\n  </body>`) : out;
+}

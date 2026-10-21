@@ -1,0 +1,8 @@
+# MeteoVerdict is open data (CC BY 4.0 / CC BY-SA 4.0): crawlers and AI search are welcome.
+User-agent: *
+Allow: /
+# one aggressive crawler with no benefit for us
+User-agent: Bytespider
+Disallow: /
+
+Sitemap: https://meteoverdict.cz/sitemap.xml
