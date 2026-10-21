@@ -8,7 +8,7 @@ import { drawIcon, glyph, iconCanvas } from "./icons.js";
 import { setUpLanguage } from "./i18n.js";
 import { addLocateControl } from "./locate-control.js";
 import { OUTSIDE_KM, nearestPlace } from "./home-place.js";
-import { mapModelOptions, modelHorizon, modelPeriods, parseModelParts, parseModels } from "./models.js";
+import { mapModelOptions, modelHorizon, modelPeriods, modelSymbol, parseModelParts, parseModels } from "./models.js";
 import { MIN_ZOOM, addObceLayers, goToObec, nearestObec, obceDrawn, obcePartRows, paintObce } from "./obce-map.js";
 import { obceFor } from "./obce-test.js";
 import { placeSearch } from "./place-search.js";
@@ -586,7 +586,19 @@ function windCell(row) {
 function renderObecPanel(panel, { doc, rows, ai: ownAi }) {
   const place = doc.places.find((p) => p.name === panelObec);
   const own = rows.get(panelObec) ?? new Map();
-  const rowOf = (day, part) => own.get(`${day}|${part}`);
+  // the okres's sky for the obec (no symbols in the obec files): its symbol, from its cloud
+  // with the obec's own rain and temperature where the okres has the cloud
+  const okresRow = (day, part) => rowFor(outlook, state.okres, day, part);
+  const rowOf = (day, part) => {
+    const row = own.get(`${day}|${part}`);
+    const sky = okresRow(day, part);
+    if (!row) return undefined;
+    if (!sky) return row;
+    const symbol = sky.cloud != null && row.tmin != null
+      ? modelSymbol(sky.cloud, row.precipitation, (row.tmin + row.tmax) / 2) ?? sky.symbol
+      : sky.symbol;
+    return { ...row, symbol, cloud: sky.cloud, sunshine: sky.sunshine, ...sunFor(outlook, state.okres, day) };
+  };
   const info = outlook.okresy.find((o) => o.code === state.okres);
   panel.classList.remove("single");
   const now = rowOf(state.day, state.part);
@@ -616,14 +628,20 @@ function renderObecPanel(panel, { doc, rows, ai: ownAi }) {
   strip.append(...PARTS.slice(0, 4).map((p) => partCell(rowOf(state.day, p), p, true)));
   const week = element("table", null, "week");
   for (const day of outlook.days) {
-    const row = rowOf(day, "day");
-    if (!row && day < state.day) continue;
+    const ownRow = rowOf(day, "day");
+    if (!ownRow && day < state.day) continue;
+    // a day the obec's hours do not cover whole: the okres's values, marked
+    const fallback = ownRow ? null : okresRow(day, "day");
+    const row = ownRow ?? fallback;
     const tr = element("tr");
-    if (day === state.day) tr.className = "current";
+    tr.className = [day === state.day ? "current" : "", fallback ? "okres-values" : ""].join(" ").trim();
+    if (fallback) tr.title = t("tv.obecDayOkres");
     tr.addEventListener("click", () => update({ day }));
+    const iconCell = element("td");
+    iconCell.append(iconCanvas(row ? iconName(row.symbol, "day", row) : "", 26, symbolText(row?.symbol)));
     tr.append(
       element("td", dayText(day)),
-      element("td"),
+      iconCell,
       element("td", row ? `${fmt(row.tmax)}° / ${fmt(row.tmin)}°` : "–", "num"),
       element("td", row ? rainText(row, true) : "", "num rain"),
       windCell(row),
@@ -758,7 +776,12 @@ function townDetail(code) {
   const seat = seatOkres(code);
   const detail = element("a", t("tv.detail", { town: seatName(seat, outlook?.okresy.find((o) => o.code === seat)?.name ?? seat) }));
   detail.href = `${DETAIL}#${seat}`;
-  return detail;
+  // directly under it, the link to what was measured in this okres
+  const measured = element("a", t("tv.measuredLink"));
+  measured.href = `measured.html#${code}`;
+  const links = element("div", null, "detail-links");
+  links.append(detail, measured);
+  return links;
 }
 let padding = null;
 
@@ -946,7 +969,8 @@ function defaultToAi() {
 
 /** The link below the map to the measured page, for the okres open in the panel (measured.html#CZxxxx). */
 function paintMeasuredLink() {
-  document.getElementById("measured-link-a").href = state.okres ? `measured.html#${state.okres}` : "measured.html";
+  // with a panel open the link is in the panel (townDetail); without one it stays below the map
+  document.getElementById("measured-link").hidden = Boolean(state.okres);
 }
 
 /** After the map's model changed: the obce of the open okres and of those in view, for the new source. */
