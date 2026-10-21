@@ -97,8 +97,8 @@ export function dataBlocks(language, c) {
       ],
     }],
     ["note", L(
-      "AI výstupy jsou experiment: nejsou oficiální předpověď a nemají záruku. Soubory AI zatím nenesou pole `licence` a `attribution`. Licence výstupů AI zatím není rozhodnutá; do rozhodnutí je berte jako CC BY-SA 4.0 jako ostatní naše výstupy a uvádějte zdroje níže.",
-      "The AI outputs are an experiment: not an official forecast and without a guarantee. The AI files do not yet carry `licence` and `attribution` fields. The licence of the AI outputs is not decided yet; until it is, treat them as CC BY-SA 4.0 like our other outputs and credit the sources below.")],
+      "AI výstupy jsou experiment: nejsou oficiální předpověď a nemají záruku. Soubory AI zatím nenesou pole `licence` a `attribution`. Výstupy AI jsou pod CC BY-SA 4.0 jako ostatní naše výstupy; uvádějte zdroje níže.",
+      "The AI outputs are an experiment: not an official forecast and without a guarantee. The AI files do not yet carry `licence` and `attribution` fields. The AI outputs are CC BY-SA 4.0 like our other outputs; credit the sources below.")],
 
     ["h", L("Soubory ke stažení: releasy na GitHubu", "Downloads: releases on GitHub"), "releases"],
     ["p", L(

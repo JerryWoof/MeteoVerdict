@@ -16,8 +16,8 @@ export const SKY_URL = "data/scores/ai/fc/sky/ai-sky.json";
 /** The AI's own outlook (same format as outlook.json) with its per-variable `sources` flag. */
 export const OUTLOOK_URL = "data/scores/ai/fc/outlook.json";
 const AI_VARIABLES = ["temperature_2m", "wind_speed_10m"];
-// hourly rain, cloud and sunshine: the AI's own (``mvai hourly``, made to agree with its parts of
-// the day) where its file has them; an older file without them takes our blend's on the AI's hours
+// hourly rain, cloud and sunshine: the AI's own (consistent with its parts of the day)
+// where its file has them; an older file without them takes our blend's on the AI's hours
 const BLEND_VARIABLES = ["precipitation", "cloud_cover", "sunshine_duration"];
 /** The outlook's gust warning threshold (m/s). */
 const GUST_THRESHOLD = 13.5;
