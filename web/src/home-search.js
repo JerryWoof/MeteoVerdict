@@ -35,7 +35,7 @@ export function setUpHomeSearch(t) {
     window.location.href = forecastLink(okres.code, obec?.name);
   }
 
-  document.getElementById("home-search").replaceChildren(placeSearch({ t, load: loadPlaces, choose: go }));
+  document.getElementById("home-search").replaceChildren(placeSearch({ t, load: loadPlaces, choose: go, placeholder: t("home.placeholder") }));
 
   const button = document.getElementById("home-locate");
   button.addEventListener("click", () => {

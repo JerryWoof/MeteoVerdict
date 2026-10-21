@@ -2981,58 +2981,75 @@ body.station [hidden] {
   display: none;
 }
 
-/* the home page's top: place search and "my location" above the map */
+/* the home page's top: one compact row, place search + "my location", above the map */
 .home-find {
+  position: relative;
   margin: 0 0 1.4rem;
-  padding: 0.9rem 1rem 0.7rem;
-  border-radius: 6px;
-  background: var(--surface);
-}
-.home-find .page-intro {
-  margin: 0.25rem 0 0.6rem;
 }
 .home-find-row {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.6rem 1rem;
+  gap: 0.5rem;
 }
-/* may shrink below the field's own width (on a 320 px phone it stuck out of the box) */
 #home-search {
+  flex: 1 1 auto;
   min-width: 0;
-  max-width: 100%;
+  max-width: 30rem;
 }
 #home-search .place-search {
   position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
+  margin: 0;
 }
+/* the label stays for screen readers */
 #home-search .place-search label {
-  font-weight: 600;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 #home-search .place-search input {
-  width: 18rem;
-  max-width: 100%;
+  width: 100%;
+  height: 2.75rem;
   font-size: 16px; /* no zoom on focus on phones */
-  padding: 0.4rem 0.6rem;
+  padding: 0 0.6rem 0 2.2rem;
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234b5661' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") no-repeat 0.65rem center / 1.1rem;
 }
 #home-search .place-list {
   position: absolute;
   top: calc(100% + 3px);
   left: 0;
-  width: 22rem;
-  max-width: 90vw;
+  right: 0;
   margin: 0;
   z-index: 20;
   box-shadow: 0 4px 14px rgba(29, 35, 41, 0.18);
 }
 #home-locate {
-  font: inherit;
-  font-size: 16px;
-  padding: 0.4rem 0.8rem;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
   cursor: pointer;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+/* messages float under the row, so the page below does not jump */
+#home-note {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 0.15rem 0 0;
+  z-index: 15;
+}
+#home-note:empty {
+  display: none;
 }
 /* the links to About, Methodology, For business and Contact, at the top of every footer */
 footer .site-links {
