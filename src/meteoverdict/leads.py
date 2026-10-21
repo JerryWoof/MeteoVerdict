@@ -31,10 +31,10 @@ Both domains are compared on the same sample there: only the run, station, lead 
 and variable that every model in the data has a pair for. The archive also records when
 ČHMÚ published each run (``publication_delays``), shown on the all-model chart.
 
-**Ranking by lead band** (``band_rankings``, ``leads-bands-<window>[-kraj|-okres].json``): the
+**Ranking by lead band** (``band_rankings``, ``leads-bands-<window>[-kraj].json``): the
 same single runs pooled over H+1-6, H+7-12, H+13-24, H+25-48 and H+49-72, on two fair
 sets per band (``band_required``), with bias-corrected MAE, hourly precipitation ETS,
-gusts and block-bootstrap intervals over days, for Czechia, the station kinds, kraje and okresy.
+gusts and block-bootstrap intervals over days, for Czechia, the station kinds and kraje.
 
 Lead 0 (the analysis) is not scored. Sums are kept additive (``metrics``), so MAE, bias
 and RMSE come from the sums of each group.
@@ -631,9 +631,9 @@ BIAS_MIN_DAYS = 10
 BAND_THRESHOLDS = (0.1, 1.0)
 #: Windows: the last 90 days of runs (up to the last run) and every run.
 BAND_WINDOWS = {"90d": 90, "all": None}
-#: Levels: Czechia, main WMO vs other stations, kraje, okresy. Most okresy have one
-#: station or none (okresy without a station have no rows); the page shows ``stations``.
-BAND_LEVELS = ("cz", "network", "kraj", "okres")
+#: Levels: Czechia, main WMO vs other stations, kraje. No okres level: ~100 stations for
+#: 76 okresy, most okresy have one station or none.
+BAND_LEVELS = ("cz", "network", "kraj")
 BAND_MIN_STATIONS = 3
 #: Results on fewer days of runs are marked preliminary on the page.
 PRELIMINARY_DAYS = 30
@@ -942,7 +942,7 @@ def band_sums(
 
 def _band_regions(sums: pl.DataFrame, level: str, stations: pl.DataFrame) -> pl.DataFrame:
     """``sums`` with ``region`` for a level (kraje with at least ``BAND_MIN_STATIONS``
-    stations in a group only; okresy with at least one)."""
+    stations in a group only)."""
     if level == "cz":
         return sums.with_columns(pl.lit("cz").alias("region"))
     if level == "network":
@@ -952,11 +952,8 @@ def _band_regions(sums: pl.DataFrame, level: str, stations: pl.DataFrame) -> pl.
             .otherwise(pl.lit("other"))
             .alias("region")
         )
-    column = "okres_code" if level == "okres" else "kraj_code"
-    if column not in stations.columns:
-        return sums.head(0).with_columns(pl.lit(None, pl.String).alias("region"))
-    codes = stations.select(pl.col("id").alias("station_id"), pl.col(column).alias("region"))
-    return sums.join(codes, on="station_id").drop_nulls("region")
+    kraj = stations.select(pl.col("id").alias("station_id"), pl.col("kraj_code").alias("region"))
+    return sums.join(kraj, on="station_id").drop_nulls("region")
 
 
 def band_scores(
@@ -1132,8 +1129,7 @@ def band_documents(
     default: str | None = None,
 ) -> dict[str, dict]:
     """``{file name: document}``: ``leads-bands-<window>.json`` (Czechia and the station
-    kinds), ``leads-bands-<window>-kraj.json`` (kraje) and ``-okres.json`` (okresy),
-    ``{"columns", "rows"}``."""
+    kinds) and ``leads-bands-<window>-kraj.json`` (kraje), ``{"columns", "rows"}``."""
     from meteoverdict import ranking
 
     stamp = "%Y-%m-%dT%H:%MZ"
@@ -1200,7 +1196,7 @@ def band_documents(
             "wind_gusts_10m": "m/s, gust at the valid time (observed: hourly maximum)",
         },
         "column_notes": {
-            "level": "cz, network (region main = WMO main stations, other), kraj or okres",
+            "level": "cz, network (region main = WMO main stations, other) or kraj",
             "n": "pairs (station x run x lead hour) per model",
             "runs, stations, days": "runs, stations and days of runs behind the result",
             "ets_0p1, ets_1, pod_1, far_1": "precipitation >= 0.1 / 1 mm in the hour",
@@ -1231,7 +1227,6 @@ def band_documents(
     for name, levels in (
         (f"leads-bands-{window}.json", ("cz", "network")),
         (f"leads-bands-{window}-kraj.json", ("kraj",)),
-        (f"leads-bands-{window}-okres.json", ("okres",)),
     ):
         part = rounded.filter(pl.col("level").is_in(levels)) if rounded.height else rounded
         codes = sorted(set(part["region"])) if part.height else []
