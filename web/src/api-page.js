@@ -82,7 +82,10 @@ async function main() {
       const ai = aiFile?.okresy?.[code];
       const li = Object.assign(document.createElement("li"), { textContent: "JSON: " });
       li.append(Object.assign(document.createElement("a"), { href: AI_URL, textContent: AI_URL }));
-      links.replaceChildren(li, Object.assign(document.createElement("li"), { textContent: t("api.aiNote") }));
+      const apiUrl = `api/v1/ai/okresy/${code}.json`;
+      const apiLi = Object.assign(document.createElement("li"), { textContent: "JSON (API v1): " });
+      apiLi.append(Object.assign(document.createElement("a"), { href: apiUrl, textContent: apiUrl }));
+      links.replaceChildren(apiLi, li, Object.assign(document.createElement("li"), { textContent: t("api.aiNote") }));
       preview.textContent = ai
         ? ["time_utc,temperature_2m,wind_speed_10m",
           ...ai.time.slice(0, 7).map((time, i) => `${time},${ai.temperature_2m?.ai?.[i] ?? ""},${ai.wind_speed_10m?.ai?.[i] ?? ""}`),
