@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { compareSeries, errorKeyFor, errorLookup, okresErrors, errorSummary, modelOptions, readModelChoice, sizeClass, splitModelHash, tabChoice, withModelHash } from "./station-model.js";
+import { compareSeries, lastDays, errorKeyFor, errorLookup, okresErrors, errorSummary, modelOptions, readModelChoice, sizeClass, splitModelHash, tabChoice, withModelHash } from "./station-model.js";
 
 const t = (key) => key;
 
@@ -129,4 +129,11 @@ test("readModelChoice / tabChoice: each tab of the measured page keeps its own c
   assert.deepEqual(readModelChoice("#kinds", { ...start, model: "ai", lead: 2, err: "r" }, false), start);
   assert.deepEqual(readModelChoice("#2026-10-18/day", { ...start, model: "ai", lead: 2, wx: "none" }, true), start);
   assert.equal(readModelChoice("#kinds;m=ai;l=2", start, false).lead, 2);
+});
+
+test("the station chart keeps the last days only", () => {
+  const s = lastDays({ days: ["a", "b", "c"], obs: [1, 2, 3], fc: [1, 2, 3], err: [0, 0, 0], hasModel: true }, 2);
+  assert.deepEqual(s.days, ["b", "c"]);
+  assert.deepEqual(s.obs, [2, 3]);
+  assert.equal(lastDays(null), null);
 });
