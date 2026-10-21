@@ -120,7 +120,6 @@ export function formatRange(from, to, language) {
   return ay === by ? `${a} – ${b}${by}` : `${a}${ay} – ${b}${by}`;
 }
 
-/** "39 days" / "39 dní" (Czech: 1 den, 2–4 dny, 5+ dní) */
 /** The Czech plural form of a count, for i18n keys ending .one, .few or .many. */
 export function pluralForm(n) {
   return n === 1 ? "one" : n >= 2 && n <= 4 ? "few" : "many";
@@ -131,6 +130,7 @@ export function stationCount(n, t) {
   return t(`compare.stationCount.${pluralForm(n)}`, { n });
 }
 
+/** "39 days" / "39 dní" (Czech: 1 den, 2–4 dny, 5+ dní) */
 export function dayCount(days, t) {
   return t(`window.days.${pluralForm(days)}`, { n: days });
 }
