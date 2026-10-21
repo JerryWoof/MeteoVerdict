@@ -858,7 +858,7 @@ def leads_cmd(
         bool,
         typer.Option(
             help="Also rank the models by lead band (H+1-6 … H+49-72) over the last 90 days "
-            "and every single run since --bands-since: leads-bands-<window>[-okres].json.",
+            "and every single run since --bands-since: leads-bands-<window>[-kraj|-okres].json.",
         ),
     ] = True,
     bands_since: Annotated[
@@ -944,7 +944,7 @@ def _lead_bands(
     names: dict[str, str],
 ) -> list[Path]:
     """The ranking by lead band (``leads.band_rankings``) into
-    ``leads-bands-<window>.json`` and ``-okres.json`` beside ``out``."""
+    ``leads-bands-<window>.json`` and ``-kraj.json`` and ``-okres.json`` beside ``out``."""
     single = leads.scan_runs(data_dir / "runs", since, now)
     obs = partitions.scan_months(data_dir / "obs", since.date(), now.date())
     if single is None or obs is None:
@@ -955,7 +955,8 @@ def _lead_bands(
     )
     models = [m for m in catalogue.load_models() if m.enabled]
     results = leads.band_rankings(single, obs, models, station_table, log=typer.echo)
-    region_names = {o.code: o.name for o in regions.load_regions("okres")}
+    region_names = {k.code: k.name for k in regions.load_kraje()}
+    region_names |= {o.code: o.name for o in regions.load_regions("okres")}
     region_names |= {"cz": "Česko", "main": "hlavní stanice (WMO)", "other": "ostatní stanice"}
     default = leads.band_default(results["90d"][0])
     written = []
