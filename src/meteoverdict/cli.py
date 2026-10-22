@@ -1567,9 +1567,16 @@ def runs_add_stations(
     extra: Annotated[
         bool, typer.Option(help="Also the further variables (four times the requests).")
     ] = False,
+    extras_only: Annotated[
+        bool,
+        typer.Option(
+            help="Only the further variables the stored stations lack (read again with them)."
+        ),
+    ] = False,
 ) -> None:
     """Fill in the stations of the subset that stored model-runs lack (after the subset
-    grew), from Open-Meteo's open-data bucket, newest month first; no API calls
+    grew), or with ``--extras-only`` the further variables the stored stations lack,
+    from Open-Meteo's open-data bucket, newest month first; no API calls
     (docs/data-sources.md#the-station-subset). Resumable."""
     stations = runs.load_stations()
     models = [m for m in catalogue.load_models() if m.enabled]
@@ -1595,6 +1602,7 @@ def runs_add_stations(
                 threads=threads,
                 parallel_models=parallel_models,
                 extra=extra,
+                extras_only=extras_only,
                 log=typer.echo,
             )
     for month in sorted(result.filled, reverse=True):
