@@ -66,6 +66,10 @@ VARIABLES = (
     "cloud_cover",
     "sunshine_duration",
 )
+#: further variables of each model's own hourly forecast (the per-model files only, never
+#: combined; since 2026-10-22): from the bucket only, null from the API fallback, whose
+#: call weight would grow with every variable (``outlook_bucket.EXTRA_VARIABLES``)
+EXTRA_VARIABLES = tuple(outlook_bucket.EXTRA_VARIABLES)
 #: plain means of the models, not combined with weights; corrected afterwards
 #: (``sun_cloud_gust.correct_hourly``)
 MEANS = ("cloud_cover", "sunshine_duration")
@@ -214,12 +218,13 @@ def parse(payload: list | dict, codes: list[str], models: list[str]) -> pl.DataF
                         "time": times,
                         "model": model,
                         **{v: columns[v] for v in VARIABLES},
+                        **{v: None for v in EXTRA_VARIABLES},  # not asked of the API
                     },
                     schema={
                         "okres": pl.String,
                         "time": pl.Datetime("us", "UTC"),
                         "model": pl.String,
-                        **{v: pl.Float64 for v in VARIABLES},
+                        **{v: pl.Float64 for v in (*VARIABLES, *EXTRA_VARIABLES)},
                     },
                     strict=False,
                 )
@@ -651,6 +656,20 @@ MODEL_DIGITS = {
     "sunshine_duration": 0,
     "temperature_2m_lo": 1,
     "temperature_2m_hi": 1,
+    # further variables (``EXTRA_VARIABLES``): the resolution of the bucket's files
+    "relative_humidity_2m": 0,
+    "dew_point_2m": 1,
+    "pressure_msl": 1,
+    "wind_direction_10m": 0,
+    "wind_gusts_10m": 1,
+    "shortwave_radiation": 0,
+    "cloud_cover_low": 0,
+    "snowfall": 2,
+    "snow_depth": 2,
+    "snow_depth_water_equivalent": 1,
+    "surface_temperature": 1,
+    "cape": 0,
+    "visibility": 0,
 }
 MODEL_UNITS = {
     "temperature_2m": "°C",
@@ -658,6 +677,19 @@ MODEL_UNITS = {
     "wind_speed_10m": "m/s, hourly mean",
     "cloud_cover": "%",
     "sunshine_duration": "s of sunshine in the hour ending at the time",
+    "relative_humidity_2m": "%",
+    "dew_point_2m": "°C",
+    "pressure_msl": "hPa, reduced to mean sea level",
+    "wind_direction_10m": "° the wind comes from (0 north, 90 east)",
+    "wind_gusts_10m": "m/s, highest gust in the hour ending at the time",
+    "shortwave_radiation": "W/m², mean of the hour ending at the time",
+    "cloud_cover_low": "%",
+    "snowfall": "cm of fresh snow in the hour ending at the time",
+    "snow_depth": "m",
+    "snow_depth_water_equivalent": "mm of water in the snow cover",
+    "surface_temperature": "°C",
+    "cape": "J/kg",
+    "visibility": "m",
 }
 
 
@@ -688,8 +720,9 @@ def models_doc(fc: pl.DataFrame, hourly: pl.DataFrame, code: str, generated: dat
     {variable: [...]}, "models": {model: {variable: [...]}}, "licence",
     "attribution"}``. ``models``: each model's raw hourly forecast as Open-Meteo gave it
     (no correction; a series ends at the model's last hour, a variable the model lacks is
-    left out); ``combined``: our combined series of ``outlook-hourly.json``, on the same
-    hours."""
+    left out; ``EXTRA_VARIABLES`` besides the five of ``VARIABLES``, null where a model's
+    hour has no value, never 0); ``combined``: our combined series of
+    ``outlook-hourly.json``, on the same hours."""
     own = fc.filter(pl.col("okres") == code)
     ours = hourly.filter(pl.col("okres") == code)
     times = pl.concat([own["time"], ours["time"]]).unique().sort()
@@ -705,8 +738,12 @@ def models_doc(fc: pl.DataFrame, hourly: pl.DataFrame, code: str, generated: dat
     for (model,), part in sorted(own.partition_by("model", as_dict=True).items()):
         rows = grid.join(part, on="time", how="left").sort("time")
         series = {}
-        for v in VARIABLES:
+        for v in (*VARIABLES, *EXTRA_VARIABLES):
+            if v not in rows.columns:
+                continue
             values = _values(rows[v], MODEL_DIGITS[v], trim=True)
+            if v in EXTRA_VARIABLES and all(x is None for x in values):
+                continue  # the model lacks it: left out, never 0
             if values:
                 series[v] = values
         if series:

@@ -631,9 +631,31 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
   `wind_speed_10m` (0.1 m/s; Open-Meteo gives 2 decimals only as a conversion from
   km/h), `cloud_cover` and `sunshine_duration` (whole % and seconds); a model's series
   ends at its last hour (ICON-D2 after 48 h, ALADIN after 72 h), a variable it lacks is
-  left out. `combined`: our combined series of `outlook-hourly.json` on the same hours.
+  left out. **Further variables** (since 2026-10-22, additive: the five keys above are
+  unchanged), where the model has them: `relative_humidity_2m` (%, whole),
+  `dew_point_2m` (°C, 0.1), `pressure_msl` (hPa, 0.1), `wind_direction_10m` (°, whole;
+  the direction the wind comes from), `wind_gusts_10m` (m/s, 0.1; the highest gust of
+  the hour before), `shortwave_radiation` (W/m², whole; the mean of the hour before),
+  `cloud_cover_low` (%), `snowfall` (cm in the hour before, 0.01), `snow_depth` (m, 0.01),
+  `snow_depth_water_equivalent` (mm, 0.1), `surface_temperature` (°C, 0.1), `cape` (J/kg)
+  and `visibility` (m). A value a model lacks is `null`, never 0, and a model without the
+  variable has no key for it (`variables` lists every unit). They come from the bucket
+  only ([outlook from the bucket](#outlook-from-the-bucket)): the API fallback does not
+  ask for them (its call weight would grow from 5 to 18 variables a model), so a model
+  read from the API in a run has none of them. Between native steps: humidity, dew point,
+  pressure, surface temperature and CAPE by the Hermite spline, wind direction along the
+  shorter arc (never the arithmetic mean of 350° and 10°), snowfall spread over its step,
+  the rest linearly; humidity, cloud, gusts, CAPE, radiation, snow and visibility are kept
+  within their physical bounds. `combined`, `outlook-hourly.json`, the parts of day and
+  the archive carry none of them (wind direction is not averaged anywhere). `combined`: our combined series of `outlook-hourly.json` on the same hours.
   About 26 kB per okres with 11 models (measured on the saved answer), ~50 kB with 19,
-  i.e. ~2–4 MB for the 77 files (~0.5–1 MB zipped). The detailed forecast page and the
+  i.e. ~2–4 MB for the 77 files (~0.5–1 MB zipped) with the five variables; with the
+  further variables (measured 2026-10-22 on three okresy and all 19 models) 140 kB a
+  file instead of 62 kB (33 kB instead of 15 kB zipped): ~10.8 MB for the 77 files,
+  `outlook-models.zip` ~2.5 MB instead of ~1.2 MB. The web ignores keys it does not
+  know. The extra files read from the bucket roughly double the run's range requests
+  (3 okresy: 11,271 instead of 5,753; the 77 okresy ~55,000 instead of ~28,000, no
+  quota) and its reading time. The detailed forecast page and the
   forecast selector of the forecast map read these files: **no visitor's browser asks
   Open-Meteo** (until 2026-10-17 the detailed page did, one request per okres shown).
 - **Every model's parts of day for all okresy** (`outlook.write_model_parts`, no extra

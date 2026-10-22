@@ -443,7 +443,7 @@ def test_per_model_files(tmp_path):
     assert doc["okres"] == "CZ0201"
     assert "Open-Meteo.com" in doc["attribution"] and "CC BY-SA 4.0" in doc["licence"]
     assert len(doc["time"]) == 144 and doc["time"][0] == "2026-10-12T00:00Z"
-    assert set(doc["variables"]) == set(outlook.VARIABLES)
+    assert set(doc["variables"]) == {*outlook.VARIABLES, *outlook.EXTRA_VARIABLES}
     # our combined series as in outlook-hourly.json, every hour
     assert set(doc["combined"]) == set(outlook.HOURLY)
     assert all(len(v) == 144 for v in doc["combined"].values())
@@ -488,6 +488,57 @@ def test_per_model_files_round_and_stay_small(tmp_path):
     # 11 models with every value filled in: well under the 100 kB a file may take with
     # all 19 models (about 19/11 of this)
     assert len(text.encode()) * 19 / 11 < 100_000
+
+
+def test_extra_variables_are_null_from_the_api_and_left_out_of_the_files(tmp_path):
+    # the API fallback does not ask for them: columns there, all null
+    assert all(FC[v].null_count() == FC.height for v in outlook.EXTRA_VARIABLES)
+    hourly = outlook.combine_hourly(FC, WEIGHTS, NOW)
+    outlook.write_models(FC, hourly, tmp_path, NOW)
+    doc = json.loads((tmp_path / "CZ0201.json").read_text("utf-8"))
+    for series in doc["models"].values():
+        assert not set(series) & set(outlook.EXTRA_VARIABLES)  # never 0, never a null series
+
+
+def test_extra_variables_in_the_files_null_digits_units(tmp_path):
+    ours = FC.filter(pl.col("okres") == "CZ0100")
+    ifs = pl.col("model") == "ecmwf_ifs025"
+    n = ours.filter(ifs).height
+    ours = ours.with_columns(
+        # IFS has them, with a gap in the middle; everyone else has none
+        pl.when(ifs).then(pl.lit(81.6)).alias("relative_humidity_2m"),
+        pl.when(ifs).then(pl.lit(1013.26)).alias("pressure_msl"),
+        pl.when(ifs).then(pl.lit(271.4)).alias("wind_direction_10m"),
+        pl.when(ifs).then(pl.lit(0.126)).alias("snowfall"),
+        pl.when(ifs).then(pl.lit(12345.6)).alias("visibility"),
+    )
+    gap = pl.int_range(pl.len()).over("model") == 10
+    ours = ours.with_columns(pl.when(ifs).then(pl.lit(0.0)).alias("cape"))
+    ours = ours.with_columns(
+        pl.when(ifs & gap).then(None).otherwise(pl.col("snowfall")).alias("snowfall")
+    )
+    hourly = outlook.combine_hourly(ours, WEIGHTS, NOW)
+    outlook.write_models(ours, hourly, tmp_path, NOW)
+    doc = json.loads((tmp_path / "CZ0100.json").read_text("utf-8"))
+    ifs_doc = doc["models"]["ecmwf_ifs025"]
+    assert ifs_doc["relative_humidity_2m"][0] == 82  # whole %, an int
+    assert ifs_doc["pressure_msl"][0] == 1013.3
+    assert ifs_doc["wind_direction_10m"][0] == 271
+    assert ifs_doc["snowfall"][0] == 0.13 and ifs_doc["snowfall"][10] is None
+    assert ifs_doc["visibility"][0] == 12346
+    assert ifs_doc["cape"][0] == 0  # a real zero stays 0
+    for model, series in doc["models"].items():
+        if model != "ecmwf_ifs025":
+            assert not set(series) & set(outlook.EXTRA_VARIABLES)  # lacks them: left out
+    assert all(len(v) <= len(doc["time"]) for v in ifs_doc.values())
+    # every extra variable has a unit and digits; the keys of the five stay as they were
+    assert set(outlook.EXTRA_VARIABLES) <= set(doc["variables"]) <= set(outlook.MODEL_UNITS)
+    assert set(outlook.EXTRA_VARIABLES) <= set(outlook.MODEL_DIGITS)
+    assert list(doc["variables"])[:5] == list(outlook.VARIABLES)
+    assert doc["variables"]["temperature_2m"] == "°C"
+    assert n > 10
+    # the combined series (and outlook-hourly.json) carry none of them
+    assert set(doc["combined"]) == set(outlook.HOURLY)
 
 
 def test_model_archive_merges_runs_without_duplicates(tmp_path):
