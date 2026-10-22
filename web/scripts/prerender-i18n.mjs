@@ -5,13 +5,22 @@
 // blinks when the page script (src/i18n.js, loaded later) applies the language again.
 import { STRINGS } from "../src/i18n.js";
 import { injectInfoText, injectSeo } from "./seo.mjs";
+import { THEME_BUTTON, THEME_HEAD_SCRIPT } from "../src/theme.js";
 
 const NAV_LINK = /<a\b[^>]*\bhref="([^"]*)"[^>]*>/g;
 const TEXT_ELEMENT = /<(\w+)\b([^>]*?\bdata-i18n="([^"]+)"[^>]*)>([^<]*)<\/\1>/g;
 
+// the colour theme before the first paint, and its button right after the language switch
+// (the two in one box, so they never wrap apart)
+export function prerenderTheme(html) {
+  return html
+    .replace(/(<meta charset="[^"]*" \/>)/i, `$1\n    ${THEME_HEAD_SCRIPT}`)
+    .replace(/(<div id="language"[\s\S]*?<\/button><\/div>)/, `<div class="hdr-tools">$1${THEME_BUTTON}</div>`);
+}
+
 export function prerenderI18n(html, file) {
   const keys = new Set();
-  let out = html;
+  let out = prerenderTheme(html);
   out = out.replace(TEXT_ELEMENT, (m, tag, attrs, key) => {
     const cs = STRINGS.cs[key];
     if (cs === undefined || /[<>&]/.test(cs)) return m;
