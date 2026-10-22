@@ -10,7 +10,7 @@ import { placeSearch } from "./place-search.js";
 import { placeLabel, placesLoader } from "./places.js";
 import placesUrl from "./data/obce.json?url";
 import { colorFor, renderScale } from "./palette.js";
-import { keepRoomForPanels, userMoved } from "./panel-room.js";
+import { keepRoomForPanels, scrollToPanel, userMoved } from "./panel-room.js";
 import { BASEMAP_ATTRIBUTION, BASEMAP_SPEC, GLYPHS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
 import { themeMap } from "./map-theme.js";
 import {
@@ -363,6 +363,7 @@ function closePoint(write = true) {
 function pickPoint(lng, lat, name = null) {
   setPoint(lng, lat, name);
   writeHash(true);
+  scrollToPanel($("heat-panel"), true);
 }
 
 async function placeName(at) {
@@ -431,7 +432,10 @@ async function renderHourlyPanel() {
   const close = element("button", "×", "close");
   close.type = "button";
   close.setAttribute("aria-label", t("heat.close"));
-  close.addEventListener("click", () => closePoint());
+  close.addEventListener("click", () => {
+    closePoint();
+    scrollToPanel($("heat-panel"), false);
+  });
   title.append(element("strong", at.label ?? t("heat.coords", { lat: at.lat.toFixed(2), lon: at.lng.toFixed(2) })), close);
   const value = heatBlend(at.series, step / 2);
   const lines = [
@@ -468,7 +472,10 @@ async function renderPanel() {
   const close = element("button", "×", "close");
   close.type = "button";
   close.setAttribute("aria-label", t("heat.close"));
-  close.addEventListener("click", closePoint);
+  close.addEventListener("click", () => {
+    closePoint();
+    scrollToPanel($("heat-panel"), false);
+  });
   title.append(element("strong", name ?? t("heat.coords", { lat: at.lat.toFixed(2), lon: at.lng.toFixed(2) })), close);
   const value = values[selected];
   const lines = [

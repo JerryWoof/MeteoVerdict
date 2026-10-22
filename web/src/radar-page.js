@@ -29,6 +29,7 @@ import { placeSearch } from "./place-search.js";
 import { placeLabel, placesLoader } from "./places.js";
 import placesUrl from "./data/obce.json?url";
 import { addLocateControl, locationDot } from "./locate-control.js";
+import { scrollToPanel } from "./panel-room.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -686,12 +687,14 @@ function setPoint(lon, lat, name = null) {
   marker.setLngLat([lon, lat]).addTo(map);
   if (window.innerWidth <= 700) document.getElementById("show").open = false;
   refreshPoint();
+  scrollToPanel(document.getElementById("point-panel"), true);
 }
 
 function closePoint() {
   point = null;
   marker?.remove();
   document.getElementById("point-panel").hidden = true;
+  scrollToPanel(document.getElementById("point-panel"), false);
 }
 
 async function refreshPoint() {
