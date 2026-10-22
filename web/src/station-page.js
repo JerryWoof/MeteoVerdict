@@ -701,7 +701,7 @@ function wxFill(w) {
     const title = displayName(o.name);
     if (!e) {
       fill.set(o.code, BEYOND);
-      tips.set(o.code, { title, text: (w.view.noFile ? noFileText(w.view, "wx") : w.view.hasModel ? "measured.wx.tipNone" : "measured.wx.noModel") });
+      tips.set(o.code, { title, text: w.view.noFile ? noFileText(w.view, "wx") : t(w.view.hasModel ? "measured.wx.tipNone" : "measured.wx.noModel") });
       continue;
     }
     fill.set(o.code, colorFor(w.abs ? e.mae : e.bias, w.view.ramp));
