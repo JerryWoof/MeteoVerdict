@@ -2355,7 +2355,11 @@ def fetch_obs(
     except httpx.HTTPError as exc:
         typer.echo(f"mvd fetch-obs: download failed: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    written = observations.write_monthly(obs, out_dir)
+    # out_dir is <data>/obs; the extra elements go next to it, in <data>/obs-extra
+    core, extra = observations.split_extra(obs)
+    written = observations.write_monthly(core, out_dir) if core.height else []
+    if extra.height:
+        written += observations.write_monthly(extra, out_dir.parent / "obs-extra")
     typer.echo(
         f"{obs.height} hourly values from {obs['station_id'].n_unique()} of {len(ids)} "
         f"stations → {', '.join(str(p) for p in written) or 'nothing'}"

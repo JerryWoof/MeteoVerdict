@@ -50,7 +50,13 @@ def test_urls():
 def test_normalize_keeps_our_elements_and_good_quality():
     raw = parse_collection(SEPTEMBER)
     rows = obs.normalize(raw, "recent")
-    assert set(rows["variable"]) == {"temperature_2m", "wind_speed_10m", "precipitation"}
+    # the real file has wind direction (D) besides the verified elements
+    assert set(rows["variable"]) == {
+        "temperature_2m",
+        "wind_speed_10m",
+        "precipitation",
+        "wind_direction_10m",
+    }
     assert rows.schema == pl.Schema(obs.SCHEMA)
     # the real file has a missing Casmax ("" with QUALITY 4); Casmax is not ours anyway
     assert "" in raw["VAL"].cast(pl.String).to_list()
@@ -227,6 +233,107 @@ def test_gusts_do_not_change_the_automatic_stations():
             "WSI": ["a", "b"],
             "OBS_TYPE": ["10M", "10M"],
             "EG_EL_ABBREVIATION": ["T", "Fmax"],
+        }
+    )
+    assert obs.automatic_station_ids(meta2) == {"a"}
+
+
+def ten_minute(rows):
+    """10-minute rows ``(element, 'HH:MM', value[, quality])`` of 14 Oct 2026."""
+    data = [[LIBUS, e, f"2026-10-14T{t}:00Z", v, "", q[0] if q else 0.0] for e, t, v, *q in rows]
+    return pl.DataFrame(
+        data, schema=["STATION", "ELEMENT", "DT", "VAL", "FLAG", "QUALITY"], orient="row"
+    )
+
+
+def hourly_of(rows):
+    return obs.to_hourly(obs.normalize(ten_minute(rows), "now"))
+
+
+def test_extra_elements_are_instants_at_the_full_hour():
+    hourly = hourly_of(
+        [
+            (e, t, v)
+            for e, v in [("H", "80"), ("D", "270"), ("TPM", "-1.5"), ("SCEa", "12"), ("SVHa", "30")]
+            for t in ("01:00", "01:10")
+        ]
+    )
+    one = datetime(2026, 10, 14, 1, tzinfo=UTC)
+    assert values(hourly, "relative_humidity_2m") == {one: 80.0}
+    assert values(hourly, "wind_direction_10m") == {one: 270.0}
+    assert values(hourly, "temperature_5cm") == {one: -1.5}
+    assert values(hourly, "snow_depth") == {one: 12.0}
+    assert values(hourly, "snow_water_equivalent") == {one: 30.0}
+    assert set(hourly["variable"]) <= set(obs.EXTRA_VARIABLES)  # no T: no dew point
+
+
+def test_dew_point_needs_temperature_and_humidity_of_the_same_hour():
+    hourly = hourly_of(
+        [
+            ("T", "01:00", "20"),
+            ("H", "01:00", "50"),
+            ("T", "02:00", "20"),  # no humidity at 02:00
+            ("H", "03:00", "50"),  # no temperature at 03:00
+            ("T", "04:00", "-5"),
+            ("H", "04:00", "100"),
+        ]
+    )
+    dew = values(hourly, "dew_point_2m")
+    assert dew == {
+        datetime(2026, 10, 14, 1, tzinfo=UTC): pytest.approx(9.27, abs=0.01),
+        datetime(2026, 10, 14, 4, tzinfo=UTC): pytest.approx(-5.0, abs=0.01),  # saturated
+    }
+
+
+def test_dew_point_skips_bad_quality_and_implausible_humidity():
+    hourly = hourly_of(
+        [
+            ("T", "01:00", "10"),
+            ("H", "01:00", "50", 1.0),  # suspect humidity
+            ("T", "02:00", "10"),
+            ("H", "02:00", "130"),  # impossible humidity
+        ]
+    )
+    assert values(hourly, "dew_point_2m") == {}
+    assert values(hourly, "relative_humidity_2m") == {}
+
+
+@pytest.mark.parametrize(
+    ("element", "variable", "bad", "good"),
+    [
+        ("H", "relative_humidity_2m", ["0", "101"], ["1", "100"]),
+        ("D", "wind_direction_10m", ["-1", "361"], ["0", "360"]),
+        ("TPM", "temperature_5cm", ["-51", "61"], ["-50", "60"]),
+        ("SCEa", "snow_depth", ["-1", "501"], ["0", "500"]),
+        ("SVHa", "snow_water_equivalent", ["-0.5"], ["0", "250"]),
+    ],
+)
+def test_extra_elements_are_dropped_outside_their_plausible_range(element, variable, bad, good):
+    rows = [(element, f"{h:02d}:00", v) for h, v in enumerate(bad + good, start=1)]
+    kept = values(hourly_of(rows), variable)
+    assert sorted(kept.values()) == sorted(float(v) for v in good)
+
+
+def test_extra_variables_are_written_apart_from_the_verified_ones(tmp_path):
+    hourly = hourly_of([("T", "01:00", "20"), ("H", "01:00", "50"), ("SCEa", "01:00", "3")])
+    obs.write_hourly(hourly, tmp_path)
+    core = pl.read_parquet(tmp_path / "obs" / "2026-10.parquet")
+    extra = pl.read_parquet(tmp_path / "obs-extra" / "2026-10.parquet")
+    assert set(core["variable"]) == {"temperature_2m"}
+    assert set(extra["variable"]) == {
+        "relative_humidity_2m",
+        "snow_depth",
+        "dew_point_2m",
+    }
+    assert set(obs.EXTRA_VARIABLES).isdisjoint(core["variable"])
+
+
+def test_extra_elements_do_not_change_the_automatic_stations():
+    meta2 = pl.DataFrame(
+        {
+            "WSI": ["a", "b", "c"],
+            "OBS_TYPE": ["10M"] * 3,
+            "EG_EL_ABBREVIATION": ["T", "H", "SCEa"],
         }
     )
     assert obs.automatic_station_ids(meta2) == {"a"}
