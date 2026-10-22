@@ -26,7 +26,7 @@ import {
   placeMarkers, playSteps, rampKey, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary,
   today, viewHash, gustOver, gustOverText, chmiNotice, CAPITALS, historyMode, leaveFor, measuredRedirect,
 } from "./tv.js";
-import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
+import { keepRoomForPanels, panelRoom, scrollToPanel, userMoved } from "./panel-room.js";
 import { aiPath } from "./ai-source.js";
 import { seatName, seatOkres } from "./seats.js";
 import { AI_MODEL, aiMapView, aiPeriods, hasAi, loadAi, withAi } from "./ai-model.js";
@@ -294,6 +294,7 @@ function markerElement(o) {
   el.addEventListener("click", (event) => {
     event.stopPropagation();
     update({ okres: o.code });
+    scrollToPanel(document.getElementById("okres-panel"), true);
   });
   return { el, canvas, temp, chips, chipBox, icon: null };
 }
@@ -617,7 +618,10 @@ function renderObecPanel(panel, { doc, rows, ai: ownAi }) {
   const close = element("button", "×", "close");
   close.type = "button";
   close.setAttribute("aria-label", t("chart.close"));
-  close.addEventListener("click", () => update({ okres: null }));
+  close.addEventListener("click", () => {
+    update({ okres: null });
+    scrollToPanel(document.getElementById("okres-panel"), false);
+  });
   const big = element("div", null, "now");
   big.append(element("div", now ? labelFor(now, "temperature", state.part) : "–", "big-temp"));
   const facts = element("ul", null, "facts");
@@ -712,7 +716,10 @@ function renderPanel(outlook) {
   const close = element("button", "×", "close");
   close.type = "button";
   close.setAttribute("aria-label", t("chart.close"));
-  close.addEventListener("click", () => update({ okres: null }));
+  close.addEventListener("click", () => {
+    update({ okres: null });
+    scrollToPanel(document.getElementById("okres-panel"), false);
+  });
   const big = element("div", null, "now");
   big.append(
     iconCanvas(now ? iconName(now.symbol, state.part, now) : "", 64, symbolText(now?.symbol)),
@@ -1058,6 +1065,7 @@ function addLayers() {
     // a click on an obec's label opens its panel, not the okres's
     if (map.queryRenderedFeatures(event.point, { layers: ["obce-test-label"] }).length) return;
     update({ okres: event.features[0].properties.code });
+    scrollToPanel(document.getElementById("okres-panel"), true);
   });
   map.on("mouseenter", "okresy-fill", () => (map.getCanvas().style.cursor = "pointer"));
   map.on("mouseleave", "okresy-fill", () => (map.getCanvas().style.cursor = ""));

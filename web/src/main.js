@@ -15,7 +15,7 @@ import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
 import { availableLeadDays, availableVariables, availableWindows, filesWindow, parseHash, pickWindow, windowLabel } from "./view.js";
-import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
+import { keepRoomForPanels, panelRoom, scrollToPanel, userMoved } from "./panel-room.js";
 import { EDGE, INK, KRAJE, PAGE_BG, pick, themeMap } from "./map-theme.js";
 import { onThemeChange } from "./theme.js";
 
@@ -220,7 +220,9 @@ function closeButton(onClose) {
 function intervalChart(facts) {
   const best = facts.table.find((r) => r.rank === 1);
   const data = facts.table
-    .filter((r) => r.mae != null && !r.short)
+    .filter((r) => r.mae != null && !r.short && r.model !== "blend")
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, 3)
     .map((r) => ({
       label: r.model === "blend" ? t("model.blend") : nameOf(r.model),
       model: r.model,
@@ -441,11 +443,7 @@ function select(region, scroll = false) {
   writeView();
   showRegion(region).then(() => {
     fitView();
-    // phones: the panel is under the map, the page scrolls to it; closing returns to the map
-    if (scroll && window.innerWidth <= 700) {
-      const target = region ? panel() : map.getContainer();
-      target.scrollIntoView({ block: region ? "start" : "nearest", behavior: "smooth" });
-    }
+    if (scroll) scrollToPanel(panel(), Boolean(region));
   });
 }
 
