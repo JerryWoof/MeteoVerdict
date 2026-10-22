@@ -2,6 +2,7 @@ import { Map as MapLibreMap, Marker, NavigationControl, Popup, setWorkerUrl } fr
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
+import "./fit-map.js";
 
 import { setUpLanguage } from "./i18n.js";
 import { addLocateControl, locationDot } from "./locate-control.js";
