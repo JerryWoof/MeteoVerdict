@@ -21,6 +21,7 @@ import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { cssVar, isDark, onThemeChange } from "./theme.js";
 import { setUpTips } from "./tip-popover.js";
+import { pragueHour } from "./prague-time.js";
 import { displayName } from "./tv.js";
 import {
   availableLeadDays, availableVariables, availableWindows, dayCount, filesWindow, formatRange, pickWindow, pluralForm,
@@ -756,7 +757,7 @@ async function renderLeadHours(view, names, colors) {
   section.hidden = data.length === 0 || basis == null;
   if (section.hidden) return;
   const select = document.getElementById("lead-hours-run");
-  fillSelect("lead-hours-run", runHours.map((h) => [h, h === "all" ? t("compare.leadHoursAllRuns") : t("compare.runHour", { hour: (Number(h) + 1) % 24 })]),
+  fillSelect("lead-hours-run", runHours.map((h) => [h, h === "all" ? t("compare.leadHoursAllRuns") : t("compare.runHour", { hour: pragueHour(Number(h)) })]),
     leadHoursView.runHour);
   select.onchange = (event) => {
     leadHoursView.runHour = event.target.value;

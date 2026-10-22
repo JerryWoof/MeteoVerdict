@@ -2,6 +2,7 @@
 // meta.json and are not translated.
 
 import { renderFooter } from "./footer.js";
+import { pragueClock } from "./prague-time.js";
 import { setUpTheme } from "./theme.js";
 
 export const STRINGS = {
@@ -490,7 +491,7 @@ export const STRINGS = {
     "obs.borrowedTitle": "Z okolních stanic: {stations}",
     "obs.borrowedWhere": "(okres {okres}, {km} km za hranicí)",
     "obs.borrowedNote": "Co v okrese žádná jeho stanice neměří (nebo ten den nenaměřila), je z nejbližších stanic sousedních okresů, nejvýš 3 a nejdál 30 km za hranicí okresu, jako u hodnocení předpovědí.",
-    "obs.dailyNote": "Starší den: jen celodenní hodnoty z denních dat ČHMÚ (maximum a minimum 21–21 h SEČ, srážky 7–7 h SEČ včetně ručních srážkoměrů). Části dne jsou za posledních 30 dní.",
+    "obs.dailyNote": "Starší den: jen celodenní hodnoty z denních dat ČHMÚ (maximum a minimum {@20}–{@20} h, srážky {@06}–{@06} h včetně ručních srážkoměrů). Části dne jsou za posledních 30 dní.",
     "obs.panelNote": "Naměřeno: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Hodnota okresu je průměr jeho stanic, náraz ten nejsilnější v okrese. Symbol jen z naměřeného: srážky, slunce (nebo oblačnost), jevy. Podezřelé hodnoty jsou vynechány; nejnovější data ČHMÚ ještě nezkontroloval.",
     "fc.model": "Porovnat s modelem",
     "fc.lead": "Předstih",
@@ -522,7 +523,7 @@ export const STRINGS = {
     "fc.noModelValue": "{model} pro tuto stanici veličinu „{value}“ nemá (model ji nevydává, nebo ji tu nemáme uloženou).",
     "fc.summary": "{model}, předstih D+{lead}: průměrná chyba {mae} {unit} za {n} dní s oběma hodnotami, v průměru {bias} {unit} (kladné: model výš než stanice).",
     "fc.noOverlap": "Za sledované dny není den, kdy máme naměřenou i předpovězenou hodnotu.",
-    "fc.note": "Předpověď je v bodě stanice a její výšce (ne hodnota okresu). D+{lead}: běh modelu z 1 h SEČ (2 h SELČ) dne D−{lead} (D je den v tabulce). Naměřené hodnoty jsou z hodinových dat stanice, počítané stejně jako předpověď (den SEČ/SELČ). Modely s krokem 3 nebo 6 hodin mají maximum a minimum z méně bodů, tedy trochu mírnější. Posledních 7 dní.",
+    "fc.note": "Předpověď je v bodě stanice a její výšce (ne hodnota okresu). D+{lead}: běh modelu z {@00} h dne D−{lead} (D je den v tabulce). Naměřené hodnoty jsou z hodinových dat stanice, počítané stejně jako předpověď (den pražského času). Modely s krokem 3 nebo 6 hodin mají maximum a minimum z méně bodů, tedy trochu mírnější. Posledních 7 dní.",
     "fc.okresTitle": "Model u stanic okresu",
     "fc.okresIntro": "{model}, předstih D+{lead}: {value} ({unit}) ve stanicích okresu, celý den. Kliknutím na stanici otevřete její graf.",
     "fc.noOkresStations": "Žádná ze stanic okresu nemá uložené předpovědi modelů (jen asi 300 vybraných stanic je má).",
@@ -664,12 +665,12 @@ export const STRINGS = {
     "variable.temperature_2m": "Teplota (2 m)",
     "variable.temperature_2m_hourly": "Teplota (2 m), každá hodina modelu (bez pořadí)",
     "variable.wind_speed_10m_hourly": "Vítr (10 m), každá hodina modelu (bez pořadí)",
-    "variable.temperature_2m_06utc": "Teplota v 7 h SEČ (8 h SELČ, noc)",
-    "variable.temperature_2m_12utc": "Teplota ve 13 h SEČ (14 h SELČ, odpoledne)",
+    "variable.temperature_2m_06utc": "Teplota v {@06} h (noc)",
+    "variable.temperature_2m_12utc": "Teplota ve {@12} h (odpoledne)",
     "variable.temperature_max": "Denní maximum teploty",
     "variable.wind_speed_10m": "Vítr (10 m)",
-    "variable.precipitation_24h": "Srážky za 24 h (7–7 h SEČ, v létě 8–8 h, se srážkoměry)",
-    "variable.precipitation_daily": "Srážky za den (od 1 h SEČ, v létě od 2 h)",
+    "variable.precipitation_24h": "Srážky za 24 h ({@06}–{@06} h, se srážkoměry)",
+    "variable.precipitation_daily": "Srážky za den (od {@00} h)",
     "window.90d": "Posledních 90 dní",
     "window.season": "Tato sezóna",
     "window.all": "Celé období",
@@ -707,10 +708,10 @@ export const STRINGS = {
     "detail.tiedNote": "statisticky stejně dobrý jako nejlepší",
     "detail.byLead": "Nejlepší podle předstihu",
     "detail.byHour": "Nejlepší podle denní doby (teplota)",
-    "hour.00": "1 h SEČ · noc",
-    "hour.06": "7 h SEČ · ráno",
-    "hour.12": "13 h SEČ · poledne",
-    "hour.18": "19 h SEČ · večer",
+    "hour.00": "{@00} h · noc",
+    "hour.06": "{@06} h · ráno",
+    "hour.12": "{@12} h · poledne",
+    "hour.18": "{@18} h · večer",
     "detail.basis": "Spočítáno ze {stations} stanic a {days} dní.",
     "detail.stations": "Stanice v okrese ({n}) – barva: nejlepší model na stanici",
     "detail.stationPage": "Stanice na mapě",
@@ -811,7 +812,7 @@ export const STRINGS = {
     "compare.fromRuns": "z každého běhu",
     "compare.bandBasisShort": "{runs} běhů, {stations} stanic, {days} dní",
     "compare.bandBasis":
-      "{band}: každá hodina tohoto pásma z běhů v 1, 7, 13 a 19 h SEČ (v létě o hodinu později) proti měření ČHMÚ v čase, pro který platí; {runs} běhů, {stations} stanic, {days} dní.",
+      "{band}: každá hodina tohoto pásma z běhů v {@00}, {@06}, {@12} a {@18} h proti měření ČHMÚ v čase, pro který platí; {runs} běhů, {stations} stanic, {days} dní.",
     "compare.preliminary": "Předběžné: jen {days} dní.",
     "compare.bandFewStations":
       "Tento kraj má mezi asi 100 stanicemi, na kterých hodnotíme jednotlivé běhy, méně než 3 stanice, pro pásma hodin ho proto nehodnotíme. Vyberte jiný kraj, Česko, nebo D+1 až D+5.",
@@ -843,15 +844,15 @@ export const STRINGS = {
     "compare.byLeadNote": "MAE každého modelu na D+1 až D+5 v této oblasti; čárkovaně průměr všech modelů. Krátkodobé modely (ICON-D2, AROME, ALADIN) končí po 1–2 dnech.",
     "compare.leadHours": "Chyba podle hodin dopředu (po jednotlivých bězích)",
     "compare.leadHoursNote":
-      "Jiný pohled než D+1 až D+5 výše: každý běh všech modelů (v 1, 7, 13 a 19 h SEČ, v létě o hodinu později; až 120 hodin dopředu) porovnáváme hodinu po hodině s měřením ČHMÚ v čase, pro který předpověď platí. H+6 je tedy předpověď na 6 hodin po startu běhu. Asi 100 stanic (alespoň jedna v každém okrese a k tomu horské), hodnoty v nadmořské výšce stanice. Tučně tři modely nejlepší napříč hodinami, čárkovaně ALADIN ČHMÚ. Šedé pole: ČHMÚ zveřejní běh ALADINu až asi 3 až 4.5 hodiny po startu, takže H+1 až H+4 nikdo v čase nedostane; ostatní modely mají podobné zpoždění, ale neměříme ho. Historie je zatím krátká, čísla se budou měnit.",
+      "Jiný pohled než D+1 až D+5 výše: každý běh všech modelů (v {@00}, {@06}, {@12} a {@18} h; až 120 hodin dopředu) porovnáváme hodinu po hodině s měřením ČHMÚ v čase, pro který předpověď platí. H+6 je tedy předpověď na 6 hodin po startu běhu. Asi 100 stanic (alespoň jedna v každém okrese a k tomu horské), hodnoty v nadmořské výšce stanice. Tučně tři modely nejlepší napříč hodinami, čárkovaně ALADIN ČHMÚ. Šedé pole: ČHMÚ zveřejní běh ALADINu až asi 3 až 4.5 hodiny po startu, takže H+1 až H+4 nikdo v čase nedostane; ostatní modely mají podobné zpoždění, ale neměříme ho. Historie je zatím krátká, čísla se budou měnit.",
     "compare.leadHoursBasis": "{runs} běhů od {first} do {last} ({days} dne)",
     "compare.leadHoursStations": "{models} modelů, {stations} stanic",
     "compare.leadHoursBest": "nejlepší napříč hodinami: {models}",
     "compare.leadHoursRuns": "Běhy",
-    "compare.runHour": "{hour} h SEČ",
-    "compare.leadHoursAllRuns": "všechny (1, 7, 13, 19 h SEČ)",
+    "compare.runHour": "{hour} h",
+    "compare.leadHoursAllRuns": "všechny ({@00}, {@06}, {@12}, {@18} h)",
     "compare.leadHoursFair":
-      "Férové srovnání: v každé hodině předstihu porovnáváme jen modely, které do ní dosáhnou vlastním výstupem, a jen na bězích a stanicích, které mají všechny z nich. Se vzdáleností proto modely ubývají: ICON-D2 končí po 48 h, DMI a KNMI HARMONIE po 59–60 h, AROME po 60 h, ALADIN po 72 h, ARPEGE po 102 h, UK Met Office z běhů v 7 a 19 h SEČ po 60 h; GEM Global má jen běhy v 1 a 13 h SEČ. U „všech běhů“ musí model danou hodinu dosáhnout v každém běhu dne; delší výhled běhů v 1 a 13 h SEČ ukáže volba běhu. Modely s výstupem po 3 nebo 6 hodinách (IFS 0.25°, AIFS, AIGFS, JMA GSM, CMA GRAPES, ARPEGE World po 48 h, UKMO po 54 h, ICON-EU a ICON global po 78 h, GEM Global po 84 h, IFS po 90 h) jsou jen ve svých hodinách, hodinové srážky jen tam, kde je výstup hodinový. Časy běhů jsou ve SEČ, v létě (SELČ) o hodinu později.",
+      "Férové srovnání: v každé hodině předstihu porovnáváme jen modely, které do ní dosáhnou vlastním výstupem, a jen na bězích a stanicích, které mají všechny z nich. Se vzdáleností proto modely ubývají: ICON-D2 končí po 48 h, DMI a KNMI HARMONIE po 59–60 h, AROME po 60 h, ALADIN po 72 h, ARPEGE po 102 h, UK Met Office z běhů v {@06} a {@18} h po 60 h; GEM Global má jen běhy v {@00} a {@12} h. U „všech běhů“ musí model danou hodinu dosáhnout v každém běhu dne; delší výhled běhů v {@00} a {@12} h ukáže volba běhu. Modely s výstupem po 3 nebo 6 hodinách (IFS 0.25°, AIFS, AIGFS, JMA GSM, CMA GRAPES, ARPEGE World po 48 h, UKMO po 54 h, ICON-EU a ICON global po 78 h, GEM Global po 84 h, IFS po 90 h) jsou jen ve svých hodinách, hodinové srážky jen tam, kde je výstup hodinový.",
     "compare.leadHoursSource":
       "Předpovědi: Open-Meteo.com (otevřená data na AWS a Single Runs API), bezplatně pro nekomerční použití (CC BY 4.0; UK Met Office CC BY-SA 4.0), z modelů DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, ČHMÚ, KNMI, DMI, ECCC (Kanada), JMA (Japonsko), CMA (Čína) a UK Met Office. MeteoVerdict je nekomerční projekt.",
     "compare.leadHoursAxis": "hodin od startu běhu →",
@@ -863,7 +864,7 @@ export const STRINGS = {
     "leadHours.precipitation": "Hodinové srážky, mm",
     "farm.title": "Pro zemědělce: mráz, nárazy větru, 3hodinové srážky",
     "farm.intro":
-      "Vyplatí se zakrýt plodiny, odložit postřik nebo zajistit fóliovník? Tady je vidět, jak spolehlivě jednotlivé modely předpovídaly mrazivé noci, silné nárazy větru a vydatné 3hodinové srážky na asi 100 stanicích ČHMÚ, podle toho, kolik hodin dopředu předpověď vznikla (každý běh v 1, 7, 13 a 19 h SEČ zvlášť, v létě o hodinu později). V tabulce je ETS: 1 = vše trefeno bez planých poplachů, 0 = ne lépe než náhoda; tmavší zelená je lepší, ★ nejlepší model v daném sloupci. Najeďte myší na číslo nebo na něj klepněte pro podrobnosti.",
+      "Vyplatí se zakrýt plodiny, odložit postřik nebo zajistit fóliovník? Tady je vidět, jak spolehlivě jednotlivé modely předpovídaly mrazivé noci, silné nárazy větru a vydatné 3hodinové srážky na asi 100 stanicích ČHMÚ, podle toho, kolik hodin dopředu předpověď vznikla (každý běh v {@00}, {@06}, {@12} a {@18} h zvlášť). V tabulce je ETS: 1 = vše trefeno bez planých poplachů, 0 = ne lépe než náhoda; tmavší zelená je lepší, ★ nejlepší model v daném sloupci. Najeďte myší na číslo nebo na něj klepněte pro podrobnosti.",
     "farm.basis": "{runs} běhů od {first} do {last}, {stations} stanic",
     "farm.event": "Jev",
     "farm.event.frost": "Mráz: noční minimum {op} {value} °C",
@@ -888,7 +889,7 @@ export const STRINGS = {
     "farm.howToRead":
       "Jak číst: POD (pravděpodobnost zachycení) říká, kolik skutečných jevů model předpověděl: POD 0.80 = zachytil 8 z 10 mrazivých nocí. FAR (podíl planých poplachů) říká, kolik jeho předpovědí jevu se nesplnilo: FAR 0.30 = 3 z 10 předpovědí jevu bylo planých. Poměr předpovědí jevu a jevů nad 1 znamená, že model předpovídá jev častěji, než nastane (víc planých poplachů), pod 1 že jevy podceňuje. CSI a ETS spojují obojí do jednoho čísla; ETS navíc odečítá zásahy, které by vyšly náhodou.",
     "farm.definitions":
-      "Mráz: nejnižší hodinová teplota ve 2 m mezi 18:00 a 9:00 místního času, noc patří do sloupce podle hodiny jejího konce (9:00) po startu běhu; přízemní mrazík u země bývá ještě o pár stupňů nižší. Nárazy: nejsilnější náraz větru (ČHMÚ Fmax) ve 3hodinovém úseku (1–4, 4–7, … h SEČ, v létě o hodinu později). Srážky: součet za stejné 3hodinové úseky. Prázdné pole: model do té doby nedosahuje, nemá tam vlastní výstup nebo veličinu vůbec (AIFS nemá nárazy).",
+      "Mráz: nejnižší hodinová teplota ve 2 m mezi 18:00 a 9:00 místního času, noc patří do sloupce podle hodiny jejího konce (9:00) po startu běhu; přízemní mrazík u země bývá ještě o pár stupňů nižší. Nárazy: nejsilnější náraz větru (ČHMÚ Fmax) ve 3hodinovém úseku ({@00}–{@03}, {@03}–{@06}, … h). Srážky: součet za stejné 3hodinové úseky. Prázdné pole: model do té doby nedosahuje, nemá tam vlastní výstup nebo veličinu vůbec (AIFS nemá nárazy).",
     "farm.fair":
       "Spravedlivé srovnání: v každém sloupci jen modely, které celý ten předstih pokrývají, a jen na nocích a úsecích, které mají všechny, takže každý model má ve sloupci stejné jevy. Nárazy větru sbíráme od 15. 10. 2026, takže jejich historie je zatím nejkratší.",
     "compare.clear": "Jasný vítěz: žádný jiný model není statisticky stejně dobrý.",
@@ -934,7 +935,7 @@ export const STRINGS = {
     "compare.rankByNote":
       "MAE u srážek zvýhodňuje hladké modely: kdo všude předpoví trochu, nikdy se moc nesplete, ale nepozná, kde opravdu zaprší. ETS hodnotí, jestli model trefil dny se srážkami alespoň 1 mm nebo 10 mm za den (1 = vše trefeno bez planých poplachů, 0 = ne lépe než náhoda). Podle ETS jen seřadíme, bez intervalů; dnů s ≥ 10 mm je málo, čísla jsou proto hodně náhodná.",
     "compare.bcNote":
-      "MAE bez biasu: jak dobrý je model, když od jeho předpovědi odečteme jeho obvyklou chybu (bias) na dané stanici v danou hodinu (1, 7, 13, 19 h SEČ, v létě o hodinu později), spočtenou jen ze 30 dní před vydáním předpovědi. Přesně to dělá naše kombinovaná předpověď. Počítá se jen tam, kde takový bias mají všechny modely (ne v prvních dnech historie), proto ji porovnávejte mezi modely, ne přesně s MAE vlevo.",
+      "MAE bez biasu: jak dobrý je model, když od jeho předpovědi odečteme jeho obvyklou chybu (bias) na dané stanici v danou hodinu ({@00}, {@06}, {@12}, {@18} h), spočtenou jen ze 30 dní před vydáním předpovědi. Přesně to dělá naše kombinovaná předpověď. Počítá se jen tam, kde takový bias mají všechny modely (ne v prvních dnech historie), proto ji porovnávejte mezi modely, ne přesně s MAE vlevo.",
     "compare.aladinNote":
       "ALADIN ČHMÚ: „CZ 1 km“ není samostatný běh s rozlišením 1 km, ale výstup modelu ALARO s rozlišením 2,3 km převedený na síť 1 km (podle popisu dat ČHMÚ Popis_obsahu.xlsx na opendata.chmi.cz). Obě oblasti ALADINu (CZ 1 km a Central Europe 2,3 km) jsou proto skoro stejné.",
     "compare.best": "nejlepší",
@@ -989,7 +990,7 @@ export const STRINGS = {
     "report.caveat2": "Remíza „≈“ je normální, ne chyba: rozdíl menší než náhoda několika dní nepovažujeme za rozdíl. U srážek je remíz nejvíc.",
     "report.caveat3": "Na každém předstihu soutěží jen modely, které tak daleko dosáhnou (ICON-D2 jen na D+1), každý na stejných dnech a stanicích. Čísla z různých předstihů proto nejsou přímo srovnatelná.",
     "report.caveat4": "Porovnává se bod (stanice) s buňkou modelu, takže hrubé modely ztrácejí v bouřkách a v horách. Výběr buňky a přepočet na výšku dělá Open-Meteo, ne model.",
-    "report.caveat5": "Měří jen stanice ČHMÚ; srážky jsou denní úhrny 7–7 h SEČ (v létě 8–8 h) z automatických stanic i ručních srážkoměrů. Posledních pár dní měsíce ČHMÚ možná ještě nezkontroloval; po kontrole lze report vygenerovat znovu.",
+    "report.caveat5": "Měří jen stanice ČHMÚ; srážky jsou denní úhrny {@06}–{@06} h z automatických stanic i ručních srážkoměrů. Posledních pár dní měsíce ČHMÚ možná ještě nezkontroloval; po kontrole lze report vygenerovat znovu.",
     "report.caveat6": "Report neověřuje naši skládanou předpověď, ta se testuje zvlášť (stránka Porovnání). „Průměr všech modelů“ je prostý průměr, ne naše předpověď. A říká, kdo se trefil, ne proč.",
     "report.download": "Ke stažení",
     "report.print": "Tisk / uložit jako PDF",
@@ -1502,7 +1503,7 @@ export const STRINGS = {
     "obs.borrowedTitle": "From nearby stations: {stations}",
     "obs.borrowedWhere": "(okres {okres}, {km} km beyond the border)",
     "obs.borrowedNote": "What no station of the okres measures (or measured that day) comes from the nearest stations of the neighbouring okresy, at most 3 and at most 30 km beyond the okres's border, as in the forecast scores.",
-    "obs.dailyNote": "An older day: whole-day values only, from ČHMÚ's daily data (maximum and minimum 21–21 h CET, precipitation 07–07 h CET, manual rain gauges included). Parts of the day are kept for the last 30 days.",
+    "obs.dailyNote": "An older day: whole-day values only, from ČHMÚ's daily data (maximum and minimum {@20}:00–{@20}:00, precipitation {@06}:00–{@06}:00, manual rain gauges included). Parts of the day are kept for the last 30 days.",
     "obs.panelNote": "Measured: ČHMÚ (opendata.chmi.cz, CC BY 4.0). An okres's value is the mean of its stations, the gust the strongest in the okres. The symbol comes only from what was measured: precipitation, sunshine (or cloud cover), phenomena. Suspect values are left out; ČHMÚ has not checked the newest data yet.",
     "fc.model": "Compare with",
     "fc.lead": "Lead time",
@@ -1534,7 +1535,7 @@ export const STRINGS = {
     "fc.noModelValue": "{model} has no “{value}” for this station (the model does not issue it, or we have not stored it here).",
     "fc.summary": "{model}, lead D+{lead}: mean error {mae} {unit} over {n} days with both values, on average {bias} {unit} (positive: model above the station).",
     "fc.noOverlap": "No day in the period has both a measured and a forecast value.",
-    "fc.note": "The forecast is at the station's point and height (not the okres value). D+{lead}: the model's 01:00 CET (02:00 CEST) run of day D−{lead} (D is the day in the table). The measured values are from the station's hourly data, computed the same way as the forecast (Prague day). Models with 3- or 6-hourly steps take the maximum and minimum from fewer points, so slightly milder ones. The last 7 days.",
+    "fc.note": "The forecast is at the station's point and height (not the okres value). D+{lead}: the model's {@00}:00 run of day D−{lead} (D is the day in the table). The measured values are from the station's hourly data, computed the same way as the forecast (Prague day). Models with 3- or 6-hourly steps take the maximum and minimum from fewer points, so slightly milder ones. The last 7 days.",
     "fc.okresTitle": "Model at the okres's stations",
     "fc.okresIntro": "{model}, lead D+{lead}: {value} ({unit}) at the okres's stations, whole day. Click a station for its chart.",
     "fc.noOkresStations": "None of the okres's stations has model forecasts stored (only about 300 chosen stations do).",
@@ -1676,12 +1677,12 @@ export const STRINGS = {
     "variable.temperature_2m": "Temperature (2 m)",
     "variable.temperature_2m_hourly": "Temperature (2 m), every model hour (not ranked)",
     "variable.wind_speed_10m_hourly": "Wind (10 m), every model hour (not ranked)",
-    "variable.temperature_2m_06utc": "Temperature at 07 CET (08 CEST, night)",
-    "variable.temperature_2m_12utc": "Temperature at 13 CET (14 CEST, afternoon)",
+    "variable.temperature_2m_06utc": "Temperature at {@06}:00 (night)",
+    "variable.temperature_2m_12utc": "Temperature at {@12}:00 (afternoon)",
     "variable.temperature_max": "Daily maximum temperature",
     "variable.wind_speed_10m": "Wind (10 m)",
-    "variable.precipitation_24h": "Precipitation, 24 h (07-07 CET, 08-08 in summer, with rain gauges)",
-    "variable.precipitation_daily": "Precipitation, day (from 01 CET, 02 CEST in summer)",
+    "variable.precipitation_24h": "Precipitation, 24 h ({@06}:00–{@06}:00, with rain gauges)",
+    "variable.precipitation_daily": "Precipitation, day (from {@00}:00)",
     "window.90d": "Last 90 days",
     "window.season": "This season",
     "window.all": "All time",
@@ -1719,10 +1720,10 @@ export const STRINGS = {
     "detail.tiedNote": "statistically as good as the best",
     "detail.byLead": "Best by lead time",
     "detail.byHour": "Best by time of day (temperature)",
-    "hour.00": "01 CET · night",
-    "hour.06": "07 CET · morning",
-    "hour.12": "13 CET · noon",
-    "hour.18": "19 CET · evening",
+    "hour.00": "{@00}:00 · night",
+    "hour.06": "{@06}:00 · morning",
+    "hour.12": "{@12}:00 · noon",
+    "hour.18": "{@18}:00 · evening",
     "detail.basis": "Based on {stations} stations and {days} days.",
     "detail.stations": "Stations in the okres ({n}) – colour: best model at the station",
     "detail.stationPage": "Station on the map",
@@ -1823,7 +1824,7 @@ export const STRINGS = {
     "compare.fromRuns": "from every run",
     "compare.bandBasisShort": "{runs} runs, {stations} stations, {days} days",
     "compare.bandBasis":
-      "{band}: every hour of this band of the 01, 07, 13 and 19 CET runs (an hour later in summer) against the ČHMÚ observation at the time it is for; {runs} runs, {stations} stations, {days} days.",
+      "{band}: every hour of this band of the {@00}:00, {@06}:00, {@12}:00 and {@18}:00 runs against the ČHMÚ observation at the time it is for; {runs} runs, {stations} stations, {days} days.",
     "compare.preliminary": "Preliminary: only {days} days.",
     "compare.bandFewStations":
       "This kraj has fewer than 3 of the about 100 stations where we verify the single runs, so it has no ranking by hours ahead. Choose another kraj, Czechia, or D+1 to D+5.",
@@ -1855,15 +1856,15 @@ export const STRINGS = {
     "compare.byLeadNote": "Each model's MAE at D+1 to D+5 in this region; dashed: the mean of all models. The short-range models (ICON-D2, AROME, ALADIN) end after 1–2 days.",
     "compare.leadHours": "Error by hours ahead (run-based)",
     "compare.leadHoursNote":
-      "A different view from D+1 to D+5 above: every run of every model (01, 07, 13 and 19 CET, an hour later in summer; up to 120 hours ahead) is compared hour by hour with the ČHMÚ observation at the time the forecast is for. H+6 is the forecast for 6 hours after the run started. About 100 stations (at least one in every okres, plus mountain stations), values at the station's elevation. Bold: the three models best across the hours; dashed: ČHMÚ's ALADIN. Grey band: ČHMÚ publishes an ALADIN run only about 3 to 4.5 hours after it starts, so nobody gets H+1 to H+4 in time; the other models have similar delays, which we do not measure. The history is still short; the numbers will change.",
+      "A different view from D+1 to D+5 above: every run of every model ({@00}:00, {@06}:00, {@12}:00 and {@18}:00; up to 120 hours ahead) is compared hour by hour with the ČHMÚ observation at the time the forecast is for. H+6 is the forecast for 6 hours after the run started. About 100 stations (at least one in every okres, plus mountain stations), values at the station's elevation. Bold: the three models best across the hours; dashed: ČHMÚ's ALADIN. Grey band: ČHMÚ publishes an ALADIN run only about 3 to 4.5 hours after it starts, so nobody gets H+1 to H+4 in time; the other models have similar delays, which we do not measure. The history is still short; the numbers will change.",
     "compare.leadHoursBasis": "{runs} runs from {first} to {last} ({days} days)",
     "compare.leadHoursStations": "{models} models, {stations} stations",
     "compare.leadHoursBest": "best across the hours: {models}",
     "compare.leadHoursRuns": "Runs",
-    "compare.runHour": "{hour}:00 CET",
-    "compare.leadHoursAllRuns": "all (01, 07, 13, 19 CET)",
+    "compare.runHour": "{hour}:00",
+    "compare.leadHoursAllRuns": "all ({@00}:00, {@06}:00, {@12}:00, {@18}:00)",
     "compare.leadHoursFair":
-      "A fair comparison: at every lead hour only the models that reach it with their own output are compared, and only on the runs and stations that all of them have. So models drop out as the lead grows: ICON-D2 ends after 48 h, DMI and KNMI HARMONIE after 59–60 h, AROME after 60 h, ALADIN after 72 h, ARPEGE after 102 h, UK Met Office runs from 07 and 19 CET after 60 h; GEM Global has only the 01 and 13 CET runs. For “all runs” a model must reach the hour in every run of the day; pick a run hour to see the longer 01 and 13 CET runs. Models with 3- or 6-hourly output (IFS 0.25°, AIFS, AIGFS, JMA GSM, CMA GRAPES, ARPEGE World after 48 h, UKMO after 54 h, ICON-EU and ICON global after 78 h, GEM Global after 84 h, IFS after 90 h) are shown at their own hours only, hourly precipitation only where the output is hourly. Run times are CET, an hour later in summer (CEST).",
+      "A fair comparison: at every lead hour only the models that reach it with their own output are compared, and only on the runs and stations that all of them have. So models drop out as the lead grows: ICON-D2 ends after 48 h, DMI and KNMI HARMONIE after 59–60 h, AROME after 60 h, ALADIN after 72 h, ARPEGE after 102 h, UK Met Office runs from {@06}:00 and {@18}:00 after 60 h; GEM Global has only the {@00}:00 and {@12}:00 runs. For “all runs” a model must reach the hour in every run of the day; pick a run hour to see the longer {@00}:00 and {@12}:00 runs. Models with 3- or 6-hourly output (IFS 0.25°, AIFS, AIGFS, JMA GSM, CMA GRAPES, ARPEGE World after 48 h, UKMO after 54 h, ICON-EU and ICON global after 78 h, GEM Global after 84 h, IFS after 90 h) are shown at their own hours only, hourly precipitation only where the output is hourly.",
     "compare.leadHoursSource":
       "Forecasts: Open-Meteo.com (open-data bucket on AWS and Single Runs API), free for non-commercial use (CC BY 4.0; UK Met Office CC BY-SA 4.0), from models by DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, ČHMÚ, KNMI, DMI, ECCC (Canada), JMA (Japan), CMA (China) and the UK Met Office. MeteoVerdict is a non-commercial project.",
     "compare.leadHoursAxis": "hours after the run started →",
@@ -1875,7 +1876,7 @@ export const STRINGS = {
     "leadHours.precipitation": "Hourly precipitation, mm",
     "farm.title": "For farmers: frost, gusts, 3-hour rain (run-based)",
     "farm.intro":
-      "Worth covering the crops, postponing spraying or securing the polytunnel? This shows how reliably each model forecast frost nights, strong gusts and heavy 3-hour rain at about 100 ČHMÚ stations, by how many hours ahead the forecast was made (every 01, 07, 13 and 19 CET run on its own, an hour later in summer). The table shows the ETS: 1 = every event caught without false alarms, 0 = no better than chance; darker green is better, ★ marks the best model in a column. Hover over or tap a number for details.",
+      "Worth covering the crops, postponing spraying or securing the polytunnel? This shows how reliably each model forecast frost nights, strong gusts and heavy 3-hour rain at about 100 ČHMÚ stations, by how many hours ahead the forecast was made (every {@00}:00, {@06}:00, {@12}:00 and {@18}:00 run on its own). The table shows the ETS: 1 = every event caught without false alarms, 0 = no better than chance; darker green is better, ★ marks the best model in a column. Hover over or tap a number for details.",
     "farm.basis": "{runs} runs from {first} to {last}, {stations} stations",
     "farm.event": "Event",
     "farm.event.frost": "Frost: night minimum {op} {value} °C",
@@ -1900,7 +1901,7 @@ export const STRINGS = {
     "farm.howToRead":
       "How to read: POD (probability of detection) is the share of real events the model forecast: POD 0.80 = it caught 8 of 10 frost nights. FAR (false alarm ratio) is the share of its event forecasts that did not happen: FAR 0.30 = 3 of 10 event forecasts were false. Event forecasts per event above 1 means the model forecasts the event more often than it occurs (more false alarms), below 1 that it misses events. CSI and ETS combine both into one number; ETS also discounts the hits that would come by chance.",
     "farm.definitions":
-      "Frost: the lowest hourly 2 m temperature between 18:00 and 09:00 local time; a night goes into the column of the hour it ends (09:00) after the run started. Ground frost near the soil is often a few degrees colder. Gusts: the strongest gust (ČHMÚ Fmax) in a 3-hour period (01–04, 04–07, … CET, an hour later in summer). Rain: the total over the same 3-hour periods. Empty cell: the model does not reach that far, has no own output there, or lacks the variable (AIFS has no gusts).",
+      "Frost: the lowest hourly 2 m temperature between 18:00 and 09:00 local time; a night goes into the column of the hour it ends (09:00) after the run started. Ground frost near the soil is often a few degrees colder. Gusts: the strongest gust (ČHMÚ Fmax) in a 3-hour period ({@00}–{@03}, {@03}–{@06}, … h). Rain: the total over the same 3-hour periods. Empty cell: the model does not reach that far, has no own output there, or lacks the variable (AIFS has no gusts).",
     "farm.fair":
       "A fair comparison: each column has only the models that cover the whole lead time, and only the nights and periods all of them have, so every model in a column faces the same events. Gusts are collected since 15 October 2026, so their history is the shortest.",
     "compare.clear": "Clear winner: no other model is statistically as good.",
@@ -1946,7 +1947,7 @@ export const STRINGS = {
     "compare.rankByNote":
       "For precipitation, MAE favours smooth models: forecasting a little rain everywhere is never far off, but does not tell where it really rains. ETS scores whether a model got the days with at least 1 mm or 10 mm right (1 = every event caught without false alarms, 0 = no better than chance). Sorting by ETS is a plain order without intervals; days with ≥ 10 mm are few, so those numbers are noisy.",
     "compare.bcNote":
-      "MAE, bias removed: how good the model is once its usual bias is removed, which is what our combined forecast does. From each forecast we subtract the model's mean error at that station and hour (01, 07, 13, 19 CET, an hour later in summer) over the 30 days before the forecast was made. Computed only where every model has such a bias (not in the first days of the history), so compare it between models rather than exactly with the MAE.",
+      "MAE, bias removed: how good the model is once its usual bias is removed, which is what our combined forecast does. From each forecast we subtract the model's mean error at that station and hour ({@00}:00, {@06}:00, {@12}:00, {@18}:00) over the 30 days before the forecast was made. Computed only where every model has such a bias (not in the first days of the history), so compare it between models rather than exactly with the MAE.",
     "compare.aladinNote":
       "ČHMÚ ALADIN: \"CZ 1 km\" is not a separate 1 km run but the output of the 2.3 km ALARO model post-processed onto a 1 km grid (ČHMÚ's data description Popis_obsahu.xlsx on opendata.chmi.cz). The two ALADIN domains (CZ 1 km and Central Europe 2.3 km) are therefore near-duplicates.",
     "compare.best": "best",
@@ -2001,7 +2002,7 @@ export const STRINGS = {
     "report.caveat2": "A tie “≈” is normal, not a fault: a difference smaller than luck over a few days is not counted as a difference. Rain has the most ties.",
     "report.caveat3": "At each lead only the models that reach that far compete (ICON-D2 only D+1), each on the same days and stations. Numbers from different leads are therefore not directly comparable.",
     "report.caveat4": "A point (a station) is compared with a model cell, so coarse models lose in thunderstorms and mountains. The cell choice and the elevation correction are Open-Meteo's, not the model's.",
-    "report.caveat5": "Only ČHMÚ stations measure; rain is the 07–07 CET (08–08 CEST) daily total from automatic stations and manual gauges. ČHMÚ may not yet have checked the last days of the month; the report can be regenerated afterwards.",
+    "report.caveat5": "Only ČHMÚ stations measure; rain is the {@06}:00–{@06}:00 daily total from automatic stations and manual gauges. ČHMÚ may not yet have checked the last days of the month; the report can be regenerated afterwards.",
     "report.caveat6": "The report does not verify our combined forecast, which is tested separately (the Compare page). “Mean of all models” is a plain mean, not our forecast. And it says who got it right, not why.",
     "report.download": "Download",
     "report.print": "Print / save as PDF",
@@ -2043,20 +2044,19 @@ export function translator(language) {
   const strings = STRINGS[language] ?? STRINGS.en;
   const date = dateFormat(language);
   return (key, params = {}) =>
-    (strings[key] ?? STRINGS.en[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => {
+    pragueClock(strings[key] ?? STRINGS.en[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => {
       const value = params[name] ?? "";
       const day = ISO_DAY.exec(value);
-      return day ? `${date.format(new Date(`${day[1]}T12:00:00Z`))}${runHour(language, day[2], day[3])}` : String(value);
+      return day ? `${date.format(new Date(`${day[1]}T12:00:00Z`))}${runHour(language, day[2])}` : String(value);
     });
 }
 
 // a day "2026-10-19" (or a run "2026-10-19 02 CEST", Prague time) in a text is shown in the language:
 // "19. 10. 2026", "19 Oct 2026"
 const ISO_DAY = /^(\d{4}-\d{2}-\d{2})(?: (\d{2}) (CEST|CET))?$/;
-function runHour(language, hour, zone) {
+function runHour(language, hour) {
   if (hour == null) return "";
-  if (language === "cs") return ` ${Number(hour)} h ${zone === "CEST" ? "SELČ" : "SEČ"}`;
-  return ` ${hour}:00 ${zone}`;
+  return language === "cs" ? ` ${Number(hour)} h` : ` ${hour}:00`;
 }
 function dateFormat(language) {
   return language === "cs"
