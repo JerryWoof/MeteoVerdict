@@ -10,7 +10,8 @@ import { placeLabel, placesLoader } from "./places.js";
 import placesUrl from "./data/obce.json?url";
 import { colorFor, renderScale } from "./palette.js";
 import { keepRoomForPanels, userMoved } from "./panel-room.js";
-import { BASEMAP_ATTRIBUTION, GLYPHS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
+import { BASEMAP_ATTRIBUTION, BASEMAP_SPEC, GLYPHS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
+import { themeMap } from "./map-theme.js";
 import {
   TEMP100M_INDEX, TEMP100M_JSON, nearestPlaceOf, parseTemp100m, parseTemp100mIndex, temp100mDefaultIndex,
   temp100mFormat, temp100mGradient, temp100mLoader, temp100mSlot, temp100mSlotText,
@@ -93,6 +94,7 @@ let sharpening = null; // percent of the full-size images downloaded while the c
 let step = 0; // the hourly slider's position, in half hours
 let unit = "°C";
 let map = null;
+let applyTheme = () => {};
 let point = null; // { lng, lat, name }
 let marker = null;
 let tip = null;
@@ -115,6 +117,7 @@ function makeMap() {
   m.once("load", () => m.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show"));
   m.addControl(new NavigationControl({ showCompass: false }));
   const myDot = locationDot(m);
+  applyTheme = themeMap(m, { ...BASEMAP_SPEC, "okresy-line": { "line-color": ["#ffffff", "#151412"] } });
   addLocateControl(m, {
     t,
     places: () => loadPlaces(),
@@ -138,6 +141,7 @@ function addLayers() {
   map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
   map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#ffffff", "line-opacity": 0.7, "line-width": 0.5 } });
   for (const layer of topLayers(language)) map.addLayer(layer);
+  applyTheme();
   map.on("click", (event) => pickPoint(event.lngLat.lng, event.lngLat.lat));
   // the hover value only with a mouse: a tap on a phone also sends a mousemove, and that
   // tooltip stayed on the map next to the panel the tap opened

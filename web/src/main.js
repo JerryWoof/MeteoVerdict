@@ -15,6 +15,8 @@ import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
 import { availableLeadDays, availableVariables, availableWindows, filesWindow, parseHash, pickWindow, windowLabel } from "./view.js";
 import { keepRoomForPanels, panelRoom, userMoved } from "./panel-room.js";
+import { EDGE, INK, KRAJE, PAGE_BG, pick, themeMap } from "./map-theme.js";
+import { onThemeChange } from "./theme.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -34,11 +36,20 @@ const map = new MapLibreMap({
   style: {
     version: 8,
     sources: {},
-    layers: [{ id: "background", type: "background", paint: { "background-color": "#f4f1ea" } }],
+    layers: [{ id: "background", type: "background", paint: { "background-color": pick(PAGE_BG) } }],
   },
   bounds: BOUNDS,
   fitBoundsOptions: { padding: 20 },
   attributionControl: { customAttribution: "Boundaries: ČÚZK (CC BY 4.0)" },
+});
+const applyTheme = themeMap(map, {
+  background: { "background-color": PAGE_BG },
+  "okresy-line": { "line-color": EDGE },
+  "kraje-line": { "line-color": KRAJE },
+  "small-sample": { "line-color": INK },
+  selected: { "line-color": INK },
+  hovered: { "line-color": INK },
+  stations: { "circle-stroke-color": EDGE },
 });
 // the map grows with a long okres panel (it shares a grid cell with it): keep it drawn
 new ResizeObserver(() => map.resize()).observe(map.getContainer());
@@ -233,14 +244,14 @@ function intervalChart(facts) {
     x: { label: `MAE (${unitOf(current.view.variable)}) →`, grid: true, zero: true },
     y: { label: null, domain: data.map((d) => d.label) },
     marks: [
-      Plot.ruleX([best.mae], { stroke: "#1d2329", strokeDasharray: "3,3" }),
+      Plot.ruleX([best.mae], { stroke: pick(INK), strokeDasharray: "3,3" }),
       Plot.ruleY(data.filter((d) => d.low != null), {
-        y: "label", x1: "low", x2: "high", stroke: (d) => (d.tied ? "#9aa7b1" : "#e0a19a"), strokeWidth: 3,
+        y: "label", x1: "low", x2: "high", stroke: (d) => (d.tied ? pick(["#9aa7b1", "#6a665f"]) : pick(["#e0a19a", "#a8564c"])), strokeWidth: 3,
       }),
       Plot.dot(data, {
         y: "label", x: "mae", r: 4.5,
-        fill: (d) => (d.model === "blend" ? "#ffffff" : (current.colors[d.model] ?? "#888888")),
-        stroke: (d) => (d.model === best.model ? "#1d2329" : "#ffffff"),
+        fill: (d) => (d.model === "blend" ? pick(EDGE) : (current.colors[d.model] ?? "#888888")),
+        stroke: (d) => (d.model === best.model ? pick(INK) : pick(EDGE)),
         strokeWidth: (d) => (d.model === best.model ? 2 : 1),
         tip: true,
       }),
@@ -296,6 +307,19 @@ function stationList(region) {
   wrap.append(list);
   return wrap;
 }
+
+// the panel chart is drawn in the theme's colours: draw it again on a switch
+onThemeChange(() => {
+  // the model colours are lighter in dark: the fills, stations, legend and panel again
+  current.colors = modelColors(current.names);
+  if (current.regions?.size && map.getLayer("regions-fill")) {
+    map.setPaintProperty("regions-fill", "fill-color", fillExpression(current.regions, current.colors));
+    map.getSource("stations")?.setData(stationFeatures(current.stationTable, current.stations, current.colors));
+    renderLegend();
+    paintHighlight();
+  }
+  if (current.view.region) showRegion(current.view.region);
+});
 
 async function showRegion(region) {
   const view = current.view;
@@ -442,6 +466,7 @@ function addLayers(filled) {
     id: "stations", type: "circle", source: "stations",
     paint: { "circle-radius": 3.5, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 1 },
   });
+  applyTheme();
 
   map.on("mousemove", "regions-fill", (event) => {
     const code = event.features[0].properties.code;

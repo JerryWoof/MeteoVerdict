@@ -317,7 +317,7 @@ export function createModelCompare({ getJson, t, language }) {
       style: { fontSize: "11px" },
       x: { label: null, type: "utc", ticks: 5, tickFormat: (d) => dayText(d.toISOString().slice(0, 10)) },
       y: { label: v.unit, grid: true },
-      color: { domain: [t("fc.measured"), name], range: ["#1d2329", "#2b7bd1"], legend: true },
+      color: { domain: [t("fc.measured"), name], range: ["var(--ink)", "var(--model)"], legend: true },
       marks: [
         Plot.lineY(points, { x: "date", y: "value", stroke: "series", strokeWidth: 1.6 }),
         Plot.dot(points, { x: "date", y: "value", stroke: "series", r: 2 }),

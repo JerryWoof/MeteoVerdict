@@ -32,6 +32,50 @@
   --shadow: 0 1px 4px rgba(29, 35, 41, 0.18);
   --shadow-soft: 0 1px 4px rgba(29, 35, 41, 0.12);
   --box-bg: rgba(255, 255, 255, 0.95);
+  --on-ink: #ffffff;
+  --on-ink-soft: #c9ced3;
+  --on-measured: #ffffff;
+  --halo: #ffffff;
+  --chip-bg: rgba(255, 255, 255, 0.9);
+  --box-bg-strong: rgba(255, 255, 255, 0.97);
+  --info-bg: #e3effb;
+  --info-ink: #123d6b;
+  --bad-bg: #fbeae8;
+  --bad-ink: #7a1f12;
+  --bad-bg-2: #f8d3cf;
+  --bad-ink-2: #8a1f17;
+  --ok-bg: #e8f3e8;
+  --ok-bg-2: #dcefdc;
+  --ok-ink: #23703a;
+  --ok-line: #2e7d32;
+  --warn-ink: #8a5a00;
+  --warn-ink-strong: #7a4504;
+  --warn-bg: #fbf4df;
+  --warn-note: #fff3cd;
+  --warn-bg-2: #fbe6c4;
+  --warn-line: #c28a00;
+  --fc-bg: #fbe3c4;
+  --fc-stripe: #f2c48c;
+  --event-ink: #a5521b;
+  --forecast-badge: #b35c00;
+  --past-a: #eef6f4;
+  --past-b: #e3f0ed;
+  --past-edge: #8fbab3;
+  --missing: #7b8791;
+  --hover-bg: #ece8de;
+  --option-hover: #e8eef5;
+  --swatch-outline: rgba(0, 0, 0, 0.12);
+  --locate-ink: #333333;
+  --focus: #1f78b4;
+  --now-ink: #1f4f8f;
+  --risk: #4575b4;
+  --risk-ink: #2f5f9e;
+  --bar: #9aa7b3;
+  --bar-tied: #5f87ad;
+  --bar-best: #1d4f7c;
+  --neutral-bg: #f1eee6;
+  --leader-bg: #f6f2e8;
+  --badge-line: #c9c2b2;
   --fs-ui: 0.85rem;
   --fs-small: 0.75rem;
   --fs-title: 1.2rem;
@@ -57,6 +101,117 @@ body {
 }
 select {
   max-width: 100%;
+}
+/* Dark colours (the toggle next to CS | EN, src/theme.js), the same palette as pudomer.cz.
+   <html data-theme="dark"> is set before the first paint by the script in every <head>. */
+:root {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #ece7df;
+  --ink-soft: #d3ccc1;
+  --muted: #a69c90;
+  --muted-strong: #bcb2a5;
+  --faint: #8a8076;
+  --paper: #151412;
+  --surface: #1e1c19;
+  --surface-warm: #211f1b;
+  --surface-hover: #262320;
+  --line: #36312b;
+  --line-strong: #6a665f;
+  --map-edge: #4a453e;
+  --link: #6fc3dc;
+  --model: #6cb8ff;
+  --accent: #f07a6c;
+  --danger: #f07a6c;
+  --measured: #4fbfb1;
+  --measured-ink: #a5e0d7;
+  --measured-bg: #15302c;
+  --measured-line: #2b4f49;
+  --strip-bg: #1e1c19;
+  --strip-line: #36312b;
+  --strip-edge: #6a665f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.4);
+  --shadow-soft: 0 1px 4px rgba(0, 0, 0, 0.4);
+  --box-bg: rgba(30, 28, 25, 0.95);
+  --glyph-temperature: #ef6a50;
+  --glyph-precipitation: #5aa0ee;
+  --glyph-wind: #4fb36a;
+  --glyph-gust: #4fb36a;
+  --glyph-cloud: #9aa5ae;
+  --glyph-sunshine: #e6a23a;
+  --glyph-sunrise: #e6a23a;
+  --glyph-sunset: #e0834a;
+  --on-ink: #151412;
+  --on-ink-soft: #5b544c;
+  --on-measured: #0e1f1c;
+  --halo: #151412;
+  --chip-bg: rgba(30, 28, 25, 0.9);
+  --box-bg-strong: rgba(30, 28, 25, 0.97);
+  --info-bg: #1b2532;
+  --info-ink: #bcd5f3;
+  --bad-bg: #33201d;
+  --bad-ink: #f4a398;
+  --bad-bg-2: #4a2723;
+  --bad-ink-2: #f4a398;
+  --ok-bg: #1a2b1c;
+  --ok-bg-2: #223a25;
+  --ok-ink: #74c47f;
+  --ok-line: #4a9a55;
+  --warn-ink: #e6b553;
+  --warn-ink-strong: #f0c27a;
+  --warn-bg: #2e2512;
+  --warn-note: #3a2e12;
+  --warn-bg-2: #3a2d14;
+  --warn-line: #b8872a;
+  --fc-bg: #3a2d14;
+  --fc-stripe: #5a4020;
+  --event-ink: #e9a65a;
+  --forecast-badge: #e9a65a;
+  --past-a: #15302c;
+  --past-b: #1b3a35;
+  --past-edge: #3d6a63;
+  --missing: #8a8076;
+  --hover-bg: #2d2a26;
+  --option-hover: #1b2532;
+  --swatch-outline: rgba(255, 255, 255, 0.28);
+  --locate-ink: #ece7df;
+  --focus: #6fc3dc;
+  --now-ink: #8fc4ee;
+  --risk: #7fa8dc;
+  --risk-ink: #8fbaea;
+  --bar: #6b7480;
+  --bar-tied: #6f9cc4;
+  --bar-best: #6cb8ff;
+  --neutral-bg: #262320;
+  --leader-bg: #2a2619;
+  --badge-line: #4a453e;
+}
+/* the button shows the current theme: a sun in light, a moon in dark */
+.iconbtn {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.iconbtn:hover {
+  color: var(--ink);
+}
+.iconbtn svg {
+  width: 18px;
+  height: 18px;
+}
+:root[data-theme="dark"] .iconbtn .theme-light,
+:root:not([data-theme="dark"]) .iconbtn .theme-dark {
+  display: none;
 }
 /* ---------------------------------------------------------------------------------------
    Page colours: each section has a pastel tint for its control strip and tabs and a stronger
@@ -105,6 +260,13 @@ body.theme-ai {
   --theme-accent: #6a4fb3;
   --theme-ink: #4a3585;
 }
+/* the same section tints in dark: deep tinted backgrounds, light text (4.5:1 or more) */
+:root[data-theme="dark"] body.theme-map { --theme-bg: #1b2532; --theme-line: #2f4058; --theme-accent: #7fb0ea; --theme-ink: #bcd5f3; }
+:root[data-theme="dark"] body.theme-forecast { --theme-bg: #2d2214; --theme-line: #4d3a1f; --theme-accent: #e9a65a; --theme-ink: #f3d3a8; }
+:root[data-theme="dark"] body.theme-radar { --theme-bg: #221f33; --theme-line: #3a3456; --theme-accent: #a99af0; --theme-ink: #d6cef8; }
+:root[data-theme="dark"] body.theme-compare { --theme-bg: #2e1c1a; --theme-line: #4f2e2a; --theme-accent: #ee8a7f; --theme-ink: #f6c9c2; }
+:root[data-theme="dark"] body.theme-data { --theme-bg: #1c2229; --theme-line: #323d49; --theme-accent: #9db4cc; --theme-ink: #ccd8e5; }
+:root[data-theme="dark"] body.theme-ai { --theme-bg: #231f31; --theme-line: #3b3452; --theme-accent: #b19ff0; --theme-ink: #d9cff7; }
 body[class*="theme-"] {
   --strip-bg: var(--theme-bg);
   --strip-line: var(--theme-line);
@@ -168,7 +330,7 @@ select:disabled {
 }
 .btn[aria-pressed="true"] {
   background: var(--ink);
-  color: #ffffff;
+  color: var(--on-ink);
 }
 .btn:disabled {
   color: var(--line-strong);
@@ -395,9 +557,18 @@ header h1 {
 .site-nav {
   order: -1;
 }
-#language {
+/* the language switch and the theme button (src/theme.js) at the end of the menu row, 14 px
+   apart as on pudomer.cz */
+.hdr-tools {
   order: 1;
   margin-left: auto;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+#language {
+  margin-left: 0;
 }
 header #controls {
   order: 2;
@@ -557,7 +728,7 @@ table#days,
 }
 /* on a phone the switch sits beside the title instead of taking a row of its own */
 @media (max-width: 700px) {
-  header #language {
+  header .hdr-tools {
     order: -2;
   }
 }
@@ -690,10 +861,10 @@ body.tv {
 }
 .segmented button[aria-pressed="true"] {
   background: var(--ink);
-  color: #ffffff;
+  color: var(--on-ink);
 }
 .segmented button[aria-pressed="true"] small {
-  color: #c9ced3;
+  color: var(--on-ink-soft);
 }
 .play {
   white-space: nowrap;
@@ -708,7 +879,7 @@ body.tv {
 }
 .play[aria-pressed="true"] {
   background: var(--ink);
-  color: #ffffff;
+  color: var(--on-ink);
 }
 /* which forecast the whole map shows (beside the parts of the day) */
 .map-model {
@@ -811,12 +982,12 @@ body.tv {
   margin: 0 0 0.4rem;
   padding: 0.35rem 0.5rem;
   border-radius: 4px;
-  background: #e3effb;
-  color: #123d6b;
+  background: var(--info-bg);
+  color: var(--info-ink);
 }
 #headline .model-banner.failed {
-  background: #fbe9e7;
-  color: #7a1f12;
+  background: var(--bad-bg);
+  color: var(--bad-ink);
 }
 #headline .model-banner p {
   margin: 0 0 0.2rem;
@@ -847,7 +1018,7 @@ body.tv {
   padding: 0.1rem 0.6rem;
   border-radius: 999px;
   background: var(--ink);
-  color: #ffffff;
+  color: var(--on-ink);
   font-weight: 600;
 }
 #headline .line {
@@ -1043,9 +1214,9 @@ body.tv {
   font: inherit;
   color: var(--ink);
   text-shadow:
-    0 0 3px #ffffff,
-    0 0 3px #ffffff,
-    0 0 3px #ffffff;
+    0 0 3px var(--halo),
+    0 0 3px var(--halo),
+    0 0 3px var(--halo);
 }
 /* elements hidden with the attribute stay hidden whatever their display */
 body.tv [hidden] {
@@ -1059,7 +1230,7 @@ body.tv [hidden] {
 /* the symbol with a white halo, as the text: readable on any fill (a sun on a warm
    orange, a dot of the same colour beside it) */
 .wx-top canvas {
-  filter: drop-shadow(0 0 1px #ffffff) drop-shadow(0 0 1px #ffffff);
+  filter: drop-shadow(0 0 1px var(--halo)) drop-shadow(0 0 1px var(--halo));
 }
 .wx-temp {
   font-weight: 700;
@@ -1079,7 +1250,7 @@ body.tv [hidden] {
   gap: 0.1rem;
   padding: 0 0.25rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--chip-bg);
   font-size: 0.7rem;
   font-weight: 600;
   text-shadow: none;
@@ -1089,16 +1260,16 @@ body.tv [hidden] {
   color: var(--link);
 }
 .wx-chip.wind {
-  color: #23703a;
+  color: var(--ok-ink);
 }
 .wx-chip.cloud {
-  color: #4f5961;
+  color: var(--muted-strong);
 }
 .wx-chip.gust {
-  color: #23703a;
+  color: var(--ok-ink);
 }
 .wx-chip.sunshine {
-  color: #8a5a00;
+  color: var(--warn-ink);
 }
 .wx-marker.selected .wx-temp,
 .wx-marker.selected .wx-top {
@@ -1186,7 +1357,7 @@ body.tv [hidden] {
 .daytab.past {
   min-width: 6.5rem;
   color: var(--measured-ink);
-  background: repeating-linear-gradient(135deg, #eef6f4 0 6px, #e3f0ed 6px 12px);
+  background: repeating-linear-gradient(135deg, var(--past-a) 0 6px, var(--past-b) 6px 12px);
 }
 .daytab.past small {
   color: var(--measured);
@@ -1205,7 +1376,7 @@ body.tv [hidden] {
   font-size: 0.75rem;
   max-width: 8.5rem;
   padding: 0 0.15rem;
-  border: 1px solid #8fbab3;
+  border: 1px solid var(--past-edge);
   border-radius: 4px;
   background: var(--surface);
 }
@@ -1249,7 +1420,7 @@ body.tv.past #ribbon {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   background: var(--measured);
-  color: #ffffff;
+  color: var(--on-measured);
 }
 .past-banner strong {
   text-transform: uppercase;
@@ -1265,7 +1436,7 @@ body.tv.past #ribbon {
   padding: 0 0.45rem;
   border-radius: 999px;
   background: var(--measured);
-  color: #ffffff;
+  color: var(--on-measured);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -1273,7 +1444,7 @@ body.tv.past #ribbon {
 }
 #station-panel .facts .missing ,
 #okres-panel .facts .missing {
-  color: #7b8791;
+  color: var(--missing);
   font-style: italic;
 }
 /* a value from the neighbours' stations (an okres without its own) */
@@ -1371,7 +1542,7 @@ body.tv.past #ribbon {
   background: var(--measured-bg);
 }
 .compare-table.matrix tr.rebuilt th.lead small {
-  color: #8a5a00;
+  color: var(--warn-ink);
 }
 .compare-table.matrix th.sym,
 .compare-table.matrix td.sym {
@@ -1393,16 +1564,16 @@ body.tv.past #ribbon {
 }
 /* how far our forecast was off: small / medium / large */
 .compare-table.matrix .delta.small {
-  background: #dcefdc;
-  color: #1f5a24;
+  background: var(--ok-bg-2);
+  color: var(--ok-ink);
 }
 .compare-table.matrix .delta.medium {
-  background: #fbe6c4;
-  color: #7a4504;
+  background: var(--warn-bg-2);
+  color: var(--warn-ink-strong);
 }
 .compare-table.matrix .delta.large {
-  background: #f8d3cf;
-  color: #8a1f17;
+  background: var(--bad-bg-2);
+  color: var(--bad-ink-2);
 }
 .obs-stations ul {
   margin: 0 0 0.4rem;
@@ -1524,7 +1695,7 @@ pre.code {
 }
 /* static swatches need an edge; small samples outlined dashed */
 .legend-item.static .swatch {
-  outline: 1px solid rgba(0, 0, 0, 0.12);
+  outline: 1px solid var(--swatch-outline);
 }
 .legend-item .swatch.small-sample {
   outline: none;
@@ -1539,13 +1710,13 @@ pre.code {
 }
 .legend-item[aria-pressed="true"] {
   background: var(--ink);
-  color: #ffffff;
+  color: var(--on-ink);
 }
 .legend-item[aria-pressed="true"] .count {
-  color: #c9ced3;
+  color: var(--on-ink-soft);
 }
 button.legend-item:hover {
-  background: #ece8de;
+  background: var(--hover-bg);
 }
 button.legend-item[aria-pressed="true"]:hover {
   background: var(--ink);
@@ -1562,7 +1733,7 @@ button.legend-item[aria-pressed="true"]:hover {
   pointer-events: none;
   max-width: 18rem;
   padding: 0.35rem 0.55rem;
-  background: rgba(255, 255, 255, 0.97);
+  background: var(--box-bg-strong);
   border-radius: 4px;
   box-shadow: 0 1px 4px rgba(29, 35, 41, 0.25);
   font-size: 0.8rem;
@@ -1622,7 +1793,7 @@ button.legend-item[aria-pressed="true"]:hover {
 #detail .warning {
   padding: 0.3rem 0.5rem;
   border-radius: 4px;
-  background: #fff3cd;
+  background: var(--warn-note);
   font-size: 0.8rem;
 }
 #detail .why {
@@ -1793,14 +1964,14 @@ body.station #facts {
   padding: 0.1rem 0.6rem;
   border-radius: 999px;
   background: var(--ink);
-  color: #ffffff;
+  color: var(--on-ink);
   font-size: 0.8rem;
   font-weight: 600;
   white-space: nowrap;
 }
 #when .badge.forecast,
 #headline .badge.forecast {
-  background: #b35c00;
+  background: var(--forecast-badge);
 }
 /* the timeline: hours, frames, the nowcast hatched, now */
 .timeline {
@@ -1834,7 +2005,7 @@ body.station #facts {
   top: 30%;
   bottom: 30%;
   border-radius: 0 999px 999px 0;
-  background: repeating-linear-gradient(-45deg, #f2c48c, #f2c48c 4px, #fbe3c4 4px, #fbe3c4 8px);
+  background: repeating-linear-gradient(-45deg, var(--fc-stripe), var(--fc-stripe) 4px, var(--fc-bg) 4px, var(--fc-bg) 8px);
 }
 #ticks .frame {
   bottom: 0;
@@ -1892,7 +2063,7 @@ body.station #facts {
 }
 #headline .fresh {
   font-size: 0.78rem;
-  color: #2d6a3a;
+  color: var(--ok-ink);
 }
 #headline .fresh.stale,
 #headline .warning,
@@ -1901,7 +2072,7 @@ body.station #facts {
   font-weight: 600;
 }
 #headline .warning {
-  background: #fde8e6;
+  background: var(--bad-bg);
   border-radius: 4px;
   padding: 0.15rem 0.4rem;
 }
@@ -1975,7 +2146,7 @@ body.radar.forecast #map::after {
   display: inline-block;
   height: 0.8rem;
   border-radius: 2px;
-  outline: 1px solid rgba(0, 0, 0, 0.12);
+  outline: 1px solid var(--swatch-outline);
 }
 .legend-rows .mm {
   color: var(--muted-strong);
@@ -2015,7 +2186,7 @@ body.radar.forecast #map::after {
   height: 0.7rem;
 }
 .radar-scale .bar span:last-child {
-  outline: 1px solid #c9ced3;
+  outline: 1px solid var(--map-edge);
   outline-offset: -1px;
 }
 .radar-scale .numbers span {
@@ -2058,7 +2229,7 @@ body.radar #show-box {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #333;
+  color: var(--locate-ink);
 }
 .mv-locate.loading svg {
   animation: mv-locate-pulse 1s ease-in-out infinite;
@@ -2083,12 +2254,12 @@ body.radar #show-box {
   max-width: calc(100% - 100px);
   padding: 0.3rem 0.7rem;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--box-bg);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
   font-size: 0.78rem;
   line-height: 1.3;
   text-align: center;
-  color: #222;
+  color: var(--locate-ink);
   pointer-events: none;
 }
 .my-location-dot {
@@ -2137,7 +2308,7 @@ body.radar #show-box {
 }
 .place-list .option[aria-selected="true"],
 .place-list .option:hover {
-  background: #e8eef5;
+  background: var(--option-hover);
 }
 .place-list .okres,
 .place-list .empty {
@@ -2173,7 +2344,7 @@ body.radar #show-box {
 }
 #point-panel .sentence.expected,
 #point-panel .sentence.now {
-  color: #1f4f8f;
+  color: var(--now-ink);
 }
 .point-chart {
   width: 100%;
@@ -2181,11 +2352,11 @@ body.radar #show-box {
   display: block;
 }
 .point-chart .future {
-  fill: #fbe3c4;
+  fill: var(--fc-bg);
   opacity: 0.6;
 }
 .point-chart .guide {
-  stroke: #e3ddd0;
+  stroke: var(--line);
   stroke-width: 1;
 }
 .point-chart .base {
@@ -2285,7 +2456,7 @@ body.radar #show-box {
   border-bottom: none;
 }
 .farm-table tr.events td.small {
-  color: #a5521b;
+  color: var(--event-ink);
 }
 .farm-reading {
   font-size: 0.9rem;
@@ -2317,7 +2488,7 @@ body.radar #show-box {
 .blend-test-table th,
 .blend-test-table td {
   padding: 0.3rem 0.45rem;
-  border: 1px solid #e3ddd0;
+  border: 1px solid var(--line);
   text-align: left;
   vertical-align: top;
 }
@@ -2325,13 +2496,13 @@ body.radar #show-box {
   color: var(--muted-strong);
 }
 .blend-test-table td.better {
-  background: #e3f1e0;
+  background: var(--ok-bg);
 }
 .blend-test-table td.worse {
-  background: #f8e1de;
+  background: var(--bad-bg);
 }
 .blend-test-table td.same {
-  background: #f1efe9;
+  background: var(--neutral-bg);
 }
 /* our forecast vs every single model: fits a phone without scrolling sideways */
 .blend-test-models {
@@ -2545,7 +2716,7 @@ body.radar #show-box {
   opacity: 0.7;
 }
 .station-map canvas:focus-visible {
-  outline: 3px solid #1f78b4;
+  outline: 3px solid var(--focus);
   outline-offset: -3px;
 }
 .station-map-tools {
@@ -2572,7 +2743,7 @@ body.radar #show-box {
   height: 0.7rem;
   border-radius: 50%;
   background: var(--dot);
-  box-shadow: 0 0 0 1px #ffffff;
+  box-shadow: 0 0 0 1px var(--halo);
 }
 .station-map-legend .dot.hollow {
   background: var(--surface);
@@ -2729,7 +2900,7 @@ body.station [hidden] {
   font-weight: 600;
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
-  color: #fff;
+  color: var(--on-ink);
   background: var(--theme-accent);
 }
 .ai-banner {
@@ -2929,20 +3100,20 @@ body.station [hidden] {
   fill-opacity: 0.18;
 }
 #heat-panel .heat-chart .risk {
-  stroke: #4575b4;
+  stroke: var(--risk);
   stroke-dasharray: 4 3;
 }
 #heat-panel .heat-chart .risk-label {
-  fill: #4575b4;
+  fill: var(--risk);
   /* a halo of the box colour: the label stays readable where the temperature line crosses it */
   paint-order: stroke;
-  stroke: #ffffff;
+  stroke: var(--surface);
   stroke-width: 3px;
   stroke-linejoin: round;
 }
 #heat-panel .heat-risk {
   font-weight: 600;
-  color: #2f5f9e;
+  color: var(--risk-ink);
 }
 #heat-panel .heat-risk-times {
   font-size: 0.8rem;
@@ -2999,13 +3170,13 @@ footer .site-links {
   display: block;
   height: 100%;
   border-radius: 3px;
-  background: #9aa7b3;
+  background: var(--bar);
 }
 .report .bars .tied .bar {
-  background: #5f87ad;
+  background: var(--bar-tied);
 }
 .report .bars .best .bar {
-  background: #1d4f7c;
+  background: var(--bar-best);
 }
 .report .bars .best .name {
   font-weight: 700;
@@ -3054,37 +3225,37 @@ footer .site-links {
 .aic-status {
   padding: 0.5rem 0.7rem;
   margin: 0.4rem 0;
-  border-left: 4px solid #c28a00;
-  background: #fbf4df;
+  border-left: 4px solid var(--warn-line);
+  background: var(--warn-bg);
   font-size: 0.88rem;
 }
 .aic-status.verified {
-  border-color: #2e7d32;
-  background: #e8f3e8;
+  border-color: var(--ok-line);
+  background: var(--ok-bg);
 }
 .aic-verdict {
   margin: 0.6rem 0 0.3rem;
   padding: 0.6rem 0.8rem;
   border-radius: 6px;
-  border: 1px solid #ddd8cc;
+  border: 1px solid var(--line);
   font-size: 0.98rem;
 }
 .aic-verdict.better {
-  border-color: #2e7d32;
-  background: #e8f3e8;
+  border-color: var(--ok-line);
+  background: var(--ok-bg);
 }
 .aic-verdict.worse {
-  border-color: #c0392b;
-  background: #fbeae8;
+  border-color: var(--accent);
+  background: var(--bad-bg);
 }
 .aic-verdict.same {
-  background: #f1eee6;
+  background: var(--neutral-bg);
 }
 .aic-verdict .tag {
   display: block;
   margin-top: 0.25rem;
   font-size: 0.8rem;
-  color: #8a5a00;
+  color: var(--warn-ink);
 }
 .aic-table td,
 .aic-table th {
@@ -3094,25 +3265,25 @@ footer .site-links {
 }
 
 .aic-table tr.leader td {
-  background: #f6f2e8;
+  background: var(--leader-bg);
 }
 .aic-table tr.ai td {
-  background: #fbeae8;
+  background: var(--bad-bg);
 }
 .aic-table tr.selected td {
-  box-shadow: inset 0 -2px 0 #1f78b4;
+  box-shadow: inset 0 -2px 0 var(--focus);
 }
 .aic-table .badge {
   margin-left: 0.4rem;
   padding: 0 0.35rem;
   border-radius: 8px;
-  border: 1px solid #c9c2b2;
+  border: 1px solid var(--badge-line);
   font-size: 0.7rem;
-  color: #5b6770;
+  color: var(--muted);
 }
 .aic-table .badge.provisional {
-  border-color: #c28a00;
-  color: #8a5a00;
+  border-color: var(--warn-line);
+  color: var(--warn-ink);
 }
 .aic-more {
   margin-top: 1.6rem;
@@ -3132,13 +3303,13 @@ footer .site-links {
 .aic-pair {
   margin: 0.45rem 0;
   padding-left: 0.6rem;
-  border-left: 4px solid #ddd8cc;
+  border-left: 4px solid var(--line);
 }
 .aic-pair.better {
-  border-left-color: #2e7d32;
+  border-left-color: var(--ok-line);
 }
 .aic-pair.worse {
-  border-left-color: #c0392b;
+  border-left-color: var(--accent);
 }
 .swatch {
   display: inline-block;
@@ -3165,11 +3336,11 @@ footer .site-links {
 }
 .aic-numbers .label {
   font-size: 0.8rem;
-  color: #5b6770;
+  color: var(--muted);
 }
 .aic-verdict .detail {
   font-size: 0.85rem;
-  color: #3d4750;
+  color: var(--ink-soft);
 }
 .aic-table td:nth-child(3) {
   white-space: normal;
@@ -3528,4 +3699,62 @@ header {
   .aic-numbers .label {
     font-size: 0.7rem;
   }
+}
+
+/* MapLibre's own controls, attribution and popups in dark (its stylesheet is white) */
+:root[data-theme="dark"] .maplibregl-ctrl-group {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .maplibregl-ctrl-group:not(:empty) {
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+:root[data-theme="dark"] .maplibregl-ctrl-group button + button {
+  border-top-color: var(--line);
+}
+:root[data-theme="dark"] .maplibregl-ctrl-icon {
+  filter: invert(1);
+}
+:root[data-theme="dark"] .maplibregl-ctrl-group button.mv-locate {
+  color: var(--locate-ink);
+}
+:root[data-theme="dark"] .maplibregl-ctrl-attrib.maplibregl-compact,
+:root[data-theme="dark"] .maplibregl-ctrl-attrib {
+  background: var(--box-bg);
+  color: var(--muted);
+}
+:root[data-theme="dark"] .maplibregl-ctrl-attrib a {
+  color: var(--link);
+}
+:root[data-theme="dark"] .maplibregl-ctrl-attrib-button {
+  background-color: transparent;
+  filter: invert(1);
+}
+:root[data-theme="dark"] .maplibregl-popup-content {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+:root[data-theme="dark"] .maplibregl-popup-close-button {
+  color: var(--muted);
+}
+:root[data-theme="dark"] .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+:root[data-theme="dark"] .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+:root[data-theme="dark"] .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--surface);
+}
+:root[data-theme="dark"] .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+:root[data-theme="dark"] .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+:root[data-theme="dark"] .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--surface);
+}
+:root[data-theme="dark"] .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--surface);
+}
+:root[data-theme="dark"] .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--surface);
+}
+/* Observable Plot tooltips take the box colour (they are white with light text otherwise) */
+svg[class^="plot-"],
+[class^="plot-"] svg {
+  --plot-background: var(--surface);
 }

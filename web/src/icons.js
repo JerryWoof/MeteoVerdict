@@ -183,8 +183,10 @@ export function glyph(layer, size = 14) {
   for (const d of spec.paths) {
     const path = document.createElementNS(ns, "path");
     path.setAttribute("d", d);
-    path.setAttribute("fill", layer === "precipitation" || layer === "cloud" ? spec.color : "none");
-    path.setAttribute("stroke", spec.color);
+    const colour = `var(--glyph-${layer},${spec.color})`;
+    const filled = layer === "precipitation" || layer === "cloud";
+    // the dark theme can lighten a glyph with --glyph-<layer> (light mode keeps its colour)
+    path.setAttribute("style", `fill:${filled ? colour : "none"};stroke:${colour}`);
     path.setAttribute("stroke-width", "2");
     path.setAttribute("stroke-linecap", "round");
     path.setAttribute("stroke-linejoin", "round");

@@ -3,6 +3,8 @@ import * as Plot from "@observablehq/plot";
 import "./style.css";
 
 import { modelColors, records } from "./data.js";
+import { INK, pick as themed } from "./map-theme.js";
+import { onThemeChange } from "./theme.js";
 import {
   COMBINED, VARIABLES, bestPerLeadDay, dailySummary, nightBands, weightTable, winnersByLeadDay,
 } from "./forecast.js";
@@ -199,15 +201,15 @@ function chart(forecast, combined, table, variable, colors, names, nights, selec
       marks: [
         // night, sunset to sunrise, behind everything; the full height of the chart
         Plot.rectX(nights, {
-          x1: (n) => new Date(n.start), x2: (n) => new Date(n.end), fill: "#1d2329", fillOpacity: 0.06,
+          x1: (n) => new Date(n.start), x2: (n) => new Date(n.end), fill: themed(INK), fillOpacity: 0.06,
         }),
         ...(band.length
-          ? [Plot.areaY(band, { x: "time", y1: "lo", y2: "hi", fill: "#1d2329", fillOpacity: 0.12, curve })]
+          ? [Plot.areaY(band, { x: "time", y1: "lo", y2: "hi", fill: themed(INK), fillOpacity: 0.12, curve })]
           : []),
-        Plot.lineY(rows, { x: "time", y: "value", z: "model", stroke: "#b7bec4", strokeWidth: 0.8, curve }),
+        Plot.lineY(rows, { x: "time", y: "value", z: "model", stroke: themed(["#b7bec4", "#4a443d"]), strokeWidth: 0.8, curve }),
         ...(single
           ? [
-            Plot.lineY(ours, { x: "time", y: "value", stroke: "#1d2329", strokeWidth: 1, curve }),
+            Plot.lineY(ours, { x: "time", y: "value", stroke: themed(INK), strokeWidth: 1, curve }),
             Plot.lineY(picked, {
               x: "time", y: "value", stroke: colors[selected] ?? "#1f78b4", strokeWidth: 2.5, curve, tip: true,
             }),
@@ -217,7 +219,7 @@ function chart(forecast, combined, table, variable, colors, names, nights, selec
               x: "time", y: "value", z: "segment", stroke: (r) => colors[r.model] ?? "#1f78b4", strokeWidth: 1.6, curve,
             }),
             Plot.lineY(withRange, {
-              x: "time", y: "value", stroke: "#1d2329", strokeWidth: 2.5, curve, tip: true,
+              x: "time", y: "value", stroke: themed(INK), strokeWidth: 2.5, curve, tip: true,
               channels: band.length ? { range: { value: "range", label: "±" } } : {},
             }),
           ]),
@@ -376,6 +378,11 @@ async function main() {
   document.getElementById("status").textContent = statusText(meta, t);
   const names = { ...meta?.models, [AI_MODEL]: t("ai.modelName") };
   const colors = modelColors(names);
+  // lighter model colours in dark: update in place (the page holds this object) and redraw
+  onThemeChange(() => {
+    Object.assign(colors, modelColors(names));
+    if (state) render(names, colors);
+  });
   // one entry per okres town; the okresy whose seat is a city elsewhere show that city
   const points = records(index)
     .filter((p) => !(p.code in SEAT_OKRES))

@@ -6,6 +6,8 @@
 // docs/licensing.md and docs/data-sources.md ("Radar base map") credit both.
 
 import { OSM_COPYRIGHT, TERRAIN_ATTRIBUTION } from "./footer.js";
+import { isDark } from "./theme.js";
+import { withTheme } from "./map-theme.js";
 
 export const GLYPHS = "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf";
 const TILES = "https://tiles.openfreemap.org/planet";
@@ -22,6 +24,29 @@ export const LAND = "#f3f1ec";
 const WATER = "#b6c8d6";
 const TEXT_HALO = "rgba(255,255,255,0.9)";
 
+// [light, dark] per layer, like pudomer's dark map: near-black land, dark water, muted roads
+// and borders, light labels with dark halos, a subtle relief
+const HALO = ["rgba(255,255,255,0.9)", "rgba(21,20,18,0.88)"];
+export const BASEMAP_SPEC = {
+  background: { "background-color": [LAND, "#151412"] },
+  hillshade: {
+    "hillshade-exaggeration": [
+      ["interpolate", ["linear"], ["zoom"], 5, 0.55, 10, 0.35],
+      ["interpolate", ["linear"], ["zoom"], 5, 0.3, 10, 0.2],
+    ],
+    "hillshade-shadow-color": ["#5f6469", "#000000"],
+    "hillshade-highlight-color": ["#ffffff", "#3d3a35"],
+    "hillshade-accent-color": ["#9a9ea2", "#0b0b0a"],
+  },
+  water: { "fill-color": [WATER, "#1b2a35"] },
+  waterway: { "line-color": [WATER, "#1b2a35"] },
+  roads: { "line-color": ["#d9d3c7", "#37322b"] },
+  "country-line": { "line-color": ["#59636b", "#8a8076"] },
+  "place-village": { "text-color": ["#4b535a", "#a69c90"], "text-halo-color": HALO },
+  "place-town": { "text-color": ["#353d44", "#cfc7bb"], "text-halo-color": HALO },
+  "place-city": { "text-color": ["#22292f", "#ece7df"], "text-halo-color": HALO },
+};
+
 /** The labels that select their place when clicked. */
 export const PLACE_LAYERS = ["place-village", "place-town", "place-city"];
 
@@ -34,8 +59,8 @@ export function basemapSources() {
 }
 
 /** Under the radar: hillshade, water, rivers, main roads. */
-export function baseLayers() {
-  return [
+export function baseLayers(dark = isDark()) {
+  return withTheme([
     { id: "background", type: "background", paint: { "background-color": LAND } },
     {
       id: "hillshade", type: "hillshade", source: "terrain",
@@ -68,7 +93,7 @@ export function baseLayers() {
         "line-width": ["interpolate", ["linear"], ["zoom"], 6, ["match", ["get", "class"], "primary", 0.4, 0.7], 12, ["match", ["get", "class"], "primary", 1.6, 2.4]],
       },
     },
-  ];
+  ], BASEMAP_SPEC, dark);
 }
 
 const name = (language) => ["coalesce", ["get", `name:${language}`], ["get", "name"]];
@@ -89,14 +114,14 @@ function place(id, classes, minzoom, size, colour, font = "Noto Sans Regular") {
 }
 
 /** Over the radar: the national border and the place labels (more as you zoom). */
-export function topLayers(language) {
+export function topLayers(language, dark = isDark()) {
   const labels = [
     place("place-village", ["village"], 10, [10, 10.5, 14, 13], "#4b535a"),
     place("place-town", ["town"], 7.5, [7.5, 10.5, 12, 14], "#353d44"),
     place("place-city", ["city"], 5, [5, 11, 10, 16], "#22292f", "Noto Sans Bold"),
   ];
   for (const layer of labels) layer.layout["text-field"] = name(language);
-  return [
+  return withTheme([
     {
       id: "country-line", type: "line", source: "omt", "source-layer": "boundary",
       filter: ["all", ["==", ["get", "admin_level"], 2], ["!=", ["get", "maritime"], 1]],
@@ -104,5 +129,5 @@ export function topLayers(language) {
       paint: { "line-color": "#59636b", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1, 10, 2] },
     },
     ...labels,
-  ];
+  ], BASEMAP_SPEC, dark);
 }

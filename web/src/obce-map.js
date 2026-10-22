@@ -3,6 +3,8 @@
 // part shown, the bigger places first. Only with
 // our combination (the obce have no single-model parts).
 import { obecTimes } from "./obce-test.js";
+import { isDark } from "./theme.js";
+import { themeMap } from "./map-theme.js";
 import { colorFor, labelFor, mixColor, rampKey, valueFor } from "./tv.js";
 
 // from about the zoom where one okres fills the map
@@ -102,6 +104,23 @@ export function nearestObec(doc, lat, lon) {
   return best;
 }
 
+// the name small and the value large beneath it; colours of the name and of the extra values
+function textField(dark) {
+  const name = dark ? "#cfc7bb" : "#4b5863";
+  const extra = dark ? "#8cc4e0" : "#1f5f8b";
+  const value = ["get", "valueColor"];
+  const head = [["get", "name"], { "font-scale": 0.62, "text-color": name }, "\n", {}, ["get", "label"], { "text-font": ["literal", ["Noto Sans Bold"]], "text-color": value }];
+  return [
+    "case",
+    ["==", ["get", "extra"], ""],
+    ["format", ...head],
+    ["format", ...head, "\n", {}, ["get", "extra"], { "font-scale": 0.62, "text-color": extra }],
+  ];
+}
+
+// the dark halo is the page's dark; the selected place's yellow turns a dull gold
+const haloColor = (dark) => ["case", ["get", "selected"], dark ? "#6b5316" : "#ffe08a", dark ? "rgba(21,20,18,0.9)" : "rgba(255,255,255,0.92)"];
+
 /** The source and its layer (once the map has loaded); a click on a label calls `onPick(okres, name)`. */
 export function addObceLayers(map, onPick) {
   map.addSource("obce-test", { type: "geojson", data: empty });
@@ -116,24 +135,7 @@ export function addObceLayers(map, onPick) {
     layout: {
       // the name, the main value (temperature, or the first value ticked) and the other
       // values ticked under "Values at each okres and village" (rain, wind) small beneath
-      "text-field": [
-        "case",
-        ["==", ["get", "extra"], ""],
-        [
-          "format",
-          ["get", "name"], { "font-scale": 0.62, "text-color": "#4b5863" },
-          "\n", {},
-          ["get", "label"], { "text-font": ["literal", ["Noto Sans Bold"]], "text-color": ["get", "valueColor"] },
-        ],
-        [
-          "format",
-          ["get", "name"], { "font-scale": 0.62, "text-color": "#4b5863" },
-          "\n", {},
-          ["get", "label"], { "text-font": ["literal", ["Noto Sans Bold"]], "text-color": ["get", "valueColor"] },
-          "\n", {},
-          ["get", "extra"], { "font-scale": 0.62, "text-color": "#1f5f8b" },
-        ],
-      ],
+      "text-field": textField(false),
       "text-font": ["Noto Sans Regular"],
       "text-size": ["case", [">=", ["coalesce", ["get", "population"], 0], TOWN], 19, 16],
       "text-anchor": "center",
@@ -143,10 +145,13 @@ export function addObceLayers(map, onPick) {
       "symbol-sort-key": ["-", ["coalesce", ["get", "population"], 0]],
     },
     paint: {
-      "text-halo-color": ["case", ["get", "selected"], "#ffe08a", "rgba(255,255,255,0.92)"],
+      "text-halo-color": haloColor(false),
       "text-halo-width": ["case", ["get", "selected"], 3, 1.6],
     },
   });
+  themeMap(map, {
+    "obce-test-label": { "layout:text-field": [textField(false), textField(true)], "text-halo-color": [haloColor(false), haloColor(true)] },
+  })();
   map.on("click", "obce-test-label", (event) => {
     const p = event.features[0].properties;
     onPick(p.okres, p.name);
@@ -157,6 +162,13 @@ export function addObceLayers(map, onPick) {
 
 // the values an obec has, in the order of the map's layers (no cloud for the obce)
 const OBEC_LAYERS = ["temperature", "precipitation", "wind"];
+
+// the scale's colour, darkened to read as text on the light map, lightened on the dark one
+function valueColor(value, layer) {
+  const dark = isDark();
+  if (value == null) return dark ? "#ece7df" : "#1d2329";
+  return mixColor(colorFor(value, rampKey(layer, true)), dark ? "#ffffff" : "#1d2329", dark ? 0.3 : 0.4);
+}
 
 /** Draw the obce for `state` (day, part, the values ticked in `shown`); `docs`: [{doc,
  * rows}]; none = hidden; `selected`: the obec whose panel is open (a yellow halo). */
@@ -181,7 +193,7 @@ export function paintObce(map, docs, state, selected = null) {
           population: place.population ?? null,
           selected: place.name === selected,
           // the scale's colour, darkened to read as text on the map
-          valueColor: value == null ? "#1d2329" : mixColor(colorFor(value, rampKey(layer, true)), "#1d2329", 0.4),
+          valueColor: valueColor(value, layer),
           label: layer ? labelFor(row, layer, state.part) : "",
           extra: others.map((l) => labelFor(row, l, state.part)).join(" · "),
         },

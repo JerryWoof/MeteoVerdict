@@ -19,6 +19,7 @@ import { binLabel, count as countIn, etsColor, etsTextColor, farmChoices, farmGr
 import { NO_DATA, bestByRegion, fillExpression, modelColors, records } from "./data.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
+import { cssVar, isDark, onThemeChange } from "./theme.js";
 import { setUpTips } from "./tip-popover.js";
 import { displayName } from "./tv.js";
 import {
@@ -195,7 +196,7 @@ const map = new MapLibreMap({
   style: {
     version: 8,
     sources: {},
-    layers: [{ id: "background", type: "background", paint: { "background-color": "#f4f1ea" } }],
+    layers: [{ id: "background", type: "background", paint: { "background-color": cssVar("--paper") } }],
   },
   bounds: [
     [12.0, 48.5],
@@ -207,6 +208,16 @@ const map = new MapLibreMap({
 map.addControl(new NavigationControl({ showCompass: false }));
 const mapLoaded = new Promise((resolve) => map.on("load", resolve));
 
+/** The map's lines and background in the colours of the current theme. */
+function paintMapTheme() {
+  const set = (layer, prop, value) => map.getLayer(layer) && map.setPaintProperty(layer, prop, value);
+  set("background", "background-color", cssVar("--paper"));
+  set("okresy-line", "line-color", cssVar("--surface"));
+  set("kraje-line", "line-color", cssVar("--muted-strong"));
+  set("sel-okres", "line-color", cssVar("--ink"));
+  set("sel-kraj", "line-color", cssVar("--ink"));
+}
+
 function addLayers(onPick) {
   map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
   map.addSource("kraje", { type: "geojson", data: "data/kraje.geojson" });
@@ -216,15 +227,15 @@ function addLayers(onPick) {
     id: "kraj-fill", type: "fill", source: "kraje", layout: { visibility: "none" },
     paint: { "fill-color": NO_DATA, "fill-opacity": 0.8 },
   });
-  map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": "#ffffff", "line-width": 0.5 } });
-  map.addLayer({ id: "kraje-line", type: "line", source: "kraje", paint: { "line-color": "#4b5863", "line-width": 1 } });
+  map.addLayer({ id: "okresy-line", type: "line", source: "okresy", paint: { "line-color": cssVar("--surface"), "line-width": 0.5 } });
+  map.addLayer({ id: "kraje-line", type: "line", source: "kraje", paint: { "line-color": cssVar("--muted-strong"), "line-width": 1 } });
   for (const [id, source] of [["sel-okres", "okresy"], ["sel-kraj", "kraje"]]) {
     map.addLayer({
       id,
       type: "line",
       source,
       filter: ["==", ["get", "code"], ""],
-      paint: { "line-color": "#1d2329", "line-width": 2.5 },
+      paint: { "line-color": cssVar("--ink"), "line-width": 2.5 },
     });
   }
   for (const layer of ["fill", "kraj-fill"]) {
@@ -440,8 +451,8 @@ function renderIntervals(rows, view, names, colors, region = view.region) {
       x: { label: t("compare.diffAxis"), grid: true, tickFormat: tickNumber },
       y: { label: null, domain: data.map((r) => label(r.model)) },
       marks: [
-        Plot.ruleX([0], { stroke: "#1d2329" }),
-        Plot.ruleY(data, { y: (r) => label(r.model), x1: "low", x2: "high", stroke: (r) => (r.tied ? "#9aa7b1" : "#c0392b"), strokeWidth: 3 }),
+        Plot.ruleX([0], { stroke: "var(--ink)" }),
+        Plot.ruleY(data, { y: (r) => label(r.model), x1: "low", x2: "high", stroke: (r) => (r.tied ? "var(--line-strong)" : "var(--accent)"), strokeWidth: 3 }),
         Plot.dot(data, {
           y: (r) => label(r.model), x: "diff", fill: (r) => colors[r.model] ?? "#888888", r: 5, tip: true,
           title: (r) => tipText(label(r.model), t("compare.tipDiff", {
@@ -480,11 +491,11 @@ function renderByLead(rows, view, names, colors, region = view.region) {
       y: { label: "MAE", grid: true, zero: true, tickFormat: tickNumber },
       color: {
         domain: models.map(label),
-        range: models.map((m) => (m === "blend" ? "#1d2329" : (colors[m] ?? "#888888"))),
+        range: models.map((m) => (m === "blend" ? "var(--ink)" : (colors[m] ?? "#888888"))),
         legend: true,
       },
       marks: [
-        Plot.ruleX([band ? LEAD_BANDS.indexOf(view.leadDay) + 1 : view.leadDay], { stroke: "#ddd8cc", strokeWidth: 8 }),
+        Plot.ruleX([band ? LEAD_BANDS.indexOf(view.leadDay) + 1 : view.leadDay], { stroke: "var(--line)", strokeWidth: 8 }),
         Plot.lineY(
           data.filter((r) => r.model !== "blend"),
           { x: "lead_day", y: "mae", stroke: (r) => label(r.model), strokeWidth: 1.5, marker: "circle", tip: true, title: leadTip },
@@ -515,8 +526,11 @@ async function summaryBlend(target, view) {
 // --- does our forecast beat one model? (blend-test.json; hidden until it exists) -----
 const blendTestDoc = getJson("data/scores/blend-test.json");
 const SERIES_COLORS = {
-  combined: "#c0392b", best_cz_oos: "#1f78b4", best_oos: "#6a3d9a", blend: "#1d2329", best_hindsight: "#7f8c8d",
+  combined: "var(--accent)", best_cz_oos: "#1f78b4", best_oos: "#6a3d9a", blend: "var(--ink)", best_hindsight: "#7f8c8d",
 };
+// the blue and the purple on the dark surface (same hues as the dark model palette)
+const SERIES_COLORS_DARK = { best_cz_oos: "#3586bc", best_oos: "#9473b6" };
+const seriesColor = (s) => (isDark() && SERIES_COLORS_DARK[s]) || SERIES_COLORS[s];
 // [series, stroke width, dash]: ours on top
 const SERIES_STYLE = [
   ["best_hindsight", 1.5, "4,3"], ["blend", 1.5, null], ["best_oos", 1.5, "2,2"], ["best_cz_oos", 2.2, null],
@@ -709,7 +723,7 @@ async function renderBlendTest(names) {
       marginLeft: 45,
       x: { label: t("control.lead"), ticks: leads, tickFormat: (d) => `D+${d}` },
       y: { label: `MAE (${unit(variable)})`, grid: true, tickFormat: tickNumber },
-      color: { domain: present.map(label), range: present.map((s) => SERIES_COLORS[s]), legend: true },
+      color: { domain: present.map(label), range: present.map(seriesColor), legend: true },
       marks: SERIES_STYLE.filter(([series]) => present.includes(series)).map(
         ([series, strokeWidth, strokeDasharray]) => Plot.lineY(lines.filter((r) => r.series === series), {
           x: "lead_day", y: "mae", stroke: (r) => label(r.series), marker: "circle", tip: true, strokeWidth,
@@ -784,7 +798,7 @@ async function renderLeadHours(view, names, colors) {
   const pick = (bold, dashed) => data.filter((r) => best.has(r.model) === bold && isAladin(r.model) === dashed);
   const marks = [];
   if (aladin.length) {
-    marks.push(Plot.rectX([{ x1: 0, x2: hidden }], { x1: "x1", x2: "x2", fill: "#ddd8cc", fillOpacity: 0.6 }));
+    marks.push(Plot.rectX([{ x1: 0, x2: hidden }], { x1: "x1", x2: "x2", fill: "var(--line)", fillOpacity: 0.6 }));
   }
   // the band's words only where the band is wide enough for them (on a phone it is a few
   // pixels, and the text would sit on the y axis; the note below the chart says it too)
@@ -792,7 +806,7 @@ async function renderLeadHours(view, names, colors) {
     marks.push(
       Plot.text([{ x: hidden / 2 }], {
         x: "x", frameAnchor: "top", dy: 6, rotate: -90, textAnchor: "end",
-        text: () => t("compare.leadHoursUnpublished"), fontSize: 10, fill: "#4b5863",
+        text: () => t("compare.leadHoursUnpublished"), fontSize: 10, fill: "var(--muted-strong)",
       }),
     );
   }
@@ -803,7 +817,7 @@ async function renderLeadHours(view, names, colors) {
     }));
   }
   marks.push(
-    Plot.ruleX([1, 6, 12, 24, 48, 72], { stroke: "#ddd8cc", strokeDasharray: "2,3" }),
+    Plot.ruleX([1, 6, 12, 24, 48, 72], { stroke: "var(--line)", strokeDasharray: "2,3" }),
     lines(pick(false, false), 1.2, 0.45, false),
     lines(pick(false, true), 2, 0.9, true),
     lines(pick(true, false), 2.8, 1, false),
@@ -981,7 +995,7 @@ async function main() {
   scoresMeta = meta;
   document.getElementById("status").textContent = statusText(meta, t);
   const names = { ...meta?.models, blend: t("model.blend") };
-  const colors = modelColors(names);
+  let colors = modelColors(names);
   const view = readView();
   // only periods with scored days: an empty one is never offered nor kept from a link
   const windows = availableWindows(meta?.windows);
@@ -1118,6 +1132,13 @@ async function main() {
       renderBlendTest(names).then(() => (view.blendVariable = blendView.variable));
     }
     render();
+  });
+  // the charts and the map redraw in the colours of the new theme
+  onThemeChange(() => {
+    colors = modelColors(names);
+    paintMapTheme();
+    render();
+    renderBlendTest(names);
   });
   await render();
   renderFarm(names);
