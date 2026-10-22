@@ -13,10 +13,10 @@ test("the model choice lives in a suffix of the hash and the defaults leave it o
   assert.deepEqual(splitModelHash("#kinds"), { hash: "#kinds", model: null, lead: null });
   assert.equal(splitModelHash("#kinds;m=x;l=9").lead, 1);
   const base = { lead: 1, err: "tmax" };
-  assert.equal(withModelHash("#kinds/S1", { ...base, model: "blend" }), "#kinds/S1");
-  assert.equal(withModelHash("#kinds/S1", { ...base, model: "ai" }), "#kinds/S1;m=ai");
-  assert.equal(withModelHash("#kinds/S1;m=ai", { ...base, model: "ecmwf_ifs", lead: 2 }), "#kinds/S1;m=ecmwf_ifs;l=2");
-  assert.equal(withModelHash("", { ...base, model: "blend", lead: 2 }), "#;m=blend;l=2");
+  assert.equal(withModelHash("#kinds/S1", { ...base, model: "ai" }), "#kinds/S1");
+  assert.equal(withModelHash("#kinds/S1", { ...base, model: "blend" }), "#kinds/S1;m=blend");
+  assert.equal(withModelHash("#kinds/S1;m=blend", { ...base, model: "ecmwf_ifs", lead: 2 }), "#kinds/S1;m=ecmwf_ifs;l=2");
+  assert.equal(withModelHash("", { ...base, model: "ai", lead: 2 }), "#;m=ai;l=2");
 });
 
 test("options: AI, the blend, then the models in a fixed order", () => {
@@ -72,10 +72,10 @@ test("the error choice rides in the hash after the model and lead; the maximum i
   assert.deepEqual(splitModelHash("#x;m=ai;e=r"), { hash: "#x", model: "ai", lead: 1, err: "r" });
   assert.equal(splitModelHash("#x;m=ai;e=none").err, null); // the measured values
   assert.equal(splitModelHash("#x;m=ai;e=gust").err, undefined); // only the mapped values
-  assert.equal(withModelHash("#x", { model: "blend", lead: 1, err: "wind" }), "#x;m=blend;e=wind");
-  assert.equal(withModelHash("#x", { model: "blend", lead: 2, err: "tmin" }), "#x;m=blend;l=2;e=tmin");
-  assert.equal(withModelHash("#x", { model: "blend", lead: 1, err: null }), "#x;m=blend;e=none");
-  assert.equal(withModelHash("#x;m=ai;e=r", { model: "blend", lead: 1, err: "tmax" }), "#x");
+  assert.equal(withModelHash("#x", { model: "ai", lead: 1, err: "wind" }), "#x;m=ai;e=wind");
+  assert.equal(withModelHash("#x", { model: "ai", lead: 2, err: "tmin" }), "#x;m=ai;l=2;e=tmin");
+  assert.equal(withModelHash("#x", { model: "ai", lead: 1, err: null }), "#x;m=ai;e=none");
+  assert.equal(withModelHash("#x;m=blend;e=r", { model: "ai", lead: 1, err: "tmax" }), "#x");
 });
 
 test("the day's errors per station, in the unit (the file has tenths), null where missing", () => {
@@ -97,10 +97,10 @@ test("the Weather map's error mode rides in the hash as ;w= (the model's error i
   assert.equal(splitModelHash("#x;m=ai;e=tmax;w=none").wx, "none");
   assert.equal(splitModelHash("#x;m=ai;w=abs").wx, "abs");
   assert.equal(splitModelHash("#x;m=ai;e=tmax").wx, undefined); // an old link: the default
-  const base = { model: "blend", lead: 1, err: "tmax" };
+  const base = { model: "ai", lead: 1, err: "tmax" };
   assert.equal(withModelHash("#d", { ...base, wx: "bias" }), "#d");
-  assert.equal(withModelHash("#d", { ...base, wx: "none" }), "#d;m=blend;w=none");
-  assert.equal(withModelHash("#d", { ...base, err: null, wx: "abs" }), "#d;m=blend;e=none;w=abs");
+  assert.equal(withModelHash("#d", { ...base, wx: "none" }), "#d;m=ai;w=none");
+  assert.equal(withModelHash("#d", { ...base, err: null, wx: "abs" }), "#d;m=ai;e=none;w=abs");
 });
 
 test("the error of an okres is the mean of its stations with a value", () => {
@@ -114,21 +114,21 @@ test("the error of an okres is the mean of its stations with a value", () => {
 });
 
 test("readModelChoice / tabChoice: each tab of the measured page keeps its own colour in its hashes", () => {
-  const start = { model: "blend", lead: 1, err: "tmax", wx: "bias", key: "tmax" };
+  const start = { model: "ai", lead: 1, err: "tmax", wx: "bias", key: "tmax" };
   // the Stations tab coloured by kind (e=none), then the Weather tab: its hash has no ";e="
-  const kinds = readModelChoice("#kinds;m=blend;e=none", start, false);
+  const kinds = readModelChoice("#kinds;m=ai;e=none", start, false);
   assert.equal(kinds.err, null);
   assert.equal(withModelHash("#2026-10-18/night/wind/tp", tabChoice(kinds, true)), "#2026-10-18/night/wind/tp");
   // back on Stations its colour is still there
-  const weather = readModelChoice("#2026-10-18/night/wind/tp;m=blend;w=abs", kinds, true);
+  const weather = readModelChoice("#2026-10-18/night/wind/tp;m=ai;w=abs", kinds, true);
   assert.equal(weather.wx, "abs");
   assert.equal(weather.err, null);
-  assert.equal(withModelHash("#kinds", tabChoice(weather, false)), "#kinds;m=blend;e=none");
-  assert.equal(withModelHash("#2026-10-18/day/temperature/tp", tabChoice(weather, true)), "#2026-10-18/day/temperature/tp;m=blend;w=abs");
+  assert.equal(withModelHash("#kinds", tabChoice(weather, false)), "#kinds;m=ai;e=none");
+  assert.equal(withModelHash("#2026-10-18/day/temperature/tp", tabChoice(weather, true)), "#2026-10-18/day/temperature/tp;m=ai;w=abs");
   // a hash without a choice: the defaults (Back to a plain link)
-  assert.deepEqual(readModelChoice("#kinds", { ...start, model: "ai", lead: 2, err: "r" }, false), start);
-  assert.deepEqual(readModelChoice("#2026-10-18/day", { ...start, model: "ai", lead: 2, wx: "none" }, true), start);
-  assert.equal(readModelChoice("#kinds;m=ai;l=2", start, false).lead, 2);
+  assert.deepEqual(readModelChoice("#kinds", { ...start, model: "blend", lead: 2, err: "r" }, false), start);
+  assert.deepEqual(readModelChoice("#2026-10-18/day", { ...start, model: "blend", lead: 2, wx: "none" }, true), start);
+  assert.equal(readModelChoice("#kinds;m=blend;l=2", start, false).lead, 2);
 });
 
 test("the station chart keeps the last days only", () => {

@@ -14,7 +14,9 @@ import { formatFixed, formatSigned } from "./station.js";
 
 export const AI = "ai";
 export const BLEND = "blend";
-export const DEFAULT_MODEL = BLEND;
+export const DEFAULT_MODEL = AI;
+/** What the page shows instead of the default when the AI has no data at all. */
+export const FALLBACK_MODEL = BLEND;
 export const DEFAULT_LEAD = 1;
 export const LEADS = [1, 2];
 /** The station chart and summary show this many of the file's last days. */
