@@ -180,7 +180,7 @@ function paintHighlight() {
 
 /** "A, B" (at most three) of the models statistically as good as the region's best. */
 function closeList(entry) {
-  const names = entry.tied.slice(0, 3).map(nameOf).join(", ");
+  const names = entry.tied.slice(0, 7).map(nameOf).join(", ");
   return names || "–";
 }
 
@@ -222,7 +222,7 @@ function intervalChart(facts) {
   const data = facts.table
     .filter((r) => r.mae != null && !r.short && r.model !== "blend")
     .sort((a, b) => a.rank - b.rank)
-    .slice(0, 3)
+    .slice(0, 7)
     .map((r) => ({
       label: r.model === "blend" ? t("model.blend") : nameOf(r.model),
       model: r.model,
