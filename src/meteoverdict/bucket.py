@@ -1096,11 +1096,19 @@ class Added:
 
 
 def _present(path: Path) -> pl.DataFrame:
-    """``run``, ``model``, ``source`` and the ``stations`` of every stored model-run."""
+    """``run``, ``model``, ``source``, the ``stations`` of every stored model-run and the
+    stations among them with any further variable (``with_extras``)."""
+    frame = pl.scan_parquet(path)
+    names = frame.collect_schema().names()
+    extras = [v for v in runs.EXTRA_VARIABLES if v in names]
+    has = pl.any_horizontal(pl.col(v).is_not_null() for v in extras) if extras else pl.lit(False)
     return (
-        pl.scan_parquet(path)
-        .group_by("run", "model")
-        .agg(pl.col("source").first(), pl.col("station_id").unique().alias("stations"))
+        frame.group_by("run", "model")
+        .agg(
+            pl.col("source").first(),
+            pl.col("station_id").unique().alias("stations"),
+            pl.col("station_id").filter(has).unique().alias("with_extras"),
+        )
         .collect()
     )
 
@@ -1127,6 +1135,7 @@ def add_stations(
     threads: int = 96,
     parallel_models: int = 8,
     extra: bool = False,
+    extras_only: bool = False,
     flush_every: int = 200,
     log: Callable[[str], None] = lambda _: None,
     clock: Callable[[], float] = time.monotonic,
@@ -1144,7 +1153,14 @@ def add_stations(
     kept on disk every ``flush_every`` model-runs (a month at ~200 stations is tens of
     millions of rows; on 2026-10-20 a runner holding them in memory was lost) and
     merged into the month file once. Resumable: a month already complete costs one
-    scan."""
+    scan.
+
+    With ``extras_only`` the stations are the stored ones whose rows lack the further
+    variables while other stations of the same model-run have them (2026-08-28 to
+    2026-10-19 the added stations were filled in with the four main variables only):
+    they are read again with the further variables and their rows replaced. A
+    model-run without further variables at any station (the bucket had none) is left."""
+    extra = extra or extras_only
     cells = load_cells() if cells is None else cells
     catalogue = {m.id: m for m in models}
     wanted = set(stations["id"])
@@ -1160,15 +1176,21 @@ def add_stations(
                 continue
             present = _present(path)
             todo = []
-            for run, model_id, source, have in present.sort("run", descending=True).rows():
+            for run, model_id, source, have, full in present.sort("run", descending=True).rows():
                 if source != "bucket" or model_id not in catalogue:
                     continue
                 if run < window[-1] or run > window[0]:
                     continue
-                missing = sorted(wanted - set(have))
+                if extras_only:
+                    missing = sorted((wanted & set(have)) - set(full)) if full else []
+                else:
+                    missing = sorted(wanted - set(have))
                 if missing:
                     todo.append((run, model_id, missing))
-            log(f"{month}: {len(todo)} model-runs lack some of the {len(wanted)} stations")
+            log(
+                f"{month}: {len(todo)} model-runs lack some of the {len(wanted)} stations"
+                + (" (further variables)" if extras_only else "")
+            )
             frames, done, parts = [], 0, []
             spool = data_dir / "runs" / f".{month}.added"
             spool.mkdir(parents=True, exist_ok=True)

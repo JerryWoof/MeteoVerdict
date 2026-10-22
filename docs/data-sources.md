@@ -2205,7 +2205,10 @@ not change from run to run). The rule (`runs.select_stations`, regenerated with
    station, newest month first, resumable; the four main variables only (the further
    ones come with the new runs). A GitHub runner holding a month in memory was lost, so
    the rows are spooled to disk and the fill-in ran on a machine with more memory.
-   Model-runs from the API (the bucket's gaps,
+   The further variables of the stations filled in that way (2026-08-28 to 2026-10-19:
+   only the 100 had them) are read again with `--extras-only` (workflow input
+   `extras_only`): per model-run of the bucket, the stored stations without any further
+   variable while others have them. Model-runs from the API (the bucket's gaps,
    the history before its window) stay at the 100. Their bucket cells were appended to
    `bucket-cells.csv` (three of them, in the far east, are outside ICON-D2's domain).
 

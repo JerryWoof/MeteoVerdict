@@ -676,6 +676,59 @@ def test_add_stations_fills_in_only_the_missing_stations(tmp_path, monkeypatch):
     assert asked == []
 
 
+def test_add_stations_extras_only_reads_the_stations_without_further_variables(
+    tmp_path, monkeypatch
+):
+    now = datetime(2026, 10, 20, 12, tzinfo=UTC)
+    run = datetime(2026, 10, 19, 0, tzinfo=UTC)
+    model = next(m for m in load_models() if m.id in bucket.SOURCES)
+
+    def rows(stations, rh, run=run):
+        return pl.DataFrame(
+            {
+                "run": [run] * len(stations),
+                "model": [model.id] * len(stations),
+                "station_id": stations,
+                "lead_h": [1] * len(stations),
+                "temperature_2m": [1.0] * len(stations),
+                "relative_humidity_2m": [rh] * len(stations),
+                "source": ["bucket"] * len(stations),
+            },
+            schema_overrides={
+                "run": pl.Datetime("us", "UTC"),
+                "lead_h": pl.Int16,
+                "relative_humidity_2m": pl.Float32,
+            },
+        )
+
+    other = run - timedelta(hours=6)  # no further variables anywhere: left alone
+    stored = pl.concat(
+        [rows(["s1"], 80.0), rows(["s2", "s3"], None), rows(["s1", "s2"], None, other)]
+    )
+    partitions.write_monthly(stored, tmp_path / "runs", runs.KEYS, "run")
+    asked = []
+
+    def fake_read(_bucket, m, r, stations, *_a, extra=False, **_k):
+        asked.append((r, stations["id"].to_list(), extra))
+        return bucket.Fetched(rows(stations["id"].to_list(), 70.0, r))
+
+    monkeypatch.setattr(bucket, "read_run", fake_read)
+    stations = pl.DataFrame({"id": ["s1", "s2", "s3", "s4"], "elevation": [200.0] * 4})
+    out = bucket.add_stations(None, stations, [model], tmp_path, now, cells=pl.DataFrame(),
+                              extras_only=True)  # fmt: skip
+    # s4 was never stored (not this mode's job), s1 has them already
+    assert asked == [(run, ["s2", "s3"], True)]
+    assert out.filled == {"2026-10": 1}
+    back = pl.read_parquet(tmp_path / "runs" / "2026-10.parquet").filter(pl.col("run") == run)
+    assert back.sort("station_id").select("station_id", "relative_humidity_2m").rows() == [
+        ("s1", 80.0), ("s2", 70.0), ("s3", 70.0)]  # fmt: skip
+    asked.clear()
+    bucket.add_stations(
+        None, stations, [model], tmp_path, now, cells=pl.DataFrame(), extras_only=True
+    )
+    assert asked == []
+
+
 def test_arpege_radiation_undoes_meteo_france_s_storage_factor(tmp_path):
     arpege = MODELS["meteofrance_arpege_europe"]
     fake = FakeBucket()
