@@ -166,7 +166,7 @@ def document(
     code: str, points: pl.DataFrame, rows: pl.DataFrame, hourly: pl.DataFrame, now: datetime
 ) -> dict:
     """The JSON of the page: the places, the hours and per obec the combined series and
-    every model's temperature."""
+    every model's temperature, wind speed and precipitation."""
     times = sorted(hourly["time"].unique().to_list())
     index = {t: i for i, t in enumerate(times)}
 
@@ -176,6 +176,11 @@ def document(
             if t in index and v is not None:
                 out[index[t]] = round(v, digits)
         return out
+
+    def models_of(parts: list, column: str) -> dict[str, list]:
+        """Each model's ``column`` series; models with no value at the place left out."""
+        out = {m: series(part, column, 1) for (m,), part in parts}
+        return {m: v for m, v in out.items() if any(x is not None for x in v)}
 
     runs = rows.group_by("model").agg(pl.col("run").max()).sort("model")
     by_place = hourly.partition_by("okres", as_dict=True)
@@ -188,6 +193,8 @@ def document(
         if frame is None:
             continue
         mine = model_rows.get((pid,), pl.DataFrame())
+        parts = sorted(mine.partition_by("model", as_dict=True).items()) if mine.height else []
+
         places_out.append(
             {
                 "name": name,
@@ -198,10 +205,9 @@ def document(
                 "temperature_2m": series(frame, "temperature_2m", 1),
                 "precipitation": series(frame, "precipitation", 1),
                 "wind_speed_10m": series(frame, "wind_speed_10m", 1),
-                "models": {
-                    m: series(part, "temperature_2m", 1)
-                    for (m,), part in sorted(mine.partition_by("model", as_dict=True).items())
-                },
+                "models": {m: series(part, "temperature_2m", 1) for (m,), part in parts},
+                "models_wind_speed_10m": models_of(parts, "wind_speed_10m"),
+                "models_precipitation": models_of(parts, "precipitation"),
             }
         )
     return {

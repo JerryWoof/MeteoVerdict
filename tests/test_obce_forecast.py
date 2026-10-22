@@ -94,3 +94,46 @@ def test_corrections_at_the_obec_height():
     # a weight file from before the elevation term was kept: unchanged
     old = weights.drop(combine.ELEVATION_TERM_COLUMNS)
     assert obce_forecast.at_obec_height(old).equals(old)
+
+
+def test_document_has_every_models_wind_and_precipitation():
+    now = datetime(2026, 10, 18, 0, tzinfo=UTC)
+    times = [datetime(2026, 10, 18, h, tzinfo=UTC) for h in (1, 2)]
+    rows = pl.DataFrame(
+        {
+            "station_id": ["A"] * 4,
+            "valid_time": times * 2,
+            "model": ["m1"] * 2 + ["m2"] * 2,
+            "run": [now] * 4,
+            "temperature_2m": [10.0, 11.0, 12.0, 13.0],
+            "precipitation": [0.0, 0.25, None, None],
+            "wind_speed_10m": [1.04, 2.0, 3.0, None],
+        }
+    )
+    hourly = pl.DataFrame(
+        {
+            "okres": ["A"] * 2,
+            "time": times,
+            "temperature_2m": [10.5, 11.5],
+            "precipitation": [0.1, 0.2],
+            "wind_speed_10m": [1.0, 2.0],
+        }
+    )
+    points = pl.DataFrame(
+        {
+            "id": ["A"],
+            "name": ["Aa"],
+            "lat": [50.0],
+            "lon": [14.0],
+            "elevation": [200.0],
+            "population": [100],
+        }
+    )
+    doc = obce_forecast.document("CZ0423", points, rows, hourly, now)
+    place = doc["places"][0]
+    assert place["models"] == {"m1": [10.0, 11.0], "m2": [12.0, 13.0]}
+    assert place["models_wind_speed_10m"] == {"m1": [1.0, 2.0], "m2": [3.0, None]}
+    # m2 has no precipitation at this place: no entry
+    assert place["models_precipitation"] == {"m1": [0.0, 0.2]}
+    for key in ("models", "models_wind_speed_10m", "models_precipitation"):
+        assert all(len(s) == len(doc["times"]) for s in place[key].values())
