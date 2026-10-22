@@ -305,7 +305,8 @@ def _dn_window(
             unreadable=unreadable,
         )
         if obs.height:
-            partitions.write_monthly(obs, data_dir / "obs", ["station_id", "time", "variable"])
+            observations.write_hourly(obs, data_dir)
+        obs, _ = observations.split_extra(obs)  # what is final is decided by the verified ones
         # only a whole month published (recent/ or historical/) and read for every
         # station is final; data from now/ covers a few days and is replaced once ČHMÚ
         # publishes the month
