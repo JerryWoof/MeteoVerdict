@@ -10,7 +10,7 @@ export function statusText(meta, t) {
   return t("status.scores", { asOf: meta.as_of, updated });
 }
 
-/** Older than this (hours since the AI run) the heatmap's status line warns: "starší data". */
+/** Older than this (hours since the map was generated) the heatmap's status line warns: "starší data". */
 export const HEAT_STALE_HOURS = 30;
 
 const EN_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -35,21 +35,21 @@ function dayRange(from, to, language) {
 }
 
 /**
- * The status line of the heatmap: when the AI run was made (its `issued` time, Prague time) and the
- * days the map covers (its hours), with "starší data" when that run is older than HEAT_STALE_HOURS.
- * @param {null | {issued: number, hours: {time: number}[]}} index parsed heat index (ai-heat.js)
+ * The status line of the heatmap: when the map was generated (its `generated` time, Prague time) and the
+ * days it covers (its hours), with "starší data" when it is older than HEAT_STALE_HOURS.
+ * @param {null | {generated: number, hours: {time: number}[]}} index parsed heat index (ai-heat.js)
  * @param {(key: string, params?: object) => string} t
  * @param {"cs" | "en"} language
  * @returns {{text: string, stale: boolean}}
  */
 export function heatStatus(index, t, language, now = Date.now()) {
-  if (!index || !Number.isFinite(index.issued) || !index.hours?.length) return { text: "", stale: false };
-  const issued = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", {
+  if (!index || !Number.isFinite(index.generated) || !index.hours?.length) return { text: "", stale: false };
+  const generated = new Intl.DateTimeFormat(language === "cs" ? "cs-CZ" : "en-GB", {
     day: "numeric", month: language === "cs" ? "numeric" : "short", year: "numeric",
     hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Europe/Prague",
-  }).format(index.issued);
+  }).format(index.generated);
   const days = dayRange(index.hours[0].time, index.hours.at(-1).time, language);
-  const stale = now - index.issued > HEAT_STALE_HOURS * 3600e3;
-  const text = t("status.heat", { issued, days });
+  const stale = now - index.generated > HEAT_STALE_HOURS * 3600e3;
+  const text = t("status.heat", { generated, days });
   return { text: stale ? `${text} · ${t("status.stale")}` : text, stale };
 }
