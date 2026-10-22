@@ -9,7 +9,7 @@ weather models forecast what ČHMÚ stations then measured, ranks them in every 
 and combines them into its own forecast: for every okres and, as a test, for every one
 of the 6,258 obce.
 
-**→ [meteoverdict.cz](https://meteoverdict.cz/)** (Czech and English) · Contact: [info@meteoverdict.com](mailto:info@meteoverdict.com) · bugs: [GitHub Issues](https://github.com/JerryWoof/MeteoVerdict/issues)
+**→ [meteoverdict.cz](https://meteoverdict.cz/)** (Czech and English)
 
 | Page | What you get |
 |---|---|
