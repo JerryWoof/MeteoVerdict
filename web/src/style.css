@@ -3789,3 +3789,34 @@ svg[class^="plot-"],
 [class^="plot-"] svg {
   --plot-background: var(--surface);
 }
+
+/* the okres panel's ranked list of the most accurate models */
+.rank-list {
+  list-style: none;
+  margin: 0.2rem 0;
+  padding: 0;
+}
+.rank-list li {
+  display: grid;
+  grid-template-columns: 1.1rem 0.9rem minmax(0, 1fr) auto 3.2rem;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.3rem;
+  border-radius: 4px;
+}
+.rank-list li.best {
+  font-weight: 600;
+}
+.rank-list li.best,
+.rank-list li.tied {
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+}
+.rank-list .pos,
+.rank-list .gap {
+  font-size: 0.75rem;
+}
+.rank-list .val,
+.rank-list .gap {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,4 +1,3 @@
-import * as Plot from "@observablehq/plot";
 import { Map as MapLibreMap, NavigationControl, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 // MapLibre's ES module build loads its worker from a separate file
@@ -10,7 +9,7 @@ import {
   NO_DATA, P_BEST_MIN, TOO_FEW, bestByRegion, fillExpression, modelColors, records,
   regionColor, smallSampleCodes, stationFeatures, stationsIn, withKrajFallback,
 } from "./data.js";
-import { HOURS, explainRegion, reasons } from "./explain.js";
+import { HOURS, explainRegion } from "./explain.js";
 import { setUpLanguage } from "./i18n.js";
 import { statusText } from "./status.js";
 import { displayName } from "./tv.js";
@@ -217,49 +216,28 @@ function closeButton(onClose) {
   return b;
 }
 
-function intervalChart(facts) {
+/** The seven most accurate models as a ranked list: name, mean error and how far it is from the best. */
+function rankList(facts) {
   const best = facts.table.find((r) => r.rank === 1);
-  const data = facts.table
+  const rows = facts.table
     .filter((r) => r.mae != null && !r.short && r.model !== "blend")
-    .sort((a, b) => a.rank - b.rank)
-    .slice(0, 7)
-    .map((r) => ({
-      label: r.model === "blend" ? t("model.blend") : nameOf(r.model),
-      model: r.model,
-      mae: r.mae,
-      low: r.rank === 1 || !r.ci ? null : best.mae + r.ci[0],
-      high: r.rank === 1 || !r.ci ? null : best.mae + r.ci[1],
-      tied: r.tied || r.rank === 1,
-    }));
-  // as wide as the panel's content, and a left margin that fits the longest model name
-  const wrapWidth = document.getElementById("map").parentElement.clientWidth;
-  const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  const panelWidth = window.innerWidth <= 700 ? wrapWidth : window.innerWidth <= 900 ? 21 * rem : wrapWidth * 0.4;
-  const chartWidth = Math.max(280, Math.round(panelWidth - 2 * 0.9 * rem - 6));
-  const longest = Math.max(...data.map((d) => d.label.length));
-  const nameMargin = Math.min(Math.round(chartWidth * 0.6), Math.round(longest * 5.6 + 14));
-  return Plot.plot({
-    width: chartWidth,
-    height: 28 + 19 * data.length,
-    marginLeft: nameMargin,
-    marginRight: 10,
-    style: { fontSize: "10px" },
-    x: { label: `MAE (${unitOf(current.view.variable)}) →`, grid: true, zero: true },
-    y: { label: null, domain: data.map((d) => d.label) },
-    marks: [
-      Plot.ruleX([best.mae], { stroke: pick(INK), strokeDasharray: "3,3" }),
-      Plot.ruleY(data.filter((d) => d.low != null), {
-        y: "label", x1: "low", x2: "high", stroke: (d) => (d.tied ? pick(["#9aa7b1", "#6a665f"]) : pick(["#e0a19a", "#a8564c"])), strokeWidth: 3,
-      }),
-      Plot.dot(data, {
-        y: "label", x: "mae", r: 4.5,
-        fill: (d) => (d.model === "blend" ? pick(EDGE) : (current.colors[d.model] ?? "#888888")),
-        stroke: (d) => (d.model === best.model ? pick(INK) : pick(EDGE)),
-        strokeWidth: (d) => (d.model === best.model ? 2 : 1),
-        tip: true,
-      }),
-    ],
+    .sort((x, y) => x.rank - y.rank)
+    .slice(0, 7);
+  const list = element("ol", null, "rank-list");
+  rows.forEach((r, i) => {
+    const li = element("li", null, i === 0 ? "best" : r.tied ? "tied" : "");
+    const gap = r.model === best.model ? "" : `+${(r.mae - best.mae).toFixed(2)}`;
+    li.append(
+      element("span", String(i + 1), "pos"),
+      swatch(current.colors[r.model] ?? "#888888"),
+      element("span", nameOf(r.model), "name"),
+      element("span", r.mae.toFixed(2), "val"),
+      element("span", gap, "gap muted"),
+    );
+    if (i > 0 && r.tied) li.title = t("detail.tiedNote");
+    list.append(li);
   });
+  return list;
 }
 
 function chips(items, label) {
@@ -272,42 +250,6 @@ function chips(items, label) {
   }
   const wrap = element("div", null, "detail-block");
   wrap.append(element("h3", label), box);
-  return wrap;
-}
-
-/** Under the okres name: links to all its stations in the Stations tab of measured.html. */
-function stationPages(region) {
-  const all = stationsIn(current.stationTable, region);
-  if (all.length === 0) return null;
-  const line = element("p", null, "station-pages");
-  line.append(element("span", `${t(all.length === 1 ? "detail.stationPage" : "detail.stationPages")}: `, "muted"));
-  all.forEach((s, i) => {
-    if (i > 0) line.append(" · ");
-    const a = element("a", s.name);
-    a.href = `measured.html#kinds/${encodeURIComponent(s.id)}`;
-    line.append(a);
-    if (s.high) line.append(element("span", ` (${t("detail.highSite")})`, "muted"));
-  });
-  return line;
-}
-
-function stationList(region) {
-  const table = records(current.stationTable);
-  const own = table.filter((s) => s.okres_code === region || s.kraj_code === region);
-  const scored = own.filter((s) => current.stations.has(s.id));
-  if (scored.length === 0) return null;
-  const wrap = element("div", null, "detail-block");
-  wrap.append(element("h3", t("detail.stations", { n: scored.length })));
-  const list = element("div", null, "station-list");
-  for (const s of scored.sort((a, b) => a.name.localeCompare(b.name, "cs"))) {
-    const entry = current.stations.get(s.id);
-    const b = element("button", null, "station");
-    b.type = "button";
-    b.append(swatch(regionColor(entry, current.colors)), element("span", s.name));
-    b.addEventListener("click", () => showStation(s.id, s.name, region));
-    list.append(b);
-  }
-  wrap.append(list);
   return wrap;
 }
 
@@ -343,8 +285,7 @@ async function showRegion(region) {
   const close = closeButton(() => select(null, true));
   const heading = element("h2", name);
   const sub = element("p", `${t(`variable.${view.variable}`)} · D+${view.leadDay} · ${t(`window.${view.window}`).toLowerCase()}`, "muted");
-  const pages = stationPages(region);
-  const top = pages ? [close, heading, pages, sub] : [close, heading, sub];
+  const top = [close, heading, sub];
   if (!facts) {
     box.replaceChildren(...top, element("p", t(entry && !entry.enough ? "describe.tooFew" : "detail.noRanking")));
     return;
@@ -357,8 +298,6 @@ async function showRegion(region) {
     element("strong", nameOf(facts.winner.model)),
     element("span", t("detail.mae", { mae: fmt(facts.winner.mae) }), "muted"),
   );
-  const why = element("ul", null, "why");
-  for (const { key, params } of reasons(facts, fmt)) why.append(element("li", t(key, params)));
   const blocks = [...top, verdict];
   const pBest = entry?.pBest;
   if (entry?.fallback) blocks.push(element("p", t("detail.fallback", { kraj: displayName(entry.krajName ?? "") }), "muted"));
@@ -367,9 +306,8 @@ async function showRegion(region) {
     blocks.push(element("p", t(key, { pct: percent(pBest), min: percent(current.pBestMin), others: closeList(entry) }), "muted"));
   }
   if (facts.preliminary) blocks.push(element("p", t("detail.preliminary", { days: facts.basis.days }), "warning"));
-  blocks.push(element("h3", t("detail.why")), why);
   const chartBlock = element("div", null, "detail-block");
-  chartBlock.append(element("h3", t("detail.chart")), intervalChart(facts), element("p", t("detail.chartNote"), "muted small"));
+  chartBlock.append(element("h3", t("detail.chart")), rankList(facts), element("p", t("detail.chartNote", { unit }), "muted small"));
   blocks.push(chartBlock);
   if (facts.byLead.length > 1) {
     blocks.push(chips(facts.byLead.map((l) => ({ title: `D+${l.lead}`, model: l.model })), t("detail.byLead")));
@@ -385,12 +323,7 @@ async function showRegion(region) {
       "muted small",
     ),
   );
-  const stations = stationList(region);
-  if (stations) blocks.push(stations);
   const links = element("p", null, "links");
-  const compare = element("a", t("detail.compare"));
-  compare.href = `compare-models.html#${view.variable}/${view.leadDay}/${view.window}/${region}`;
-  links.append(compare);
   if (current.level === "okres") {
     const forecast = element("a", t("detail.forecast"));
     forecast.href = `forecast.html#${region}/`;
