@@ -2757,7 +2757,7 @@ the labels, and the storm cells on top. Clicking a label sets the rain-at-a-plac
 on that town. The radar starts once the style is parsed (`style.load`), not after every
 base-map tile (`load`). Rendering the base map costs about 1 ms a frame (measured with
 `map.redraw()` at zoom 7 and 9.5); drawing a radar frame is unchanged. Credits: the map's
-attribution control and the radar page footer (see `docs/licensing.md`).
+attribution control and the credits page `zdroje.html` (see `docs/licensing.md`).
 
 ## Open-Meteo Previous Runs API (forecasts)
 

@@ -997,7 +997,10 @@ export const STRINGS = {
     "site.business": "Spolupráce",
     "site.contact": "Kontakt",
     "site.privacy": "Soukromí",
-    "site.pudomer": "Půdoměr – předpověď teploty a vlhkosti půdy",
+    "site.credits": "Zdroje a licence",
+    "site.reportShort": "Report",
+    "footer.data": "data",
+    "site.pudomer": "Půdoměr",
   },
   en: {
     "page.station": "Measured",
@@ -1991,7 +1994,10 @@ export const STRINGS = {
     "site.business": "Collaboration",
     "site.contact": "Contact",
     "site.privacy": "Privacy",
-    "site.pudomer": "Půdoměr – soil temperature & moisture forecast",
+    "site.credits": "Sources & licences",
+    "site.reportShort": "Report",
+    "footer.data": "data",
+    "site.pudomer": "Půdoměr",
   },
 };
 

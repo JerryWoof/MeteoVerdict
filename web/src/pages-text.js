@@ -1,6 +1,7 @@
 // The text of the pages About, Methodology and Collaboration, in Czech and English: lists of
 // blocks (see renderBlocks in info-page.js). Links: [text](url), bold: **text**.
 
+import { CREDITS } from "./credits-text.js";
 const REPO = "https://github.com/JerryWoof/MeteoVerdict";
 
 export const PAGES = {
@@ -298,4 +299,5 @@ export const PAGES = {
       ],
     },
   },
+  credits: CREDITS,
 };
