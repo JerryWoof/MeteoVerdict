@@ -21,14 +21,37 @@ on:
 
 permissions:
   contents: write # commit README/site data, release assets
+  actions: read # the check job lists the earlier runs
 
 concurrency:
   group: data-pipeline # backfill and daily write the same release assets
   cancel-in-progress: false
 
 jobs:
+  check:
+    # The Spark starts this workflow itself at 06:30 CEST (GitHub's own schedule runs ~5 h
+    # late, after the AI's 08:30 run): the scheduled run is only the fallback and stays out
+    # when a run already succeeded in the last 12 hours.
+    name: Already ran today?
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.recent.outputs.skip }}
+    steps:
+      - id: recent
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          skip=false
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            since=$(date -u -d '12 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+            n=$(gh api "repos/${{ github.repository }}/actions/workflows/daily.yml/runs?status=success&created=%3E%3D$since" --jq '.total_count')
+            [ "$n" -gt 0 ] && skip=true
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
   daily:
     name: Daily update
+    needs: check
+    if: needs.check.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
