@@ -183,3 +183,34 @@ def test_run_refreshes_recent_rain_gauge_months(tmp_path, monkeypatch):
     assert not (tmp_path / "obs" / "2026-09.parquet").exists()
     both = observations.scan(tmp_path, date(2026, 9, 1), DAY).collect()
     assert both["variable"].to_list() == ["precipitation_24h"]
+
+
+def test_extra_observations_are_stored_apart_and_scores_stay_the_same(tmp_path, monkeypatch):
+    def run_with(extra: bool, data_dir):
+        def fake_obs(client, ids, start, end):
+            rows = obs_rows(hours(start, (end - start).days + 1))
+            if extra:
+                more = rows.with_columns(
+                    pl.lit("relative_humidity_2m").alias("variable"), pl.lit(55.0).alias("value")
+                ).cast(observations.SCHEMA)
+                rows = pl.concat([rows, more])
+            return rows
+
+        monkeypatch.setattr(daily.observations, "fetch_observations", fake_obs)
+        write_forecasts(data_dir, DAY - timedelta(days=5), 6)
+        points = pl.DataFrame({"id": ["a", "b", "c"]})
+        daily.run(None, points, [ICON], DAY, data_dir)
+
+    run_with(False, tmp_path / "plain")
+    run_with(True, tmp_path / "extra")
+    assert set(pl.read_parquet(tmp_path / "extra" / "obs" / "2026-10.parquet")["variable"]) == {
+        "temperature_2m"
+    }
+    assert (tmp_path / "extra" / "obs-extra" / "2026-10.parquet").exists()
+    name = "scores/2026-10.parquet"
+    assert pl.read_parquet(tmp_path / "plain" / name).equals(
+        pl.read_parquet(tmp_path / "extra" / name)
+    )
+    # a reader that scans obs/ and gauges/ never sees the extra variables
+    scan = observations.scan(tmp_path / "extra", DAY - timedelta(days=3), DAY)
+    assert set(scan.collect()["variable"]) == {"temperature_2m"}

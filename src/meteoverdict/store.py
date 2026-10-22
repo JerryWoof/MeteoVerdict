@@ -16,11 +16,12 @@ from pathlib import Path
 
 from meteoverdict.releases import GitHubReleaseStore
 
-KINDS = ("obs", "gauges", "fc", "scores")
+KINDS = ("obs", "obs-extra", "gauges", "fc", "scores")
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 RELEASE_NOTES = (
-    "Hourly station observations (obs-YYYY-MM.parquet), daily rain-gauge totals "
+    "Hourly station observations (obs-YYYY-MM.parquet; further elements in "
+    "obs-extra-YYYY-MM.parquet), daily rain-gauge totals "
     "(gauges-YYYY-MM.parquet), archived forecasts at the stations (fc-YYYY-MM.parquet) "
     "and daily scores (scores-YYYY-MM.parquet) for one month, written by "
     "`mvd fetch-obs`, `mvd fetch-gauges`, `mvd fetch-fc` and `mvd score` "
