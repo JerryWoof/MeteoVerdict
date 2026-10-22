@@ -6,11 +6,13 @@ import {
   opponentSeries, pairVersus, parseView, regionGroups, seriesOf, threeWayPBest,
 } from "./compare-ai.js";
 import { dayTick, numberTick, tipText } from "./compare.js";
+import { isDark, onThemeChange } from "./theme.js";
 import { displayName } from "./tv.js";
 import { dayCount, stationCount } from "./view.js";
 
 // the three series of the page, the same colour everywhere (chart, table, verdict)
-const COLORS = { ai: "#c0392b", outlook: "#1f78b4", model: "#6a3d9a" };
+const COLORS = { ai: "var(--accent)", outlook: "#1f78b4", model: "#6a3d9a" };
+const COLORS_DARK = { ai: "var(--accent)", outlook: "#3586bc", model: "#9473b6" };
 // in the page language: "0,92" in Czech
 const fmt = (v, signed = false, digits = 2) =>
   v == null
@@ -79,7 +81,7 @@ export async function setUpAiCompare(t, names, language) {
   if (view.sample === "live" && !liveIndex) view.sample = "validation";
   const modelName = (id) => names[id] ?? valIndex?.models?.[id] ?? id;
   const label = (id, kind) => (kind === "ai" ? t("aic.ai") : kind === "outlook" ? t("aic.outlook") : modelName(id));
-  const swatch = (kind) => Object.assign(el("span", null, "swatch"), { style: `background:${COLORS[kind]}` });
+  const swatch = (kind) => Object.assign(el("span", null, "swatch"), { style: `background:${(isDark() ? COLORS_DARK : COLORS)[kind]}` });
 
   /** Fills the model menu: third-party models only (never our AI, our blend or the mean); one with too few shared hours is greyed out. */
   function fillOpponents(entry) {
@@ -262,7 +264,7 @@ export async function setUpAiCompare(t, names, language) {
       marginLeft: 44,
       x: { label: null, type: "utc", tickFormat: dayTick(language) },
       y: { label: `MAE (${unit})`, grid: true, zero: true, tickFormat: numberTick(language) },
-      color: { domain: names2, range: ids.map((id) => COLORS[kinds[id]]), legend: true },
+      color: { domain: names2, range: ids.map((id) => (isDark() ? COLORS_DARK : COLORS)[kinds[id]]), legend: true },
       marks: [
         Plot.lineY(data, { x: "date", y: "mae", z: (r) => `${r.id}${r.segment}`, stroke: (r) => label(r.id, r.kind), strokeWidth: 2.5,
           title: (r) => tipText(label(r.id, r.kind), day.format(r.date), `MAE ${fmt(r.mae)} ${unit}`), tip: true }),
@@ -280,5 +282,6 @@ export async function setUpAiCompare(t, names, language) {
       render();
     });
   }
+  onThemeChange(() => render());
   await render();
 }
