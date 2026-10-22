@@ -150,6 +150,7 @@ def test_gather_asks_the_api_only_for_models_the_bucket_lacks(monkeypatch):
             "time": times,
             "model": "dwd_icon",
             **{v: [1.0, 2.0, 3.0] for v in outlook.VARIABLES},
+            **{v: [None] * 3 for v in outlook.EXTRA_VARIABLES},
         },
         schema=outlook_bucket.EMPTY_SCHEMA,
     )
@@ -183,3 +184,37 @@ def test_gather_asks_the_api_only_for_models_the_bucket_lacks(monkeypatch):
 def test_the_api_fallback_stays_within_its_budget():
     # 77 okresy: five models at most, ~193 calls; four runs a day <= 800
     assert outlook.cost(77, 5) <= outlook.MAX_FALLBACK_CALLS < outlook.cost(77, 6)
+
+
+def test_wind_direction_goes_the_short_way_round():
+    leads = np.array([0.0, 3.0])
+    hours = np.array([0.0, 1.0, 2.0, 3.0])
+    out = outlook_bucket.degrees(leads, np.array([350.0, 10.0]), hours)
+    assert out.tolist() == pytest.approx([350.0, 356.667, 3.333, 10.0], abs=1e-3)
+    # never the arithmetic mean (180) across north, and beyond the steps: null
+    assert np.isnan(outlook_bucket.degrees(leads, np.array([350.0, 10.0]), np.array([4.0]))[0])
+    back = outlook_bucket.degrees(leads, np.array([10.0, 350.0]), np.array([1.5]))
+    assert back[0] == pytest.approx(0.0, abs=1e-9) or back[0] == pytest.approx(360.0)
+
+
+def test_extra_variables_hourly_nulls_and_bounds():
+    cells = pl.DataFrame(
+        {"bucket_model": ["b"], "station_id": ["CZ0100"], "grid_lat": [50.0], "grid_lon": [14.5]}
+    )
+    rows = _rows(RUN, [3, 6], [1.0, 2.0]).with_columns(
+        pl.Series("relative_humidity_2m", [99.0, 100.0]),
+        pl.Series("wind_direction_10m", [350.0, 10.0]),
+        pl.Series("snowfall", [0.6, 0.0]),
+        pl.Series("cape", [None, None], dtype=pl.Float64),
+    )
+    out = outlook_bucket.hourly(rows, cells, bucket.Source("b"), "m").sort("time")
+    assert out["relative_humidity_2m"].max() <= 100.0
+    assert out["snowfall"].to_list()[:3] == pytest.approx([0.2, 0.2, 0.2])  # spread evenly
+    at = out.filter(pl.col("time") == RUN + timedelta(hours=3))
+    assert at["wind_direction_10m"].to_list() == [350.0]
+    assert out["wind_direction_10m"].min() >= 0 and out["wind_direction_10m"].max() < 360
+    # a variable the run lacks (no column) or has only nulls: null, never 0
+    assert out["pressure_msl"].null_count() == out.height
+    assert out["cape"].null_count() == out.height
+    assert set(outlook_bucket.COLUMNS) <= set(out.columns)
+    assert set(outlook.EXTRA_VARIABLES) == set(outlook_bucket.EXTRA_VARIABLES)

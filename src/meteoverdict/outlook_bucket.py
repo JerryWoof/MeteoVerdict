@@ -67,13 +67,35 @@ RUN_STEP_H = {
     "knmi_harmonie_arome_europe": 3,
     "dmi_harmonie_arome_europe": 3,
 }
-#: the bucket's further variables the outlook needs (``bucket.EXTRA``)
+#: the further variables the per-model files carry besides ``VARIABLES`` (since
+#: 2026-10-22; ``bucket.EXTRA``; the wind gusts are the single runs' own column), each with
+#: how its hourly values are made from the model's native steps: "hermite" (Catmull-Rom),
+#: "linear", "sum" (a total over the step, spread evenly), "degrees" (an angle: the
+#: short way round the circle) or "solar" (clearness index), and its lower and upper
+#: bound. A model without the variable has it null.
+EXTRA_VARIABLES = {
+    "relative_humidity_2m": ("hermite", 0.0, 100.0),
+    "dew_point_2m": ("hermite", None, None),
+    "pressure_msl": ("hermite", None, None),
+    "wind_direction_10m": ("degrees", None, None),
+    "wind_gusts_10m": ("linear", 0.0, None),
+    "shortwave_radiation": ("solar", 0.0, None),
+    "cloud_cover_low": ("linear", 0.0, 100.0),
+    "snowfall": ("sum", 0.0, None),
+    "snow_depth": ("linear", 0.0, None),
+    "snow_depth_water_equivalent": ("linear", 0.0, None),
+    "surface_temperature": ("hermite", None, None),
+    "cape": ("hermite", 0.0, None),
+    "visibility": ("linear", 0.0, None),
+}
+#: the bucket's further variables the outlook reads (``bucket.EXTRA``): those of the
+#: cloud cover and the sunshine, and ``EXTRA_VARIABLES`` (not the gusts: base files)
 EXTRA = (
     "cloud_cover",
-    "shortwave_radiation",
     "sunshine_duration",
     "direct_radiation",
     "diffuse_radiation",
+    *(v for v in EXTRA_VARIABLES if v != "wind_gusts_10m"),
 )
 VARIABLES = (
     "temperature_2m",
@@ -82,6 +104,8 @@ VARIABLES = (
     "cloud_cover",
     "sunshine_duration",
 )
+#: every value column of the hourly table
+COLUMNS = (*VARIABLES, *EXTRA_VARIABLES)
 #: W/m² (Open-Meteo's ``Zensun.solarConstant``)
 SOLAR_CONSTANT = 1367.7
 
@@ -237,6 +261,18 @@ def hermite(leads: np.ndarray, values: np.ndarray, hours: np.ndarray, low: float
     return out
 
 
+def degrees(leads: np.ndarray, values: np.ndarray, hours: np.ndarray) -> np.ndarray:
+    """An angle (°, 0 to 360) between the native ``leads`` along the shorter arc, never
+    the arithmetic mean of 350 and 10."""
+    inside = (hours >= leads[0]) & (hours <= leads[-1])
+    k = np.clip(np.searchsorted(leads, hours, side="right") - 1, 0, len(leads) - 1)
+    k1 = np.minimum(k + 1, len(leads) - 1)
+    span = np.where(k1 > k, leads[k1] - leads[k], 1.0)
+    fraction = np.where(k1 > k, (hours - leads[k]) / span, 0.0)
+    step = (values[k1] - values[k] + 180.0) % 360.0 - 180.0
+    return np.where(inside, (values[k] + fraction * step) % 360.0, np.nan)
+
+
 def linear(leads: np.ndarray, values: np.ndarray, hours: np.ndarray) -> np.ndarray:
     inside = (hours >= leads[0]) & (hours <= leads[-1])
     return np.where(inside, np.interp(hours, leads, values), np.nan)
@@ -340,9 +376,9 @@ def hourly(
             ("cloud_cover", "linear"),
             ("precipitation", "sum"),
             ("sunshine_duration", "sum"),
-            ("shortwave_radiation", "solar"),
             ("direct_radiation", "solar"),
             ("diffuse_radiation", "solar"),
+            *((v, how) for v, (how, _, _) in EXTRA_VARIABLES.items()),
         ):
             if column not in part.columns:
                 series[column] = np.full(len(hours), np.nan)
@@ -356,12 +392,17 @@ def hourly(
                 series[column] = hermite(leads, values, hours, low=0.0)
             elif how == "linear":
                 series[column] = linear(leads, values, hours)
+            elif how == "degrees":
+                series[column] = degrees(leads, values, hours)
             elif how == "sum":
                 series[column] = backwards_sum(leads, values, hours)
             elif math.isnan(lat):
                 series[column] = np.full(len(hours), np.nan)
             else:
                 series[column] = solar_backwards(leads, values, hours, run, lat, lon)
+        for column, (_, low, high) in EXTRA_VARIABLES.items():
+            if low is not None or high is not None:
+                series[column] = np.clip(series[column], low, high)  # NaN stays NaN
         if np.isnan(series["sunshine_duration"]).all() and not math.isnan(lat):
             series["sunshine_duration"] = _sunshine(series, hours, run.timestamp(), lat, lon)
         frames.append(
@@ -370,15 +411,15 @@ def hourly(
                     "okres": sid,
                     "time": [run + timedelta(hours=int(h)) for h in hours],
                     "model": model_id,
-                    **{v: series[v] for v in VARIABLES},
+                    **{v: series[v] for v in COLUMNS},
                 },
                 schema={
                     "okres": pl.String,
                     "time": pl.Datetime("us", "UTC"),
                     "model": pl.String,
-                    **{v: pl.Float64 for v in VARIABLES},
+                    **{v: pl.Float64 for v in COLUMNS},
                 },
-            ).with_columns(pl.col(v).fill_nan(None) for v in VARIABLES)
+            ).with_columns(pl.col(v).fill_nan(None) for v in COLUMNS)
         )
     return pl.concat(frames) if frames else pl.DataFrame()
 
@@ -428,7 +469,7 @@ def stitch(frames: list[pl.DataFrame]) -> pl.DataFrame:
     return (
         ranked.sort("_rank")
         .group_by("okres", "time", "model", maintain_order=True)
-        .agg(pl.col(v).drop_nulls().first() for v in VARIABLES)
+        .agg(pl.col(v).drop_nulls().first() for v in COLUMNS)
         .sort("okres", "time")
     )
 
@@ -531,5 +572,5 @@ EMPTY_SCHEMA = {
     "okres": pl.String,
     "time": pl.Datetime("us", "UTC"),
     "model": pl.String,
-    **{v: pl.Float64 for v in VARIABLES},
+    **{v: pl.Float64 for v in COLUMNS},
 }
