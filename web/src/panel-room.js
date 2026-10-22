@@ -39,3 +39,13 @@ export function userMoved(map) {
   });
   return () => moved;
 }
+
+/** Under the map (a phone, a narrow window: the panel is not floating on it) the page scrolls
+ * smoothly to a panel that opens, and back to the map when it closes. */
+export function scrollToPanel(panel, open) {
+  if (!panel || getComputedStyle(panel).position === "absolute") return;
+  setTimeout(() => {
+    if (open) panel.scrollIntoView({ block: "start", behavior: "smooth" });
+    else panel.parentElement?.querySelector(".map-frame, .maplibregl-map")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, 120);
+}
