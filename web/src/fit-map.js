@@ -2,7 +2,7 @@
 // header, controls, map and footer fill the height, so the footer is visible without scrolling
 // the page. This sets --map-height (which the map and its panels use) to what is left under
 // the controls. On phones, and when the window is too low, the map keeps its usual height
-// (the footer is then a bar that stays at the bottom, see style.css).
+// (the footer then follows the page).
 
 const MIN_WIDTH = 701;
 const MIN_HEIGHT = 560;

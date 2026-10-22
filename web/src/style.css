@@ -631,18 +631,20 @@ footer {
   color: var(--muted);
 }
 /* the app pages (maps, measured, comparison): the footer stays at the bottom of the window,
-   so it is always visible; where the window is tall enough the map pages fit it without
+   so it is always visible (not on phones: the display is too small, the footer follows the page); where the window is tall enough the map pages fit it without
    any scrolling (src/fit-map.js). The text pages' footer is at the end of the text; with
    body.footer-bar it stays at the bottom of the window too. */
-body.map-page > footer,
-body.station > footer,
-body.theme-compare > footer,
-body.footer-bar > footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 5;
-  margin-top: 0;
-  background: var(--paper);
+@media (min-width: 701px) {
+  body.map-page > footer,
+  body.station > footer,
+  body.theme-compare > footer,
+  body.footer-bar > footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    margin-top: 0;
+    background: var(--paper);
+  }
 }
 header h1 a {
   color: inherit;
