@@ -12,7 +12,8 @@ import { pickLabels } from "./measured.js";
 import { NEUTRAL } from "./palette.js";
 import { ALL_LAYERS, iconName, labelFor, valueFor } from "./tv.js";
 import { panelRoom } from "./panel-room.js";
-import { BASEMAP_ATTRIBUTION, GLYPHS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
+import { BASEMAP_ATTRIBUTION, BASEMAP_SPEC, GLYPHS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
+import { EDGE, INK, KRAJE, NO_FILL, PAGE_BG, pick, themeMap } from "./map-theme.js";
 
 setWorkerUrl(workerUrl);
 
@@ -46,7 +47,7 @@ export function createMeasuredMap({ container, t, onPick, describe }) {
       glyphs: GLYPHS,
       sources: basemapSources(),
       layers: [
-        { id: "background", type: "background", paint: { "background-color": "#f4f1ea" } },
+        { id: "background", type: "background", paint: { "background-color": pick(PAGE_BG) } },
         ...baseLayers()
           .filter((layer) => layer.type !== "background")
           .map((layer) => ({ ...layer, minzoom: Math.max(layer.minzoom ?? 0, BASE_ZOOM) })),
@@ -169,6 +170,14 @@ export function createMeasuredMap({ container, t, onPick, describe }) {
     }
   }
 
+  const applyTheme = themeMap(map, {
+    ...BASEMAP_SPEC,
+    background: { "background-color": PAGE_BG },
+    "okresy-line": { "line-color": EDGE },
+    "kraje-line": { "line-color": KRAJE },
+    "okres-selected": { "line-color": INK },
+  });
+
   ready.then(() => {
     map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
     map.addSource("kraje", { type: "geojson", data: "data/kraje.geojson" });
@@ -190,6 +199,7 @@ export function createMeasuredMap({ container, t, onPick, describe }) {
       filter: ["==", ["get", "code"], ""],
       paint: { "line-color": "#1d2329", "line-width": 2.5 },
     });
+    applyTheme();
     loaded = true;
     paint();
     const canvas = map.getCanvas();
@@ -214,7 +224,7 @@ export function createMeasuredMap({ container, t, onPick, describe }) {
 
   function paint() {
     const pairs = view.fill ? [...view.fill].flat() : [];
-    map.setPaintProperty("okresy-fill", "fill-color", pairs.length ? ["match", ["get", "code"], ...pairs, NEUTRAL] : "#ececec");
+    map.setPaintProperty("okresy-fill", "fill-color", pairs.length ? ["match", ["get", "code"], ...pairs, NEUTRAL] : pick(NO_FILL));
     map.setFilter("okres-selected", ["==", ["get", "code"], view.okres ?? ""]);
     declutter();
   }

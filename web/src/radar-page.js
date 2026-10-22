@@ -22,7 +22,8 @@ import {
   bracket, cellFeatures, compass, hourTicks, lonLatToPixel, nowcastSentence, relativeTime, sample,
   satelliteProduct,
 } from "./radar-extras.js";
-import { BASEMAP_ATTRIBUTION, GLYPHS, PLACE_LAYERS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
+import { BASEMAP_ATTRIBUTION, BASEMAP_SPEC, GLYPHS, PLACE_LAYERS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
+import { INK, themeMap } from "./map-theme.js";
 import { placeSearch } from "./place-search.js";
 import { placeLabel, placesLoader } from "./places.js";
 import placesUrl from "./data/obce.json?url";
@@ -73,6 +74,16 @@ const map = new MapLibreMap({
 });
 map.addControl(new NavigationControl({ showCompass: false }));
 const myDot = locationDot(map);
+const applyTheme = themeMap(map, {
+  ...BASEMAP_SPEC,
+  "kraje-line": { "line-color": ["#3a444c", "#b5ab9e"] },
+  "cell-tracks": { "line-color": INK },
+  "cell-arrows": { "line-color": [["case", ["get", "hail"], "#b3001b", "#1d2329"], ["case", ["get", "hail"], "#ff5a6a", "#ece7df"]] },
+  "cell-points": {
+    "circle-color": [["case", ["get", "hail"], "#ffffff", "#1d2329"], ["case", ["get", "hail"], "#151412", "#ece7df"]],
+    "circle-stroke-color": [["case", ["get", "hail"], "#d0021b", "#ffffff"], ["case", ["get", "hail"], "#ff5a6a", "#151412"]],
+  },
+});
 addLocateControl(map, {
   t,
   places: () => loadPlaces(),
@@ -624,6 +635,7 @@ function addLayers() {
       "circle-stroke-width": ["case", ["get", "hail"], 4, 2],
     },
   });
+  applyTheme();
   for (const layer of ["cell-points", ...PLACE_LAYERS]) {
     map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
     map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));

@@ -21,3 +21,9 @@ test("an inline script switches to English before first paint", () => {
   assert.match(out, /<script>.*"page.tv":"Forecast".*<\/script>/s);
   assert.match(out, /<script>.*#language \[data-lang\].*<\/script>/s);
 });
+
+test("every page gets the theme before first paint and the theme button after the language switch", () => {
+  const out = prerenderI18n(`<head><meta charset="UTF-8" /></head>${PAGE}`, "radar.html");
+  assert.match(out, /<meta charset="UTF-8" \/>\s*<script>try\{document\.documentElement\.dataset\.theme=.*meteoverdict\.theme.*<\/script>/);
+  assert.match(out, /<div class="hdr-tools"><div id="language".*EN<\/button><\/div><button id="theme" class="iconbtn".*<\/button><\/div>/);
+});

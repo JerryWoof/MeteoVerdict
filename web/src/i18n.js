@@ -2,6 +2,7 @@
 // meta.json and are not translated.
 
 import { renderFooter } from "./footer.js";
+import { setUpTheme } from "./theme.js";
 
 export const STRINGS = {
   cs: {
@@ -141,6 +142,9 @@ export const STRINGS = {
     "page.compareIntro": "Který model předpovídá nejlépe v celém Česku, v každém kraji a okrese, a jak jisté to pořadí je.",
     "page.compare": "Porovnání",
     "page.map": "Mapa",
+    "theme.mode": "Barevný režim: {mode}",
+    "theme.light": "světlý",
+    "theme.dark": "tmavý",
     "page.api": "Data",
     "page.ai": "AI předpověď",
     "page.heatmap": "Heatmapa",
@@ -1132,6 +1136,9 @@ export const STRINGS = {
     "page.compareIntro": "Which model forecasts best in all of Czechia, each kraj and each okres, and how sure that ranking is.",
     "page.compare": "Compare",
     "page.map": "Map",
+    "theme.mode": "Colour mode: {mode}",
+    "theme.light": "light",
+    "theme.dark": "dark",
     "page.api": "Data",
     "page.ai": "AI forecast",
     "page.heatmap": "Heatmap",
@@ -2077,5 +2084,6 @@ export function setUpLanguage() {
       window.location.reload();
     });
   }
+  setUpTheme(t);
   return t;
 }

@@ -7,6 +7,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 
 import { panelRoom } from "./panel-room.js";
+import { EDGE, INK, KRAJE, NO_FILL, PAGE_BG, pick, themeMap } from "./map-theme.js";
+import { onThemeChange } from "./theme.js";
 import { colorExpression, nearestStation, stationFeatures } from "./station-map.js";
 
 setWorkerUrl(workerUrl);
@@ -35,7 +37,7 @@ export function createStationMap({ container, t, onPick, describe, extraFor = nu
     style: {
       version: 8,
       sources: {},
-      layers: [{ id: "background", type: "background", paint: { "background-color": "#f4f1ea" } }],
+      layers: [{ id: "background", type: "background", paint: { "background-color": pick(PAGE_BG) } }],
     },
     bounds: BOUNDS,
     fitBoundsOptions: { padding: 10 },
@@ -102,14 +104,25 @@ export function createStationMap({ container, t, onPick, describe, extraFor = nu
   function paint() {
     const color = colorExpression(colourBy, errorRamp);
     const automatic = ["==", ["get", "automatic"], 1];
-    map.setPaintProperty("stations", "circle-color", ["case", automatic, color, "#ffffff"]);
-    map.setPaintProperty("stations", "circle-stroke-color", ["case", automatic, "#ffffff", color]);
+    // manual stations hollow: filled with the page colour, ringed in their own
+    const edge = pick(EDGE);
+    map.setPaintProperty("stations", "circle-color", ["case", automatic, color, edge]);
+    map.setPaintProperty("stations", "circle-stroke-color", ["case", automatic, edge, color]);
   }
 
   function setSelectedData() {
     const s = selected && byId.get(selected);
     map.getSource("selected")?.setData(s ? stationFeatures([s]) : EMPTY);
   }
+
+  const applyTheme = themeMap(map, {
+    background: { "background-color": PAGE_BG },
+    "okresy-fill": { "fill-color": NO_FILL },
+    "okresy-line": { "line-color": EDGE },
+    "kraje-line": { "line-color": KRAJE },
+    selected: { "circle-stroke-color": INK },
+  });
+  onThemeChange(() => loaded && paint());
 
   ready.then(() => {
     map.addSource("okresy", { type: "geojson", data: "data/okresy.geojson" });
@@ -143,6 +156,7 @@ export function createStationMap({ container, t, onPick, describe, extraFor = nu
         "circle-stroke-width": 2.5,
       },
     });
+    applyTheme();
     loaded = true;
     paint();
     setSelectedData();

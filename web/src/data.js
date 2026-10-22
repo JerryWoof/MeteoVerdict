@@ -1,5 +1,7 @@
 // Turning the score JSON (written by `mvd aggregate`) into what the map draws.
 
+import { isDark } from "./theme.js";
+
 export const NO_DATA = "#ececec";
 export const TOO_FEW = "#bdbdbd";
 // the best model is best with probability under P_BEST_MIN (ranking.P_BEST_MIN, also in
@@ -16,6 +18,13 @@ const PALETTE = [
   "#17becf", "#e377c2", "#bcbd22", "#8c564b",
   "#00695c", "#8e0152", "#7f7f7f", "#c49c94",
 ];
+// the same hues, lightened where the dark ones fail 3:1 against the dark surface (#1e1c19)
+const PALETTE_DARK = [
+  "#3586bc", "#e84345", "#33a02c", "#ff7f00", "#9473b6", "#b96a3e",
+  "#a6cee3", "#fb9a99", "#b2df8a", "#fdbf6f", "#cab2d6", "#ffff99",
+  "#17becf", "#e377c2", "#bcbd22", "#a1746b",
+  "#3d8d83", "#b96294", "#7f7f7f", "#c49c94",
+];
 
 /** {"columns": [...], "rows": [[...]]} → array of objects */
 export function records(doc) {
@@ -24,9 +33,10 @@ export function records(doc) {
 }
 
 /** model id → colour; the blend (not ranked) gets none */
-export function modelColors(models) {
+export function modelColors(models, dark = isDark()) {
   const ids = Object.keys(models ?? {}).filter((id) => id !== "blend");
-  return Object.fromEntries(ids.map((id, i) => [id, PALETTE[i % PALETTE.length]]));
+  const palette = dark ? PALETTE_DARK : PALETTE;
+  return Object.fromEntries(ids.map((id, i) => [id, palette[i % palette.length]]));
 }
 
 /**
