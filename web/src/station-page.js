@@ -257,7 +257,7 @@ function renderLegend(shown) {
       items.push(legendItem(dot(KIND_COLORS[kind]), `${t(`map.kind.${kind}`)} (${num(count)})`));
     }
   }
-  const neutral = "#5b6670";
+  const neutral = "var(--muted)";
   items.push(legendItem(dot(neutral), t("map.automatic")), legendItem(dot(neutral, true), t("map.manual")));
   $("map-legend").replaceChildren(...items);
   // what the error colours mean and where they are missing: under the map, not in the box

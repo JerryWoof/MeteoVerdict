@@ -15,7 +15,9 @@ import { placeSearch } from "./place-search.js";
 import { placesLoader } from "./places.js";
 import placesUrl from "./data/obce.json?url";
 import { renderScale } from "./palette.js";
-import { BASEMAP_ATTRIBUTION, GLYPHS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
+import { BASEMAP_ATTRIBUTION, BASEMAP_SPEC, GLYPHS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
+import { EDGE, INK, KRAJE, PAGE_BG, pick, themeMap } from "./map-theme.js";
+import { onThemeChange } from "./theme.js";
 import { fillPicker, issuedText } from "./picker.js";
 import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, currentPart, dayLabel, displayName, ease,
@@ -60,7 +62,7 @@ const map = new MapLibreMap({
     glyphs: GLYPHS,
     sources: basemapSources(),
     layers: [
-      { id: "background", type: "background", paint: { "background-color": "#f4f1ea" } },
+      { id: "background", type: "background", paint: { "background-color": pick(PAGE_BG) } },
       ...baseLayers()
         .filter((layer) => layer.type !== "background")
         .map((layer) => ({ ...layer, minzoom: Math.max(layer.minzoom ?? 0, BASE_ZOOM) })),
@@ -74,6 +76,15 @@ const map = new MapLibreMap({
 new ResizeObserver(() => map.resize()).observe(map.getContainer());
 keepRoomForPanels(map.getContainer().parentElement, map.getContainer(), [document.getElementById("okres-panel")]);
 map.addControl(new NavigationControl({ showCompass: false }));
+const applyTheme = themeMap(map, {
+  ...BASEMAP_SPEC,
+  background: { "background-color": PAGE_BG },
+  "okresy-line": { "line-color": EDGE },
+  "kraje-line": { "line-color": KRAJE },
+  "okres-selected": { "line-color": INK },
+});
+// the obce's value colours are data (computed per theme): draw them again
+onThemeChange(() => paintObce(map, obceShown() ? obceDocs : [], state, panelObec));
 // my location: the obec nearest to the position, selected with its panel open (as a search)
 addLocateControl(map, {
   t,
@@ -1041,6 +1052,7 @@ function addLayers() {
     paint: { "line-color": "#1d2329", "line-width": 2.5 },
   });
   addObceLayers(map, (okres, obec) => update({ okres, obec }));
+  applyTheme();
   map.on("click", "okresy-fill", (event) => {
     // a click on an obec's label opens its panel, not the okres's
     if (map.queryRenderedFeatures(event.point, { layers: ["obce-test-label"] }).length) return;
