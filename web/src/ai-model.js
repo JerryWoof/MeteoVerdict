@@ -23,9 +23,56 @@ const BLEND_VARIABLES = ["precipitation", "cloud_cover", "sunshine_duration"];
 const GUST_THRESHOLD = 13.5;
 const BLEND_FIELDS = ["precipitation", "cloud", "sunshine", "symbol", "gust", "gust_over_threshold"];
 
+/** The further variables of the AI file's `extra` block, in the order the page offers them. */
+export const EXTRA_VARIABLES = [
+  "relative_humidity_2m", "dew_point_2m", "temperature_5cm", "pressure_msl", "visibility",
+  "fog_probability", "snowfall", "snow_depth", "snow_depth_water_equivalent", "cape", "wind_direction_10m",
+];
+
+const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+/**
+ * The `extra` block of the AI file → {version, issued, units, sources, status, method}, or null
+ * when the file has none (an older run) or it is malformed: the page then shows nothing new.
+ */
+export function parseExtra(doc) {
+  const extra = doc?.extra;
+  if (!extra || typeof extra !== "object" || typeof extra.sources !== "object" || !extra.sources) return null;
+  const pick = (o) => (o && typeof o === "object" ? o : {});
+  return {
+    version: extra.version ?? null,
+    issued: extra.issued ?? null,
+    units: pick(extra.units),
+    sources: pick(extra.sources),
+    status: pick(extra.status),
+    method: typeof extra.method === "string" ? extra.method : "",
+  };
+}
+
+/**
+ * The series of one okres's further variables as the page shows them: [{variable, source
+ * ("ai"|"reference"), status ("unverified"|"reference"), unit, values}] in EXTRA_VARIABLES order;
+ * the `ai` series where extra.sources says "ai", else the `reference` one. A variable without a
+ * single value is left out; nothing at all without an `extra` block.
+ */
+export function extraSeries(ai, code) {
+  const own = ai?.okresy?.[code];
+  const extra = ai?.extra;
+  if (!own?.extra || !extra) return [];
+  const out = [];
+  for (const variable of EXTRA_VARIABLES) {
+    const source = extra.sources[variable] === "ai" ? "ai" : "reference";
+    const values = own.extra[variable]?.[source];
+    if (!values?.some((v) => v != null)) continue;
+    const status = source === "ai" && extra.status[variable] !== "reference" ? "unverified" : "reference";
+    out.push({ variable, source, status, unit: extra.units[variable] ?? "", values });
+  }
+  return out;
+}
+
 /**
  * The AI forecast file → {issued (ISO), okresy: {code: {times: [ms], temperature_2m,
- * wind_speed_10m, precipitation, cloud_cover, sunshine_duration}}} (a series is null when the
+ * wind_speed_10m, precipitation, cloud_cover, sunshine_duration, extra}}, extra (see parseExtra)} (a series is null when the
  * file lacks it), or null when it is missing, malformed or older than MAX_AGE_HOURS.
  * An okres without a usable temperature series is left out.
  */
@@ -45,9 +92,20 @@ export function parseAi(doc, now = Date.now()) {
         ? values.map((v) => (typeof v === "number" && Number.isFinite(v) ? v : null))
         : null;
     }
+    // the further variables ({ai, reference} per variable, on the same times)
+    const extra = {};
+    for (const variable of EXTRA_VARIABLES) {
+      const pair = {};
+      for (const kind of ["ai", "reference"]) {
+        const values = o[variable]?.[kind];
+        pair[kind] = Array.isArray(values) && values.length === times.length ? values.map(num) : null;
+      }
+      if (pair.ai || pair.reference) extra[variable] = pair;
+    }
+    if (Object.keys(extra).length) series.extra = extra;
     if (series.temperature_2m?.some((v) => v != null)) okresy[code] = series;
   }
-  return { issued: doc.issued ?? doc.generated, okresy };
+  return { issued: doc.issued ?? doc.generated, okresy, extra: parseExtra(doc) };
 }
 
 /**
@@ -58,7 +116,6 @@ export function parseSky(doc, now = Date.now()) {
   const issued = Date.parse(doc?.issued ?? "");
   if (!doc?.okresy || Number.isNaN(issued)) return null;
   if (now - issued > MAX_AGE_HOURS * 3600 * 1000 || issued - now > 3600 * 1000) return null;
-  const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
   const out = new Map();
   for (const [code, o] of Object.entries(doc.okresy)) {
     if (!Array.isArray(o?.rows)) continue;
