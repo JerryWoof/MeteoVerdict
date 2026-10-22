@@ -2,6 +2,7 @@ import { Map as MapLibreMap, Marker, NavigationControl, Popup, setWorkerUrl } fr
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
+import "./fit-map.js";
 
 import { setUpLanguage } from "./i18n.js";
 import {
@@ -70,7 +71,7 @@ const map = new MapLibreMap({
     [18.95, 51.1],
   ],
   fitBoundsOptions: { padding: 20 },
-  attributionControl: { compact: true, customAttribution: `Radar: ČHMÚ (CC BY 4.0) · Boundaries, places: ČÚZK (CC BY 4.0) · ${BASEMAP_ATTRIBUTION}` },
+  attributionControl: { compact: true, customAttribution: `Radar: ČHMÚ (CC BY 4.0) · Satellite: contains modified EUMETSAT Meteosat data ${new Date().getFullYear()} (CC BY 4.0), processed by ČHMÚ · Boundaries, places: ČÚZK (CC BY 4.0) · ${BASEMAP_ATTRIBUTION}` },
 });
 map.addControl(new NavigationControl({ showCompass: false }));
 const myDot = locationDot(map);
@@ -1357,7 +1358,3 @@ async function bench(scale = perf.scale) {
 
 // for checks in a browser: jump to a time, play, place a point, measure
 window.__radar = { map, goTo, play, stop, setPoint, bench, state: () => ({ shownMs, playing, steps: steps.length, perf }) };
-
-// EUMETSAT's data policy asks for "contains modified EUMETSAT Meteosat data <year>"
-const satYear = document.getElementById("sat-year");
-if (satYear) satYear.textContent = String(new Date().getFullYear());

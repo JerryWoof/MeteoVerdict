@@ -97,6 +97,7 @@ body {
   /* one column no wider than the screen: a long select or code line must not widen the page */
   grid-template-columns: minmax(0, 1fr);
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--paper);
 }
 select {
@@ -620,12 +621,28 @@ header p {
   vertical-align: -0.1rem;
   border-radius: 2px;
 }
+/* one compact line of links (src/footer.js), two lines at most on a phone */
 footer {
   font-size: var(--fs-small);
-  margin-top: 0.5rem;
-  padding: 0.5rem var(--gutter) 0.6rem;
+  line-height: 1.35;
+  margin-top: 0.4rem;
+  padding: 0.3rem var(--gutter) 0.35rem;
   border-top: 1px solid var(--line);
   color: var(--muted);
+}
+/* the app pages (maps, measured, comparison): the footer stays at the bottom of the window,
+   so it is always visible; where the window is tall enough the map pages fit it without
+   any scrolling (src/fit-map.js). The text pages' footer is at the end of the text; with
+   body.footer-bar it stays at the bottom of the window too. */
+body.map-page > footer,
+body.station > footer,
+body.theme-compare > footer,
+body.footer-bar > footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-top: 0;
+  background: var(--paper);
 }
 header h1 a {
   color: inherit;
@@ -3125,8 +3142,15 @@ body.station [hidden] {
 
 /* the links to About, Methodology, For business and Contact, at the top of every footer */
 footer .site-links {
-  margin: 0 0 0.4rem;
-  font-weight: 600;
+  display: inline;
+  margin: 0;
+}
+@media (max-width: 600px) {
+  footer {
+    font-size: 0.66rem;
+    line-height: 1.3;
+    padding-inline: 0.75rem;
+  }
 }
 
 /* text pages: About, Methodology, For business */
