@@ -26,7 +26,7 @@ import {
 import { keepRoomForPanels } from "./panel-room.js";
 import { hashHistory } from "./hash-history.js";
 import {
-  DEFAULT_MODEL, ERROR_VARS, LEADS, AI, WX_MODES, createModelCompare, errorKeyFor, errorLookup, modelOptions,
+  DEFAULT_MODEL, FALLBACK_MODEL, ERROR_VARS, LEADS, AI, WX_MODES, createModelCompare, errorKeyFor, errorLookup, modelOptions,
   okresErrors, readModelChoice, splitModelHash, tabChoice, withModelHash,
 } from "./station-model.js";
 
@@ -839,6 +839,12 @@ async function fillModelPick() {
   cleanHash(); // a choice in the address
   const options = await models.options();
   if (!options.some((o) => o.id === models.state.model)) models.state.model = DEFAULT_MODEL;
+  // a plain link shows the AI; without any AI data yet, the blend (a link naming a model is left as it is)
+  const named = splitModelHash(window.location.hash).model;
+  if (!named && models.state.model === AI) {
+    const day = (await models.loadIndex())?.to;
+    if (day && !(await models.loadErrors(day, AI))) models.state.model = FALLBACK_MODEL;
+  }
   modelSelect.replaceChildren(
     ...options.map((o) => {
       const option = el("option", o.name);
