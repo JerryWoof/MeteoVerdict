@@ -16,7 +16,8 @@ import { SEAT_OKRES, seatName, seatOkres } from "./seats.js";
 import { statusText } from "./status.js";
 import { chmiNotice, dayLabel, gustOver, gustOverText, parseOutlook, rowFor, sunFor, today } from "./tv.js";
 import { AI_FILES, aiPath, aiText } from "./ai-source.js";
-import { AI_MODEL, loadAi, withAi } from "./ai-model.js";
+import { AI_MODEL, extraSeries, loadAi, withAi } from "./ai-model.js";
+import { dayWindDirection, extraDisplay } from "./ai-extra.js";
 
 // ?source=ai: MeteoVerdict AI's forecast (the AI forecast tab's detail, ai-source.js): its
 // own outlook.json and obce files, "MeteoVerdict AI" wherever ours is named, no weights
@@ -85,7 +86,20 @@ function sunCell(sun) {
   return td;
 }
 
-function renderDays(days, sunOf, gustOf) {
+// the max wind with a small arrow for where it blows from (extra variables, when the file has them)
+function windCell(wind, direction) {
+  const td = cell("td", fmt(wind), "num");
+  if (direction != null && wind != null) {
+    const arrow = cell("span", "↓", "wind-dir");
+    arrow.style.transform = `rotate(${Math.round(direction)}deg)`;
+    arrow.title = `${t("forecast.extra.windDir")}: ${Math.round(direction)}°`;
+    arrow.setAttribute("aria-label", arrow.title);
+    td.append(" ", arrow);
+  }
+  return td;
+}
+
+function renderDays(days, sunOf, gustOf, dirOf = () => null) {
   const table = document.getElementById("days");
   const head = document.createElement("tr");
   // older outlook files have no sun times or gusts: then no column at all
@@ -108,7 +122,7 @@ function renderDays(days, sunOf, gustOf) {
       cell("td", fmt(d.tmin), "num"),
       cell("td", fmt(d.tmax), "num"),
       cell("td", fmt(d.precipitation), "num"),
-      cell("td", fmt(d.wind), "num"),
+      windCell(d.wind, dirOf(d.day)),
     );
     if (withGust) {
       // from outlook.json (the single runs, corrected): null beyond the newest run
@@ -286,16 +300,89 @@ function render(names, colors) {
     modelNote.textContent = selected === AI_MODEL ? "" : note;
     modelNote.hidden = selected === AI_MODEL;
     // the gusts come from our corrected outlook: not shown for a single model
-    renderDays(rows.map(dayRow), sunOf, () => null);
+    renderDays(rows.map(dayRow), sunOf, () => null, state.dirOf);
   } else {
     modelNote.textContent = "";
-    renderDays(days.map(dayRow), sunOf, gustOf);
+    renderDays(days.map(dayRow), sunOf, gustOf, state.dirOf);
   }
   const nights = nightBands(sunOf, forecast.times[0], forecast.times.at(-1), TIME_ZONE);
   const issued = Date.parse(parsed.generated ?? "") || Date.now();
   document.getElementById("charts").replaceChildren(
     ...VARIABLES.map((v) => chart(forecast, combined[v], table, v, colors, names, nights, selected, issued, range)),
   );
+  renderExtra(nights);
+}
+
+// further variables (AI file's `extra` block): one compact chart with a variable selector, only
+// for the AI and the combination (a single public model has none), and only where the file has them
+let extraVariable = null;
+function renderExtra(nights) {
+  const box = document.getElementById("extra");
+  const items = state.extra.filter((e) => e.series.some((v) => v != null));
+  if (!items.length || (selected !== COMBINED && selected !== AI_MODEL)) {
+    box.replaceChildren();
+    box.hidden = true;
+    return;
+  }
+  const item = items.find((e) => e.variable === extraVariable) ?? items[0];
+  extraVariable = item.variable;
+  const heading = cell("h3", t("forecast.extra.title"), "extra-title");
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", t("forecast.extra.pick"));
+  select.replaceChildren(...items.map((e) => {
+    const option = document.createElement("option");
+    option.value = e.variable;
+    option.textContent = t(`forecast.extra.${e.variable}`);
+    option.selected = e.variable === item.variable;
+    return option;
+  }));
+  select.addEventListener("change", () => {
+    extraVariable = select.value;
+    renderExtra(nights);
+  });
+  const label = cell("span", t(`forecast.extra.${item.status === "unverified" ? "ai" : "reference"}`), "extra-label");
+  const head = cell("div", null, "extra-head");
+  head.append(heading, select, label);
+  const figure = document.createElement("figure");
+  figure.className = "forecast-chart extra-chart";
+  figure.append(cell("figcaption", `${t(`forecast.extra.${item.variable}`)}${item.unit ? `, ${item.unit}` : ""}`));
+  figure.append(extraPlot(item, nights));
+  box.replaceChildren(head, figure);
+  box.hidden = false;
+}
+
+function extraPlot(item, nights) {
+  const width = Math.min(1200, document.body.clientWidth - 32);
+  const times = state.extraTimes;
+  const rows = item.series.map((v, i) => ({ time: new Date(times[i]), value: v })).filter((r) => r.value != null);
+  const kind = item.variable === "snowfall" ? "step" : item.variable === "wind_direction_10m" ? "dot" : "line";
+  const stroke = themed(INK);
+  const mark = kind === "dot"
+    ? Plot.dot(rows, { x: "time", y: "value", r: 2, fill: stroke, tip: true })
+    : Plot.lineY(rows, { x: "time", y: "value", stroke, strokeWidth: 2, curve: kind === "step" ? "step-before" : "linear", tip: true });
+  return Plot.plot({
+    width,
+    height: 160,
+    marginLeft: 40,
+    marginRight: 28,
+    x: {
+      label: null,
+      type: "time",
+      ticks: times.map((time) => new Date(time)).filter((d) => pragueHour(d) % (width < 600 ? 24 : 12) === 0),
+      tickFormat: (date) => timeTick(date, width < 600),
+    },
+    y: {
+      label: null,
+      grid: true,
+      zero: kind === "step" || ["snow_depth", "snow_depth_water_equivalent", "cape", "visibility", "fog_probability"].includes(item.variable),
+      ...(item.variable === "wind_direction_10m" ? { domain: [0, 360], ticks: [0, 90, 180, 270, 360] } : {}),
+    },
+    marks: [
+      Plot.rectX(nights, { x1: (n) => new Date(n.start), x2: (n) => new Date(n.end), fill: stroke, fillOpacity: 0.06 }),
+      mark,
+      Plot.ruleX([new Date()], { stroke: "#c0392b", strokeDasharray: "3,3" }),
+    ],
+  });
 }
 
 function pick(model, names, colors) {
@@ -312,7 +399,8 @@ async function show(point, names, colors, outlook) {
   const issued = document.getElementById("issued");
   document.getElementById("title").textContent = t("forecast.titleFor", { town: seatName(point.code, point.name) });
   state = null;
-  for (const id of ["days", "charts"]) document.getElementById(id).replaceChildren();
+  for (const id of ["days", "charts", "extra"]) document.getElementById(id).replaceChildren();
+  document.getElementById("extra").hidden = true;
   document.getElementById("model-note").hidden = true;
   document.getElementById("combined-note").hidden = false;
   issued.textContent = "";
@@ -326,7 +414,7 @@ async function show(point, names, colors, outlook) {
   const [weightsDoc, modelsDoc, ai] = await Promise.all([
     getJson(`data/scores/forecast/${point.code}.json`),
     getJson(`data/scores/forecast/models/${point.code}.json`),
-    AI ? null : loadAi(getJson),
+    loadAi(getJson),
   ]);
   if (token !== showToken) return;
   const table = weightTable(weightsDoc);
@@ -334,7 +422,7 @@ async function show(point, names, colors, outlook) {
     message.textContent = t("forecast.noWeights");
     return;
   }
-  const parsed = withAi(parseModels(modelsDoc), ai, point.code);
+  const parsed = withAi(parseModels(modelsDoc), AI ? null : ai, point.code);
   if (!parsed) {
     message.textContent = t("forecast.unavailable");
     return;
@@ -356,7 +444,13 @@ async function show(point, names, colors, outlook) {
   const range = !AI && parsed.combined.temperature_2m_lo && parsed.combined.temperature_2m_hi
     ? { lo: parsed.combined.temperature_2m_lo, hi: parsed.combined.temperature_2m_hi }
     : null;
-  state = { point, table, parsed, forecast, combined, days, sunOf, gustOf, range };
+  // the further variables of the AI file; none without its `extra` block (an older run)
+  const extra = extraDisplay(extraSeries(ai, point.code));
+  const dirOf = (day) => dayWindDirection(extra, ai?.okresy?.[point.code], day, TIME_ZONE);
+  state = {
+    point, table, parsed, forecast, combined, days, sunOf, gustOf, range, extra, dirOf,
+    extraTimes: ai?.okresy?.[point.code]?.times ?? [],
+  };
   const when = issuedText(state.parsed.generated);
   issued.textContent = when ? t("forecast.issued", { time: when }) : "";
   selected = fillPicker(document.getElementById("model"), {
