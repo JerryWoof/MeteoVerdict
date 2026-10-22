@@ -2086,6 +2086,9 @@ body.station #facts {
 }
 #headline .fresh.stale,
 #headline .warning,
+#status.placeholder {
+  visibility: hidden;
+}
 #status.stale {
   color: var(--danger);
   font-weight: 600;

@@ -23,6 +23,7 @@ import {
   heatHash, heatParseHash, heatStepAt,
 } from "./ai-heat.js";
 import { hashHistory } from "./hash-history.js";
+import { heatStatus } from "./status.js";
 
 // The heatmap tab: MeteoVerdict AI's 100 m temperature over the radar page's base map,
 // a time control above it, and a click's panel with the temperature at that place at every time.
@@ -631,9 +632,23 @@ async function startHourly() {
   if (point) setPoint(point.lng, point.lat, point.name, point.own);
 }
 
+/** The status line under the menu: when the AI run was made and the days its map covers (status.js). */
+function showStatus() {
+  const { text, stale } = heatStatus(heatIndex, t, language);
+  const status = $("status");
+  status.textContent = text;
+  status.classList.remove("placeholder");
+  status.classList.toggle("stale", stale);
+}
+
 async function main() {
   heatIndex = parseHeatIndex(await fetchJson(HEAT_INDEX));
-  if (heatIndex) return startHourly();
+  if (heatIndex) {
+    showStatus();
+    return startHourly();
+  }
+  $("status").textContent = ""; // the older day-part maps have no run time to show
+  $("status").classList.remove("placeholder");
   const index = parseTemp100mIndex(await fetchJson(TEMP100M_INDEX));
   const single = index ? null : parseTemp100m(await fetchJson(TEMP100M_JSON));
   source = index ? { index } : single ? { single } : null;
