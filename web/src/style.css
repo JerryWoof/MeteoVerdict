@@ -3428,10 +3428,12 @@ footer .site-links {
   background: var(--box-bg);
   border-radius: 4px;
 }
+/* phones: the panel has its full height under the map and the page scrolls through it (no
+   scroll of its own to fight the page's); the close button stays at the top of the screen */
 @media (max-width: 700px) {
   #detail {
-    max-height: 70vh;
-    overflow-y: auto;
+    max-height: none;
+    overflow: visible;
   }
 }
 
