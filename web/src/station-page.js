@@ -227,7 +227,7 @@ let kindsErr = null; // the error view of the Stations map's dots (buildErrView)
 /** What the error colours mean on the Stations map, and where they are missing. */
 function kindsErrNote(v) {
   const value = t(`fc.var.${v.key}`).toLowerCase();
-  if (v.noFile) return t(models.state.model === AI ? "fc.noAiDay" : "measured.err.noFile");
+  if (v.noFile) return noFileText(v, "err");
   if (!v.hasModel && models.state.model === AI) return t("fc.noAi");
   if (!v.hasModel) return t("fc.noModelValue", { model: v.name, value });
   const have = placed.filter((s) => v.byId.get(s.id) != null).length;
@@ -441,7 +441,7 @@ function wxErrorBlock(code) {
   box.append(el("strong", t("measured.wx.panelTitle", { model: w.view.name, lead: models.state.lead, what })));
   box.append(el("p", e
     ? t("measured.wx.panelLine", { bias: signedText(e.bias, w.view), mae: w.view.label(e.mae).replace(/^[+−]?/, ""), n: e.n })
-    : t(w.view.noFile ? (models.state.model === AI ? "fc.noAiDay" : "measured.wx.noFile") : "measured.wx.panelNone")));
+    : w.view.noFile ? noFileText(w.view, "wx") : t("measured.wx.panelNone")));
   return box;
 }
 
@@ -468,6 +468,28 @@ function errorText(row, v) {
   return t(v.byId.has(row.id) ? "measured.err.tipGap" : "measured.err.tipOutside");
 }
 
+/**
+ * Why a day has no error file: "pending" (the day's measurements are processed by the next daily run),
+ * "old" (beyond the 35 stored days) or "none" (inside the window, but this model has no file for it).
+ */
+function noFileWhy(day, index, model) {
+  const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  const to = index?.to;
+  if ((to && day > to) || (model === AI && day >= yesterday)) return "pending";
+  if (to) {
+    const oldest = new Date(Date.parse(`${to}T00:00:00Z`) - 34 * 864e5).toISOString().slice(0, 10);
+    if (day < oldest) return "old";
+  }
+  return "none";
+}
+
+/** The note for a missing error file; scope "err" (dots) or "wx" (okresy). */
+function noFileText(v, scope) {
+  if (v.noFileWhy === "pending") return t(`measured.${scope}.pending`);
+  if (v.noFileWhy === "none") return t(`measured.${scope}.none`);
+  return t(models.state.model === AI ? "fc.noAiDay" : `measured.${scope}.noFile`);
+}
+
 /** The error view for a day, from the per-day error file: null when the colour is the measured values. */
 async function buildErrView(day, forKey = models.state.err, abs = false) {
   const key = forKey;
@@ -478,7 +500,7 @@ async function buildErrView(day, forKey = models.state.err, abs = false) {
   const name = modelOptions(index, t).find((o) => o.id === model)?.name ?? model;
   const variable = key === "r" ? "mm" : key === "wind" ? "m/s" : "°C";
   const label = (e) => `${formatSigned(e, language, 1)} ${variable}`;
-  return { key, ramp: errorRampKey(key, abs), unit: variable, name, noFile: !doc, day, label, ...lookup };
+  return { key, ramp: errorRampKey(key, abs), unit: variable, name, noFile: !doc, noFileWhy: doc ? null : noFileWhy(day, index, model), day, label, ...lookup };
 }
 
 const measuredMap = createMeasuredMap({
@@ -679,7 +701,7 @@ function wxFill(w) {
     const title = displayName(o.name);
     if (!e) {
       fill.set(o.code, BEYOND);
-      tips.set(o.code, { title, text: t(w.view.noFile ? (models.state.model === AI ? "fc.noAiDay" : "measured.wx.noFile") : w.view.hasModel ? "measured.wx.tipNone" : "measured.wx.noModel") });
+      tips.set(o.code, { title, text: (w.view.noFile ? noFileText(w.view, "wx") : w.view.hasModel ? "measured.wx.tipNone" : "measured.wx.noModel") });
       continue;
     }
     fill.set(o.code, colorFor(w.abs ? e.mae : e.bias, w.view.ramp));
@@ -700,7 +722,7 @@ function renderWxLegend(w) {
   const title = t(w.abs ? "measured.wx.scaleAbs" : "measured.wx.scaleBias", { model: w.view.name, lead: models.state.lead, unit: w.view.unit });
   renderScale(box, w.view.ramp, title);
   const notes = [];
-  if (w.view.noFile) notes.push(t(models.state.model === AI ? "fc.noAiDay" : "measured.wx.noFile"));
+  if (w.view.noFile) notes.push(noFileText(w.view, "wx"));
   else if (!w.view.hasModel) notes.push(models.state.model === AI ? t("fc.noAi") : t("measured.wx.noModel"));
   if (landing.part !== "day") notes.push(t("measured.wx.wholeDay"));
   for (const n of notes) box.append(el("p", n, "muted small"));
