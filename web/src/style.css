@@ -3821,3 +3821,28 @@ svg[class^="plot-"],
   font-variant-numeric: tabular-nums;
 }
 
+
+/* forecast-detail.html: the AI file's further variables, a compact chart with a selector */
+.extra-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.6rem;
+  margin-top: 1rem;
+}
+.extra-title {
+  margin: 0;
+  font-size: 1rem;
+}
+.extra-label {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+.extra-chart {
+  margin-top: 0.4rem;
+}
+.wind-dir {
+  display: inline-block;
+  color: var(--muted);
+  line-height: 1;
+}
