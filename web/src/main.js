@@ -330,7 +330,7 @@ async function showRegion(region) {
   const entry = current.regions.get(region);
   const name = displayName(facts?.name ?? entry?.name ?? region);
   const close = closeButton(() => select(null, true));
-  const heading = element("h2", name);
+  const heading = element("h2", `${t(current.level === "okres" ? "detail.kindOkres" : "detail.kindKraj")}: ${name}`);
   const sub = element("p", `${t(`variable.${view.variable}`)} · D+${view.leadDay} · ${t(`window.${view.window}`).toLowerCase()}`, "muted");
   const nearest = await nearestStations(region, facts);
   const top = nearest ? [close, heading, sub, nearest] : [close, heading, sub];
@@ -393,7 +393,7 @@ async function showStation(code, title, backTo, models = null) {
   const children = [close];
   if (backTo) children.push(back);
   const sub = element("p", `${t(`variable.${current.view.variable}`)} · D+${current.view.leadDay} · ${t(`window.${current.view.window}`).toLowerCase()}`, "muted");
-  children.push(element("h2", title), sub, stationChart(doc, current.view, current.colors, current.names, t, models));
+  children.push(element("h2", `${t("detail.kindStation")}: ${title}`), sub, stationChart(doc, current.view, current.colors, current.names, t, models));
   // the station on the Stations tab of measured.html
   const all = element("a", t("station.link"));
   all.href = `measured.html#kinds/${encodeURIComponent(code)}`;
