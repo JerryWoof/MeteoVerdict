@@ -307,7 +307,7 @@ async function showRegion(region) {
   }
   if (facts.preliminary) blocks.push(element("p", t("detail.preliminary", { days: facts.basis.days }), "warning"));
   const chartBlock = element("div", null, "detail-block");
-  chartBlock.append(element("h3", t("detail.chart")), rankList(facts), element("p", t("detail.chartNote", { unit }), "muted small"));
+  chartBlock.append(element("h3", t("detail.chart", { name })), rankList(facts), element("p", t("detail.chartNote", { unit }), "muted small"));
   blocks.push(chartBlock);
   if (facts.byLead.length > 1) {
     blocks.push(chips(facts.byLead.map((l) => ({ title: `D+${l.lead}`, model: l.model })), t("detail.byLead")));
