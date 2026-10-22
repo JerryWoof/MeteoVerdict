@@ -52,7 +52,7 @@ def run(
         client, points["id"], day - timedelta(days=CAPTURE_DAYS - 1), day
     )
     if obs.height:
-        partitions.write_monthly(obs, data_dir / "obs", ["station_id", "time", "variable"])
+        observations.write_hourly(obs, data_dir)
     log(f"captured {obs.height} hourly observations up to {day}")
     if gauge_points is not None:
         since = (day - timedelta(days=GAUGE_DELAY_DAYS)).replace(day=1)
