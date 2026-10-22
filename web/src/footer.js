@@ -178,7 +178,7 @@ export const SITE_LINKS = [
   ["site.method", "methodology.html"],
   ["site.report", "report.html"],
   ["site.business", "collaboration.html"],
-  ["site.contact", "mailto:info@meteoverdict.com"],
+  ["site.contact", "about.html#contact"],
   ["site.privacy", "soukromi.html"],
   ["site.pudomer", "https://pudomer.cz/"],
 ];
