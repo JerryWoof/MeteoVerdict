@@ -132,6 +132,40 @@ Values with `QUALITY` 1 (suspect), 2 (poor) or 4 (missing) are dropped; 0, 3 and
 kept with their code, so scoring can exclude estimated values. Every value also records
 its `source` (`recent`, `historical`, `now`).
 
+#### Extra elements (`obs-extra/`)
+
+Further 10-minute elements are stored so that new forecast variables can be scored
+later. They are **not verified yet** and live in their own monthly files
+`data/obs-extra/YYYY-MM.parquet` (same columns as `obs/`; release asset
+`obs-extra-YYYY-MM.parquet` next to `obs-`), never in `obs/`, because many readers of
+`obs/` (D+N scores, MOS, rain calibration, farm, gusts, station pages, observed map,
+quality checks) do not filter by `variable` and must see exactly what they saw before.
+`observations.scan` reads only `obs/` and `gauges/`; a consumer of the extras scans
+`obs-extra/` itself.
+
+| Variable | From | Unit | Range kept |
+|---|---|---|---|
+| `relative_humidity_2m` | `H` at HH:00 | % | 1 to 100 |
+| `wind_direction_10m` | `D` at HH:00 (instant, not a mean) | degrees | 0 to 360 |
+| `temperature_5cm` | `TPM` at HH:00 | °C | -50 to 60 |
+| `snow_depth` | `SCEa` at HH:00 | cm (as given; `meta2`: "Výška sněhu", cm) | 0 to 500 |
+| `snow_water_equivalent` | `SVHa` at HH:00 | mm (`meta2`: "Vodní hodnota", mm; 16 stations on 2026-10-22) | >= 0 |
+| `dew_point_2m` | derived from `T` and `H` of the same hour: with `g = ln(H/100) + 17.62 T / (243.12 + T)`, `Td = 243.12 g / (17.62 - g)` (Magnus) | °C | -80 to 50 |
+
+The dew point exists only where both `T` and `H` passed the checks for that station and
+hour; its `quality` is the worse of the two. `meta2` lists `TPM` ("Teplota přízemní") at
+height 0.05 m for 235 stations but 2.0 m for 5; the data files do not say which, so those
+5 stations' `temperature_5cm` is not the air 5 cm above ground (**unverified**, small).
+Humidity sits at 1.9 to 2.5 m at most stations. These elements do not change the station
+list (`VERIFIED_ELEMENTS`).
+
+`mvd daily` re-reads the last 3 days from `now/` and re-fetches nothing older, but the
+re-score path (`backfill`, whole months from `recent/` or `historical/`) now writes the
+extras too, so months already in `obs/` get their `obs-extra/` file when a month is
+fetched again (`mvd backfill` skips months it marked done; clear `obs_months` in the
+state or run `mvd fetch-obs --start .. --end ..`, which also writes `obs-extra/`, for the
+past ~100 days, which `recent/` still holds).
+
 Only stations with a 10-minute `T`, `F` or `SRA10M` in today's `meta2` are fetched
 (`Fmax` does not add stations)
 (about 475; the other ~280 active stations are manual rain gauges with daily data

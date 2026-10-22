@@ -12,6 +12,12 @@ The verified variables come from the 10-minute files (see docs/data-sources.md):
   This matches Open-Meteo's hourly ``wind_gusts_10m``, the maximum of the preceding
   hour. Used by the farmers' event scores (``farm``), not by the D+N scores.
 
+Extra elements (stored apart from the verified ones, in ``obs-extra/``, see
+``EXTRA_VARIABLES``), all instants at HH:00: ``relative_humidity_2m`` (``H``, %),
+``wind_direction_10m`` (``D``, degrees), ``temperature_5cm`` (``TPM``, °C, air 5 cm above
+the ground), ``snow_depth`` (``SCEa``, cm), ``snow_water_equivalent`` (``SVHa``, mm) and
+the derived ``dew_point_2m`` (°C, Magnus formula from ``T`` and ``H`` of the same hour).
+
 Times are UTC. Per station and month the data comes from ``recent/`` (checked data of
 the last 12 months), ``historical/`` (closed years) or, for days not published there
 yet, ``now/`` (last ~3 days, unchecked).
@@ -38,7 +44,34 @@ ELEMENTS = {
     "F": "wind_speed_10m",
     "SRA10M": "precipitation",
     "Fmax": "wind_gusts_10m",
+    "H": "relative_humidity_2m",
+    "D": "wind_direction_10m",
+    "TPM": "temperature_5cm",
+    "SCEa": "snow_depth",
+    "SVHa": "snow_water_equivalent",
 }
+#: Variables that are not verified (yet): kept in ``obs-extra/``, not ``obs/``, so that
+#: everything reading ``obs/`` sees exactly what it did before they existed.
+EXTRA_VARIABLES = (
+    "relative_humidity_2m",
+    "wind_direction_10m",
+    "temperature_5cm",
+    "snow_depth",
+    "snow_water_equivalent",
+    "dew_point_2m",
+)
+#: Instant values at HH:00 (the rest are built from six 10-minute values).
+INSTANT = (
+    "temperature_2m",
+    "wind_speed_10m",
+    "relative_humidity_2m",
+    "wind_direction_10m",
+    "temperature_5cm",
+    "snow_depth",
+    "snow_water_equivalent",
+)
+#: Magnus formula constants (WMO-style, over water) for the dew point.
+MAGNUS_A, MAGNUS_B = 17.62, 243.12
 #: The elements of the verified variables: they decide which stations are automatic.
 #: ``Fmax`` (gusts, an extra) is left out so the station list stays as it was.
 VERIFIED_ELEMENTS = ("T", "F", "SRA10M")
@@ -55,6 +88,12 @@ PLAUSIBLE = {
     "wind_speed_10m": (0.0, 75.0),
     "precipitation": (0.0, 120.0),
     "wind_gusts_10m": (0.0, 75.0),
+    "relative_humidity_2m": (1.0, 100.0),
+    "wind_direction_10m": (0.0, 360.0),
+    "temperature_5cm": (-50.0, 60.0),
+    "snow_depth": (0.0, 500.0),
+    "snow_water_equivalent": (0.0, 1e6),
+    "dew_point_2m": (-80.0, 50.0),
 }
 
 #: QUALITY codes (meta4) we keep: 0 good, 3 estimated, 5 unknown (unchecked now/ data).
@@ -187,12 +226,11 @@ def normalize(raw: pl.DataFrame, source: str) -> pl.DataFrame:
 
 
 def to_hourly(ten_minute: pl.DataFrame) -> pl.DataFrame:
-    """Hourly values: instant T and F at HH:00, precipitation summed and gusts maximised
-    over the hour ending at HH:00 (all six 10-minute values required)."""
+    """Hourly values: instant values (``INSTANT``) at HH:00, precipitation summed and gusts
+    maximised over the hour ending at HH:00 (all six 10-minute values required), and the
+    dew point from T and H of the same hour."""
     full_hour = pl.col("time").dt.minute() == 0
-    instant = ten_minute.filter(
-        pl.col("variable").is_in(["temperature_2m", "wind_speed_10m"]), full_hour
-    )
+    instant = ten_minute.filter(pl.col("variable").is_in(list(INSTANT)), full_hour)
     parts = [instant.select(list(SCHEMA))]
     for variable, how in HOURLY_FROM_SIX.items():
         slots = ten_minute.filter(pl.col("variable") == variable)
@@ -215,7 +253,33 @@ def to_hourly(ten_minute: pl.DataFrame) -> pl.DataFrame:
             )
             .cast(SCHEMA)
         )
-    return pl.concat(parts).filter(plausible())
+    # the dew point only from values that passed the plausibility checks
+    hourly = pl.concat(parts).filter(plausible())
+    return pl.concat([hourly, _dew_point(hourly)]).filter(plausible())
+
+
+def _dew_point(hourly: pl.DataFrame) -> pl.DataFrame:
+    """Dew point (°C) where temperature and humidity exist at the same station and hour."""
+    keys = ["station_id", "time"]
+    t = hourly.filter(pl.col("variable") == "temperature_2m")
+    h = hourly.filter(pl.col("variable") == "relative_humidity_2m").select(
+        *keys, pl.col("value").alias("rh"), pl.col("quality").alias("q_h")
+    )
+    temp = pl.col("value").cast(pl.Float64)
+    gamma = (pl.col("rh").cast(pl.Float64) / 100).log() + MAGNUS_A * temp / (MAGNUS_B + temp)
+    return (
+        t.join(h, on=keys)
+        .with_columns((MAGNUS_B * gamma / (MAGNUS_A - gamma)).alias("dew"))
+        .select(
+            "station_id",
+            "time",
+            pl.lit("dew_point_2m").alias("variable"),
+            pl.col("dew").alias("value"),
+            pl.max_horizontal("quality", "q_h").alias("quality"),
+            "source",
+        )
+        .cast(SCHEMA)
+    )
 
 
 def plausible() -> pl.Expr:
@@ -283,6 +347,22 @@ def scan(data_dir: Path, first: date, last: date) -> pl.LazyFrame | None:
     scans = [partitions.scan_months(data_dir / kind, first, last) for kind in ("obs", "gauges")]
     found = [s for s in scans if s is not None]
     return pl.concat(found) if found else None
+
+
+def split_extra(observations: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """``(verified rows, extra rows)`` of hourly observations (see ``EXTRA_VARIABLES``)."""
+    is_extra = pl.col("variable").is_in(EXTRA_VARIABLES)
+    return observations.filter(~is_extra), observations.filter(is_extra)
+
+
+def write_hourly(observations: pl.DataFrame, data_dir: Path) -> list[Path]:
+    """Write hourly observations into ``data_dir/obs`` (verified variables) and
+    ``data_dir/obs-extra`` (the rest); returns the files written."""
+    core, extra = split_extra(observations)
+    written = write_monthly(core, data_dir / "obs") if core.height else []
+    if extra.height:
+        written += write_monthly(extra, data_dir / "obs-extra")
+    return written
 
 
 def write_monthly(observations: pl.DataFrame, out_dir: Path) -> list[Path]:

@@ -24,7 +24,7 @@ data comes from recorded fixtures in `tests/fixtures/`. Dates are `YYYY-MM-DD` i
 | Step | Command | Output |
 |---|---|---|
 | Stations | `mvd stations` | `data/stations.parquet` |
-| Observations | `mvd fetch-obs`, `mvd fetch-gauges` | `data/obs/YYYY-MM.parquet` |
+| Observations | `mvd fetch-obs`, `mvd fetch-gauges` | `data/obs/YYYY-MM.parquet`, `data/obs-extra/YYYY-MM.parquet` (not yet verified elements) |
 | Forecasts (archive) | `mvd fetch-fc`, `mvd backfill` | `data/fc/YYYY-MM.parquet` |
 | Scores | `mvd score` | `data/scores/YYYY-MM.parquet` |
 | Rankings | `mvd aggregate` | `data/aggregates.parquet`, `site/data/**/*.json` |
