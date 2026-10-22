@@ -2717,7 +2717,11 @@ instead of only the okres's forecast point. After each outlook run
 - **Output:** `obce-<okres>.json` per okres (per obec the combined temperature,
   precipitation and wind and every model's temperature, from Prague midnight of the day),
   packed in `obce.zip` in the release `data-latest`; Pages unpacks it to
-  `data/scores/forecast/`.
+  `data/scores/forecast/`. Besides `models` (temperature per model) each place has
+  `models_wind_speed_10m` and `models_precipitation` (the same on the same hourly `times`,
+  1 decimal, only models with a value for the place), which make `obce.zip` considerably
+  larger; Pages removes these three keys, and `ai` and `blend` where present, from the
+  site's copies of the files.
 - **Pages:** the forecast detail page shows an "Obec" picker for the okres shown (link
   `#<okres>/<obec>`). The forecast map (`web/src/obce-map.js`) loads the files of the okresy
   in view from zoom 8.5 and shows the obce as yr.no and Windy draw places: no dots, the name
