@@ -22,5 +22,5 @@ test("translation with parameters and fallbacks", () => {
   // a day in the parameters is written in the language
   assert.equal(translator("cs")("status.scores", { asOf: "2026-10-19", updated: "2026-10-20" }), "Skóre do 19. 10. 2026 · aktualizováno 20. 10. 2026");
   assert.equal(translator("en")("status.scores", { asOf: "2026-10-19", updated: "2026-10-20" }), "Scores up to 19 Oct 2026 · updated 20 Oct 2026");
-  assert.match(translator("cs")("farm.basis", { runs: 3, first: "2026-07-27 02 CEST", last: "2026-10-19 14 CEST", stations: 5 }), /od 27\. 7\. 2026 2 h SELČ do 19\. 10\. 2026 14 h SELČ/);
+  assert.match(translator("cs")("farm.basis", { runs: 3, first: "2026-07-27 02 CEST", last: "2026-10-19 14 CEST", stations: 5 }), /od 27\. 7\. 2026 2 h do 19\. 10\. 2026 14 h,/);
 });

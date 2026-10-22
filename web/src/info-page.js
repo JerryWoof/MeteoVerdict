@@ -4,11 +4,12 @@ import "./style.css";
 
 import { setUpLanguage } from "./i18n.js";
 import { parseInline } from "./inline-text.js";
+import { pragueClock } from "./prague-time.js";
 import { FILE as LOSO_FILE, losoBlocks, losoSummary } from "./obce-loso.js";
 import { PAGES } from "./pages-text.js";
 
 function inline(parent, text) {
-  for (const part of parseInline(text)) {
+  for (const part of parseInline(pragueClock(text))) {
     if (part.href) {
       const a = document.createElement("a");
       a.href = part.href;
