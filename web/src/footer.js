@@ -179,6 +179,7 @@ export const SITE_LINKS = [
   ["site.report", "report.html"],
   ["site.business", "collaboration.html"],
   ["site.contact", "about.html#contact"],
+  ["site.privacy", "soukromi.html"],
   ["site.pudomer", "https://pudomer.cz/"],
 ];
 
