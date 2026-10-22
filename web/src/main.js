@@ -253,13 +253,60 @@ function chips(items, label) {
   return wrap;
 }
 
+/** The main station nearest to the middle of a region and the other main ones in it: buttons that open the station's chart
+ * (each model against that ČHMÚ station). */
+// phones: only the main (WMO, synoptic) stations are on the map, larger so a finger can hit them
+const phone = window.matchMedia("(max-width: 700px)");
+const isMain = (id) => id.startsWith("0-20000-0-");
+const mapStations = () => (phone.matches ? new Map([...current.stations].filter(([id]) => isMain(id))) : current.stations);
+phone.addEventListener("change", () => {
+  if (!map.getLayer("stations") || !current.stationTable) return;
+  map.getSource("stations").setData(stationFeatures(current.stationTable, mapStations(), current.colors));
+  map.setPaintProperty("stations", "circle-radius", phone.matches ? 5 : 3.5);
+});
+const shapes = {};
+async function nearestStations(region, facts) {
+  const best3 = (facts?.table ?? []).filter((r) => r.model !== "blend" && r.mae != null && !r.short).sort((x, y) => x.rank - y.rank).slice(0, 3).map((r) => r.model);
+  const file = current.level === "okres" ? "data/okresy.geojson" : "data/kraje.geojson";
+  shapes[file] ??= getJson(file);
+  const shape = ((await shapes[file])?.features ?? []).filter((f) => f.properties.code === region);
+  const points = [];
+  const walk = (c) => (typeof c[0] === "number" ? points.push(c) : c.forEach(walk));
+  for (const f of shape) walk(f.geometry.coordinates);
+  if (!points.length) return null;
+  const lons = points.map((c) => c[0]);
+  const lats = points.map((c) => c[1]);
+  const mid = [(Math.min(...lons) + Math.max(...lons)) / 2, (Math.min(...lats) + Math.max(...lats)) / 2];
+  const k = Math.cos((mid[1] * Math.PI) / 180);
+  // only the main stations: the one really nearest, and the others of the okres
+  const inRegion = new Set(current.level === "okres" ? stationsIn(current.stationTable, region).map((x) => x.id) : []);
+  const ranked = stationFeatures(current.stationTable, current.stations, current.colors).features
+    .filter((f) => isMain(f.properties.code))
+    .map((f) => ({ f, d: Math.hypot((f.geometry.coordinates[0] - mid[0]) * k, f.geometry.coordinates[1] - mid[1]) }))
+    .sort((x, y) => x.d - y.d);
+  const near = ranked.filter((x, i) => i === 0 || inRegion.has(x.f.properties.code));
+  if (!near.length) return null;
+  const wrap = element("div", null, "detail-block");
+  wrap.append(element("h3", t("detail.nearest")));
+  const list = element("div", null, "station-list");
+  for (const { f } of near) {
+    const b = element("button", null, "station");
+    b.type = "button";
+    b.append(swatch(f.properties.color), element("span", f.properties.name));
+    b.addEventListener("click", () => showStation(f.properties.code, f.properties.name, region, best3));
+    list.append(b);
+  }
+  wrap.append(list);
+  return wrap;
+}
+
 // the panel chart is drawn in the theme's colours: draw it again on a switch
 onThemeChange(() => {
   // the model colours are lighter in dark: the fills, stations, legend and panel again
   current.colors = modelColors(current.names);
   if (current.regions?.size && map.getLayer("regions-fill")) {
     map.setPaintProperty("regions-fill", "fill-color", fillExpression(current.regions, current.colors));
-    map.getSource("stations")?.setData(stationFeatures(current.stationTable, current.stations, current.colors));
+    map.getSource("stations")?.setData(stationFeatures(current.stationTable, mapStations(), current.colors));
     renderLegend();
     paintHighlight();
   }
@@ -285,7 +332,8 @@ async function showRegion(region) {
   const close = closeButton(() => select(null, true));
   const heading = element("h2", name);
   const sub = element("p", `${t(`variable.${view.variable}`)} · D+${view.leadDay} · ${t(`window.${view.window}`).toLowerCase()}`, "muted");
-  const top = [close, heading, sub];
+  const nearest = await nearestStations(region, facts);
+  const top = nearest ? [close, heading, sub, nearest] : [close, heading, sub];
   if (!facts) {
     box.replaceChildren(...top, element("p", t(entry && !entry.enough ? "describe.tooFew" : "detail.noRanking")));
     return;
@@ -294,6 +342,7 @@ async function showRegion(region) {
   const fmt = (v) => `${v.toFixed(2)} ${unit}`;
   const verdict = element("div", null, "verdict");
   verdict.append(
+    element("span", t("detail.winner"), "muted"),
     swatch(current.colors[facts.winner.model] ?? "#888888"),
     element("strong", nameOf(facts.winner.model)),
     element("span", t("detail.mae", { mae: fmt(facts.winner.mae) }), "muted"),
@@ -333,7 +382,7 @@ async function showRegion(region) {
   box.replaceChildren(...blocks);
 }
 
-async function showStation(code, title, backTo) {
+async function showStation(code, title, backTo, models = null) {
   const box = panel();
   const back = element("button", `← ${t("detail.back")}`, "back");
   back.type = "button";
@@ -343,7 +392,8 @@ async function showStation(code, title, backTo) {
   const [{ stationChart }, doc] = await Promise.all([import("./chart.js"), getJson(`data/scores/series/${code}.json`)]);
   const children = [close];
   if (backTo) children.push(back);
-  children.push(element("h2", title), stationChart(doc, current.view, current.colors, current.names, t));
+  const sub = element("p", `${t(`variable.${current.view.variable}`)} · D+${current.view.leadDay} · ${t(`window.${current.view.window}`).toLowerCase()}`, "muted");
+  children.push(element("h2", title), sub, stationChart(doc, current.view, current.colors, current.names, t, models));
   // the station on the Stations tab of measured.html
   const all = element("a", t("station.link"));
   all.href = `measured.html#kinds/${encodeURIComponent(code)}`;
@@ -403,7 +453,7 @@ function addLayers(filled) {
   });
   map.addLayer({
     id: "stations", type: "circle", source: "stations",
-    paint: { "circle-radius": 3.5, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 1 },
+    paint: { "circle-radius": phone.matches ? 5 : 3.5, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": phone.matches ? 1.5 : 1 },
   });
   applyTheme();
 
@@ -419,7 +469,8 @@ function addLayers(filled) {
     document.getElementById("hover").hidden = true;
   });
   map.on("click", (event) => {
-    const station = map.queryRenderedFeatures(event.point, { layers: ["stations"] })[0];
+    const reach = phone.matches ? 9 : 0;
+    const station = map.queryRenderedFeatures(reach ? [[event.point.x - reach, event.point.y - reach], [event.point.x + reach, event.point.y + reach]] : event.point, { layers: ["stations"] })[0];
     if (station) {
       showStation(station.properties.code, station.properties.name, current.view.region);
       return;
@@ -471,7 +522,7 @@ map.on("load", async () => {
     current.stations = bestByRegion(stationRows, view.leadDay, current.pBestMin);
     map.setPaintProperty("regions-fill", "fill-color", fillExpression(current.regions, current.colors));
     map.setFilter("small-sample", ["in", ["get", "code"], ["literal", smallSampleCodes(current.regions)]]);
-    map.getSource("stations").setData(stationFeatures(current.stationTable, current.stations, current.colors));
+    map.getSource("stations").setData(stationFeatures(current.stationTable, mapStations(), current.colors));
     if (current.highlight && ![...current.regions.values()].some((e) => e.model === current.highlight)) current.highlight = null;
     renderLegend();
     paintHighlight();
