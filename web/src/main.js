@@ -338,7 +338,7 @@ async function showRegion(region) {
   const facts = explainRegion(current.rows, region, view.leadDay, hourRows);
   const entry = current.regions.get(region);
   const name = displayName(facts?.name ?? entry?.name ?? region);
-  const close = closeButton(() => select(null));
+  const close = closeButton(() => select(null, true));
   const heading = element("h2", name);
   const sub = element("p", `${t(`variable.${view.variable}`)} · D+${view.leadDay} · ${t(`window.${view.window}`).toLowerCase()}`, "muted");
   const pages = stationPages(region);
@@ -403,7 +403,7 @@ async function showStation(code, title, backTo) {
   const back = element("button", `← ${t("detail.back")}`, "back");
   back.type = "button";
   back.addEventListener("click", () => showRegion(backTo));
-  const close = closeButton(() => select(null));
+  const close = closeButton(() => select(null, true));
   // Observable Plot is loaded only when a chart is opened
   const [{ stationChart }, doc] = await Promise.all([import("./chart.js"), getJson(`data/scores/series/${code}.json`)]);
   const children = [close];
@@ -434,12 +434,19 @@ function fitView() {
   map.fitBounds(BOUNDS, { padding, duration: first ? 0 : 400 });
 }
 
-function select(region) {
+function select(region, scroll = false) {
   current.view.region = region;
   map.setFilter("selected", ["==", ["get", "code"], region ?? ""]);
   document.getElementById("find").value = region ?? "";
   writeView();
-  showRegion(region).then(fitView);
+  showRegion(region).then(() => {
+    fitView();
+    // phones: the panel is under the map, the page scrolls to it; closing returns to the map
+    if (scroll && window.innerWidth <= 700) {
+      const target = region ? panel() : map.getContainer();
+      target.scrollIntoView({ block: region ? "start" : "nearest", behavior: "smooth" });
+    }
+  });
 }
 
 // --- map layers -------------------------------------------------------------------
@@ -488,7 +495,7 @@ function addLayers(filled) {
     }
     const region = map.queryRenderedFeatures(event.point, { layers: ["regions-fill"] })[0];
     const code = region?.properties.code ?? null;
-    select(code === current.view.region ? null : code);
+    select(code === current.view.region ? null : code, true);
   });
   map.on("mouseenter", "stations", () => (map.getCanvas().style.cursor = "pointer"));
 }
@@ -558,5 +565,5 @@ map.on("load", async () => {
   // the okres finder: every region of the map, by name
   const found = [...current.regions].map(([code, e]) => [code, displayName(e.name)]).sort((a, b) => a[1].localeCompare(b[1], "cs"));
   fillSelect("find", [["", t("find.placeholder")], ...found], view.region ?? "");
-  document.getElementById("find").addEventListener("change", (event) => select(event.target.value || null));
+  document.getElementById("find").addEventListener("change", (event) => select(event.target.value || null, true));
 });
