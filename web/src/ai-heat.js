@@ -62,6 +62,7 @@ export function parseHeatIndex(doc, indexPath = HEAT_INDEX) {
     a,
     b: bb,
     issued: Date.parse(doc.issued),
+    generated: Date.parse(doc.generated),
   };
   // the coarse set, when the index lists a usable one: an index-like object of its own (same hours and points)
   const lo = doc.lo && typeof doc.lo === "object" ? parseLevel(doc.lo, indexPath, doc.lo) : null;
