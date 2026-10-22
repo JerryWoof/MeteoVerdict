@@ -2,6 +2,7 @@ import { Map as MapLibreMap, Marker, NavigationControl, setWorkerUrl } from "map
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
+import "./fit-map.js";
 
 import { COMBINED, weightTable } from "./forecast.js";
 import { drawIcon, glyph, iconCanvas } from "./icons.js";

@@ -23,6 +23,7 @@ export const PAGES = {
   "collaboration.html": ["collaboration.html", "MeteoVerdict je open-source a zdarma; jsme otevřeni spolupráci.", "MeteoVerdict is open source and free; we are open to collaboration."],
   "nejpresnejsi-model.html": ["nejpresnejsi-model.html", "Který model počasí je v Česku nejpřesnější? Žádný nevyhrává všude: ALADIN, ICON a ECMWF se liší podle místa, veličiny a předstihu. Jak to měříme a kde je aktuální pořadí.", "Which weather model is the most accurate in Czechia? None wins everywhere: ALADIN, ICON and ECMWF differ by place, variable and lead time. How we measure it and where the current ranking is.", "Který model počasí je nejpřesnější?"],
   "soukromi.html": ["soukromi.html", "Soukromí na MeteoVerdictu: žádné cookies, anonymní statistiky, poloha jen v prohlížeči.", "Privacy on MeteoVerdict: no cookies, anonymous statistics, your location stays in the browser."],
+  "zdroje.html": ["zdroje.html", "Zdroje dat MeteoVerdictu a jejich licence: ČHMÚ, Open-Meteo, modely, ČÚZK, OpenStreetMap a další.", "Data sources of MeteoVerdict and their licences: ČHMÚ, Open-Meteo, the models, ČÚZK, OpenStreetMap and others."],
   "report.html": ["report.html", "Který model předpovídal Česko v uplynulém měsíci nejlépe: čísla, grafy a výhrady.", "Which model forecast Czechia best last month: numbers, charts and caveats."],
 };
 

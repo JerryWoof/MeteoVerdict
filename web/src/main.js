@@ -4,6 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 // MapLibre's ES module build loads its worker from a separate file
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
+import "./fit-map.js";
 
 import {
   NO_DATA, P_BEST_MIN, TOO_FEW, bestByRegion, fillExpression, modelColors, records,
