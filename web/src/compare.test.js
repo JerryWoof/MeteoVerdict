@@ -153,7 +153,7 @@ test("MAE by lead hour for Czechia, one run hour", () => {
 
 test("history behind the lead-hour chart and the unpublished hours", () => {
   assert.deepEqual(leadHourBasis(LEADS), {
-    runs: 18, models: 2, stations: null, first: "2026-10-09 00 UTC", last: "2026-10-13 06 UTC", days: 4.3,
+    runs: 18, models: 2, stations: null, first: "2026-10-09 02 CEST", last: "2026-10-13 08 CEST", days: 4.3,
   });
   assert.equal(leadHourBasis({}), null);
   assert.equal(unpublishedHours(LEADS), 4);

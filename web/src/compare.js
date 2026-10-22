@@ -243,13 +243,20 @@ export function isAladin(model) {
 }
 
 /** How much history the chart rests on: runs per model (the most), models, stations,
- * first and last run (YYYY-MM-DD HH UTC) and days from the first to the last run. */
+ * first and last run (YYYY-MM-DD HH CET|CEST, Prague time) and days from the first to the last run. */
 export function leadHourBasis(doc) {
   const models = Object.values(doc?.models ?? {});
   if (!models.length || !doc.first_run) return null;
   const first = new Date(doc.first_run);
   const last = new Date(doc.last_run);
-  const stamp = (d) => `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 13)} UTC`;
+  // Prague time, as the site shows it (i18n.js turns "2026-10-09 02 CEST" into the language)
+  const prague = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Prague", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23", timeZoneName: "short",
+  });
+  const stamp = (d) => {
+    const p = Object.fromEntries(prague.formatToParts(d).map((x) => [x.type, x.value]));
+    return `${p.year}-${p.month}-${p.day} ${p.hour} ${p.timeZoneName}`;
+  };
   return {
     runs: Math.max(...models.map((m) => m.runs ?? 0)),
     models: models.length,

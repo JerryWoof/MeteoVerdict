@@ -756,7 +756,7 @@ async function renderLeadHours(view, names, colors) {
   section.hidden = data.length === 0 || basis == null;
   if (section.hidden) return;
   const select = document.getElementById("lead-hours-run");
-  fillSelect("lead-hours-run", runHours.map((h) => [h, h === "all" ? t("compare.leadHoursAllRuns") : `${h} UTC`]),
+  fillSelect("lead-hours-run", runHours.map((h) => [h, h === "all" ? t("compare.leadHoursAllRuns") : t("compare.runHour", { hour: (Number(h) + 1) % 24 })]),
     leadHoursView.runHour);
   select.onchange = (event) => {
     leadHoursView.runHour = event.target.value;
