@@ -8,14 +8,13 @@ import { records } from "./data.js";
 const load = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
 const OUTLOOK = load("outlook.json");
 const HOURLY_DOC = load("outlook-hourly.json");
-const WEIGHTS = load("weights-CZ0201.json");
 const META = load("meta.json");
 const SCORES = {
   temperature_2m: records(load("scores-90d-okres-temperature_2m.json")),
   precipitation_24h: records(load("scores-90d-okres-precipitation_24h.json")),
 };
 const BENESOV = { code: "CZ0201", name: "Benešov", lat: 49.717, lon: 14.7767 };
-const DOC = okresDoc({ okres: BENESOV, outlook: OUTLOOK, hourly: HOURLY_DOC, weightsDoc: WEIGHTS, scores: SCORES, meta: META });
+const DOC = okresDoc({ okres: BENESOV, outlook: OUTLOOK, hourly: HOURLY_DOC, scores: SCORES, meta: META });
 
 test("an okres file: forecast by hour and part of day, licence and attribution", () => {
   assert.equal(DOC.okres.code, "CZ0201");
@@ -41,7 +40,7 @@ test("an okres file: forecast by hour and part of day, licence and attribution",
 test("the frost fields of an outlook row are passed through", () => {
   const columns = [...OUTLOOK.columns, "night_min", "coldest_site", "coldest_min", "frost_probability", "frost", "ground_min", "ground_frost"];
   const rows = OUTLOOK.rows.map((r) => [...r, -0.4, "Valley", -2.1, 0.6, true, -4.2, true]);
-  const doc = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, weightsDoc: WEIGHTS, scores: SCORES, meta: META });
+  const doc = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, scores: SCORES, meta: META });
   const night = doc.forecast.parts[0];
   assert.equal(night.night_min, -0.4);
   assert.equal(night.coldest_site, "Valley");
@@ -52,7 +51,7 @@ test("the frost fields of an outlook row are passed through", () => {
 test("the gust fields of an outlook row are passed through", () => {
   const columns = [...OUTLOOK.columns, "gust", "gust_over_threshold", "gust_warning"];
   const rows = OUTLOOK.rows.map((r) => [...r, 14.2, true, true]);
-  const doc = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, weightsDoc: WEIGHTS, scores: SCORES, meta: META });
+  const doc = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, scores: SCORES, meta: META });
   assert.equal(doc.forecast.parts[0].gust, 14.2);
   assert.equal(doc.forecast.parts[0].gust_over_threshold, true);
   assert.equal(doc.forecast.parts[0].gust_warning, true);
@@ -61,7 +60,7 @@ test("the gust fields of an outlook row are passed through", () => {
 test("an outlook row with only the old gust_warning fills both fields", () => {
   const columns = [...OUTLOOK.columns, "gust", "gust_warning"];
   const rows = OUTLOOK.rows.map((r) => [...r, 14.2, true]);
-  const doc = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, weightsDoc: WEIGHTS, scores: SCORES, meta: META });
+  const doc = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, scores: SCORES, meta: META });
   assert.equal(doc.forecast.parts[0].gust_over_threshold, true);
   assert.equal(doc.forecast.parts[0].gust_warning, true);
 });
@@ -72,19 +71,16 @@ test("the files say the flags are thresholds, not ČHMÚ warnings", () => {
   assert.match(DOC.deprecated.gust_warning, /gust_over_threshold/);
 });
 
-test("model ranking per variable and lead day, with the weights of our forecast", () => {
+test("model ranking per variable and lead day, without the weights of our forecast", () => {
   const t = DOC.models.variables.temperature_2m;
   assert.deepEqual(Object.keys(t.lead_days), ["1", "2", "3", "4", "5"]);
   const d1 = t.lead_days[1];
   assert.equal(d1[0].rank, 1);
   assert.ok(d1.every((r) => r.model !== "blend"));
-  assert.ok(d1.every((r) => typeof r.weight === "number"), "temperature weights attached");
-  assert.ok(Math.abs(d1.reduce((s, r) => s + r.weight, 0) - 1) < 0.01);
+  assert.ok(d1.every((r) => !("weight" in r) && !("correction" in r) && !("mos_weight" in r)), "no weights published");
   assert.equal(d1[0].name, META.models[d1[0].model]);
-  // 06-06 precipitation is ranked but not part of our combination: no weights
-  assert.ok(DOC.models.variables.precipitation_24h.lead_days[1].every((r) => r.weight === null));
   assert.equal(DOC.models.from, META.windows["90d"].from);
-  assert.deepEqual(okresModels("CZ9999", SCORES, WEIGHTS, {}), {});
+  assert.deepEqual(okresModels("CZ9999", SCORES, {}), {});
   // score files written before the block bootstrap have no p_best
   assert.ok(d1.every((r) => r.p_best === null && r.small_sample === false));
 });
@@ -94,7 +90,7 @@ test("the probability of being best and the small-sample flag are passed on", ()
     { region: "CZ0201", model: "icon", lead_day: 1, rank: 1, mae: 1.1, p_best: 0.7234, small_sample: true },
     { region: "CZ0201", model: "ifs", lead_day: 1, rank: 2, mae: 1.2, p_best: 0.2766, small_sample: true },
   ];
-  const lead = okresModels("CZ0201", { temperature_2m: rows }, null, {}).temperature_2m.lead_days[1];
+  const lead = okresModels("CZ0201", { temperature_2m: rows }, {}).temperature_2m.lead_days[1];
   assert.deepEqual(lead.map((r) => [r.model, r.p_best, r.small_sample]), [["icon", 0.723, true], ["ifs", 0.277, true]]);
 });
 
@@ -321,7 +317,7 @@ test("obec files carry the okres's own values for what the obec has none of (clo
 test("obec frost fields follow the okres's night minimum plus the obec's difference", () => {
   const columns = [...OUTLOOK.columns, "night_min", "ground_min"];
   const rows = OUTLOOK.rows.map((r) => [...r, 0.4, -1.2]);
-  const frosty = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, weightsDoc: WEIGHTS, scores: SCORES, meta: META });
+  const frosty = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, scores: SCORES, meta: META });
   const [{ doc }] = obceDocs({ okresDoc: frosty, obceFile: obceOf(-1, 1), meta: META });
   const p = doc.parts[0];
   assert.equal(p.night_min, -0.6);

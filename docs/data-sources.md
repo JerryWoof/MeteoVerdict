@@ -462,19 +462,10 @@ models, which needs no weights, is the [blend baseline](#blend-baseline-roadmap-
 
 `mvd aggregate` writes the okres files the web map reads:
 
-- `site/data/forecast/okresy.json`: `code`, `name`, `lat`, `lon` of the point of every
-  okres (`regions.okres_points`: the centroid of its largest part, or the nearest inside
-  point), and `weights`, false where the okres has no weights.
-- `site/data/forecast/<okres>.json`: the okres's rows of the published weight table
-  `forecast-weights.parquet`, if that file is in the data folder (`mvd daily
-  --github-release` downloads it from `data-latest` first), with the columns of
-  `aggregate.FORECAST_COLUMNS` as far as the table has them: `variable`, `lead_day`,
-  `model`, `weight`, `correction`, `mae`, `rank`, `days`, `mos_weight`, `mos_models`,
-  `correction_00`, `correction_06`, `correction_12`, `correction_18` (about 8 kB each).
-  Only in the release `data-latest`, like the okres scores.
-- `forecast-weights.parquet` itself is published in `data-latest` with the forecast's
-  files; `mvd aggregate` and `mvd daily` do not compute it and `store.publish_latest`
-  does not upload it.
+- `site/data/forecast/okresy.json` (`code`, `name`, `lat`, `lon` of the point of every okres)
+  and `site/data/forecast/<okres>.json` (the ranking of the models: `variable`, `lead_day`,
+  `model`, `mae`, `rank`, `days`) come from the same place as the forecast and are put
+  into the site by the Pages build; `mvd aggregate` and `mvd daily` do not write them.
 - The okres points and their elevations are in `meteoverdict.regions` (`okres_points`,
   `representative_point`, `point_elevations`, `ELEVATIONS_FILE` =
   `src/meteoverdict/data/okres-elevations.csv`: the elevation of each okres's point from
@@ -785,9 +776,6 @@ concurrency group because both write release assets). No Open-Meteo calls.
    the backfill (replacing the rebuilt forecasts), and checked data replacing unchecked
    data all reach the scores.
 5. Push changed months, pull all score months, aggregate and rank, write `site/data`
-   (with `forecast/okresy.json` and `forecast/<okres>.json` from the published weight
-   table, see [Combination weights](#combination-weights-roadmap-62); `mvd daily
-   --github-release` downloads `forecast-weights.parquet` from `data-latest` first)
    and `site/data/badge.json`, and replace `aggregates.parquet` and `site-data.zip` in
    the release `data-latest`.
 6. The workflow commits `site/data/badge.json` and `site/data/meta.json` (the README

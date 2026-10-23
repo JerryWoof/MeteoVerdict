@@ -1,15 +1,11 @@
-// Our own forecast for one okres (roadmap 6.3): the forecasts of all models, combined
-// with the published weights and corrections per okres, variable and lead day
-// (forecast/<okres>.json, roadmap 6.2). The page reads the models' forecasts and our
-// combination from forecast/models/<okres>.json (published with the forecast, models.js); the
-// combination here (`combine`) is the same formula, kept as its reference and tested.
+// Our own forecast for one okres: the page reads the models' forecasts and our combination
+// from forecast/models/<okres>.json (published with the forecast, models.js) and the
+// ranking of the models per okres, variable and lead day from forecast/<okres>.json.
 
 import { records } from "./data.js";
 
 export const VARIABLES = ["temperature_2m", "precipitation", "wind_speed_10m"];
 export const MAX_LEAD_DAY = 5;
-// variables that cannot be negative after the bias correction
-const NON_NEGATIVE = new Set(["precipitation", "wind_speed_10m"]);
 const HOUR = 3600 * 1000;
 
 /**
@@ -31,7 +27,7 @@ export function parseForecast(doc, models) {
 }
 
 /**
- * Which lead day's weights apply to an hour: whole days ahead of `now`, from 1 (the
+ * Which lead day's ranking applies to an hour: whole days ahead of `now`, from 1 (the
  * next 24 h use D+1, the shortest lead time we score) to MAX_LEAD_DAY.
  */
 export function leadDay(time, now) {
@@ -39,7 +35,7 @@ export function leadDay(time, now) {
   return Math.min(MAX_LEAD_DAY, Math.max(1, days));
 }
 
-/** forecast/<okres>.json → Map "variable|lead day" → [{model, weight, correction, rank, mae}] */
+/** forecast/<okres>.json → Map "variable|lead day" → [{model, rank, mae, days}] */
 export function weightTable(doc) {
   const table = new Map();
   for (const r of records(doc)) {
@@ -50,12 +46,12 @@ export function weightTable(doc) {
   return table;
 }
 
-/** All models with a weight anywhere in the okres. */
+/** All ranked models anywhere in the okres. */
 export function weightedModels(table) {
   return [...new Set([...table.values()].flat().map((r) => r.model))];
 }
 
-/** Weights for a variable and lead day, falling back to the nearest shorter lead day. */
+/** The ranking for a variable and lead day, falling back to the nearest shorter lead day. */
 export function weightsAt(table, variable, lead) {
   for (let d = lead; d >= 1; d -= 1) {
     const rows = table.get(`${variable}|${d}`);
@@ -67,76 +63,6 @@ export function weightsAt(table, variable, lead) {
 /** The model ranked first for a variable at a lead day (null if none is ranked). */
 export function bestModel(table, variable, lead) {
   return weightsAt(table, variable, lead).find((r) => r.rank === 1)?.model ?? null;
-}
-
-// a model that ends before the others fades out over its last hours instead of
-// dropping out at once (as MeteoSwiss does; docs/forecast-research.md)
-export const TAPER_HOURS = 3;
-
-/** Weight factor per hour for a series that may end early: 1, then ¾, ½, ¼ at its end. */
-export function taper(values) {
-  let last = values.length - 1;
-  while (last >= 0 && values[last] == null) last -= 1;
-  if (last === values.length - 1) return values.map(() => 1);
-  return values.map((_, i) => Math.min(1, (last - i + 1) / (TAPER_HOURS + 1)));
-}
-
-// corrections at 00, 06, 12 and 18 UTC (temperature and wind, `mvd daily`)
-export const SLOT_CORRECTIONS = ["correction_00", "correction_06", "correction_12", "correction_18"];
-
-/**
- * A model's correction at an hour: the slot corrections interpolated linearly in UTC
- * hour (00 → 06 → 12 → 18 → 00) where the weight file has them, else `correction`
- * (as combine.hourly_correction).
- */
-export function correctionAt(r, time) {
-  if (r.correction_00 == null) return r.correction ?? 0;
-  const d = new Date(time);
-  const position = (d.getUTCHours() + d.getUTCMinutes() / 60) / 6;
-  const index = Math.floor(position) % 4;
-  const fraction = position - Math.floor(position);
-  const a = r[SLOT_CORRECTIONS[index]];
-  const b = r[SLOT_CORRECTIONS[(index + 1) % 4]];
-  return a * (1 - fraction) + b * fraction;
-}
-
-/**
- * The combined forecast per hour: Σ weight · (forecast − correction) over the models
- * that have a value for that hour (tapered at their end), the weights rescaled to sum
- * to 1; null when fewer than `minModels` models have a value.
- *
- * Temperature and wind with a regression blend (`mos_weight`, `mos_models`, as
- * combine.combine_values): where all `mos_models` models of it have a value and none
- * is fading out, Σ mos_weight · (forecast − correction) over them instead.
- */
-export function combine(forecast, table, variable, now, minModels = 2) {
-  const series = forecast.values[variable] ?? {};
-  const fades = Object.fromEntries(Object.entries(series).map(([m, v]) => [m, taper(v)]));
-  return forecast.times.map((time, i) => {
-    let sum = 0;
-    let total = 0;
-    let count = 0;
-    let regression = 0;
-    let present = 0;
-    let expected = 0;
-    for (const r of weightsAt(table, variable, leadDay(time, now))) {
-      if (r.mos_models > 0) expected = r.mos_models;
-      const value = series[r.model]?.[i];
-      if (value == null) continue;
-      const corrected = value - correctionAt(r, time);
-      const weight = r.weight * fades[r.model][i];
-      sum += weight * corrected;
-      total += weight;
-      count += 1;
-      if (r.mos_weight != null && fades[r.model][i] >= 1) {
-        regression += r.mos_weight * corrected;
-        present += 1;
-      }
-    }
-    if (count < minModels || total <= 0) return null;
-    const value = expected > 0 && present === expected ? regression : sum / total;
-    return NON_NEGATIVE.has(variable) ? Math.max(0, value) : value;
-  });
 }
 
 /** Local calendar day (YYYY-MM-DD) of a time in a time zone. */

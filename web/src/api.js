@@ -24,7 +24,6 @@ export const DEPRECATED = {
 };
 
 export const SCORE_VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitation_daily", "precipitation_24h"];
-const WEIGHTS_OF = { temperature_2m: "temperature_2m", wind_speed_10m: "wind_speed_10m", precipitation_daily: "precipitation" };
 export const HOURLY = ["temperature_2m", "precipitation", "wind_speed_10m", "cloud_cover", "sunshine_duration", "temperature_2m_lo", "temperature_2m_hi"];
 // further hourly variables (all 18 of a full model forecast, and the AI's own): [name, unit, digits].
 // The combination has the first five of its own (humidity, dew point, pressure, direction, gusts: hours
@@ -60,17 +59,14 @@ const PART_FIELDS = [
 
 const round = (v, digits) => (v == null ? null : Number(v.toFixed(digits)));
 
-/** Ranking of the models in one okres per variable and lead day, with their weights in
- * our combined forecast where there is one. */
-export function okresModels(code, scores, weightsDoc, names) {
-  const weights = new Map(records(weightsDoc).map((r) => [`${r.variable}|${r.lead_day}|${r.model}`, r]));
+/** Ranking of the models in one okres per variable and lead day. */
+export function okresModels(code, scores, names) {
   const variables = {};
   for (const variable of SCORE_VARIABLES) {
     const rows = (scores[variable] ?? []).filter((r) => r.region === code && r.model !== "blend");
     if (rows.length === 0) continue;
     const byLead = {};
     for (const r of rows.sort((a, b) => a.lead_day - b.lead_day || (a.rank ?? 99) - (b.rank ?? 99))) {
-      const w = weights.get(`${WEIGHTS_OF[variable]}|${r.lead_day}|${r.model}`);
       (byLead[r.lead_day] ??= []).push({
         model: r.model,
         name: names[r.model] ?? r.model,
@@ -83,14 +79,10 @@ export function okresModels(code, scores, weightsDoc, names) {
         // older score files) and whether the ranking rests on fewer than 30 days
         p_best: r.p_best != null ? round(r.p_best, 3) : null,
         small_sample: Boolean(r.small_sample),
-        // too short a record in the window (e.g. added recently): not ranked, no weight;
+        // too short a record in the window (e.g. added recently): not ranked;
         // its MAE is over its own `days` only
         short_record: Boolean(r.short_record),
         days: r.days ?? null,
-        weight: w ? round(w.weight, 4) : null,
-        correction: w ? round(w.correction, 4) : null,
-        // temperature and wind: a second weight of the combination (null without one)
-        mos_weight: w?.mos_weight != null ? round(w.mos_weight, 4) : null,
       });
     }
     const first = rows[0];
@@ -142,7 +134,7 @@ export function extraFromModels(models, times) {
 }
 
 /** The JSON file of one okres. */
-export function okresDoc({ okres, outlook, hourly, weightsDoc, scores, meta, models }) {
+export function okresDoc({ okres, outlook, hourly, scores, meta, models }) {
   const series = hourly?.okresy?.[okres.code];
   const extra = series ? extraFromModels(models, hourly.time) : { series: {}, sources: {} };
   const parts = blendParts(outlook, okres.code);
@@ -171,7 +163,7 @@ export function okresDoc({ okres, outlook, hourly, weightsDoc, scores, meta, mod
       from: window?.from ?? null,
       to: window?.to ?? null,
       metrics: "MAE, bias (forecast minus observed) and RMSE at D+1…D+5; rank 1 = smallest MAE; tied_with_best: not significantly worse (95 % bootstrap interval over blocks of 4 days, or Diebold-Mariano test); p_best: share of bootstrap resamples in which the model is best (no clear winner below 0.6); small_sample: fewer than 30 days; weight/correction: as used in our forecast (correction: mean over the day); mos_weight: weight in the temperature and wind regression blend, used when all its models have a value; short_record: scores on fewer than 80 % of the window's days (e.g. a newly added model), not ranked and no weight, its MAE is over its own days",
-      variables: okresModels(okres.code, scores, weightsDoc, meta?.models ?? {}),
+      variables: okresModels(okres.code, scores, meta?.models ?? {}),
     },
   };
 }

@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import {
   COMBINED, modelDays, modelEnd, modelOptions,
-  bestModel, bestPerLeadDay, combine, correctionAt, taper, winnersByLeadDay, dailySummary, leadDay, localDay, localTime,
+  bestModel, bestPerLeadDay, winnersByLeadDay, dailySummary, leadDay, localDay, localTime,
   nightBands, parseForecast, weightTable, weightedModels, weightsAt,
 } from "./forecast.js";
 import { parseOutlook, sunFor } from "./tv.js";
@@ -12,7 +12,7 @@ import { parseOutlook, sunFor } from "./tv.js";
 // real samples: the Open-Meteo Forecast API at Benešov's point (12 Oct 2026) and the
 // weights `mvd aggregate` wrote for okres Benešov from the published September scores
 const API = JSON.parse(readFileSync(new URL("./fixtures/open-meteo-forecast-CZ0201.json", import.meta.url)));
-const WEIGHTS = JSON.parse(readFileSync(new URL("./fixtures/weights-CZ0201.json", import.meta.url)));
+const WEIGHTS = JSON.parse(readFileSync(new URL("./fixtures/ranking-CZ0201.json", import.meta.url)));
 const TABLE = weightTable(WEIGHTS);
 const MODELS = weightedModels(TABLE);
 const FORECAST = parseForecast(API, MODELS);
@@ -36,50 +36,25 @@ test("lead day: the next 24 h use D+1, at most D+5", () => {
   assert.equal(leadDay(NOW + 10 * 86400e3, NOW), 5);
 });
 
-test("weights per variable and lead day, falling back to a shorter lead day", () => {
+test("the ranking per variable and lead day, falling back to a shorter lead day", () => {
   const d1 = weightsAt(TABLE, "temperature_2m", 1);
-  assert.ok(Math.abs(d1.reduce((s, r) => s + r.weight, 0) - 1) < 1e-3);
+  assert.ok(d1.length > 3 && d1.every((r) => !("weight" in r)));
   assert.equal(bestModel(TABLE, "temperature_2m", 1), d1.find((r) => r.rank === 1).model);
   assert.deepEqual(weightsAt(TABLE, "temperature_2m", 9), weightsAt(TABLE, "temperature_2m", 5));
   assert.deepEqual(weightsAt(TABLE, "nothing", 1), []);
 });
 
-test("combined temperature: weighted, bias-corrected, rescaled over the models present", () => {
-  const combined = combine(FORECAST, TABLE, "temperature_2m", NOW);
-  const i = FORECAST.times.indexOf(Date.parse("2026-10-12T12:00Z"));
-  let sum = 0;
-  let total = 0;
-  for (const r of weightsAt(TABLE, "temperature_2m", 1)) {
-    const v = FORECAST.values.temperature_2m[r.model]?.[i];
-    if (v == null) continue;
-    const w = r.weight * taper(FORECAST.values.temperature_2m[r.model])[i];
-    sum += w * (v - r.correction);
-    total += w;
-  }
-  assert.ok(Math.abs(combined[i] - sum / total) < 1e-9);
-  const values = Object.values(FORECAST.values.temperature_2m).map((s) => s[i]);
-  assert.ok(combined[i] >= Math.min(...values) - 1 && combined[i] <= Math.max(...values) + 1);
-  // the last hour still has the global models
-  assert.equal(typeof combined.at(-1), "number");
-});
-
-test("combined precipitation and wind are never negative; too few models give null", () => {
-  for (const variable of ["precipitation", "wind_speed_10m"]) {
-    assert.ok(combine(FORECAST, TABLE, variable, NOW).every((v) => v == null || v >= 0));
-  }
-  const one = { times: [NOW], values: { temperature_2m: { a: [10] } } };
-  const table = new Map([["temperature_2m|1", [{ model: "a", weight: 1, correction: 0 }]]]);
-  assert.deepEqual(combine(one, table, "temperature_2m", NOW), [null]);
-  assert.deepEqual(combine(one, table, "temperature_2m", NOW, 1), [10]);
-  const biased = new Map([["wind_speed_10m|1", [{ model: "a", weight: 1, correction: 2 }]]]);
-  const calm = { times: [NOW], values: { wind_speed_10m: { a: [1] } } };
-  assert.deepEqual(combine(calm, biased, "wind_speed_10m", NOW, 1), [0]);
-});
-
 test("daily summary in Prague time", () => {
   assert.equal(localDay(Date.parse("2026-10-12T22:30Z"), "Europe/Prague"), "2026-10-13");
+  // the models' mean stands in for the combination: only the summary is tested
   const series = Object.fromEntries(
-    ["temperature_2m", "precipitation", "wind_speed_10m"].map((v) => [v, combine(FORECAST, TABLE, v, NOW)]),
+    ["temperature_2m", "precipitation", "wind_speed_10m"].map((v) => {
+      const columns = Object.values(FORECAST.values[v]);
+      return [v, FORECAST.times.map((_, i) => {
+        const have = columns.map((c) => c[i]).filter((x) => x != null);
+        return have.length >= 2 ? have.reduce((a, b) => a + b, 0) / have.length : null;
+      })];
+    }),
   );
   const days = dailySummary(FORECAST.times, series);
   // UTC midnight is 02:00 in Prague: the first local day has only 22 hours, the last too
@@ -89,18 +64,6 @@ test("daily summary in Prague time", () => {
     assert.ok(d.tmin <= d.tmax);
     assert.ok(d.precipitation >= 0 && d.wind >= 0);
   }
-});
-
-test("a model that ends early fades out over its last three hours", () => {
-  assert.deepEqual(taper([1, 2, 3, 4, 5, 6]), [1, 1, 1, 1, 1, 1]);
-  assert.deepEqual(taper([1, 2, 3, 4, 5, null, null]), [1, 1, 0.75, 0.5, 0.25, 0, -0.25].map((v) => Math.min(1, v)));
-  const d2 = FORECAST.values.temperature_2m.dwd_icon_d2;
-  const fade = taper(d2);
-  const last = d2.findLastIndex((v) => v != null);
-  assert.deepEqual(fade.slice(last - 3, last + 1), [1, 0.75, 0.5, 0.25]);
-  // the combined curve has no jump where ICON-D2 ends: neighbouring hours stay close
-  const combined = combine(FORECAST, TABLE, "temperature_2m", NOW);
-  assert.ok(Math.abs(combined[last + 1] - combined[last]) < 1.5);
 });
 
 test("the best model can differ per lead day", () => {
@@ -151,30 +114,6 @@ test("no sun times (older outlook files): no nights; one known day: its nights e
     { start: Date.parse("2026-10-12T16:14Z"), end: Date.parse("2026-10-13T05:19Z") },
     { start: Date.parse("2026-10-13T16:14Z"), end: Date.parse("2026-10-14T05:19Z") },
   ]);
-});
-
-test("slot corrections are interpolated by UTC hour (as combine.hourly_correction)", () => {
-  const r = { correction: 9, correction_00: 0, correction_06: 2, correction_12: 4, correction_18: 6 };
-  const at = (h) => correctionAt(r, Date.parse(`2026-10-12T${String(h).padStart(2, "0")}:00Z`));
-  assert.deepEqual([0, 3, 6, 12, 21].map(at), [0, 1, 2, 4, 3]);
-  assert.equal(correctionAt({ correction: 9 }, NOW), 9);
-});
-
-test("the regression weights are used only when all their models have a value", () => {
-  const t0 = Date.parse("2026-10-12T00:00Z");
-  const now = t0 - 3600 * 1000;
-  const slots = { correction_00: 1, correction_06: 1, correction_12: 1, correction_18: 1 };
-  const table = new Map([["temperature_2m|1", [
-    { model: "a", weight: 0.5, correction: 1, mos_weight: 1.5, mos_models: 2, ...slots },
-    { model: "b", weight: 0.5, correction: 1, mos_weight: -0.5, mos_models: 2, ...slots },
-    { model: "c", weight: 0.5, correction: 0, mos_weight: null, mos_models: null },
-  ]]]);
-  const both = { times: [t0, t0], values: { temperature_2m: { a: [11, 11], b: [13, 13], c: [20, 20] } } };
-  // Σ mos_weight · (forecast − correction) = 1.5 · 10 − 0.5 · 12
-  assert.deepEqual(combine(both, table, "temperature_2m", now, 1), [9, 9]);
-  const missing = { times: [t0], values: { temperature_2m: { a: [11], c: [20] } } };
-  // b is missing: the inverse-error weights over a and c
-  assert.deepEqual(combine(missing, table, "temperature_2m", now, 1), [15]);
 });
 
 // --- which forecast the page shows -----------------------------------------------------
