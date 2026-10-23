@@ -566,7 +566,8 @@ function modelPicker(data, rows) {
   });
   label.append(element("span", t("forecast.pick")), select);
   const notes = [];
-  if (data.status === "loading") notes.push(element("p", t("tv.modelLoading"), "model-note"));
+  // no note while the map's own rows stand in (panelRows): it would vanish and shift the panel
+  if (data.status === "loading" && !(panelModel === mapModel && mapView)) notes.push(element("p", t("tv.modelLoading"), "model-note"));
   if (data.status === "missing") notes.push(element("p", t("tv.modelUnavailable"), "model-note"));
   if (single && panelModel !== AI_MODEL) {
     let text = t("tv.modelNote", { time: issuedText(rows.generated) ?? "–" });
