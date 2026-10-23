@@ -104,7 +104,7 @@ okresy with fewer than three stations borrow the nearest stations of their neigh
 ### Combined forecast
 
 The combined forecast's method is not part of this repository. Its files (`outlook.json`,
-`outlook-hourly.json`, `forecast-weights.parquet`, `outlook-models.zip`, `obce.zip`, …)
+`outlook-hourly.json`, `outlook-models.zip`, `obce.zip`, …)
 are published in the release `data-latest`, its archives in `outlook-archive`; the pages
 and `mvd aggregate` (the forecast pages' `forecast/<okres>.json`) read them from there.
 
@@ -133,7 +133,7 @@ uv run mvd store upload                                  # only files that chang
 
 The latest results are in the release `data-latest`: `aggregates.parquet`,
 `site-data.zip` (unzip it into `site/data` to run the pages locally with data),
-`outlook.json`, `outlook-hourly.json` and `forecast-weights.parquet`.
+`outlook.json` and `outlook-hourly.json`.
 
 **Single runs.** `mvd fetch-runs` stores each 00, 06, 12 and 18 UTC run of all models at
 the ~100 stations of `src/meteoverdict/data/run-stations.csv`: first from Open-Meteo's
