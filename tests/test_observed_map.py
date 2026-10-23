@@ -6,7 +6,6 @@ import pytest
 
 from meteoverdict import chmi_archive as ca
 from meteoverdict import observed_map as om
-from meteoverdict import outlook
 
 DAY = date(2026, 10, 15)  # summer time: the Prague day is 22:00 UTC the day before → 22:00 UTC
 A, B, C = "0-203-0-A", "0-203-0-B", "0-203-0-C"
@@ -302,19 +301,35 @@ def parts_run(issued: datetime, day: date, tmax: float) -> pl.DataFrame:
             "symbol": ["cloudy", "rain", "rain", "cloudy", "rain"],
         }
     )
-    return outlook.parts_archive_rows(table, issued)
+    # as the parts archive holds it: columns the table lacks are null
+    return table.select(
+        pl.lit(issued).dt.cast_time_unit("us").alias("issued"),
+        "okres",
+        "day",
+        "part",
+        *[
+            (pl.col(c) if c in table.columns else pl.lit(None)).alias(c)
+            for c in om.PARTS_ARCHIVE_COLUMNS
+        ],
+    ).cast(om.PARTS_ARCHIVE_SCHEMA)
 
 
-def test_parts_archive_round_trip(tmp_path):
-    path = tmp_path / "outlook-parts-2026-10.parquet"
+def test_archive_names():
     run = utc(DAY, 4, 52)
-    outlook.append_parts_archive(path, parts_run(run, DAY, 12.0))
-    outlook.append_parts_archive(path, parts_run(run, DAY, 13.0))  # the same run again
-    back = pl.read_parquet(path)
-    assert back.height == 5
-    assert back["tmax"].unique().to_list() == [13.0]
-    assert back["gust"].null_count() == 5  # a column the table did not have
-    assert outlook.parts_archive_asset(run) == ("outlook-archive", "outlook-parts-2026-10.parquet")
+    assert om.parts_archive_asset(run) == ("outlook-archive", "outlook-parts-2026-10.parquet")
+    means = ("outlook-archive", "outlook-archive-2026-10.parquet")
+    assert om.means_archive_asset("2026-10") == means
+    assert om.HINDCAST_ASSET == ("outlook-archive", "outlook-hindcast.parquet")
+
+
+def test_sky_symbol():
+    assert [om.sky_symbol(c) for c in (None, 10.0, 30.0, 64.9, 65.0)] == [
+        None,
+        "clear",
+        "partly",
+        "partly",
+        "cloudy",
+    ]
 
 
 def test_runs_beside_the_measured_day():
@@ -362,8 +377,6 @@ def sky_run(issued: datetime, day: date, cloud: float) -> pl.DataFrame:
 
 
 def rebuilt_rows(day: date, leads=(1, 2)) -> pl.DataFrame:
-    from meteoverdict import hindcast
-
     rows = []
     for lead in leads:
         for part in om.PERIODS:
@@ -385,8 +398,8 @@ def rebuilt_rows(day: date, leads=(1, 2)) -> pl.DataFrame:
     return (
         pl.DataFrame(rows)
         .with_columns(*[pl.lit(None).alias(c) for c in ("gust", "cloud", "sunshine")])
-        .select(list(hindcast.SCHEMA))
-        .cast(hindcast.SCHEMA)
+        .select(list(om.HINDCAST_SCHEMA))
+        .cast(om.HINDCAST_SCHEMA)
     )
 
 

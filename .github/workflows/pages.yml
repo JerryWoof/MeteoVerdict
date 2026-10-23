@@ -103,8 +103,8 @@ jobs:
           else
             echo "no ai.zip yet; the AI forecast tab says so"
           fi
-          # the Compare page's same-sample ranking without the AI (`mvd blend-test
-          # --compare-zip`; the AI's own run publishes the one with MeteoVerdict AI)
+          # the Compare page's same-sample ranking without the AI (compare.zip; the AI's own
+          # run publishes the one with MeteoVerdict AI)
           if gh release download data-latest --pattern compare.zip --dir /tmp --clobber 2>/dev/null; then
             rm -rf site/data/compare
             mkdir -p site/data/compare
@@ -113,7 +113,7 @@ jobs:
           else
             echo "no compare.zip yet; the Compare page uses only the AI's files"
           fi
-          # every model's own hourly forecast per okres (`mvd outlook`): the forecast
+          # every model's own hourly forecast per okres (outlook-models.zip): the forecast
           # pages read these instead of asking Open-Meteo from the visitor's browser
           if gh release download data-latest --pattern outlook-models.zip --dir /tmp 2>/dev/null; then
             rm -rf site/data/forecast/models
@@ -123,7 +123,7 @@ jobs:
           else
             echo "no outlook-models.zip yet; the detailed forecast says so"
           fi
-          # every model's parts of day for all okresy, one file per model (`mvd outlook`):
+          # every model's parts of day for all okresy, one file per model (outlook-models-parts.zip):
           # the model switch of the forecast map
           if gh release download data-latest --pattern outlook-models-parts.zip --dir /tmp 2>/dev/null; then
             rm -rf site/data/forecast/models-parts
@@ -142,7 +142,7 @@ jobs:
               echo "no $name yet; the pages that use it say so or hide that part"
             fi
           done
-          # test: the forecast for every obec, one file per okres (`mvd obce-forecast`)
+          # test: the forecast for every obec, one file per okres (obce.zip)
           mkdir -p site/data/forecast
           if gh release download data-latest --pattern obce.zip --dir /tmp --clobber 2>/dev/null; then
             unzip -o -q /tmp/obce.zip -d site/data/forecast

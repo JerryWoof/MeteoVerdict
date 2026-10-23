@@ -1,5 +1,5 @@
 // How accurate is the obec forecast where there is no station? The leave-one-station-out
-// test (`mvd obce-loso`, data/scores/obce-loso.json; docs/methodology.md) on the
+// test (data/scores/obce-loso.json; docs/methodology.md) on the
 // methodology page: the key numbers come from the file, none is written into the text.
 
 import { dayCount } from "./view.js";

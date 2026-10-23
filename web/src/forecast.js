@@ -1,7 +1,7 @@
 // Our own forecast for one okres (roadmap 6.3): the forecasts of all models, combined
-// with the weights and bias corrections `mvd aggregate` publishes per okres, variable and
-// lead day (forecast/<okres>.json, roadmap 6.2). The page reads the models' forecasts and
-// our combination from forecast/models/<okres>.json (`mvd outlook`, models.js); the
+// with the published weights and corrections per okres, variable and lead day
+// (forecast/<okres>.json, roadmap 6.2). The page reads the models' forecasts and our
+// combination from forecast/models/<okres>.json (published with the forecast, models.js); the
 // combination here (`combine`) is the same formula, kept as its reference and tested.
 
 import { records } from "./data.js";

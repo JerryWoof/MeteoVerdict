@@ -1,5 +1,5 @@
 // Every model's own hourly forecast for one okres (forecast/models/<okres>.json, written
-// by `mvd outlook` with each run, docs/data-sources.md#outlook-mvd-outlook-roadmap-66):
+// with each run of the forecast, docs/data-sources.md#outlook-outlookjson):
 // the raw values as Open-Meteo gave them, plus our combined series. The detailed forecast
 // page and the model picker of the forecast map read these files instead of asking
 // Open-Meteo from the visitor's browser.
@@ -17,7 +17,7 @@ export const MODEL_VARIABLES = ["temperature_2m", "precipitation", "wind_speed_1
 export const TIME_ZONE = "Europe/Prague";
 const PARTS = ["night", "morning", "afternoon", "evening"];
 const HOUR = 3600 * 1000;
-// as meteoverdict.outlook
+// as outlook.json
 export const MIN_PART_HOURS = 4;
 export const MIN_DAY_HOURS = 18;
 export const RAIN_MM = 0.3;
@@ -170,7 +170,7 @@ export function modelPeriods(parsed, model) {
 }
 
 // --- the whole map on one model: forecast/models-parts/<model>.json (all okresy, its
-// parts of day and days by the same rules, written by `mvd outlook`) and index.json (the
+// parts of day and days by the same rules, written with each forecast run) and index.json (the
 // models by their mean rank over Czechia) -----------------------------------------------
 
 /**

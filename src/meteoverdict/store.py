@@ -147,8 +147,7 @@ LATEST_TAG = "data-latest"
 
 
 def publish_latest(store: GitHubReleaseStore, data_dir: Path, site_dir: Path) -> None:
-    """Replace ``aggregates.parquet``, ``forecast-weights.parquet`` (where written) and
-    ``site-data.zip`` (all JSON) in ``data-latest``.
+    """Replace ``aggregates.parquet`` and ``site-data.zip`` (all JSON) in ``data-latest``.
 
     The repository only commits the small summary levels; the web map takes the full
     set (okres and station levels) from here.
@@ -158,10 +157,6 @@ def publish_latest(store: GitHubReleaseStore, data_dir: Path, site_dir: Path) ->
         store.put(LATEST_TAG, "site-data.zip", archive, label=sha256(archive))
     aggregates = data_dir / "aggregates.parquet"
     store.put(LATEST_TAG, "aggregates.parquet", aggregates, label=sha256(aggregates))
-    # the forecast's weights with the temperature and wind regression (mvd outlook)
-    weights = data_dir / "forecast-weights.parquet"
-    if weights.exists():
-        store.put(LATEST_TAG, weights.name, weights, label=sha256(weights))
 
 
 def publish_folder(store: GitHubReleaseStore, folder: Path, name: str) -> None:

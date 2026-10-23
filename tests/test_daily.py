@@ -166,9 +166,9 @@ def test_daily_command_publishes_the_scores_and_the_badge(tmp_path, monkeypatch)
     assert badge["label"] == "last updated"
     assert (tmp_path / "site" / "meta.json").exists()
     assert (tmp_path / "aggregates.parquet").exists()
-    # the forecast's weights for mvd outlook (6 days: too few for the regression)
-    weights = pl.read_parquet(tmp_path / "forecast-weights.parquet")
-    assert weights.height and weights["mos_weight"].null_count() == weights.height
+    # the scores only: the forecast's weight table is not made here
+    assert not (tmp_path / "forecast-weights.parquet").exists()
+    assert (tmp_path / "site" / "forecast" / "okresy.json").exists()
 
 
 def test_run_refreshes_recent_rain_gauge_months(tmp_path, monkeypatch):
