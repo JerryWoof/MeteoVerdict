@@ -752,7 +752,7 @@ function renderPanel(outlook) {
     for (const text of [
       symbolText(now.symbol),
       t("tv.range", { low: fmt(now.tmin), high: fmt(now.tmax) }),
-      single || now.rain_probability == null
+      (single && !now.aiRain) || now.rain_probability == null
         ? t("tv.rainModel", { amount: fmt(now.precipitation, 1) })
         : t("tv.rain", { chance: percent(now.rain_probability), amount: fmt(now.precipitation, 1) }),
       // gusts from the single runs: null beyond the newest run and in older files
