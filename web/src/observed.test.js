@@ -59,7 +59,7 @@ const DOC = {
 
   },
   forecasts: [
-    // rebuilt out of sample (meteoverdict.hindcast): no issue time, trained up to a day
+    // rebuilt out of sample (outlook-hindcast.parquet): no issue time, trained up to a day
     { lead: 0, kind: "rebuilt", trained_to: "2026-10-14", columns: ["tmax", "wind"], okresy: { CZ0423: { tmax: [7, 9, 12, 10, 12], wind: [3, 3, 3, 3, 3] } } },
     {
       lead: 2, issued: "2026-10-14T20:50Z", columns: ["tmin", "tmax", "precipitation", "rain_probability", "symbol"],

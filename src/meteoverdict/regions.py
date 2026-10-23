@@ -152,3 +152,50 @@ def add_regions(stations: pl.DataFrame) -> pl.DataFrame:
             pl.String,
         ),
     ).filter(pl.col("okres_code").is_not_null())
+
+
+# --- the okres points (the forecast map's point of every okres) ----------------------
+#: elevation of every okres's point (scripts/build_okres_elevations.py)
+ELEVATIONS_FILE = "okres-elevations.csv"
+
+
+def _area(ring: Ring) -> float:
+    return sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in pairwise(ring)) / 2
+
+
+def representative_point(region: Region) -> tuple[float, float]:
+    """A point inside the okres: the centroid of its largest polygon, or, where that
+    falls outside (a crescent-shaped okres), the inside grid point nearest to it."""
+    ring = max((p[0] for p in region.polygons), key=lambda r: abs(_area(r)))
+    area = _area(ring)
+    lon = sum((x1 + x2) * (x1 * y2 - x2 * y1) for (x1, y1), (x2, y2) in pairwise(ring))
+    lat = sum((y1 + y2) * (x1 * y2 - x2 * y1) for (x1, y1), (x2, y2) in pairwise(ring))
+    lon, lat = lon / (6 * area), lat / (6 * area)
+    if region.contains(lon, lat):
+        return lon, lat
+    lon_min, lat_min, lon_max, lat_max = region.bbox
+    steps = 60
+    inside = [
+        (lon_min + (lon_max - lon_min) * i / steps, lat_min + (lat_max - lat_min) * j / steps)
+        for i in range(steps + 1)
+        for j in range(steps + 1)
+    ]
+    inside = [(x, y) for x, y in inside if region.contains(x, y)]
+    return min(inside, key=lambda p: (p[0] - lon) ** 2 + (p[1] - lat) ** 2)
+
+
+def okres_points() -> pl.DataFrame:
+    """``code``, ``name``, ``lat``, ``lon`` of the point of every okres (the forecast map's
+    and the measured map's)."""
+    points = []
+    for region in load_regions("okres"):
+        lon, lat = representative_point(region)
+        points.append((region.code, region.name, round(lat, 4), round(lon, 4)))
+    return pl.DataFrame(points, schema=["code", "name", "lat", "lon"], orient="row")
+
+
+def point_elevations() -> pl.DataFrame:
+    """``code`` and ``elevation`` (m) of the point of every okres."""
+    source = files("meteoverdict").joinpath("data", ELEVATIONS_FILE)
+    with source.open("rb") as f:
+        return pl.read_csv(f.read()).select("code", pl.col("elevation").cast(pl.Float64))

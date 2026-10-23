@@ -20,7 +20,7 @@ import numpy as np
 import polars as pl
 from PIL import Image
 
-from meteoverdict import combine
+from meteoverdict import regions
 
 ROOT = Path(__file__).resolve().parent.parent
 # population of every obec on 1 January of the latest year (CSV; Okres and Obec columns)
@@ -101,7 +101,7 @@ def elevations(points: list[tuple[float, float]]) -> list[float]:
 
 def main(names: list[str]) -> None:
     doc = json.loads((ROOT / "web/src/data/obce.json").read_text())
-    codes = dict(combine.okres_points().select("name", "code").rows())
+    codes = dict(regions.okres_points().select("name", "code").rows())
     # ČÚZK's okres of Prague is "území Hlavního města Prahy", RÚIAN's obec list says the city
     codes["Hlavní město Praha"] = codes["území Hlavního města Prahy"]
     year, people = population()

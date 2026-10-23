@@ -154,7 +154,7 @@ function chart(forecast, combined, table, variable, colors, names, nights, selec
     });
   }
   const ours = points(combined);
-  // the 80 % range of our temperature (outlook-hourly, `mvd blend-interval`): a band behind
+  // the 80 % range of our temperature (outlook-hourly): a band behind
   // the line and, in its tooltip, how far it reaches
   const band = [];
   if (variable === "temperature_2m" && range) {

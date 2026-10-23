@@ -277,7 +277,7 @@ export function unpublishedHours(doc, fallback = 4) {
   return delays.length ? Math.max(...delays) : fallback;
 }
 
-// --- does our combined forecast beat the best model? (blend-test.json, `mvd blend-test`)
+// --- does our combined forecast beat the best model? (blend-test.json)
 // Out of sample: on each past day the combination used only scores known before it,
 // and is compared with the model that was best for the whole of Czechia at that time
 // and used everywhere (best_cz_oos, what most people do), with the best model of each

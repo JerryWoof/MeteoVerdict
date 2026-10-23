@@ -26,7 +26,7 @@ from pathlib import Path
 import httpx
 import polars as pl
 
-from meteoverdict import extras, fresh, gauges, observations, partitions, scoring
+from meteoverdict import fresh, gauges, observations, partitions, scoring
 from meteoverdict.backfill import GAUGE_DELAY_DAYS
 from meteoverdict.chmi import fetch_current_meta
 from meteoverdict.models import MAX_LEAD_DAY, Model
@@ -76,12 +76,6 @@ def run(
     if added is not None:
         table = fresh.mark(table, added)
     partitions.write_monthly(table, data_dir / "scores", scoring.KEYS, "date")
-    try:  # the further variables of the combined forecast (their own score files)
-        extra = extras.update(data_dir, models, day)
-        rows = "no runs or observations" if extra is None else f"{extra.height} score rows"
-        log(f"further variables: {rows}")
-    except Exception as exc:
-        log(f"further variables not scored: {exc!r}")
     last_scored = table["date"].max() if table.height else None
     log(f"re-scored {first}..{day}: {table.height} rows, last scored day {last_scored}")
     if last_scored is None or last_scored < day:
