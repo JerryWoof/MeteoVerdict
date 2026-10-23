@@ -516,8 +516,7 @@ Open-Meteo (most models 3.5–6 h after the run starts).
   minute of almanacs), the same on every row of a day.
 - **Frost** (`night_min`, `coldest_site`, `coldest_min`, `frost_probability`, `frost`,
   `ground_min`, `ground_frost`) on the `night` and `day` rows of the date a night ends;
-  empty where there is no frost forecast (`frost.json` is published with the other
-  files).
+  empty where there is no frost forecast.
 - **Gusts** (`gust`, `gust_over_threshold`, after the frost fields): `gust_over_threshold`
   when `gust` ≥ 13.5 m/s (`gust_warning` is its deprecated alias, same value). `null`
   beyond the forecast's gust data (about 5 days, the last part cut) and where there is none.
