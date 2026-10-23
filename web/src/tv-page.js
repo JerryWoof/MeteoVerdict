@@ -24,7 +24,7 @@ import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, currentPart, dayLabel, displayName, ease,
   iconName, labelFor, lerpRow, mixColor, okresColours, parseOutlook, parseView,
   placeMarkers, playSteps, rampKey, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary,
-  today, viewHash, gustOver, gustOverText, CAPITALS, historyMode, leaveFor, measuredRedirect,
+  today, viewHash, gustOver, gustOverText, chmiNotice, CAPITALS, historyMode, leaveFor, measuredRedirect,
 } from "./tv.js";
 import { keepRoomForPanels, panelRoom, scrollToPanel, userMoved } from "./panel-room.js";
 import { aiPath } from "./ai-source.js";
@@ -693,6 +693,7 @@ function renderObecPanel(panel, { doc, rows, ai: ownAi }) {
     facts,
     strip,
     week,
+    chmiNotice(t),
     detail,
   );
 }
