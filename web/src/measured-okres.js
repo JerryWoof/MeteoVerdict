@@ -86,6 +86,9 @@ export function createOkresPanel({ panel, t, language, dayText, update, stationH
     } else add(t("obs.noWind"), "missing");
     if (n.s) add(t("obs.sunshine", { hours: fmt1(row.sunshine), stations: source(row, n.s, "s") }), lentClass("s"));
     if (n.c) add(t("obs.cloud", { value: fmt(row.cloud), stations: source(row, n.c, "c") }), lentClass("c"));
+    if (n.h) add(t("obs.humidity", { value: fmt(row.humidity), stations: source(row, n.h, "h") }), lentClass("h"));
+    if (n.p) add(t("obs.pressure", { value: fmt(row.pressure), stations: source(row, n.p, "p") }), lentClass("p"));
+    if (n.d) add(t("obs.direction", { value: fmt(row.direction), stations: source(row, n.d, "d") }), lentClass("d"));
     if (row.ph?.length) add(t("obs.phenomena", { list: row.ph.map((c) => t(`pheno.${c}`)).join(", ") }));
     return facts;
   }

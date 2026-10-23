@@ -22,6 +22,10 @@ field       from                rule
 ``gust``    Fmax (10 min)       strongest gust
 ``ssv``     SSV1H (0.1 h)       hours of sunshine; only periods with daylight
 ``cloud``   N (octas)           mean cloud cover in %, sky obscured (9) left out
+``rh``      H (10 min)          mean relative humidity at the full hours (%)
+``pres``    P_hm (1 h)          mean pressure reduced to sea level (hPa)
+``dir``     D (10 min)          mean wind direction at the full hours (° the wind comes
+                                from; the circular mean)
 ==========  ==================  ======================================================
 
 A 10-minute value belongs to the period its 10 minutes fall in, an hourly total to the
@@ -86,8 +90,12 @@ FOLDER = "observed"
 ZIP = "observed-data.zip"
 INDEX = "index.json"
 #: the okres values, in the files' order
-COLUMNS = ("tmax", "tmin", "tmax_hi", "tmin_lo", "r", "r_hi", "wind", "gust", "ssv", "cloud")
-#: station counts: temperature, precipitation, wind, gust, sunshine, cloud
+COLUMNS = (
+    "tmax", "tmin", "tmax_hi", "tmin_lo", "r", "r_hi", "wind", "gust", "ssv", "cloud",
+    "rh", "pres", "dir",
+)  # fmt: skip
+#: station counts: temperature, precipitation, wind, gust, sunshine, cloud, humidity, pressure,
+#: wind direction
 COUNTS = {
     "n_t": "tmax",
     "n_r": "r",
@@ -95,17 +103,23 @@ COUNTS = {
     "n_g": "gust",
     "n_s": "ssv",
     "n_c": "cloud",
+    "n_h": "rh",
+    "n_p": "pres",
+    "n_d": "dir",
 }
 #: groups of values an okres may borrow from its neighbours, each with the column whose
 #: station count (``COUNTS``) says whether the okres has a station of its own
-GROUPS = {"t": "tmax", "r": "r", "w": "wind", "g": "gust", "s": "ssv", "c": "cloud"}
+GROUPS = {
+    "t": "tmax", "r": "r", "w": "wind", "g": "gust", "s": "ssv", "c": "cloud",
+    "h": "rh", "p": "pres", "d": "dir",
+}  # fmt: skip
 #: an okres without a station of its own for a group takes the nearest stations of other
 #: okresy with a value, at most this far from its border, as many as the scoring borrows
 BORROW_MAX_KM = neighbours.MAX_KM
 BORROW_STATIONS = aggregate.MIN_STATIONS
 #: a station's values (the station dots)
-STATION_COLUMNS = ("tmax", "tmin", "r", "wind", "gust", "ssv", "cloud")
-DIGITS = {"r": 1, "r_hi": 1, "ssv": 1, "cloud": 0}
+STATION_COLUMNS = ("tmax", "tmin", "r", "wind", "gust", "ssv", "cloud", "rh", "pres", "dir")
+DIGITS = {"r": 1, "r_hi": 1, "ssv": 1, "cloud": 0, "rh": 0, "pres": 1, "dir": 0}
 #: forecast leads (days before the day, Prague time) kept beside the measured values;
 #: lead 0 (the day's first run) only when there is no other
 LEADS = (1, 2, 3)
@@ -138,9 +152,12 @@ SOURCES: dict[tuple[str, str], tuple[str, str]] = {
     ("1hour", "SRA1H"): ("r", "end1h"),
     ("1hour", "SSV1H"): ("ssv", "end1h"),
     ("1hour", "N"): ("n", "inst"),
+    ("10min", "H"): ("rh", "inst"),
+    ("10min", "D"): ("dir", "inst"),
+    ("1hour", "P_hm"): ("pres", "inst"),
 }
 #: instantaneous 10-minute elements are read at the full hour only (much smaller)
-FULL_HOUR_ONLY = {"T", "F"}
+FULL_HOUR_ONLY = {"T", "F", "H", "D"}
 OBS_SCHEMA = {
     "station": pl.String,
     "time": pl.Datetime("ms", "UTC"),
@@ -321,6 +338,12 @@ def _hours(field: str | list[str]) -> pl.Expr:
     return pl.col("hour").filter(pl.col("field").is_in(fields)).n_unique()
 
 
+def _circular_mean(angle: pl.Expr) -> pl.Expr:
+    """The mean direction (degrees, 0-360) of angles in degrees, null without values."""
+    rad = angle.radians()
+    return (pl.arctan2(rad.sin().mean(), rad.cos().mean()).degrees() + 360) % 360
+
+
 def station_periods(
     rows: pl.DataFrame, light: Callable[[str, date], list[float]] | None = None
 ) -> pl.DataFrame:
@@ -357,6 +380,14 @@ def station_periods(
         .filter((pl.col("field") == "n") & (pl.col("value") <= 8))
         .n_unique()
         .alias("h_c"),
+        _agg("rh", "mean").alias("rh"),
+        _hours("rh").alias("h_h"),
+        _agg("pres", "mean").alias("pres"),
+        _hours("pres").alias("h_p"),
+        _circular_mean(
+            pl.col("value").filter(pl.col("field") == "dir"),
+        ).alias("dir"),
+        _hours("dir").alias("h_d"),
     ]
     parts = rows.group_by("station", "day", "part").agg(stats)
     days = rows.group_by("station", "day").agg(stats).with_columns(pl.lit("day").alias("part"))
@@ -391,6 +422,9 @@ def station_periods(
         "ssv": (pl.col("light") >= MIN_LIGHT_H)
         & (pl.col("h_s") >= (pl.col("light") * MIN_SHARE).floor()),
         "cloud": pl.col("h_c") >= (pl.col("expected") * CLOUD_SHARE).ceil(),
+        "rh": pl.col("h_h") >= need,
+        "pres": pl.col("h_p") >= need,
+        "dir": pl.col("h_d") >= need,
     }
     return (
         table.select(
@@ -482,6 +516,9 @@ def _okres_aggs() -> dict[str, list[pl.Expr]]:
         "g": [pl.col("gust").max()],
         "s": [pl.col("ssv").mean()],
         "c": [pl.col("cloud").mean()],
+        "h": [pl.col("rh").mean()],
+        "p": [pl.col("pres").mean()],
+        "d": [_circular_mean(pl.col("dir"))],
     }
 
 
