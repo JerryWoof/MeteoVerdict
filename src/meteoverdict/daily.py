@@ -26,8 +26,9 @@ from pathlib import Path
 import httpx
 import polars as pl
 
-from meteoverdict import fresh, gauges, observations, partitions, scoring
+from meteoverdict import extras, fresh, gauges, observations, partitions, scoring
 from meteoverdict.backfill import GAUGE_DELAY_DAYS
+from meteoverdict.chmi import fetch_current_meta
 from meteoverdict.models import MAX_LEAD_DAY, Model
 
 RESCORE_DAYS = 100  # covers the 90-day window and the publication delay of ČHMÚ data
@@ -51,6 +52,8 @@ def run(
     obs = observations.fetch_observations(
         client, points["id"], day - timedelta(days=CAPTURE_DAYS - 1), day
     )
+    pressure = capture_hourly(client, points, day, log)
+    obs = pl.concat([obs, pressure]) if pressure.height else obs
     if obs.height:
         observations.write_hourly(obs, data_dir)
     log(f"captured {obs.height} hourly observations up to {day}")
@@ -73,12 +76,40 @@ def run(
     if added is not None:
         table = fresh.mark(table, added)
     partitions.write_monthly(table, data_dir / "scores", scoring.KEYS, "date")
+    try:  # the further variables of the combined forecast (their own score files)
+        extra = extras.update(data_dir, models, day)
+        rows = "no runs or observations" if extra is None else f"{extra.height} score rows"
+        log(f"further variables: {rows}")
+    except Exception as exc:
+        log(f"further variables not scored: {exc!r}")
     last_scored = table["date"].max() if table.height else None
     log(f"re-scored {first}..{day}: {table.height} rows, last scored day {last_scored}")
     if last_scored is None or last_scored < day:
         after = last_scored or first - timedelta(days=1)
         log(f"nothing scored after {after}: {coverage(obs_scan, fc_scan, after, day)}")
     return partitions.months(first, day)
+
+
+def capture_hourly(
+    client: httpx.Client,
+    points: pl.DataFrame,
+    day: date,
+    log: Callable[[str], None] = lambda _: None,
+) -> pl.DataFrame:
+    """Sea-level pressure of the last ``CAPTURE_DAYS`` days from the hourly files of the
+    stations that have it (``observations.HOURLY_ELEMENTS``); empty when ČHMÚ fails."""
+    try:
+        meta2 = fetch_current_meta(client, 2, day)
+        return observations.fetch_hourly_elements(
+            client,
+            observations.hourly_station_ids(meta2) & set(points["id"]),
+            day - timedelta(days=CAPTURE_DAYS - 1),
+            day,
+            today=day,
+        )
+    except httpx.HTTPError as exc:
+        log(f"hourly elements not captured: {exc}")
+        return pl.DataFrame(schema=observations.SCHEMA)
 
 
 def add_fresh(
