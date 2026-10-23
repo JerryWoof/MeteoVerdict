@@ -1189,15 +1189,25 @@ async function main() {
   picker.disabled = true; // until the map is there
   // the models offered for the whole map, by their mean rank over Czechia
   metaJson ??= getJson("data/scores/meta.json");
-  Promise.all([getJson("data/scores/forecast/models-parts/index.json"), metaJson, loadAi(getJson)]).then(([index, meta, ai]) => {
+  // loaded before the first drawing: the AI is the default, so the map and an okres panel
+  // opened by a link start on it, not on the blend for a moment (a flicker)
+  const modelsLoaded = Promise.all([getJson("data/scores/forecast/models-parts/index.json"), metaJson, loadAi(getJson)]).then(([index, meta, ai]) => {
     modelIndex = index;
     aiData = ai;
     modelNames = { ...meta?.models };
     renderMapPicker();
-    if (state.okres) renderPanel(outlook);
-    defaultToAi();
   });
-  await mapLoaded;
+  await Promise.all([mapLoaded, modelsLoaded]);
+  if (aiData && !mapChosen) {
+    const view = aiMapView(aiData, outlook);
+    if (view) {
+      modelViews.set(AI_MODEL, view);
+      mapModel = AI_MODEL;
+      mapView = view;
+      panelModel = panelStart(state.okres);
+      refreshObceDocs();
+    }
+  }
   addLayers();
   buildMarkers(outlook);
   update({}, { replace: true });
