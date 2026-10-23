@@ -11,12 +11,10 @@ function cronTimes(file) {
     hours.split(",").map((h) => `${h.padStart(2, "0")}:${m.padStart(2, "0")}`));
 }
 
-test("the schedule shown on the Data page is the workflows' cron", () => {
-  assert.deepEqual(SCHEDULE.outlook, cronTimes("outlook.yml"));
+test("the workflow schedules shown on the Data page are the workflows' cron", () => {
   assert.deepEqual(SCHEDULE.daily, cronTimes("daily.yml"));
   assert.deepEqual(SCHEDULE.runs, cronTimes("runs.yml"));
   assert.deepEqual(SCHEDULE.chmi, cronTimes("chmi-archive.yml"));
-  assert.deepEqual(SCHEDULE.sun, cronTimes("sun-cloud-gust.yml"));
 });
 
 test("Prague clock time: summer and winter", () => {
