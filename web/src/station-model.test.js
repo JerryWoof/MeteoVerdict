@@ -71,7 +71,8 @@ test("the error choice rides in the hash after the model and lead; the maximum i
   });
   assert.deepEqual(splitModelHash("#x;m=ai;e=r"), { hash: "#x", model: "ai", lead: 1, err: "r" });
   assert.equal(splitModelHash("#x;m=ai;e=none").err, null); // the measured values
-  assert.equal(splitModelHash("#x;m=ai;e=gust").err, undefined); // only the mapped values
+  assert.equal(splitModelHash("#x;m=ai;e=gust").err, "gust");
+  assert.equal(splitModelHash("#x;m=ai;e=ssv").err, undefined); // only the mapped values
   assert.equal(withModelHash("#x", { model: "ai", lead: 1, err: "wind" }), "#x;m=ai;e=wind");
   assert.equal(withModelHash("#x", { model: "ai", lead: 2, err: "tmin" }), "#x;m=ai;l=2;e=tmin");
   assert.equal(withModelHash("#x", { model: "ai", lead: 1, err: null }), "#x;m=ai;e=none");
