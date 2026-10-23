@@ -117,6 +117,29 @@ def test_station_values_per_period():
     assert by["evening"]["wind"] == pytest.approx(2.0 + 2.3)  # the value at 23:00 local
 
 
+def test_humidity_pressure_and_direction_per_period():
+    items = full_day(A, DAY)
+    start = utc(DAY, 0) - timedelta(hours=2)
+    for h in range(24):
+        at = start + timedelta(hours=h)
+        # the wind comes from 350° and 10° alternately: the circular mean is north, not 180°
+        items += [
+            (A, at, "rh", "inst", 60.0 + h),
+            (A, at, "pres", "inst", 1010.0),
+            (A, at, "dir", "inst", 350.0 if h % 2 else 10.0),
+        ]
+    table = om.station_periods(obs(items))
+    by = {r["part"]: r for r in table.filter(pl.col("day") == DAY).iter_rows(named=True)}
+    assert by["night"]["rh"] == pytest.approx(62.5)  # hours 0-5 local: 60 … 65
+    assert by["day"]["pres"] == 1010.0
+    assert min(by["day"]["dir"], 360 - by["day"]["dir"]) < 1e-6
+    # the station mean over an okres (one station here) keeps the direction
+    okres = om.okres_periods(table, STATIONS).filter(
+        pl.col("okres") == "CZ0423", pl.col("part") == "day"
+    )
+    assert okres["n_h"][0] == 1 and okres["rh"][0] == pytest.approx(71.5)
+
+
 def test_incomplete_periods_have_no_value():
     rows = obs(full_day(A, DAY, rain=0.5, hours=[h for h in range(24) if h != 9]))
     table = om.station_periods(rows)
@@ -495,7 +518,14 @@ def test_build_marks_borrowed_stations(tmp_path):
     assert doc["borrow"] == {"max_km": 30.0, "stations": 3}
     blansko = doc["okresy"]["CZ0641"]
     assert blansko["n_t"] == [1] * 5 and blansko["tmax"][4] == 10.5
-    assert blansko["borrowed"]["t"] == [[C]] * 5 and set(blansko["borrowed"]) == set(om.GROUPS)
+    assert blansko["borrowed"]["t"] == [[C]] * 5 and set(blansko["borrowed"]) == {
+        "t",
+        "r",
+        "w",
+        "g",
+        "s",
+        "c",
+    }
     assert blansko["bst"] == [{"id": C, "name": "Brno", "okres": "Brno-město", "km": 10.2}]
     assert blansko["st"] == []
     # Praha: the nearest station is 43 km away, nothing borrowed

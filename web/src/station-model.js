@@ -31,7 +31,7 @@ export const VARIABLES = [
 ];
 
 /** The values of the map's model-error colouring (the per-day files of `mvd station-fc`). */
-export const ERROR_VARS = ["tmax", "tmin", "r", "wind"];
+export const ERROR_VARS = ["tmax", "tmin", "r", "wind", "gust"];
 /** The map's dots start coloured by the model's error of the day's maximum ("none" in the hash: the measured values). */
 export const DEFAULT_ERR = "tmax";
 
@@ -175,6 +175,7 @@ export function errorLookup(doc, model, lead, key) {
 export function errorKeyFor(layer, part) {
   if (layer === "temperature") return part === "night" ? "tmin" : "tmax";
   if (layer === "precipitation") return "r";
+  if (layer === "gust") return "gust";
   return layer === "wind" ? "wind" : null;
 }
 
