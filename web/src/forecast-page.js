@@ -10,14 +10,14 @@ import {
 } from "./forecast.js";
 import { setUpLanguage } from "./i18n.js";
 import { glyph } from "./icons.js";
-import { asForecast, modelHorizon, modelPeriods, parseModels } from "./models.js";
+import { GUST_THRESHOLD, asForecast, modelHorizon, modelPeriods, parseModels } from "./models.js";
 import { fillPicker, issuedText } from "./picker.js";
 import { SEAT_OKRES, seatName, seatOkres } from "./seats.js";
 import { statusText } from "./status.js";
 import { chmiNotice, dayLabel, gustOver, gustOverText, parseOutlook, rowFor, sunFor, today } from "./tv.js";
 import { AI_FILES, aiPath, aiText } from "./ai-source.js";
-import { AI_MODEL, extraSeries, loadAi, withAi } from "./ai-model.js";
-import { dayWindDirection, extraDisplay } from "./ai-extra.js";
+import { AI_MODEL, loadAi, withAi } from "./ai-model.js";
+import { dayWindDirection, extraDisplay, extraFor } from "./ai-extra.js";
 
 // ?source=ai: MeteoVerdict AI's forecast (the AI forecast tab's detail, ai-source.js): its
 // own outlook.json and obce files, "MeteoVerdict AI" wherever ours is named, no weights
@@ -273,8 +273,20 @@ const dayRow = (d) => ({ day: d.day, tmin: d.tmin, tmax: d.tmax, precipitation: 
 
 // the day table, the charts and the notes for the selected forecast
 function render(names, colors) {
-  const { parsed, forecast, combined, table, days, sunOf, gustOf, range } = state;
+  const { parsed, forecast, combined, table, days, sunOf, range, ai, point } = state;
   const single = selected !== COMBINED;
+  // the further variables of the selected forecast (MeteoVerdict AI's file or the combination's own hours)
+  const extra = extraDisplay(extraFor(selected === COMBINED ? "combined" : selected, { ai, code: point.code, parsed }));
+  state.extra = extra;
+  const wind = selected === AI_MODEL ? ai?.okresy?.[point.code] : { times: parsed.times, wind_speed_10m: parsed.combined.wind_speed_10m };
+  const dirOf = (day) => dayWindDirection(extra, wind, day, TIME_ZONE);
+  // MeteoVerdict AI's gusts per day from its own sky file; ours from the corrected outlook
+  const gustOf = selected === AI_MODEL
+    ? (day) => {
+      const gust = ai?.sky?.get(point.code)?.get(`${day}|day`)?.gust ?? null;
+      return gust == null ? null : { gust, gust_over_threshold: gust >= GUST_THRESHOLD };
+    }
+    : state.gustOf;
   const modelNote = document.getElementById("model-note");
   document.getElementById("combined-note").hidden = single;
   modelNote.hidden = !single;
@@ -300,10 +312,10 @@ function render(names, colors) {
     modelNote.textContent = selected === AI_MODEL ? "" : note;
     modelNote.hidden = selected === AI_MODEL;
     // the gusts come from our corrected outlook: not shown for a single model
-    renderDays(rows.map(dayRow), sunOf, () => null, state.dirOf);
+    renderDays(rows.map(dayRow), sunOf, selected === AI_MODEL ? gustOf : () => null, dirOf);
   } else {
     modelNote.textContent = "";
-    renderDays(days.map(dayRow), sunOf, gustOf, state.dirOf);
+    renderDays(days.map(dayRow), sunOf, gustOf, dirOf);
   }
   const nights = nightBands(sunOf, forecast.times[0], forecast.times.at(-1), TIME_ZONE);
   const issued = Date.parse(parsed.generated ?? "") || Date.now();
@@ -340,9 +352,10 @@ function renderExtra(nights) {
     extraVariable = select.value;
     renderExtra(nights);
   });
-  const label = cell("span", t(`forecast.extra.${item.status === "unverified" ? "ai" : "reference"}`), "extra-label");
   const head = cell("div", null, "extra-head");
-  head.append(heading, select, label);
+  head.append(heading, select);
+  // only a value that is the models' median (no weights of ours) says so
+  if (item.source === "reference") head.append(cell("span", t("forecast.extra.reference"), "extra-label"));
   const figure = document.createElement("figure");
   figure.className = "forecast-chart extra-chart";
   figure.append(cell("figcaption", `${t(`forecast.extra.${item.variable}`)}${item.unit ? `, ${item.unit}` : ""}`));
@@ -353,7 +366,7 @@ function renderExtra(nights) {
 
 function extraPlot(item, nights) {
   const width = Math.min(1200, document.body.clientWidth - 32);
-  const times = state.extraTimes;
+  const times = item.times;
   const rows = item.series.map((v, i) => ({ time: new Date(times[i]), value: v })).filter((r) => r.value != null);
   const kind = item.variable === "snowfall" ? "step" : item.variable === "wind_direction_10m" ? "dot" : "line";
   const stroke = themed(INK);
@@ -374,7 +387,7 @@ function extraPlot(item, nights) {
     y: {
       label: null,
       grid: true,
-      zero: kind === "step" || ["snow_depth", "snow_depth_water_equivalent", "cape", "visibility", "fog_probability"].includes(item.variable),
+      zero: kind === "step" || ["snow_depth", "snow_depth_water_equivalent", "cape", "visibility", "fog_probability", "wind_gusts_10m", "shortwave_radiation", "sunshine_duration", "cloud_cover_low"].includes(item.variable),
       ...(item.variable === "wind_direction_10m" ? { domain: [0, 360], ticks: [0, 90, 180, 270, 360] } : {}),
     },
     marks: [
@@ -444,13 +457,7 @@ async function show(point, names, colors, outlook) {
   const range = !AI && parsed.combined.temperature_2m_lo && parsed.combined.temperature_2m_hi
     ? { lo: parsed.combined.temperature_2m_lo, hi: parsed.combined.temperature_2m_hi }
     : null;
-  // the further variables of the AI file; none without its `extra` block (an older run)
-  const extra = extraDisplay(extraSeries(ai, point.code));
-  const dirOf = (day) => dayWindDirection(extra, ai?.okresy?.[point.code], day, TIME_ZONE);
-  state = {
-    point, table, parsed, forecast, combined, days, sunOf, gustOf, range, extra, dirOf,
-    extraTimes: ai?.okresy?.[point.code]?.times ?? [],
-  };
+  state = { point, table, parsed, forecast, combined, days, sunOf, gustOf, range, ai, extra: [] };
   const when = issuedText(state.parsed.generated);
   issued.textContent = when ? t("forecast.issued", { time: when }) : "";
   selected = fillPicker(document.getElementById("model"), {

@@ -25,6 +25,7 @@ const BLEND_FIELDS = ["precipitation", "cloud", "sunshine", "symbol", "gust", "g
 export const EXTRA_VARIABLES = [
   "relative_humidity_2m", "dew_point_2m", "temperature_5cm", "pressure_msl", "visibility",
   "fog_probability", "snowfall", "snow_depth", "snow_depth_water_equivalent", "cape", "wind_direction_10m",
+  "wind_gusts_10m", "cloud_cover_low", "shortwave_radiation",
 ];
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
