@@ -803,6 +803,7 @@ function renderPanel(outlook) {
     facts,
     strip,
     week,
+    chmiNotice(t),
     detail,
   );
 }
