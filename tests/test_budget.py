@@ -67,4 +67,3 @@ def test_a_day_and_a_month_stay_within_the_free_tier():
 def test_fallback_runs_fit_one_or_two_models():
     # 100 calls: at least 1 a station at the 100 stations, one or two models a run
     assert runs.run_cost(100, 2) == 100 and runs.affordable(100, 19, 100) == 2
-
