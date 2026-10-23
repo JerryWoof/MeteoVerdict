@@ -11,6 +11,8 @@
 // (a whole day: of 6-18). What one model cannot give: the probability of precipitation
 // (the share of wet models) is null, and its symbol is simplified (modelSymbol).
 
+/** The outlook's gust warning threshold (m/s). */
+export const GUST_THRESHOLD = 13.5;
 export const MODEL_VARIABLES = ["temperature_2m", "precipitation", "wind_speed_10m", "cloud_cover", "sunshine_duration"];
 export const TIME_ZONE = "Europe/Prague";
 const PARTS = ["night", "morning", "afternoon", "evening"];
@@ -106,7 +108,7 @@ export function modelPeriods(parsed, model) {
   const periods = new Map();
   const entry = (key) => {
     if (!periods.has(key)) {
-      periods.set(key, { hours: 0, sumHours: 0, t: [], w: [], c: [], p: [], s: [], lastRain: false });
+      periods.set(key, { hours: 0, sumHours: 0, t: [], w: [], g: [], c: [], p: [], s: [], lastRain: false });
     }
     return periods.get(key);
   };
@@ -120,6 +122,7 @@ export function modelPeriods(parsed, model) {
       e.hours += 1;
       if (temperature[i] != null) e.t.push(temperature[i]);
       if (series.wind_speed_10m?.[i] != null) e.w.push(series.wind_speed_10m[i]);
+      if (series.wind_gusts_10m?.[i] != null) e.g.push(series.wind_gusts_10m[i]);
       const daytime = at.part === "morning" || at.part === "afternoon";
       if (series.cloud_cover?.[i] != null && (!key.endsWith("|day") || daytime)) e.c.push(series.cloud_cover[i]);
     }
@@ -145,6 +148,7 @@ export function modelPeriods(parsed, model) {
     const tmean = mean(e.t);
     const precipitation = rainy ? sum(e.p) : null;
     const cloud = mean(e.c);
+    const gust = e.g.length ? Math.max(...e.g) : null;
     out.set(key, {
       tmin: Math.min(...e.t),
       tmax: Math.max(...e.t),
@@ -154,8 +158,9 @@ export function modelPeriods(parsed, model) {
       cloud,
       sunshine: e.s.length ? sum(e.s) / 3600 : null,
       symbol: modelSymbol(cloud, precipitation, tmean),
-      gust: null,
-      gust_over_threshold: null,
+      // only a series with gusts (MeteoVerdict AI's) has them; the rest of the models none
+      gust,
+      gust_over_threshold: gust == null ? null : gust >= GUST_THRESHOLD,
     });
   }
   return out;
