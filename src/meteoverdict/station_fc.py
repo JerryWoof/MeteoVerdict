@@ -63,8 +63,8 @@ VALUES = {
     "wind": ("wind_speed_10m", "mean"),
     "gust": ("wind_gusts_10m", "max"),
 }
-#: the values of the per-day error files (the dots of the map; gusts are not mapped)
-ERROR_VALUES = ("tmax", "tmin", "r", "wind")
+#: the values of the per-day error files (the dots of the map)
+ERROR_VALUES = ("tmax", "tmin", "r", "wind", "gust")
 ERROR_SCALE = 10
 UNITS = {"tmax": "°C", "tmin": "°C", "r": "mm", "wind": "m/s", "gust": "m/s"}
 #: Open-Meteo's precipitation (and the observations') is the total of the preceding

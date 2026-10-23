@@ -107,6 +107,7 @@ test("the error of an okres is the mean of its stations with a value", () => {
   assert.equal(errorKeyFor("temperature", "night"), "tmin");
   assert.equal(errorKeyFor("temperature", "day"), "tmax");
   assert.equal(errorKeyFor("sunshine", "day"), null);
+  assert.equal(errorKeyFor("gust", "day"), "gust");
   const byId = new Map([["a", 2], ["b", -1], ["c", null], ["d", 5]]);
   const stations = [{ id: "a", okres: "X" }, { id: "b", okres: "X" }, { id: "c", okres: "X" }, { id: "d", okres: "Nowhere" }, { id: "z", okres: "X" }];
   const out = okresErrors(byId, stations, (name) => (name === "X" ? "CZ1" : null));
