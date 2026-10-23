@@ -794,7 +794,7 @@ function renderPanel(outlook) {
   }
   // the day table can flag a gust on another day than the one in the facts above
   const detail = townDetail(state.okres);
-  panel.replaceChildren(
+  commitPanel(panel, [
     close,
     element("h2", displayName(info?.name ?? state.okres)),
     element("p", `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}`, "when"),
@@ -805,7 +805,31 @@ function renderPanel(outlook) {
     week,
     chmiNotice(t),
     detail,
-  );
+  ]);
+}
+
+/** What a panel node looks like (its canvases by their pixels), to tell a redraw from a change. */
+const nodeLook = (node) => {
+  const copy = node.cloneNode(true);
+  const live = node.matches?.("canvas") ? [node] : [...node.querySelectorAll("canvas")];
+  const drawn = node.matches?.("canvas") ? [copy] : [...copy.querySelectorAll("canvas")];
+  drawn.forEach((c, i) => c.setAttribute("data-px", live[i].toDataURL()));
+  return copy.outerHTML;
+};
+
+/**
+ * Put `nodes` in the panel, keeping the nodes already there that look the same: the panel is
+ * rebuilt when the okres's own file arrives, and replacing the whole of it blinks.
+ */
+function commitPanel(panel, nodes) {
+  const old = [...panel.children];
+  if (old.length !== nodes.length) {
+    panel.replaceChildren(...nodes);
+    return;
+  }
+  nodes.forEach((node, i) => {
+    if (nodeLook(old[i]) !== nodeLook(node)) old[i].replaceWith(node);
+  });
 }
 
 // --- update loop ------------------------------------------------------------------
@@ -814,7 +838,7 @@ let outlook = null;
 /** The link to the detail of an okres's town (seats.js): Praha for Praha-východ, … */
 function townDetail(code) {
   const seat = seatOkres(code);
-  const detail = element("a", t("tv.detail", { town: seatName(seat, outlook?.okresy.find((o) => o.code === seat)?.name ?? seat) }));
+  const detail = element("a", t("tv.detail"));
   detail.href = `${DETAIL}#${seat}`;
   // directly under it, the link to what was measured in this okres
   const measured = element("a", t("tv.measuredLink"));
