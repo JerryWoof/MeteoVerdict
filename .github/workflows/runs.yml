@@ -25,7 +25,7 @@ name: Single runs
 #
 # Open-Meteo budget (free tier, non-commercial: 10,000 weighted calls a day, 5,000 an hour
 # and 300,000 a month, shared by all workflows; docs/data-sources.md#open-meteo-budget):
-# (1) outlook (outlook.yml: the bucket, its API fallback <= 4 x 200), (2) this workflow
+# (1) outlook (the bucket, its API fallback <= 4 x 200), (2) this workflow
 # (<= 4 x 100), (3) the shared 8,300 of the backfill (backfill.yml at 02:41: D+N and the
 # single runs' history, one 14-day window after the other from today into the past).
 # Day: <= 800 + 400 + 8,300 = 9,500 (9,600 if a late 22:20 run slips past midnight); 31 days <= 294,500. Until

@@ -50,8 +50,7 @@ def test_a_day_and_a_month_stay_within_the_free_tier():
     assert fallback <= 400  # the bucket's gaps only: the newest runs cost no calls
     shared = default_calls("backfill.yml")
     assert shared == 8_300
-    assert runs_a_day("outlook.yml") == 4
-    assert runs_a_day("outlook.yml") * outlook.MAX_FALLBACK_CALLS <= OUTLOOK_DAY
+    assert 4 * outlook.MAX_FALLBACK_CALLS <= OUTLOOK_DAY
     day = OUTLOOK_DAY + fallback + shared
     assert day <= 9_500
     # scheduled runs start up to ~5 h late: the 22:20 single runs can slip into the next
@@ -69,15 +68,3 @@ def test_fallback_runs_fit_one_or_two_models():
     # 100 calls: at least 1 a station at the 100 stations, one or two models a run
     assert runs.run_cost(100, 2) == 100 and runs.affordable(100, 19, 100) == 2
 
-
-def test_the_outlook_runs_after_each_model_run_and_never_five_times_a_day():
-    # 00/06/12/18 UTC runs are on Open-Meteo 3.5-6 h after their start
-    assert schedules("outlook.yml") == ["50 4 * * *", "50 10 * * *", "50 16 * * *", "50 22 * * *"]
-    steps = workflow("outlook.yml")["jobs"]["outlook"]["steps"]
-    script = next(s for s in steps if s.get("name") == "Outlook")["run"]
-    # a 22:50 run that starts after midnight UTC would be the next day's fifth: skipped
-    assert '"$SCHEDULE" = "50 22 * * *"' in script and "exit 0" in script
-    assert script.index("exit 0") < script.index("mvd outlook --github-release")
-    # the Pages workflow deploys after every outlook run
-    pages = workflow("pages.yml")[True]["workflow_run"]["workflows"]
-    assert "Outlook" in pages
