@@ -159,3 +159,17 @@ test("the AI outlook's rows give the probability of rain and the gust of a part 
   assert.equal(row.aiRain, true);
   assert.equal(row.gust, 8.4);
 });
+
+test("aiMapView rows equal the okres file's own rows (rain, cloud, sunshine from the AI's hours), so the panel does not change when that file arrives", () => {
+  const d = doc();
+  d.okresy.A.precipitation = { ai: hours(48).map(() => 0.1) };
+  d.okresy.A.cloud_cover = { ai: hours(48).map(() => 60) };
+  d.okresy.A.sunshine_duration = { ai: hours(48).map(() => 1800) };
+  const ai = parseAi(d, NOW);
+  const blend = { precipitation: 9, cloud: 9, sunshine: 9, symbol: "rain", gust: null, gust_over_threshold: null };
+  const outlook = { okresy: [{ code: "A" }], days: ["2026-10-20"], rows: new Map([["A|2026-10-20|day", blend]]) };
+  const mapRow = aiMapView(ai, outlook).rows.get("A|2026-10-20|day");
+  const parsed = withAi({ times: ai.okresy.A.times, models: {} }, ai, "A");
+  const own = aiPeriods(modelPeriods(parsed, AI_MODEL), ai, "A").get("2026-10-20|day");
+  for (const f of ["precipitation", "cloud", "sunshine", "symbol", "tmin", "tmax", "wind"]) assert.equal(mapRow[f], own[f], f);
+});
