@@ -36,7 +36,7 @@ let obceCount = 0;
 let aiObceCount = 0;
 let aiCount = 0;
 for (const okres of okresy) {
-  const doc = okresDoc({ okres, outlook, hourly, weightsDoc: read(`forecast/${okres.code}.json`), scores, meta });
+  const doc = okresDoc({ okres, outlook, hourly, weightsDoc: read(`forecast/${okres.code}.json`), scores, meta, models: read(`forecast/models/${okres.code}.json`) });
   writeFileSync(join(out, "okresy", `${okres.code}.json`), JSON.stringify(doc));
   if (withAi) {
     const ai = aiOkresDoc({ okres, outlook, hourly, aiForecast, aiOutlook, meta });
