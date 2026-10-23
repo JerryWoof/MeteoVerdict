@@ -430,10 +430,8 @@ def test_aggregate_reads_score_files_of_different_ages(tmp_path):
     assert result.exit_code == 0, result.output
     doc = json.loads((tmp_path / "site" / "stations.json").read_text(encoding="utf-8"))
     assert [r[0] for r in doc["rows"]] == ["s1", "s2", "s3"]
-    # no weight table in the data folder: the forecast pages get the okres points only
-    index = json.loads((tmp_path / "site" / "forecast" / "okresy.json").read_text("utf-8"))
-    assert index["columns"] == ["code", "name", "lat", "lon", "weights"]
-    assert len(index["rows"]) == 77 and not any(r[4] for r in index["rows"])
+    # the forecast's ranking files are not made here
+    assert not (tmp_path / "site" / "forecast").exists()
 
 
 def test_leads_publish_needs_github_release():
