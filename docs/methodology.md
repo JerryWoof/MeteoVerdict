@@ -503,6 +503,52 @@ best in the okres for each day of the forecast (it can be a different model on D
 D+3), and lists the largest weights of every lead day. Precipitation weights come from daily totals but are
 applied to hourly values. Details: [data-sources.md](data-sources.md#combination-weights-roadmap-62).
 
+### Further variables of the combined forecast (humidity, dew point, gusts, pressure, wind direction)
+
+The combination (MeteoVerdict, weighted by stations) also weighs the variables the stations
+measure, where enough of them do. Station counts in ČHMÚ's `meta2` on 2026-10-23 (of 296
+stations with a 10-minute air temperature), and how each variable is treated:
+
+| Variable | ČHMÚ element | Stations | Treatment |
+|---|---|---:|---|
+| `relative_humidity_2m` | `H` (10 min) | 282 | **weighted** per okres |
+| `dew_point_2m` | `T` and `H` (`Td` itself only 38) | 282 | **weighted** per okres; never above the combined temperature |
+| `wind_gusts_10m` | `Fmax` (10 min) | 208 | **weighted** per okres |
+| `wind_direction_10m` | `D` (10 min) | 208 | **weighted** per okres, circular (below) |
+| `pressure_msl` | `P_hm` (1 h) | 29 (24 with data) | **weighted**, one set of weights for all okresy (a smooth field, too few stations) |
+| `cloud_cover`, `sunshine_duration` | `N` 36, `SSV1H` 165 | | corrected against the stations (`sun_cloud_gust`), unchanged |
+| `shortwave_radiation` | `RGLB10` | 24 | plain mean, `reference` (too few stations; later) |
+| `snow_depth`, `snow_depth_water_equivalent` | `SCEa` 91, `SVHa` 16 | | plain mean, `reference` (no autumn record) |
+| `surface_temperature` | `TPM` 240 (5 cm above ground) | | plain mean, `reference` (the model's skin temperature is another quantity) |
+| `visibility`, `cloud_cover_low`, `snowfall` | `VV` 37, none, daily only | | plain mean, `reference` |
+| `cape` | none | 0 | not combined |
+
+Only the models' further variables come from the bucket (`runs.EXTRA_VARIABLES`), so they
+are scored from the single runs (`meteoverdict.extras`): the D+N forecasts rebuilt as
+`fresh` does, against the stations, at the synoptic hours, into `data/scores-extra/` (the
+Previous Runs files and `scores/` are untouched), aggregated to the okres level and weighed
+like temperature: inverse error variance after the model's mean error is removed, shrunk
+towards the plain mean (`combine.EXTRA_VARIABLES`). No regression and no hour-of-day
+corrections. Humidity is held between 0 and 100 %, gusts at 0 or more.
+
+**Wind direction** is scored with the circular error `((forecast - observed + 180) mod 360)
+- 180`, only where the observed wind is at least 1 m/s; bias is the mean of those angles,
+the combination a weighted mean of unit vectors (no jump at north).
+
+Out of sample, at the 297 run stations (weights from the 60 days before each day, D+1 and
+D+2, 00 UTC runs, synoptic hours, August to 22 October 2026, MAE blend / median of the
+models):
+
+| Variable | Stations | D+1 | D+2 |
+|---|---:|---|---|
+| relative humidity (%) | 279 | 6.81 / 6.87 | 7.77 / 7.84 |
+| dew point (°C) | 279 | 0.95 / 1.00 | 1.09 / 1.14 |
+| gusts (m/s) | 208 | 1.45 / 1.67 | 1.54 / 1.73 |
+| wind direction (°) | 208 | 46.1 / 46.2 | 48.8 / 48.9 |
+| pressure (hPa) | 24 | 0.58 / 0.62 | 0.77 / 0.86 |
+
+A variable whose blend were worse than the median would stay a `reference`; none is.
+
 ### Temperature and wind: regression blend
 
 For temperature and wind the inverse-error weights and the all-hours bias are replaced

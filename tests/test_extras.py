@@ -131,5 +131,5 @@ def test_pressure_is_read_from_the_hourly_elements(tmp_path):
         }
     )
     rows = observations.normalize(raw, "now", observations.HOURLY_ELEMENTS)
-    assert rows["variable"].to_list() == ["pressure_msl"] and rows["value"][0] == 1013.2
+    assert rows["variable"].to_list() == ["pressure_msl"] and abs(rows["value"][0] - 1013.2) < 0.01
     assert "pressure_msl" in observations.EXTRA_VARIABLES
