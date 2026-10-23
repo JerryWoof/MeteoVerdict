@@ -25,6 +25,7 @@ const BLEND_FIELDS = ["precipitation", "cloud", "sunshine", "symbol", "gust", "g
 export const EXTRA_VARIABLES = [
   "relative_humidity_2m", "dew_point_2m", "temperature_5cm", "pressure_msl", "visibility",
   "fog_probability", "snowfall", "snow_depth", "snow_depth_water_equivalent", "cape", "wind_direction_10m",
+  "wind_gusts_10m", "cloud_cover_low", "shortwave_radiation",
 ];
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -147,14 +148,33 @@ export function parseSources(doc) {
   return { ai: layers.filter((l) => byLayer.get(l)), blend: layers.filter((l) => !byLayer.get(l)) };
 }
 
+/**
+ * The AI outlook's rows → Map "okres|day|part" → {rain_probability, gust, gust_over_threshold} (the values
+ * only the AI's own outlook has per part of day), or null when the file has none.
+ */
+export function parseOutlookRows(doc) {
+  if (!Array.isArray(doc?.columns) || !Array.isArray(doc?.rows)) return null;
+  const at = Object.fromEntries(doc.columns.map((c, i) => [c, i]));
+  if (at.okres == null || at.day == null || at.part == null) return null;
+  const out = new Map();
+  for (const r of doc.rows) {
+    out.set(`${r[at.okres]}|${r[at.day]}|${r[at.part]}`, {
+      rain_probability: num(r[at.rain_probability]),
+      gust: num(r[at.gust]),
+      gust_over_threshold: typeof r[at.gust_over_threshold] === "boolean" ? r[at.gust_over_threshold] : null,
+    });
+  }
+  return out;
+}
+
 /** Loads (once per `getJson` result promise) and parses the files; null when unusable. */
 let loaded = null;
 export function loadAi(getJson) {
   loaded ??= Promise.all([
     Promise.resolve(getJson(AI_URL)).then((doc) => parseAi(doc)).catch(() => null),
     Promise.resolve(getJson(SKY_URL)).then((doc) => parseSky(doc)).catch(() => null),
-    Promise.resolve(getJson(OUTLOOK_URL)).then((doc) => parseSources(doc)).catch(() => null),
-  ]).then(([ai, sky, sources]) => (ai ? { ...ai, sky, sources } : null));
+    Promise.resolve(getJson(OUTLOOK_URL)).then((doc) => ({ sources: parseSources(doc), rows: parseOutlookRows(doc) })).catch(() => ({})),
+  ]).then(([ai, sky, outlook]) => (ai ? { ...ai, sky, sources: outlook.sources ?? null, outlookRows: outlook.rows ?? null } : null));
   return loaded;
 }
 
@@ -179,9 +199,23 @@ export function skyRow(row, ai, code, key) {
   return next;
 }
 
-/** A model's periods (modelPeriods) with the AI's sky values: a new Map. */
+/**
+ * What only the AI's own outlook gives for a part of day: the probability of rain (`aiRain` marks it, so
+ * the panels may show it beside the mm) and, where the hourly series gave none, the gust.
+ */
+function outlookFill(row, ai, code, key) {
+  const own = ai?.outlookRows?.get(`${code}|${key}`);
+  if (!own || !row) return {};
+  return {
+    rain_probability: own.rain_probability,
+    aiRain: own.rain_probability != null,
+    ...(row.gust == null && own.gust != null ? { gust: own.gust, gust_over_threshold: own.gust_over_threshold } : {}),
+  };
+}
+
+/** A model's periods (modelPeriods) with the AI's sky values and outlook values: a new Map. */
 export function aiPeriods(periods, ai, code) {
-  return new Map([...periods].map(([key, row]) => [key, skyRow(row, ai, code, key)]));
+  return new Map([...periods].map(([key, row]) => [key, { ...skyRow(row, ai, code, key), ...outlookFill(row, ai, code, key) }]));
 }
 
 /** True when the AI has a forecast for this okres. */
@@ -238,8 +272,9 @@ export function aiMapView(ai, outlook) {
         if (p?.gust != null) { fill.gust = p.gust; fill.gust_over_threshold = p.gust_over_threshold; }
         // an okres the AI has no forecast for shows our blend's row whole (same look, rain in mm),
         // so the map has no gaps; a period beyond the AI's hours stays "–"
+        const aiOnly = p ? outlookFill(p, ai, o.code, `${day}|${part}`) : {};
         rows.set(`${o.code}|${day}|${part}`, p
-          ? skyRow({ ...EMPTY, ...p, ...fill, single: true, ...sunTimes }, ai, o.code, `${day}|${part}`)
+          ? skyRow({ ...EMPTY, ...p, ...fill, ...aiOnly, single: true, ...sunTimes }, ai, o.code, `${day}|${part}`)
           : !own && blend
             ? { ...blend, single: true }
             : { ...EMPTY, rain_probability: null, single: true, beyond: true, ...sunTimes });

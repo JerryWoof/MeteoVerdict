@@ -2,6 +2,7 @@
 // of the okresy in view, obce-test.js): per obec its name and its value for the day and
 // part shown, the bigger places first. Only with
 // our combination (the obce have no single-model parts).
+import { GUST_THRESHOLD } from "./models.js";
 import { obecTimes } from "./obce-test.js";
 import { isDark } from "./theme.js";
 import { themeMap } from "./map-theme.js";
@@ -39,20 +40,35 @@ export function obcePartRows(doc) {
   const at = times.map((ms) => dayHour(ms));
   const before = times.map((ms) => dayHour(ms - HOUR));
   const out = new Map();
+  const okres = okresPartValues(doc, times, at, before);
   for (const place of doc.places) {
     const acc = new Map();
     const entry = (day, part) => {
       const key = `${day}|${part}`;
-      if (!acc.has(key)) acc.set(key, { t: [], w: [], p: 0, pn: 0 });
+      if (!acc.has(key)) acc.set(key, { t: [], w: [], p: 0, pn: 0, g: [], h: [], d: [], pr: [], x: 0, y: 0, dn: 0 });
       return acc.get(key);
     };
     times.forEach((_, i) => {
       const temp = place.temperature_2m[i];
       const wind = place.wind_speed_10m[i];
+      const dir = place.wind_direction_10m?.[i];
       for (const part of [partOf(at[i].hour), "day"]) {
         const e = entry(at[i].day, part);
         if (temp != null) e.t.push(temp);
         if (wind != null) e.w.push(wind);
+        const h = place.relative_humidity_2m?.[i];
+        const d = place.dew_point_2m?.[i];
+        const pr = place.pressure_msl?.[i];
+        if (h != null) e.h.push(h);
+        if (d != null) e.d.push(d);
+        if (pr != null) e.pr.push(pr);
+        // the mean direction: the vector mean weighted by the wind (a calm hour has no direction)
+        if (dir != null) {
+          const w = wind != null && wind > 0 ? wind : 1;
+          e.x += w * Math.sin((dir * Math.PI) / 180);
+          e.y += w * Math.cos((dir * Math.PI) / 180);
+          e.dn += 1;
+        }
       }
       const rain = place.precipitation[i];
       if (rain != null) {
@@ -62,22 +78,80 @@ export function obcePartRows(doc) {
           e.pn += 1;
         }
       }
+      // a gust belongs to the hour before its time, like rain
+      const gust = place.wind_gusts_10m?.[i];
+      if (gust != null) {
+        for (const part of [partOf(before[i].hour), "day"]) entry(before[i].day, part).g.push(gust);
+      }
     });
     const rows = new Map();
+    const mean = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : null);
     for (const [key, e] of acc) {
       const enough = key.endsWith("|day") ? MIN_DAY_HOURS : MIN_PART_HOURS;
       if (e.t.length < enough) continue;
+      const gust = e.g.length ? Math.max(...e.g) : null;
       rows.set(key, {
         tmin: Math.min(...e.t),
         tmax: Math.max(...e.t),
         wind: e.w.length ? Math.max(...e.w) : null,
         precipitation: e.pn ? e.p : null,
+        gust,
+        gust_over_threshold: gust == null ? null : gust >= GUST_THRESHOLD,
+        humidity: mean(e.h),
+        dew_point: mean(e.d),
+        pressure: mean(e.pr),
+        direction: e.dn && Math.hypot(e.x, e.y) > 1e-9 ? (Math.atan2(e.x, e.y) * 180 / Math.PI + 360) % 360 : null,
+        okres: okres.get(key) ?? null,
         single: true,
       });
     }
     out.set(place.name, rows);
   }
   return out;
+}
+
+// the okres's own values that every obec of the file shares (doc.okres_values, MeteoVerdict AI's file):
+// per "day|part" the further variables the obec panel names
+const OKRES_AGGREGATE = {
+  temperature_5cm: Math.min, visibility: Math.min, fog_probability: Math.max, cape: Math.max,
+  snow_depth: Math.max, snow_depth_water_equivalent: Math.max,
+};
+const OKRES_MEAN = ["shortwave_radiation", "cloud_cover_low"];
+
+function okresPartValues(doc, times, at, before) {
+  const values = doc.okres_values;
+  const out = new Map();
+  if (!values) return out;
+  const bucket = (key) => {
+    if (!out.has(key)) out.set(key, {});
+    return out.get(key);
+  };
+  const push = (key, variable, v) => {
+    const b = bucket(key);
+    (b[variable] ??= []).push(v);
+  };
+  times.forEach((_, i) => {
+    for (const part of [partOf(at[i].hour), "day"]) {
+      const key = `${at[i].day}|${part}`;
+      for (const variable of [...Object.keys(OKRES_AGGREGATE), ...OKRES_MEAN]) {
+        const v = values[variable]?.[i];
+        if (v != null) push(key, variable, v);
+      }
+    }
+    const snow = values.snowfall?.[i];
+    if (snow != null) for (const part of [partOf(before[i].hour), "day"]) push(`${before[i].day}|${part}`, "snowfall", snow);
+  });
+  const result = new Map();
+  for (const [key, b] of out) {
+    const row = {};
+    for (const [variable, list] of Object.entries(b)) {
+      if (variable === "snowfall") row[variable] = list.reduce((a, c) => a + c, 0);
+      else if (OKRES_MEAN.includes(variable)) row[variable] = list.reduce((a, c) => a + c, 0) / list.length;
+      else row[variable] = OKRES_AGGREGATE[variable](...list);
+    }
+    result.set(key, row);
+  }
+  return result;
 }
 
 const empty = { type: "FeatureCollection", features: [] };
