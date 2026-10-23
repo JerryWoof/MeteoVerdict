@@ -104,3 +104,33 @@ def test_error_documents_one_file_per_day(tmp_path):
     assert doc["e"]["r"]["2"] == {"a": [None, 4]}
     paths = station_fc.write(docs, tmp_path, {}, datetime(2026, 10, 12, tzinfo=UTC))
     assert {p.name for p in paths} == {"S0.json", "S1.json", "err-2026-10-10.json", "index.json"}
+
+
+def test_blend_is_weighted_by_the_okres_weights():
+    runs = pl.concat([_runs("a", 0), _runs("b", 1), _runs("c", 2)])
+    table = pl.DataFrame(
+        [
+            {
+                "region": "CZ0100",
+                "variable": "temperature_2m",
+                "lead_day": 1,
+                "model": m,
+                "weight": w,
+            }
+            for m, w in (("a", 0.8), ("b", 0.1), ("c", 0.1))
+        ]
+    ).with_columns(pl.col("lead_day").cast(pl.Int64))
+    stations = pl.DataFrame({"station_id": ["S1"], "okres_code": ["CZ0100"]})
+    day = date(2026, 10, 10)
+    plain = station_fc.daily_forecasts(runs, FIRST, LAST)
+    weighted = station_fc.daily_forecasts(runs, FIRST, LAST, table, stations)
+
+    def blend_tmax(daily):
+        return daily.filter((pl.col("model") == "blend") & (pl.col("date") == day))["tmax"][0]
+
+    a_tmax = plain.filter((pl.col("model") == "a") & (pl.col("date") == day))["tmax"][0]
+    # offsets 0, 1 and 2 °C: the weighted mean sits near model a, the plain one in the middle
+    assert abs(blend_tmax(weighted) - (a_tmax + 0.1 + 0.2)) < 1e-6
+    assert abs(blend_tmax(plain) - (a_tmax + 1.0)) < 1e-6
+    # a value without weights (the wind) stays the plain mean
+    assert weighted.filter(pl.col("model") == "blend")["wind"][0] == 3.0

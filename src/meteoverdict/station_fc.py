@@ -12,8 +12,11 @@ station, model and lead day, the day's values the measured page shows: ``tmax`` 
 or 2. A model-day counts only when the run's steps cover the day (a first step in the
 first six hours and a last one in the last six, at least four steps): a model with 3- or
 6-hourly steps still gets an extreme from fewer points, which is a little too mild; that
-is a property of the model's output and told on the page. ``blend`` is the mean of the
-models that have the day (at least ``MIN_MEMBERS``), as in ``meteoverdict.blend``.
+is a property of the model's output and told on the page. ``blend`` is
+MeteoVerdict's weighted mean at the station: the models that have the day (at least
+``MIN_MEMBERS``) weighted by the weights of the station's okres (``forecast-weights``,
+the same weights as the forecast, per lead day; no bias correction), a plain mean for a
+value or station the weights do not cover (and without weights at all).
 
 The measurements are taken the same way from the hourly observations (``obs``), so the
 differences compare like with like: a day needs at least ``MIN_OBS_HOURS`` hourly values.
@@ -81,10 +84,18 @@ def _day_of(time: str, variable: str) -> pl.Expr:
     return local.dt.date()
 
 
-def daily_forecasts(runs: pl.LazyFrame | pl.DataFrame, first: date, last: date) -> pl.DataFrame:
+def daily_forecasts(
+    runs: pl.LazyFrame | pl.DataFrame,
+    first: date,
+    last: date,
+    weights: pl.DataFrame | None = None,
+    station_okres: pl.DataFrame | None = None,
+) -> pl.DataFrame:
     """Per station, model, lead day and day: ``tmax``, ``tmin``, ``r``, ``wind``, ``gust``
     (null where the model lacks the variable or the day is not covered), for the days
-    ``first`` to ``last`` from the 00 UTC runs. ``blend`` rows are added."""
+    ``first`` to ``last`` from the 00 UTC runs. ``blend`` rows are added: the weighted
+    mean (``weights``: the forecast's weight table, ``station_okres``: ``station_id`` and
+    ``okres_code``) or, without them, the plain mean."""
     since = datetime.combine(first - timedelta(days=max(LEADS)), datetime.min.time())
     until = datetime.combine(last + timedelta(days=1), datetime.min.time())
     base = (
@@ -122,22 +133,60 @@ def daily_forecasts(runs: pl.LazyFrame | pl.DataFrame, first: date, last: date) 
     for part in parts[1:]:
         frame = frame.join(part, on=keys, how="full", coalesce=True)
     daily = frame.collect()
-    return pl.concat([daily, _blend(daily)], how="diagonal_relaxed").sort(keys)
+    return pl.concat([daily, _blend(daily, weights, station_okres)], how="diagonal_relaxed").sort(
+        keys
+    )
 
 
-def _blend(daily: pl.DataFrame) -> pl.DataFrame:
-    """The mean of the models per station, lead day and day, where at least MIN_MEMBERS
-    models have the value."""
+def _blend(
+    daily: pl.DataFrame,
+    weights: pl.DataFrame | None = None,
+    station_okres: pl.DataFrame | None = None,
+) -> pl.DataFrame:
+    """The blend per station, lead day and day, where at least MIN_MEMBERS models have the
+    value: the mean weighted by the station's okres weights of the value's variable and
+    lead day, the plain mean where a station or value has no weights."""
     values = list(VALUES)
-    means = [
+    members = daily.filter(pl.col("model") != blend.ID)
+    plain = [
         pl.when(pl.col(v).count() >= MIN_MEMBERS).then(pl.col(v).mean()).alias(v) for v in values
     ]
-    return (
-        daily.filter(pl.col("model") != blend.ID)
-        .group_by("station_id", "lead_day", "date")
-        .agg(means)
-        .with_columns(pl.lit(blend.ID).alias("model"))
-        .filter(pl.any_horizontal(pl.col(v).is_not_null() for v in values))
+    keys = ["station_id", "lead_day", "date"]
+    means = members.group_by(keys).agg(plain)
+    if weights is not None and station_okres is not None and weights.height:
+        by_okres = members.join(
+            station_okres.select("station_id", pl.col("okres_code").alias("region")),
+            on="station_id",
+            how="left",
+        )
+        for value, (variable, _) in VALUES.items():
+            table = weights.filter(pl.col("variable") == variable).select(
+                "region", "lead_day", "model", "weight"
+            )
+            if table.is_empty():
+                continue
+            weighted = (
+                by_okres.filter(pl.col(value).is_not_null())
+                .join(table, on=["region", "lead_day", "model"], how="left")
+                .group_by(keys)
+                .agg(
+                    pl.col(value).count().alias("_n"),
+                    pl.col("weight").is_not_null().sum().alias("_covered"),
+                    (pl.col(value) * pl.col("weight")).sum().alias("_num"),
+                    pl.col("weight").sum().alias("_den"),
+                )
+                # only when every member has a weight: a partial set would skew the mean
+                .filter((pl.col("_n") >= MIN_MEMBERS) & (pl.col("_covered") == pl.col("_n")))
+                .filter(pl.col("_den") > 0)
+                .select(*keys, (pl.col("_num") / pl.col("_den")).alias("_w"))
+            )
+            means = (
+                means.join(weighted, on=keys, how="left")
+                .with_columns(pl.coalesce("_w", value).alias(value))
+                .drop("_w")
+            )
+    return means.with_columns(pl.lit(blend.ID).alias("model")).filter(
+        pl.any_horizontal(pl.col(v).is_not_null() for v in values)
     )
 
 

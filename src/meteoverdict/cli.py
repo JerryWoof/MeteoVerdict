@@ -1062,9 +1062,13 @@ def station_fc_cmd(
         bool,
         typer.Option("--publish", help="Put station-fc.zip into the release data-latest."),
     ] = False,
+    stations_path: Annotated[
+        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
+    ] = Path("data/stations.parquet"),
 ) -> None:
     """Every model's forecast at the station point, by day, with the measured values: the
-    measured page's model selector (``meteoverdict.station_fc``)."""
+    measured page's model selector (``meteoverdict.station_fc``). The blend is the weighted
+    mean (the forecast's weights, ``forecast-weights.parquet``), the plain mean without."""
     if publish and not github_release:
         raise typer.BadParameter("--publish needs --github-release")
     last = datetime.now(UTC).date() - timedelta(days=1)
@@ -1081,7 +1085,20 @@ def station_fc_cmd(
         if single is None or obs is None:
             typer.echo("mvd station-fc: no single runs or observations", err=True)
             raise typer.Exit(code=1)
-        forecasts_ = station_fc.daily_forecasts(single, first, last)
+        weights_path = data_dir / combine.FORECAST_WEIGHTS_FILE
+        if releases and combine.FORECAST_WEIGHTS_FILE in releases.names(store.LATEST_TAG):
+            releases.download(store.LATEST_TAG, combine.FORECAST_WEIGHTS_FILE, weights_path)
+        weights_table = pl.read_parquet(weights_path) if weights_path.exists() else None
+        station_okres = (
+            pl.read_parquet(stations_path).select(pl.col("id").alias("station_id"), "okres_code")
+            if stations_path.exists()
+            else None
+        )
+        if weights_table is None or station_okres is None:
+            typer.echo(
+                "mvd station-fc: no weights or stations: the blend is the plain mean", err=True
+            )
+        forecasts_ = station_fc.daily_forecasts(single, first, last, weights_table, station_okres)
         measured = station_fc.daily_observations(obs, first, last)
         docs = station_fc.documents(forecasts_, measured, first, last)
         paths = station_fc.write(docs, out, _model_names(), datetime.now(UTC))
