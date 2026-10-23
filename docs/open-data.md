@@ -54,18 +54,13 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
   thresholds, **not official warnings**: only ČHMÚ issues those
   ([chmi.cz](https://www.chmi.cz/); [licensing.md](licensing.md#weather-warnings-act-2622024-sb)).
   Every file repeats this in its top-level `notice`.
-- `models.variables.<variable>` for `temperature_2m`, `wind_speed_10m`,
-  `precipitation_daily` and `precipitation_24h`: `stations`, `borrowed`, `days`, and
-  `lead_days."1"…"5"`: the models in rank order with `rank`, `mae`, `bias`, `rmse`,
-  `tied_with_best`, `p_best` (the probability of being the best model: the share of the block-bootstrap resamples in which it has the lowest MAE; below 0.6 for the leader, the map shows no clear winner; `null` in files written before October 2026), `small_sample` (the ranking rests on fewer than 30 days), `short_record` (a newly added model: scores on fewer than 80 % of the window's days, not ranked), `days`. Window: the last 90 days
-  (`models.from`, `models.to`).
 - `licence`, `attribution`, `docs`.
 
 ## The AI okres file (experimental)
 
 `api/v1/ai/okresy/{code}.json` has the layout of the okres file (`okres`, `forecast`
 with `generated`, `time_zone_of_parts`, `units`, `hourly`, `parts`, and `licence`,
-`attribution`, `notice`), without `models` and without the deprecated `gust_warning`.
+`attribution`, `notice`), without the deprecated `gust_warning`.
 It is the same file with **the MeteoVerdict AI's values**
 (experimental, still unverified): `forecast.model` is `"ai"`, `forecast.method` says so
 in a sentence, `forecast.ai_issued` is when the AI issued its forecast and

@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { SCORE_VARIABLES, VERSION, aiOkresDoc, indexDoc, obceDocs, obceIndexDoc, okresDoc } from "../src/api.js";
+import { VERSION, aiOkresDoc, indexDoc, obceDocs, obceIndexDoc, okresDoc } from "../src/api.js";
 import { records } from "../src/data.js";
 
 const web = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -22,7 +22,6 @@ if (!outlook || !points) {
   process.exit(0);
 }
 const meta = read("meta.json");
-const scores = Object.fromEntries(SCORE_VARIABLES.map((v) => [v, records(read(`90d/okres/${v}.json`))]));
 mkdirSync(join(out, "okresy"), { recursive: true });
 const okresy = records(points);
 // the AI files (published daily with the release ai-latest, served under data/scores/ai)
@@ -36,7 +35,7 @@ let obceCount = 0;
 let aiObceCount = 0;
 let aiCount = 0;
 for (const okres of okresy) {
-  const doc = okresDoc({ okres, outlook, hourly, scores, meta, models: read(`forecast/models/${okres.code}.json`) });
+  const doc = okresDoc({ okres, outlook, hourly, meta, models: read(`forecast/models/${okres.code}.json`) });
   writeFileSync(join(out, "okresy", `${okres.code}.json`), JSON.stringify(doc));
   if (withAi) {
     const ai = aiOkresDoc({ okres, outlook, hourly, aiForecast, aiOutlook, meta });
