@@ -1,11 +1,11 @@
 import "./style.css";
 
-import { dataBlocks } from "./data-text.js";
+import { dataBlocks, exampleBlocks } from "./data-text.js";
 import { setUpLanguage } from "./i18n.js";
 import { renderBlocks } from "./info-page.js";
 import { SCHEDULE, pragueClocks } from "./schedule.js";
 import { displayName } from "./tv.js";
-import { hourlyPreview } from "./api.js";
+import { docPreview } from "./api.js";
 import { obceOf, setUpBuilder } from "./trmnl.js";
 
 const t = setUpLanguage();
@@ -42,6 +42,7 @@ function showSchedule() {
     sun: clocks(SCHEDULE.sun),
     zone,
   });
+  renderBlocks(document.getElementById("doc-example"), exampleBlocks(language));
   renderBlocks(document.getElementById("doc-api"), blocks.api);
   renderBlocks(document.getElementById("doc-more"), blocks.more);
   const id = decodeURIComponent(window.location.hash.slice(1));
@@ -98,12 +99,12 @@ async function main() {
     if (obec) {
       const href = `api/v1/${ai ? "ai/obce" : "obce"}/${code}/${obec}.json`;
       links.replaceChildren(linkItem("JSON", href), Object.assign(document.createElement("li"), { textContent: t("api.obecNote") }));
-      preview.textContent = hourlyPreview(await get(href));
+      preview.textContent = docPreview(await get(href));
     } else {
       const base = `api/v1/${ai ? "ai/okresy" : "okresy"}/${code}`;
       links.replaceChildren(linkItem("JSON", `${base}.json`),
         ...(ai ? [Object.assign(document.createElement("li"), { textContent: t("api.aiNote") })] : []));
-      preview.textContent = hourlyPreview(await get(`${base}.json`));
+      preview.textContent = docPreview(await get(`${base}.json`));
     }
     if (remember) window.history.replaceState(null, "", `#${code}${obec ? `/${obec}` : ""}`);
   }
