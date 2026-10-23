@@ -1,16 +1,63 @@
 // Helpers of the AI file's further variables (ai-model.js extraSeries) for the forecast detail page.
 
 import { localDay } from "./forecast.js";
+import { extraSeries } from "./ai-model.js";
+
+// the combination's (MeteoVerdict) own hourly series, in the order the page offers them
+const COMBINED_EXTRA = [
+  ["relative_humidity_2m", "combined"], ["dew_point_2m", "combined"], ["pressure_msl", "combined"],
+  ["wind_direction_10m", "combined"], ["wind_gusts_10m", "combined"], ["cloud_cover", "combined"],
+  ["sunshine_duration", "combined"], ["cloud_cover_low", "reference"], ["shortwave_radiation", "reference"],
+  ["visibility", "reference"], ["snowfall", "reference"], ["snow_depth", "reference"],
+  ["snow_depth_water_equivalent", "reference"],
+];
+const UNITS = {
+  relative_humidity_2m: "%", dew_point_2m: "°C", pressure_msl: "hPa", wind_direction_10m: "° (odkud)",
+  wind_gusts_10m: "m/s", cloud_cover: "%", sunshine_duration: "min/h", cloud_cover_low: "%",
+  shortwave_radiation: "W/m²", visibility: "km", snowfall: "cm", snow_depth: "cm", snow_depth_water_equivalent: "mm",
+};
+// model files give visibility in m, snow depth in m, sunshine in s per hour
+const SCALE = { visibility: 0.001, snow_depth: 100, sunshine_duration: 1 / 60 };
+
+/**
+ * The further variables of one forecast as [{variable, source ("ai"|"combined"|"reference"), unit,
+ * times: [ms], series}] in page order: MeteoVerdict AI's from its file (extraSeries, plus its
+ * hourly cloud and sunshine), MeteoVerdict's from forecast/models (`combined`, then `reference`).
+ * Empty for anything else (a single public model).
+ */
+export function extraFor(model, { ai, code, parsed }) {
+  const scaled = (variable, values) => values.map((v) => (v == null ? null : Math.round(v * (SCALE[variable] ?? 1) * 100) / 100));
+  const out = [];
+  if (model === "mv_ai") {
+    const own = ai?.okresy?.[code];
+    if (!own) return out;
+    for (const e of extraSeries(ai, code)) out.push({ variable: e.variable, source: e.source, unit: e.unit, times: own.times, series: e.values });
+    for (const variable of ["cloud_cover", "sunshine_duration"]) {
+      if (own[variable]?.some((v) => v != null)) {
+        out.push({ variable, source: "ai", unit: UNITS[variable], times: own.times, series: scaled(variable, own[variable]) });
+      }
+    }
+  } else if (model === "combined") {
+    for (const [variable, source] of COMBINED_EXTRA) {
+      const values = (source === "combined" ? parsed?.combined : parsed?.reference)?.[variable];
+      if (values?.some((v) => v != null)) {
+        out.push({ variable, source, unit: UNITS[variable], times: parsed.times, series: scaled(variable, values) });
+      }
+    }
+  }
+  return out;
+}
 
 /** Display series: fog probability 0–1 as %, and the snow variables only when any value is > 0. */
 export function extraDisplay(series) {
   const out = [];
   for (const e of series) {
-    if (["snowfall", "snow_depth", "snow_depth_water_equivalent"].includes(e.variable) && !e.values.some((v) => v != null && v > 0)) continue;
+    const values = e.series ?? e.values;
+    if (["snowfall", "snow_depth", "snow_depth_water_equivalent"].includes(e.variable) && !values.some((v) => v != null && v > 0)) continue;
     if (e.variable === "fog_probability") {
-      out.push({ ...e, unit: "%", series: e.values.map((v) => (v == null ? null : Math.round(v * 1000) / 10)) });
+      out.push({ ...e, unit: "%", series: values.map((v) => (v == null ? null : Math.round(v * 1000) / 10)) });
     } else {
-      out.push({ ...e, series: e.values });
+      out.push({ ...e, series: values });
     }
   }
   return out;

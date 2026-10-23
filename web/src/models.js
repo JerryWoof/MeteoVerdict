@@ -39,7 +39,10 @@ export function parseModels(doc) {
     Object.entries(byVariable ?? {}).map(([variable, values]) => [variable, pad(values)]),
   );
   const models = Object.fromEntries(Object.entries(doc.models ?? {}).map(([model, s]) => [model, series(s)]));
-  return { generated: doc.generated ?? null, okres: doc.okres ?? null, times, combined: series(doc.combined), models };
+  return {
+    generated: doc.generated ?? null, okres: doc.okres ?? null, times, combined: series(doc.combined), models,
+    reference: series(doc.reference), units: doc.variables ?? {},
+  };
 }
 
 /** The models as forecast.js wants them: {times, values: {variable: {model: [..]}}}. */
