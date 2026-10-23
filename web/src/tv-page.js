@@ -597,6 +597,21 @@ function windCell(row) {
 
 // test: the panel of an obec (obce-map.js): as the okres's with our combination, but its
 // rows have no symbol, cloud or rain probability (rain in mm)
+// the okres's further values of the part (MeteoVerdict AI's obce file): "dohlednost 20 km, CAPE 0 J/kg …"
+const OKRES_EXTRA = [
+  ["visibility", "km", 0], ["fog_probability", "%", 0], ["temperature_5cm", "°C", 1], ["cloud_cover_low", "%", 0],
+  ["shortwave_radiation", "W/m²", 0], ["cape", "J/kg", 0], ["snowfall", "cm", 1], ["snow_depth", "cm", 0],
+  ["snow_depth_water_equivalent", "mm", 0],
+];
+function okresExtras(values) {
+  if (!values) return "";
+  const snow = ["snowfall", "snow_depth", "snow_depth_water_equivalent"];
+  return OKRES_EXTRA
+    .filter(([v]) => values[v] != null && !(snow.includes(v) && values[v] <= 0))
+    .map(([v, unit, digits]) => `${v === "cape" ? "CAPE" : t(`forecast.extra.${v}`).toLowerCase()} ${fmt(v === "fog_probability" ? values[v] * 100 : values[v], digits)} ${unit}`)
+    .join(", ");
+}
+
 function renderObecPanel(panel, { doc, rows, ai: ownAi }) {
   const place = doc.places.find((p) => p.name === panelObec);
   const own = rows.get(panelObec) ?? new Map();
@@ -630,7 +645,13 @@ function renderObecPanel(panel, { doc, rows, ai: ownAi }) {
     for (const text of [
       t("tv.range", { low: fmt(now.tmin), high: fmt(now.tmax) }),
       t("tv.obecRain", { amount: fmt(now.precipitation, 1) }),
-      t("tv.wind", { value: fmt(now.wind) }),
+      now.gust != null ? t("tv.windGust", { value: fmt(now.wind), gust: fmt(now.gust) }) : t("tv.wind", { value: fmt(now.wind) }),
+      ...(now.direction != null ? [t("tv.obecDirection", { dir: Math.round(now.direction) })] : []),
+      ...(now.cloud != null ? [t("tv.cloud", { value: fmt(now.cloud, 0) })] : []),
+      ...(now.humidity != null
+        ? [t("tv.obecAir", { humidity: fmt(now.humidity, 0), dew: fmt(now.dew_point, 1), pressure: fmt(now.pressure, 0) })]
+        : []),
+      ...(okresExtras(now.okres) ? [t("tv.obecOkresExtra", { items: okresExtras(now.okres) })] : []),
     ]) {
       facts.append(element("li", text));
     }
@@ -732,7 +753,7 @@ function renderPanel(outlook) {
     for (const text of [
       symbolText(now.symbol),
       t("tv.range", { low: fmt(now.tmin), high: fmt(now.tmax) }),
-      single || now.rain_probability == null
+      (single && !now.aiRain) || now.rain_probability == null
         ? t("tv.rainModel", { amount: fmt(now.precipitation, 1) })
         : t("tv.rain", { chance: percent(now.rain_probability), amount: fmt(now.precipitation, 1) }),
       // gusts from the single runs: null beyond the newest run and in older files

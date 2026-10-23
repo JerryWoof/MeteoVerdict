@@ -144,3 +144,18 @@ test("the AI's hourly gusts give a part's strongest gust, in the map view and in
   const parsed = withAi({ times: ai.okresy.A.times, models: {} }, ai, "A");
   assert.equal(aiPeriods(modelPeriods(parsed, AI_MODEL), ai, "A").get("2026-10-20|day").gust, 14);
 });
+
+test("the AI outlook's rows give the probability of rain and the gust of a part of day", async () => {
+  const { parseOutlookRows, aiPeriods } = await import("./ai-model.js");
+  const rows = parseOutlookRows({
+    columns: ["okres", "day", "part", "rain_probability", "gust", "gust_over_threshold"],
+    rows: [["CZ0631", "2026-10-23", "morning", 0.01, 8.4, false], ["CZ0631", "2026-10-23", "night", null, null, null]],
+  });
+  assert.deepEqual(rows.get("CZ0631|2026-10-23|morning"), { rain_probability: 0.01, gust: 8.4, gust_over_threshold: false });
+  assert.equal(parseOutlookRows({}), null);
+  const periods = aiPeriods(new Map([["2026-10-23|morning", { tmin: 1, tmax: 8, gust: null }]]), { outlookRows: rows }, "CZ0631");
+  const row = periods.get("2026-10-23|morning");
+  assert.equal(row.rain_probability, 0.01);
+  assert.equal(row.aiRain, true);
+  assert.equal(row.gust, 8.4);
+});
