@@ -5,7 +5,7 @@
 // missing, malformed or stale (a failed daily run) it is not offered and the pages stay on our
 // combination, and an okres without AI data falls back to the combination too.
 
-import { modelPeriods, modelSymbol } from "./models.js";
+import { GUST_THRESHOLD, modelPeriods, modelSymbol } from "./models.js";
 
 export const AI_MODEL = "mv_ai";
 export const AI_URL = "data/scores/ai/ai-forecast.json";
@@ -15,12 +15,10 @@ export const MAX_AGE_HOURS = 36;
 export const SKY_URL = "data/scores/ai/fc/sky/ai-sky.json";
 /** The AI's own outlook (same format as outlook.json) with its per-variable `sources` flag. */
 export const OUTLOOK_URL = "data/scores/ai/fc/outlook.json";
-const AI_VARIABLES = ["temperature_2m", "wind_speed_10m"];
+const AI_VARIABLES = ["temperature_2m", "wind_speed_10m", "wind_gusts_10m"];
 // hourly rain, cloud and sunshine: the AI's own (consistent with its parts of the day)
 // where its file has them; an older file without them takes our blend's on the AI's hours
 const BLEND_VARIABLES = ["precipitation", "cloud_cover", "sunshine_duration"];
-/** The outlook's gust warning threshold (m/s). */
-const GUST_THRESHOLD = 13.5;
 const BLEND_FIELDS = ["precipitation", "cloud", "sunshine", "symbol", "gust", "gust_over_threshold"];
 
 /** The further variables of the AI file's `extra` block, in the order the page offers them. */
@@ -236,6 +234,8 @@ export function aiMapView(ai, outlook) {
         const p = periods.get(`${day}|${part}`);
         const blend = outlook.rows.get(`${o.code}|${day}|${part}`);
         const fill = blend ? Object.fromEntries(BLEND_FIELDS.map((f) => [f, blend[f] ?? null])) : {};
+        // the AI's own gusts (hourly series) stay; our blend's only where it has none
+        if (p?.gust != null) { fill.gust = p.gust; fill.gust_over_threshold = p.gust_over_threshold; }
         // an okres the AI has no forecast for shows our blend's row whole (same look, rain in mm),
         // so the map has no gaps; a period beyond the AI's hours stays "–"
         rows.set(`${o.code}|${day}|${part}`, p

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { modelPeriods } from "./models.js";
 import { parseSources, aiMapView, aiPeriods, parseAi, parseSky, skyRow, withAi, AI_MODEL } from "./ai-model.js";
 
 const NOW = Date.parse("2026-10-20T12:00:00Z");
@@ -129,4 +130,17 @@ test("parseSources groups the columns into layers and ignores a missing flag", (
   assert.deepEqual(flags, { ai: ["temperature", "wind", "cloud", "sunshine", "gust"], blend: ["precipitation"] });
   assert.equal(parseSources({}), null);
   assert.equal(parseSources(null), null);
+});
+
+test("the AI's hourly gusts give a part's strongest gust, in the map view and in the panel's periods alike", () => {
+  const gusts = hours(48).map((_, i) => (i === 5 ? 14 : 4));
+  const d = doc();
+  d.okresy.A.wind_gusts_10m = { ai: gusts };
+  const ai = parseAi(d, NOW);
+  const outlook = { okresy: [{ code: "A" }], days: ["2026-10-20"], rows: new Map([["A|2026-10-20|day", { gust: 3, gust_over_threshold: false }]]) };
+  const mapRow = aiMapView(ai, outlook).rows.get("A|2026-10-20|day");
+  assert.equal(mapRow.gust, 14);
+  assert.equal(mapRow.gust_over_threshold, true);
+  const parsed = withAi({ times: ai.okresy.A.times, models: {} }, ai, "A");
+  assert.equal(aiPeriods(modelPeriods(parsed, AI_MODEL), ai, "A").get("2026-10-20|day").gust, 14);
 });
