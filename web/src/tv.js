@@ -1,5 +1,5 @@
 // The TV-style forecast map (roadmap 6.7): what to draw from outlook.json (written
-// four times a day by `mvd outlook`): per okres, day and part of day the combined forecast.
+// with each forecast run): per okres, day and part of day the combined forecast.
 
 import { records } from "./data.js";
 import { BEYOND, NEUTRAL, RAMPS, colorFor, rampKey } from "./palette.js";

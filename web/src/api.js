@@ -89,7 +89,7 @@ export function okresModels(code, scores, weightsDoc, names) {
         days: r.days ?? null,
         weight: w ? round(w.weight, 4) : null,
         correction: w ? round(w.correction, 4) : null,
-        // temperature and wind: weight in the regression blend (null without one)
+        // temperature and wind: a second weight of the combination (null without one)
         mos_weight: w?.mos_weight != null ? round(w.mos_weight, 4) : null,
       });
     }
@@ -157,7 +157,7 @@ export function okresDoc({ okres, outlook, hourly, weightsDoc, scores, meta, mod
     okres: { code: okres.code, name: okres.name, lat: okres.lat, lon: okres.lon },
     forecast: {
       generated: hourly?.generated ?? outlook?.generated ?? null,
-      method: "all models combined with weights and bias corrections from their scores in this okres over the last 90 days; temperature and wind by a regression on the models with hour-of-day and elevation corrections (docs/methodology.md)",
+      method: "all models combined, weighted and corrected by their recent scores in this okres (docs/methodology.md)",
       time_zone_of_parts: outlook?.time_zone ?? "Europe/Prague",
       units: hourly?.variables ? { ...hourly.variables, ...Object.fromEntries(Object.keys(extra.series).map((k) => [k, EXTRA_UNITS[k]])) } : null,
       // the combination's own hours ("blend": weighted by the scores) and the models' median ("reference") of the further variables
@@ -362,7 +362,7 @@ const HOUR = 3600e3;
 const ZONE = "Europe/Prague";
 // part of day → [first, last+1] local hour; the whole day is 0–24
 const PART_HOURS = { night: [0, 6], morning: [6, 12], afternoon: [12, 18], evening: [18, 24], day: [0, 24] };
-// hours a part needs (a part 4, a whole day 18), as in `mvd outlook`
+// hours a part needs (a part 4, a whole day 18), as in outlook.json
 const MIN_HOURS = { night: 4, morning: 4, afternoon: 4, evening: 4, day: 18 };
 const parts_fmt = new Intl.DateTimeFormat("en-CA", { timeZone: ZONE, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit" });
 const OBEC_ATTRIBUTION_EXTRA = " Obec elevation: Copernicus DEM GLO-90 (© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA).";

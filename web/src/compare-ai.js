@@ -1,6 +1,7 @@
 // The Compare page's same-sample section: MeteoVerdict AI, our blend (the Outlook), the
 // mean of all models and every model, ranked on the same station-days (files written by
-// `mvd blend-test --compare-zip`, and for the live sample by the AI's daily verification).
+// compare.zip, published with the forecast, and for the live sample by the AI's daily
+// verification).
 // The pure helpers; the section itself is drawn by compare-ai-view.js.
 
 /** Where the files are: the AI's own run (with MeteoVerdict AI) first, else the public one. */

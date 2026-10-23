@@ -31,12 +31,10 @@ data comes from recorded fixtures in `tests/fixtures/`. Dates are `YYYY-MM-DD` i
 | Single runs (all models) | `mvd fetch-runs` | `data/runs/YYYY-MM.parquet`, `data/runs-state.json` |
 | Error by lead hour | `mvd leads` | `site/data/leads.json`, `leads-aladin.json`, `leads-aladin-kraj.json`, `leads-bands-{90d,all}[-kraj].json` |
 | Event skill for farmers | `mvd farm` | `site/data/farm.json` |
-| Combined forecast | `mvd outlook` | `site/data/outlook.json`, `outlook-hourly.json` (with the 80 % range of the temperature from `blend-interval.json`, `mvd blend-interval`, daily) |
 | Everything daily | `mvd daily` | all of the above from the stored data |
 | ČHMÚ archive (every element) | `mvd chmi-archive`, `mvd chmi-mirror DIR` | releases `chmi-*` ([format](data-sources.md#chmi-archive)) |
 | Station pages | `mvd station-pages` | `site/data/station/<WSI>.json` |
 | Observed map (the measured page, `measured.html`) | `mvd observed-map` | `site/data/observed/<YYYY-MM-DD>.json`, `index.json` ([format](data-sources.md#observed-map)) |
-| Rebuilt forecasts of the past days (forecast vs. measured) | `mvd hindcast` | `data/outlook-archive/outlook-hindcast.parquet` ([format](data-sources.md#observed-map)) |
 | Checks | `mvd check` | exit 1 on stale data or many silent stations |
 | Which stations score the models | `mvd station-check` | Markdown ([docs/station-check.md](station-check.md)) |
 
@@ -105,15 +103,10 @@ okresy with fewer than three stations borrow the nearest stations of their neigh
 
 ### Combined forecast
 
-```bash
-uv run mvd outlook             # → site/data/outlook.json and outlook-hourly.json
-```
-
-Reads every model's newest runs at the 77 okres points from Open-Meteo's open-data
-bucket on AWS (no API calls; `--api` asks the Forecast API for all models as before
-2026-10-20, ~730 weighted calls), combines them with the okres weights from `data/aggregates.parquet` and
-summarises each of the next six days by night, morning, afternoon and evening (Prague
-time) ([details](data-sources.md#outlook-mvd-outlook-roadmap-66)).
+The combined forecast's method is not part of this repository. Its files (`outlook.json`,
+`outlook-hourly.json`, `forecast-weights.parquet`, `outlook-models.zip`, `obce.zip`, …)
+are published in the release `data-latest`, its archives in `outlook-archive`; the pages
+and `mvd aggregate` (the forecast pages' `forecast/<okres>.json`) read them from there.
 
 ### Daily run
 
@@ -140,7 +133,7 @@ uv run mvd store upload                                  # only files that chang
 
 The latest results are in the release `data-latest`: `aggregates.parquet`,
 `site-data.zip` (unzip it into `site/data` to run the pages locally with data),
-`outlook.json` and `outlook-hourly.json`.
+`outlook.json`, `outlook-hourly.json` and `forecast-weights.parquet`.
 
 **Single runs.** `mvd fetch-runs` stores each 00, 06, 12 and 18 UTC run of all models at
 the ~100 stations of `src/meteoverdict/data/run-stations.csv`: first from Open-Meteo's
@@ -221,10 +214,9 @@ uv run mvd archive-satellite --regions ce --out-dir data/radar  # satellite days
 | Backfill | 02:41 | `mvd backfill`, the shared 8,300 Open-Meteo calls a day: one sweep from today into the past, 14-day window by window, each with its D+N (all stations, rain gauges) and the single runs' API history of its days |
 | Single runs | 04:20, 10:20, 16:20, 22:20 | `mvd fetch-runs --github-release`: every run of the last 90 days not stored yet from Open-Meteo's open-data bucket (no API calls), then the API for the bucket's gaps (100 calls each, ≤ 400 a day) ([budget](data-sources.md#open-meteo-budget)) |
 | Daily | 05:17 | `mvd daily --github-release`, commits the badge, then `mvd leads --github-release --publish` (allowed to fail) |
-| Outlook | 04:50, 10:50, 16:50, 22:50 (a 22:50 run starting from 23:45 is skipped) | `mvd outlook --github-release`: `outlook.json`, `outlook-hourly.json`, `outlook-models.zip` (every model's forecast per okres) to `data-latest`; the plain means and the parts of day (`outlook-parts-YYYY-MM.parquet`, for "forecast vs. measured") to `outlook-archive`, the full answer to the day's file in `outlook-models-YYYY-MM` |
 | CHMI archive | 01:41 and 13:41 | `mvd chmi-archive --part days --part recent --github-release` (the last days of `now/`, changed months of `recent/`), then `mvd station-pages --github-release --publish` and `mvd observed-map --github-release --publish` (`observed-data.zip`; allowed to fail) |
 | CHMI backfill | 02:07, up to 5 h | `mvd chmi-archive --part history --part months --github-release`, resumable, same concurrency group |
-| Pages | after Daily, Outlook, CHMI archive and changes in `web/` | builds `web/`, adds the radar frames of the last 7 days from the releases (satellite images 7 days, echo tops 14, a 900 MB guard) and the station index, and publishes it |
+| Pages | after Daily, CHMI archive and changes in `web/` | builds `web/`, adds the radar frames of the last 7 days from the releases (satellite images 7 days, echo tops 14, a 900 MB guard) and the station index, and publishes it |
 
 ## Web pages
 
@@ -240,7 +232,7 @@ the URL.
 | `forecast.html` | combined forecast map: day tabs, parts of the day, "play the day" / "play the week" (each round switches the map colour temperature → rain → wind → cloud), values at the okresy, a "Forecast" selector above the map that switches the whole map (values, colours, headline, legend, play) to one model's raw parts of day (`forecast/models-parts/<model>.json`, models by their mean rank over Czechia, rain in mm, grey "–" beyond the model's horizon, a note with the way back), and a panel per okres with its own "Forecast" selector (our combination or one model's raw values by the outlook's part-of-day rules, from `forecast/models/<okres>.json`; it opens on the map's choice and changes only the panel); neither choice is remembered (no storage, not in the URL); sunrise and sunset (earliest–latest over the okresy) in the headline box and the okres's own in its panel; symbols get a moon when most of the part of day is after sunset or before sunrise. Only the coming days: an old link to a past day (`#2026-10-16/…`) opens the measured page (`measured.html`) on that day | `#2026-10-13/afternoon/temperature/tpw/CZ0201` |
 | `index.html` | score map: okresy and stations coloured by the best model, legend with win counts, okres finder, a panel explaining why a model wins, per-station error charts | `#temperature_2m/1/90d/CZ0201` |
 | `compare.html` | three parts, each with its own controls: (1) the out-of-sample test of our forecast for all of Czechia (`blend-test.json`, its own test period, its own temperature/wind/precipitation switch); (2) the model ranking for Czechia, a kraj or an okres, with the region/variable/lead time/period controls right above everything they drive: map, MAE with 95 % intervals, skill, bias, RMSE, ETS/POD/FAR, MAE by lead day, bias by elevation, every model's error by hours ahead from the single runs (`leads.json`, per run hour; follows only the variable); (3) the farmers' event skill (frost, gusts, 3-hour rain by lead time bin, `farm.json`, own event picker). The period select offers only windows with scored days in `meta.json` | `#temperature_2m/1/90d/cz/wind_speed_10m` (ranking variable, lead day, period, region; blend-test variable) |
-| `forecast-detail.html` | hourly combined forecast per okres town (72 towns: Praha, Brno, …; Praha-východ/západ, Brno-venkov and Plzeň-jih/sever open their seat city, `seats.js`) next to the best single model, with the weights and a "Forecast" selector (our combination, or one model's raw forecast); all from static files (`forecast/models/<okres>.json` of `mvd outlook`, no request to Open-Meteo), with the issue time; sunrise and sunset per day and the nights shaded in the charts, from `outlook.json` | okres |
+| `forecast-detail.html` | hourly combined forecast per okres town (72 towns: Praha, Brno, …; Praha-východ/západ, Brno-venkov and Plzeň-jih/sever open their seat city, `seats.js`) next to the best single model, with the weights and a "Forecast" selector (our combination, or one model's raw forecast); all from static files (`forecast/models/<okres>.json`, no request to Open-Meteo), with the issue time; sunrise and sunset per day and the nights shaded in the charts, from `outlook.json` | okres |
 | `data.html` | open data: JSON per okres under `api/v1/` ([docs](open-data.md)) | – |
 | `measured.html` | "Naměřeno / Measured", two tabs. "Počasí / Weather": what ČHMÚ's stations measured per okres (`observed/<day>.json`, `web/src/measured.js`), in the forecast map's look: teal day tabs newest first (the last 30 days by part of day, "‹ older" with a date field for the rest of `observed/index.json`, days 31–60 the whole day only), parts of the day; each okres coloured by the mean of its stations with the forecast map's markers where they fit, and a panel (measured values with station counts, the parts of the day, "forecast vs. measured" with our archived forecast 1–3 days before, its stations as links to the Stations tab); a "measured" headline (warmest, coldest, most rain, strongest gust, most sunshine). No single stations are drawn on that map. "Stanice / Stations": the map of the network by kind or elevation; a click opens a panel with the station's facts and the model's forecast at it; search by name in the header. There is no station page: old links (`#<WSI>`, `#<WSI>/T`, `?day=…#<WSI>`) open the Stations tab on that station, an old `…/stations` ending is ignored; a model choice rides in the hash as `;m=<model>;l=<lead>` (an old `;e=…` is dropped); linked from the score map's station panel | `#2026-10-16/afternoon/temperature/tp`, `…/tp/CZ0100` (Praha open), `#kinds`, `#kinds/0-20000-0-11520` |
 | `radar.html` | ČHMÚ radar: the last 1–24 hours (live frames from the branch `radar-live`) with the nowcast for the next hour after them, marked as forecast; archived days (last 60) with a date picker; MERGE 1-hour precipitation as a second layer; colour scales in dBZ and mm, Prague time ([frames](data-sources.md#radar-page-frames)) | `#live/3/radar+rain/202610151035` |

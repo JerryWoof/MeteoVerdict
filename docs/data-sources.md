@@ -138,7 +138,7 @@ Further 10-minute elements are stored so that new forecast variables can be scor
 later. They are **not verified yet** and live in their own monthly files
 `data/obs-extra/YYYY-MM.parquet` (same columns as `obs/`; release asset
 `obs-extra-YYYY-MM.parquet` next to `obs-`), never in `obs/`, because many readers of
-`obs/` (D+N scores, MOS, rain calibration, farm, gusts, station pages, observed map,
+`obs/` (D+N scores, farm, station pages, observed map,
 quality checks) do not filter by `variable` and must see exactly what they saw before.
 `observations.scan` reads only `obs/` and `gauges/`; a consumer of the extras scans
 `obs-extra/` itself.
@@ -455,78 +455,38 @@ in the whole history, e.g. all summers, so models can be compared by season (the
 
 ## Combination weights (roadmap 6.2)
 
-`mvd aggregate` also writes, for the web map's own forecast, how to combine the models
-in each okres (`meteoverdict.combine`), from the okres scores of the last 90 days
-(window `90d`, same fair station-days, borrowed stations included). Only the models
-compared there get a weight: those with scores on at least 80 % of the window's scored
-days (`aggregate.MIN_COVERAGE`). A model with a shorter record (`short_record`, e.g.
-added recently, its backfill so far only reaching its newest weeks) gets no weight and
-does not cut the others' training days; it is weighted from the day it has them.
-`mvd aggregate` prints the models left out, and `mvd check` warns about them. The
-temperature and wind regression (`mos`) uses the same models (and its own 80 % rule
-on the training rows).
+Our combined forecast (the "blend" of the web map, the outlook below) weighs the models
+by their recent scores in each okres and corrects their usual errors. The method is not
+published; its files are, and their formats are described here. The plain mean of all
+models, which needs no weights, is the [blend baseline](#blend-baseline-roadmap-53).
 
-| Open-Meteo variable | Weights from | Bias correction |
-|---|---|---|
-| `temperature_2m` | `temperature_2m` (synoptic hours, where every model is native) | yes |
-| `wind_speed_10m` | `wind_speed_10m` | yes |
-| `precipitation` | `precipitation_daily` (daily totals) | no |
+`mvd aggregate` writes the okres files the web map reads:
 
-- Weight of a model ∝ `1 / (RMSE² − bias²)` (the error left after removing its mean
-  error) where it is bias-corrected, `1 / RMSE²` for precipitation; error variances
-  below 0.01 count as 0.01.
-- Shrinkage towards the plain mean, by the number of scored days: weight
-  `s · w + (1 − s) / models` with `s = days / (days + 30)`, correction `c · bias` with
-  `c = days / (days + 5)` (the bias is stable enough to be removed almost in full;
-  shrinking it like the weights cost 7–10 % of wind MAE out of sample).
-- Combined forecast: `Σ weight · (forecast − correction)` over the models available
-  for the hour, weights rescaled to sum to 1; a model ending before the others gets ¾,
-  ½ and ¼ of its weight in its last three hours.
-- Files: `site/data/forecast/okresy.json` (`code`, `name`, `lat`, `lon` of a point
-  inside each okres: the centroid of its largest part, or the nearest inside point;
-  `weights` false where the okres has no scores yet) and
-  `site/data/forecast/<okres>.json` (`variable`, `lead_day`, `model`, `weight`,
-  `correction`, `mae`, `rank`, `days`, then `mos_weight`, `mos_models`,
-  `correction_00`, `correction_06`, `correction_12`, `correction_18`; about 8 kB each).
+- `site/data/forecast/okresy.json`: `code`, `name`, `lat`, `lon` of the point of every
+  okres (`regions.okres_points`: the centroid of its largest part, or the nearest inside
+  point), and `weights`, false where the okres has no weights.
+- `site/data/forecast/<okres>.json`: the okres's rows of the published weight table
+  `forecast-weights.parquet`, if that file is in the data folder (`mvd daily
+  --github-release` downloads it from `data-latest` first), with the columns of
+  `aggregate.FORECAST_COLUMNS` as far as the table has them: `variable`, `lead_day`,
+  `model`, `weight`, `correction`, `mae`, `rank`, `days`, `mos_weight`, `mos_models`,
+  `correction_00`, `correction_06`, `correction_12`, `correction_18` (about 8 kB each).
   Only in the release `data-latest`, like the okres scores.
-- **Temperature and wind, regression blend** (`meteoverdict.mos`, written by
-  `mvd daily`, which has the last 100 days of `obs/` and `fc/` at hand): `mos_weight`
-  (sums to 1 over the `mos_models` models, may be negative) and the corrections at
-  00/06/12/18 UTC at the okres's point (elevation term at half strength), interpolated
-  linearly in UTC hour in between; for wind an okres where the regression did worse
-  than the method before on the last 7 days of its window has none.
-  An hour where all `mos_models` models have a value (none fading out) is
-  `Σ mos_weight · (forecast − correction)`; otherwise the inverse-error `weight` with
-  the same hourly corrections, rescaled over the models present. `correction` holds
-  the mean of the four, for readers that know only `weight` and `correction`. With
-  fewer than 14 days of pairs, or `mvd aggregate` alone, `mos_weight` is null and the
-  slot corrections equal `correction`. The method: [methodology.md](methodology.md#temperature-and-wind-regression-blend).
-- `data/forecast-weights.parquet` (also in `data-latest`): the same table for all
-  okresy, read by `mvd outlook` (it falls back to `combine.weights` of
-  `aggregates.parquet` where the file is missing), plus the regression's elevation term
-  (`bias_*`, `lapse_*`, `station_elevation`, `dz_min`, `dz_max`) so that `mvd
-  obce-forecast` can take the corrections at each obec's height.
-- `src/meteoverdict/data/okres-elevations.csv`: the elevation of each okres's point
-  (Open-Meteo Elevation API, rebuilt by `scripts/build_okres_elevations.py`).
+- `forecast-weights.parquet` itself is published in `data-latest` with the forecast's
+  files; `mvd aggregate` and `mvd daily` do not compute it and `store.publish_latest`
+  does not upload it.
+- The okres points and their elevations are in `meteoverdict.regions` (`okres_points`,
+  `representative_point`, `point_elevations`, `ELEVATIONS_FILE` =
+  `src/meteoverdict/data/okres-elevations.csv`: the elevation of each okres's point from
+  the Open-Meteo Elevation API, rebuilt by `scripts/build_okres_elevations.py`).
 - Whether the combination beats the best single model: see the out-of-sample test below.
 
-### Out-of-sample test (`mvd blend-test`, roadmap 6.4)
+### Out-of-sample test (`blend-test.json`, roadmap 6.4)
 
-`meteoverdict.blendtest` replays the combination on the stored D+N forecasts
-(`fc-YYYY-MM.parquet`) with only earlier scores; method and result in
-[methodology.md](methodology.md#does-it-beat-the-best-single-model-roadmap-64).
+The combination is replayed on the stored D+N forecasts with only earlier scores; the
+method is not published, the result is in
+[methodology.md](methodology.md#our-own-forecast).
 
-- **Training:** for day *d* at lead day *N*, `aggregate.aggregate` (okres level, window
-  `90d`, or `--window 30d` etc.) over the scores up to *d − N*, then `combine.weights`
-  and the okres's lowest-MAE model; tested only with ≥ 14 scored training days
-  (`--min-training-days`).
-- **Scoring:** the combination per okres and station (pools as in the ranking,
-  `combine.combine_values`, ≥ 2 models per hour) as a 6-hourly model through
-  `scoring.daily_scores`; `temperature_2m`, `wind_speed_10m`, `precipitation_daily`;
-  fair station-days per okres with the combination as one more model.
-- **Run:** daily in `daily.yml` after the lead hours (`--github-release --publish`, allowed
-  to fail), testing the last 180 scored days (`--days`); about 35 s and 3.6 GB for 38
-  scored days locally.
 - **Output:** `site/data/blend-test.json` (release `data-latest`, about 220 kB):
   `generated`, `method`, `training_window`, `shrink_days`, `bias_shrink_days`,
   `min_training_days`, `min_okres_days`, `first_scored`, `from`, `to`, `test_days`,
@@ -539,125 +499,69 @@ on the training rows).
   least 10 test days) and `single_models` (Czechia: `variable`, `lead_day`, `model`,
   `mae`, `diff`, `low`, `high`, same differences).
 
-## Outlook (`mvd outlook`, roadmap 6.6)
+## Outlook (`outlook.json`)
 
-The TV-style forecast for every okres (`meteoverdict.outlook`):
+The TV-style forecast for every okres, our combined forecast. How it is computed is not
+published; its files are, in the release `data-latest` (and `outlook-archive`), and the
+Pages workflow rebuilds the map after them. They appear four times a day, at about 04:50,
+10:50, 16:50 and 22:50 UTC, after each of the 00, 06, 12 and 18 UTC model runs is on
+Open-Meteo (most models 3.5–6 h after the run starts).
 
-- **Source (since 2026-10-20):** Open-Meteo's **open-data bucket** on AWS, no API calls:
-  every model with weights at the forecast points of all 77 okresy, read and made
-  hourly the way the Forecast API answers ([outlook from the bucket](#outlook-from-the-bucket)),
-  `temperature_2m, precipitation, wind_speed_10m, cloud_cover, sunshine_duration` from
-  00 UTC today for 6 days. A model with no complete run in the bucket in the last 24 h
-  is asked from the API instead (at most 200 weighted calls a run, 5 models; more are
-  left out of that run). `mvd outlook --api` asks the API for every model, as before.
-- **The API request** (until 2026-10-20 for every model, now the fallback): one Open-Meteo
-  **Forecast API** request (`api.open-meteo.com/v1/forecast`)
-  for the forecast points of all 77 okresy and the models asked,
-  `hourly=temperature_2m,precipitation,wind_speed_10m,cloud_cover,sunshine_duration`,
-  `forecast_days=6`, UTC; 77 × 5 × models / 10 weighted calls: ≈ 420 with 11 models,
-  ≈ 732 with all 19 (refused above 800). A request is at most 500 calls (Open-Meteo
-  allows 600 a minute), so with more than 12 models the okresy go in two equal requests
-  61 s apart, merged into one answer. Checked live on 2026-10-12: a JSON list of 77
-  results, columns `<variable>_<model>`, 2.7 MB, under a second (one model asked: the
-  columns lack the suffix, which `outlook.parse` allows for).
-- **New models** enter only once they have weights, i.e. once `mvd aggregate` has 90-day
-  okres scores for them (the D+N backfill fetches their current windows first). Weights
-  are per okres, variable and lead day; a model without weights in an okres is left out
-  there (the join with the weights), and the request asks only for models with weights
-  somewhere. The forecast page (`forecast.js`, `weightedModels`) does the same.
-- **Combination:** as on the forecast page (bias correction, weights of the hour's lead
-  day, models fading out over their last 3 hours, at least 2 models). Cloud cover and
-  sunshine are the plain mean of the models (all 13 models report sunshine, checked
-  2026-10-12), then corrected against ČHMÚ observations (`meteoverdict.sun_cloud_gust`,
-  [methodology](methodology.md#sunshine-cloud-and-gusts)): sunshine per UTC day as a
-  share of the day length, the hours scaled to the corrected day; cloud
-  `clip(a + b·mean, 0, 100)`. The coefficients come from `sun-cloud-gust.json` in the
-  release `data-latest` (refitted nightly by `mvd sun-cloud-gust`, workflow
-  `sun-cloud-gust.yml`), or the bootstrap in the package.
-- **Archive (training data, no extra calls):** every run appends the plain model means
-  of cloud cover and sunshine of all okresy and hours (`okres`, `issued`, `time`,
-  `cloud_cover`, `sunshine_duration`) to `outlook-archive-YYYY-MM.parquet` in the
-  release `outlook-archive` (about 11,000 rows a run); a failure there does not fail
-  the outlook.
-- **Our own copy of the answer (no extra calls):** every run also merges the whole
-  answer, every model, variable and hour at the 77 okres points as Open-Meteo gave it,
-  into `outlook-models-YYYY-MM-DD.parquet` (the run's UTC day) in the release
-  `outlook-models-YYYY-MM` (one per month, at most 31 assets; GitHub allows 1,000) (columns
-  `issued` (the run's time, UTC, to the minute), `okres`, `model`, `time`,
-  `temperature_2m`, `precipitation`, `wind_speed_10m`, `cloud_cover`,
-  `sunshine_duration`, Float32; `outlook.model_archive_rows`, `append_model_archive`).
-  One file per UTC day, so a run downloads and uploads only that day's file (the
-  runs before it that day, at most three); a run already in the file (the same
-  `issued`, e.g. a re-run) replaces itself, so there are no duplicates. With 19 models
-  that is about 210,000 rows a run; sorted by okres, model and hour so the runs of an
-  hour sit side by side, zstd: roughly 1 MB a run, so up to ~4 MB a day and ~125 MB a
-  month in ~31 files (estimated from the saved 11-model answer, not yet measured). The
-  project thus keeps its own history of what the models forecast at the okres points.
-  A failure there does not fail the outlook.
-- **What the map showed (no extra calls):** every run also merges its parts-of-day
-  table (the values of `outlook.json`) into `outlook-parts-YYYY-MM.parquet` (the run's
-  UTC month) in the release `outlook-archive` (`outlook.parts_archive_rows`,
-  `append_parts_archive`; columns `issued`, `okres`, `day`, `part`, `tmin`, `tmax`,
-  `precipitation`, `rain_probability`, `wind`, `gust`, `cloud`, `sunshine` (Float32) and
-  `symbol`; a re-run of the same `issued` replaces itself). About 2,300 rows a run,
-  ~1 MB a month. The observed map compares these with what was measured
-  ([observed map](#observed-map)); the archive starts with the first run after it was
-  added (October 2026), so older days have no comparison. A failure there does not fail
-  the outlook.
+- **Source:** every model's data come from Open-Meteo's open-data bucket on AWS, no API
+  calls; a model with no complete run in the bucket in the last 24 h is asked from the
+  Forecast API instead (at most 200 weighted calls a run, 5 models; more are left out of
+  that run). See the [Open-Meteo budget](#open-meteo-budget).
 - **Periods** in Prague time: night 0–6, morning 6–12, afternoon 12–18, evening 18–24,
   and the whole day; a part needs at least 4 hours and a day 18 (the answer starts at
   00 UTC, 02:00 in Prague in summer time).
-- **Per period:** `tmin`, `tmax`, `precipitation` (sum of the combined hourly values),
-  `rain_probability` (share of the models whose own total is ≥ 0.2 mm, among those
-  covering the whole period, every model counting the same: the amount weights favour
-  AIFS, the worst model at rain or no rain; for parts of day blended 50/50 with a
-  calibrated probability from `rain-calibration.json`, refitted nightly by `mvd daily`,
-  see [methodology.md](methodology.md#probability-of-precipitation-and-heavy-rain-meteoverdictrain_calibration)),
-  `wind` (highest combined hourly mean,
-  m/s), `cloud` (%), `sunshine` (hours, sum of the hourly mean), `symbol`: `rain` / `sleet` / `snow` (≤ 2 / ≤ 0.5 °C mean temperature) when the
-  share of models is ≥ 50 % and the total ≥ 0.3 mm, `showers` at a calibrated
-  probability ≥ 40 % (≥ 30 % of the models without a calibration), otherwise `clear`
-  (< 30 % corrected cloud), `partly` (< 65 %) or `cloudy` (thresholds chosen so the
-  shares match the observed < 25 / 25–70 / ≥ 70 %: the correction narrows the spread). The whole day's symbol uses the cloud
-  of 6–18. With a calibration also `heavy_rain_probability` (P(≥ 5 mm)) and
-  `heavy_rain` (true/false), null without; a whole day takes the highest of its parts.
+- **Per period:** `tmin`, `tmax`, `precipitation`, `rain_probability`, `wind` (highest
+  hourly mean, m/s), `cloud` (%), `sunshine` (hours), `gust` (see below) and `symbol`:
+  `rain` / `sleet` / `snow` / `showers`, otherwise the sky: `clear` (< 30 % cloud),
+  `partly` (< 65 %) or `cloudy` (`observed_map.sky_symbol`). The whole day's symbol uses
+  the cloud of 6–18. Also `heavy_rain_probability` (P(≥ 5 mm)) and `heavy_rain`
+  (true/false), null where there is none; a whole day takes the highest of its parts.
 - **Sunrise and sunset** (`sunrise`, `sunset`, Prague time "HH:MM") at the okres point,
   computed with the NOAA solar equations (`meteoverdict.sun`, no request; within half a
   minute of almanacs), the same on every row of a day.
 - **Frost** (`night_min`, `coldest_site`, `coldest_min`, `frost_probability`, `frost`,
-  `ground_min`, `ground_frost`) on the `night` and `day` rows of the date a night ends:
-  the models' night minima (18–06 UTC) corrected with `frost.json` (`mvd frost-fit`,
-  daily) and the night means of their cloud and wind; empty without `frost.json`.
-  Each run also stores the models' nights at the okres points (minimum, mean wind and
-  cloud, lead, point elevation) in `outlook-nights-YYYY-MM.parquet` of `data-YYYY-MM`
-  for refitting the clear-calm term, from the same answer (no extra calls).
-  [methodology.md](methodology.md#frost-night-minimum-frost-and-ground-frost).
-- **Gusts** (`gust`, `gust_over_threshold`, after the frost fields): no Open-Meteo calls. The
-  outlook downloads the month file(s) of the single runs (release `runs-YYYY-MM`, a
-  few MB to ~50 MB at a month's end) and takes the newest run with gusts of at least
-  3 models, at most 36 h old (runs are fetched once 10 h old, so it is usually 10–16 h
-  old). Per lowland run station of the okres (≤ 750 m and ≤ 300 m above the okres
-  point; an okres without one takes the nearest such station within 30 km): each
-  model's largest hourly gust in the part of day, mean over the models (a model must
-  reach the part's end; at least 3 models; the part wholly after the run's start),
-  corrected with `gust_part` of `sun-cloud-gust.json`, then the mean over the okres's
-  stations; a whole day takes the largest of its four parts. `gust_over_threshold` when
-  `gust` ≥ 13.5 m/s (`gust_warning` is its deprecated alias, same value). `null` beyond the run (about 5 days, the last part cut) and
-  when no run is available (`meteoverdict.gusts`,
-  [methodology.md](methodology.md#gusts-in-the-outlook)).
+  `ground_min`, `ground_frost`) on the `night` and `day` rows of the date a night ends;
+  empty where there is no frost forecast (`frost.json` is published with the other
+  files).
+- **Gusts** (`gust`, `gust_over_threshold`, after the frost fields): `gust_over_threshold`
+  when `gust` ≥ 13.5 m/s (`gust_warning` is its deprecated alias, same value). `null`
+  beyond the forecast's gust data (about 5 days, the last part cut) and where there is none.
 - **Output:** `site/data/outlook.json` `{"generated", "time_zone", "parts", "days",
-  "okresy": [{code, name, lat, lon}], "columns", "rows"}` (about 110 kB with 11 models,
-  ~340 kB with the frost and gust fields), `site/data/outlook-hourly.json` (the combined
-  hourly series of every okres, the source of the open data files) and the per-model
-  files below (per okres and per model); `.github/workflows/outlook.yml` runs it at 04:50, 10:50, 16:50 and 22:50
-  UTC, after each of the 00, 06, 12 and 18 UTC model runs is on Open-Meteo (most models
-  3.5–6 h after the run starts; until 2026-10-17 twice a day, 05:52 and 17:52), and
-  uploads them to the release `data-latest`, after which the Pages workflow rebuilds
-  the map. A scheduled 22:50 run that GitHub starts only at 23:45 UTC or later (they
-  start up to ~5 h late) is skipped, so that no UTC day sees five runs.
-- **Every model's own forecast per okres** (`outlook.write_models`, no extra calls):
-  `site/data/forecast/models/<okres>.json`, published as `outlook-models.zip` in
-  `data-latest` and unzipped by the Pages workflow to
+  "okresy": [{code, name, lat, lon}], "columns", "rows"}` (about 340 kB with the frost
+  and gust fields), `site/data/outlook-hourly.json` (the combined hourly series of every
+  okres, the source of the open data files) and the per-model files below (per okres and
+  per model).
+- **Archive of the plain means (training data):** `outlook-archive-YYYY-MM.parquet` in
+  the release `outlook-archive`: the plain model means of cloud cover and sunshine of all
+  okresy and hours (`okres`, `issued`, `time`, `cloud_cover`, `sunshine_duration`; about
+  11,000 rows a run; schema `observed_map.MEANS_SCHEMA`, asset name
+  `observed_map.means_archive_asset`).
+- **Our own copy of the answer:** every run is also merged into
+  `outlook-models-YYYY-MM-DD.parquet` (the run's UTC day) in the release
+  `outlook-models-YYYY-MM` (one per month, at most 31 assets; GitHub allows 1,000): every
+  model, variable and hour at the 77 okres points as Open-Meteo gave it (columns
+  `issued` (the run's time, UTC, to the minute), `okres`, `model`, `time`,
+  `temperature_2m`, `precipitation`, `wind_speed_10m`, `cloud_cover`,
+  `sunshine_duration`, Float32). One file per UTC day; a run already in the file (the
+  same `issued`, e.g. a re-run) replaces itself. With 19 models that is about 210,000
+  rows a run, roughly 1 MB a run, ~125 MB a month (estimated from the saved 11-model
+  answer, not yet measured). The project thus keeps its own history of what the models
+  forecast at the okres points.
+- **What the map showed:** every run is also merged into
+  `outlook-parts-YYYY-MM.parquet` (the run's UTC month) in the release `outlook-archive`
+  (the values of `outlook.json`: columns `issued`, `okres`, `day`, `part`, `tmin`,
+  `tmax`, `precipitation`, `rain_probability`, `wind`, `gust`, `cloud`, `sunshine`
+  (Float32) and `symbol`; a re-run of the same `issued` replaces itself; schema
+  `observed_map.PARTS_ARCHIVE_SCHEMA`, asset name `observed_map.parts_archive_asset`).
+  About 2,300 rows a run, ~1 MB a month. The observed map compares these with what was
+  measured ([observed map](#observed-map)); the archive starts with the first run after
+  it was added (October 2026), so older days have no comparison.
+- **Every model's own forecast per okres:** `site/data/forecast/models/<okres>.json`,
+  published as `outlook-models.zip` in `data-latest` and unzipped by the Pages workflow to
   `data/scores/forecast/models/<okres>.json` on the site: `{"generated", "okres",
   "time": [UTC hours], "variables": {variable: unit}, "combined": {variable: [...]},
   "models": {model: {variable: [...]}}, "licence", "attribution"}`, columns of values
@@ -675,26 +579,19 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
   `snow_depth_water_equivalent` (mm, 0.1), `surface_temperature` (°C, 0.1), `cape` (J/kg)
   and `visibility` (m). A value a model lacks is `null`, never 0, and a model without the
   variable has no key for it (`variables` lists every unit). They come from the bucket
-  only ([outlook from the bucket](#outlook-from-the-bucket)): the API fallback does not
-  ask for them (its call weight would grow from 5 to 18 variables a model), so a model
-  read from the API in a run has none of them. Between native steps: humidity, dew point,
-  pressure, surface temperature and CAPE by the Hermite spline, wind direction along the
-  shorter arc (never the arithmetic mean of 350° and 10°), snowfall spread over its step,
-  the rest linearly; humidity, cloud, gusts, CAPE, radiation, snow and visibility are kept
-  within their physical bounds. `combined`, `outlook-hourly.json`, the parts of day and
-  the archive carry none of them (wind direction is not averaged anywhere). `combined`: our combined series of `outlook-hourly.json` on the same hours.
+  only: a model read from the API in a run has none of them. `combined`, `outlook-hourly.json`,
+  the parts of day and the archive carry none of them (wind direction is not averaged
+  anywhere). `combined`: our combined series of `outlook-hourly.json` on the same hours.
   About 26 kB per okres with 11 models (measured on the saved answer), ~50 kB with 19,
   i.e. ~2–4 MB for the 77 files (~0.5–1 MB zipped) with the five variables; with the
   further variables (measured 2026-10-22 on three okresy and all 19 models) 140 kB a
   file instead of 62 kB (33 kB instead of 15 kB zipped): ~10.8 MB for the 77 files,
   `outlook-models.zip` ~2.5 MB instead of ~1.2 MB. The web ignores keys it does not
-  know. The extra files read from the bucket roughly double the run's range requests
-  (3 okresy: 11,271 instead of 5,753; the 77 okresy ~55,000 instead of ~28,000, no
-  quota) and its reading time. The detailed forecast page and the
-  forecast selector of the forecast map read these files: **no visitor's browser asks
-  Open-Meteo** (until 2026-10-17 the detailed page did, one request per okres shown).
-- **Every model's parts of day for all okresy** (`outlook.write_model_parts`, no extra
-  calls): `site/data/forecast/models-parts/<model>.json` and `index.json`, published as
+  know. The detailed forecast page and the forecast selector of the forecast map read
+  these files: **no visitor's browser asks Open-Meteo** (until 2026-10-17 the detailed
+  page did, one request per okres shown).
+- **Every model's parts of day for all okresy:**
+  `site/data/forecast/models-parts/<model>.json` and `index.json`, published as
   `outlook-models-parts.zip` in `data-latest` and unzipped by the Pages workflow to
   `data/scores/forecast/models-parts/` on the site; the forecast map's "Předpověď /
   Forecast" selector switches the whole map to one model with them. One file per model:
@@ -703,14 +600,13 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
   sunshine, symbol], "symbols", "rain_probability": null, "okresy": {code: {column:
   [value per day and part]}}, "notes", "licence", "attribution"}`, the value of day *d*
   and part *p* at index `d * 5 + p`, `symbol` as a position in `symbols`. The same
-  rules as the outlook, on the model's raw values: Prague parts of day, precipitation
+  periods as the outlook, on the model's raw values: Prague parts of day, precipitation
   and sunshine in the hour before their time, tmin/tmax, the rain total (0.01 mm), the
   highest hourly wind, the mean cloud cover (a whole day: of 6–18), hours of sunshine.
   A period the model does not cover in full is null (beyond `last_hour`, its last hour
-  with a temperature, or where it ends inside the period). The symbol is the single-model
-  rule of the okres panel: rain (sleet, snow at a mean of ≤ 2 / ≤ 0.5 °C) when the
-  model's own total is ≥ 0.3 mm, otherwise the sky from its raw cloud cover (30/65 %);
-  never showers, and no probability from one model. `index.json`: `{"generated",
+  with a temperature, or where it ends inside the period). The symbol comes from the
+  model's own values, the sky from its raw cloud cover (30/65 %, as above); never
+  showers, and no probability from one model. `index.json`: `{"generated",
   "days", "order", "models": [{"model", "mean_rank", "last_hour"}]}`, the models by
   their mean rank over all okresy, variables and lead days of the forecast weights.
   Measured on the live run of 17 Oct 2026 (11 models): 61–78 kB per model (global
@@ -719,79 +615,7 @@ The TV-style forecast for every okres (`meteoverdict.outlook`):
 - **Budget:** none while the bucket has every model; its API fallback at most 200 calls a
   run, 800 a day (until 2026-10-20 all models from the API: four runs a day ≈ 2,930
   calls with 19 models, 3,400 budgeted with retries); priority 1 in the
-  [budget split](#open-meteo-budget) with the backfill and the single runs. The job
-  summary shows the calls, the bucket's requests and which models came from the API.
-
-### Outlook from the bucket
-
-`meteoverdict.outlook_bucket` (since 2026-10-20): the outlook's table (`outlook.parse`'s
-rows: okres, hour, model and the five variables) from the open-data bucket
-([single runs from the bucket](#single-runs-from-the-bucket): `bucket.read_run`, the
-same layout, cells and conventions), built the way the Forecast API builds its answer
-(open-meteo's `Interpolation.swift`, `Zensun.swift`, read 2026-10-20):
-
-- **Grid cells:** the nearest cell of each okres point in every bucket model, committed
-  as `src/meteoverdict/data/okres-cells.csv` (1,540 rows: 77 points × 20 bucket models;
-  rebuilt with `mvd bucket-cells --okres` when a grid changes, like `bucket-cells.csv`),
-  the temperature moved from the cell's surface height to the point's elevation
-  (`okres-elevations.csv`, the API's) by 0.65 K per 100 m.
-- **Runs stitched like the API's time series:** each hour and variable from the newest
-  complete run that has it; older runs for the hours before it starts (back to 00 UTC
-  today) and beyond its end where they reach further (UKMO's and JMA's 06 and 18 UTC
-  runs end at 60 and 132 h, their 00 and 12 UTC ones later; a run's `meta.json` tells
-  its end before it is read). Every 3 hours for ICON-D2, ICON-EU (its 03, 09, 15, 21 UTC
-  runs reach 30 h), AROME AT, KNMI and DMI, as the API serves them; the others at their
-  run hours. Leads up to 168 h (the answer's last hour is 143 h after 00 UTC today).
-- **Hourly between a model's native steps** (3- and 6-hourly models, the 3-hourly ends
-  of ICON, IFS and GFS): temperature and wind speed by Open-Meteo's Hermite
-  (Catmull-Rom) spline, cloud cover linearly, precipitation spread evenly over its
-  step, the radiation through the clearness index of each step's solar factor
-  (`interpolateSolarBackwards`).
-- **Sunshine** from the model's own file (ALADIN, AROME AT), else from the hourly direct
-  radiation as the API derives it: the model's own direct radiation (ICON, IFS HRES,
-  UKMO, DMI), else shortwave minus its own diffuse (GFS), else minus Open-Meteo's
-  diffuse model (a polynomial in the clearness index and the sun's angle); sunshine is
-  the share of the hour with a direct normal irradiance between 60 and 180 W/m²
-  (`calculateBackwardsSunshineDuration`). ARPEGE's radiation in the bucket is 1.296
-  times the API's (Météo-France's files keep a conversion factor that the API's readers
-  undo, 10⁷ / 3600²): undone in `bucket.RADIATION_SCALE`, as for the single runs. JMA and AIGFS have no radiation: no sunshine, as
-  in the API.
-- **Fallback:** a model none of whose runs of the last 24 h is complete in the bucket
-  is asked from the API (`outlook.gather`; ≤ 200 calls a run).
-- **Cost:** ~27,000–30,000 range requests, ~4 min from Prague with 4 models and 32
-  requests in parallel (GitHub's runners are closer to us-west-2); no quota.
-- **Validation** (2026-10-20, the API asked at 09:10 UTC and the bucket read right
-  after for the same moment, all 19 models at the 77 points, 164,472 hours in both;
-  mean absolute difference; sunshine per hour (s) and per UTC day (h)):
-
-  | Model | Runs from the bucket (UTC) | t2m °C | precip mm | wind m/s | cloud % | sun s / h a day |
-  |---|---|---|---|---|---|---|
-  | ALADIN CZ 1 km / CE 2 km | 20 00, 19 18 | 0.035 / 0.039 | 0.000 | 0.006 / 0.012 | 0.4 / 0.5 | 0.1 / 0.00 |
-  | ICON-D2 | 20 06, 03, 00, 19 21 | 0.065 | 0.009 | 0.040 | 0.7 | 5 / 0.02 |
-  | ICON-EU | 20 03, 00, 19 21 | 0.028 | 0.001 | 0.018 | 0.1 | 27 / 0.10 |
-  | ICON | 20 00, 19 18 | 0.038 | 0.003 | 0.029 | 0.2 | 40 / 0.18 |
-  | IFS HRES | 20 00, 19 18 | **0.240** | 0.006 | 0.083 | 1.6 | 42 / 0.20 |
-  | IFS 0.25° / AIFS | 20 00, 19 18 | 0.036 / 0.048 | 0.006 / 0.012 | 0.059 / 0.102 | 1.6 / 2.2 | 2 / 0.01 |
-  | GFS / AIGFS | 20 00, 19 18 | 0.027 / 0.037 | 0.001 / 0.008 | 0.010 / 0.120 | 0.2 / 2.1 | 9 / 0.06 (AIGFS –) |
-  | ARPEGE Europe / World | 20 00, 19 18 | 0.029 / 0.030 | 0.000 / 0.004 | 0.003 / 0.032 | 0.2 / 0.7 | 0.4 / 0.00, 20 / 0.10 |
-  | AROME AT / KNMI / DMI | 20 06–19 21 (3-hourly) | 0.038 / 0.087 / 0.031 | 0.000–0.001 | 0.009–0.064 | 0.2–1.6 | 0–3 / 0.00–0.01 |
-  | GEM Global | 19 12 | 0.026 | 0.001 | 0.008 | 0.6 | 64 / 0.36 |
-  | JMA GSM / CMA GRAPES | 19 18 (+ 12) / 19 18 | 0.056 / 0.028 | 0.009 / 0.008 | 0.108 / 0.062 | 2.1 / 0.1 | – / 4 |
-  | UKMO 10 km | 19 18, 12 (the API: 20 00) | 0.938 | 0.113 | 0.707 | 24.8 | 386 / 0.37 |
-  | **All** (without UKMO) | | **0.112** (0.053) | 0.012 (0.004) | 0.093 (0.049) | 2.6 (0.9) | 28 / 0.10 |
-
-  The same run gives the same values: temperature within 0.03–0.09 °C (the API rounds
-  to 0.1 and interpolates u/v rather than the speed), precipitation within 0.01 mm;
-  IFS HRES as for the single runs (the API's cell differs on the O1280 grid). **UKMO**
-  differs because the API already had its 00 UTC run at 09:10 and the bucket did not
-  (UKMO reaches the bucket ~9 h after its start: 18 UTC at 03:03, 12 UTC at 20:35); at
-  the outlook's times (04:50, 10:50, …) both have the same run. Sunshine per day agrees
-  within 0.1 h on average (bias −0.02 h; GEM's and IFS HRES's 3-hourly ends differ
-  most: the API's own interpolation there is not reproduced exactly); the outlook
-  scales the hourly sunshine to the corrected daily total anyway. CMA lacks 2 of 117
-  hours where its run has a gap the API fills. The daily `sun-cloud-gust` refit keeps
-  learning from what the outlook archives, so it follows the bucket's values from
-  2026-10-20 on.
+  [budget split](#open-meteo-budget) with the backfill and the single runs.
 
 ## Ranking with confidence intervals (roadmap 2.5)
 
@@ -882,8 +706,7 @@ from its archive start, then the window's daily scores.
   A window takes about two days of the share (more where it has many single runs,
   e.g. ~40,000 calls for the 56 runs of a window in April–July 2026); the run stops at
   `--max-calls` and the next one continues where it stopped, nothing done is asked
-  again. The current windows (the last 90 days: the 90-day ranking and the combination
-  weights; `backfill.CURRENT_DAYS`) are the newest, so a new window or a newly added
+  again. The current windows (the last 90 days: the 90-day ranking; `backfill.CURRENT_DAYS`) are the newest, so a new window or a newly added
   model is fetched there first every day; so are the runs that become the backfill's
   when the bucket's window moves into the next month. The job summary shows the progress
   (windows scored, single runs left) and the calls used today (`calls_on`, `calls_used`).
@@ -962,6 +785,9 @@ concurrency group because both write release assets). No Open-Meteo calls.
    the backfill (replacing the rebuilt forecasts), and checked data replacing unchecked
    data all reach the scores.
 5. Push changed months, pull all score months, aggregate and rank, write `site/data`
+   (with `forecast/okresy.json` and `forecast/<okres>.json` from the published weight
+   table, see [Combination weights](#combination-weights-roadmap-62); `mvd daily
+   --github-release` downloads `forecast-weights.parquet` from `data-latest` first)
    and `site/data/badge.json`, and replace `aggregates.parquet` and `site-data.zip` in
    the release `data-latest`.
 6. The workflow commits `site/data/badge.json` and `site/data/meta.json` (the README
@@ -1022,7 +848,7 @@ processed, which of those days have forecasts and which have observations.
   observations: the MAE of both).
 - **Effect** (2026-10-16, real data): the last scored day moves from 2026-10-04 (the end
   of the newest backfill window) to yesterday, so `meta.json` `as_of`, the 90-day
-  ranking and the combination weights and bias corrections include the last days.
+  ranking includes the last days.
   D+1 and D+2 at once; D+3 to D+5 fill in as the single runs reach back far enough
   (stored from 2026-10-13 00 UTC; the single-runs history adds older runs).
 
@@ -1036,7 +862,7 @@ also appears on the run page (job summary).
 |---|---|---|
 | newest observation | older than 30 h | |
 | newest forecast, newest score | older than 21 days (complete backfill windows lag up to 15) | |
-| published scores (`site/data/meta.json`, `mvd check --meta`) | `as_of` more than 21 days before `generated` (forecasts come in 14-day windows, so up to ~20 is normal) | file missing; models left out of the 90-day ranking and weights for too short a record (`short_record`, under 80 % of the days; normal for a few weeks after a model is added) |
+| published scores (`site/data/meta.json`, `mvd check --meta`) | `as_of` more than 21 days before `generated` (forecasts come in 14-day windows, so up to ~20 is normal) | file missing; models left out of the 90-day ranking for too short a record (`short_record`, under 80 % of the days; normal for a few weeks after a model is added) |
 | stations reporting in the last 3 days, of those that reported in the last 30 | under 80 % | the stations missing |
 | temperature MAE per station over 90 days (all models) | | above 3 x the network median and above 3 °C: sensor or metadata problem |
 
@@ -1481,19 +1307,20 @@ cover; none when there is neither.
 ahead), the best we have, in this order (`observed_map.forecast_doc`, `kind`):
 
 1. `stored`: the forecast map's own parts of day from the
-   [parts archive](#outlook-mvd-outlook-roadmap-66) (`outlook-parts-YYYY-MM.parquet` in
+   [parts archive](#outlook-outlookjson) (`outlook-parts-YYYY-MM.parquet` in
    `outlook-archive`, since 2026-10-17): the newest run issued 1, 2 and 3 Prague days
    before, and the day's first run when issued before noon (lead 0, "issued on the day
    at HH:MM");
 2. `stored_sky`: where only the plain means of a run were stored
    (`outlook-archive-YYYY-MM.parquet`, since 2026-10-16: hourly cloud cover and sunshine
    per okres), its cloud, sunshine and sky symbol;
-3. `rebuilt`: our forecast rebuilt out of sample (below, `outlook-hindcast.parquet`),
-   with the sky of a stored run of the same lead where there is one (`sky_issued`).
+3. `rebuilt`: our forecast rebuilt out of sample (below, `outlook-hindcast.parquet`
+   in `outlook-archive`, schema `observed_map.HINDCAST_SCHEMA`, asset
+   `observed_map.HINDCAST_ASSET`), with the sky of a stored run of the same lead where there is one (`sky_issued`).
 
 The per-model archive (`outlook-models-YYYY-MM-DD.parquet`, since 2026-10-17 14:19 UTC)
-is not used: the weights valid at the time are not stored, so the map's values cannot
-be rebuilt exactly from it, and its runs are covered by the parts archive or issued in
+is not used: it holds the models' raw values, not our combined forecast, and its runs
+are covered by the parts archive or issued in
 the afternoon of the day. The okres panel shows, for the part of day chosen, the
 measured values and each forecast (symbol, temperature, precipitation, wind) with the
 difference forecast minus measured; rebuilt forecasts are marked "zpětně spočítaná
@@ -1501,23 +1328,17 @@ předpověď (stejnou metodou, jen z dat dostupných předem)". A stored forecas
 okres's point, a rebuilt one for its stations, the measurement the mean of its
 stations.
 
-**Rebuilt forecasts** (`mvd hindcast`, `meteoverdict.hindcast`; daily workflow after the
-blend test, `outlook-hindcast.parquet` in `outlook-archive`, the last 60 days): the
-combination of the [blend test](#) for every offered day and leads 1-3: weights, bias
-corrections and the regression blend from the okres scores of the 90 days ending on
-day − lead − 1 (the D+N forecast for a day is made during day − lead, whose scores come
-out the next morning: one day stricter than the blend test), applied hour by hour to the
-models' stored D+N forecasts (`fc-YYYY-MM`, the newest days rebuilt from the single
-runs) at the okres's stations (borrowed ones included), averaged over them, then the
-outlook's parts of day (`outlook.summarise`): `tmin`, `tmax`, `precipitation`, `wind`,
-`rain_probability` (share of the weighted models with ≥ 0.2 mm, uncalibrated). The
-stored D+N have no cloud cover: the symbol is rain, sleet, snow or showers only.
-Columns `lead`, `trained_to`, `okres`, `day`, `part` and the parts archive's. An okres,
-variable and lead needs 14 scored training days (warm-up), so with scores from
-2026-08-10 the rebuilt days start on 2026-09-08 (2026-10-17: 39 of the 60 offered days,
-all 77 okresy; Blansko from 2026-10-05 on has none, its stations' D+N come only from the
-backfill, which has not reached those days, and are not among the ~100 single-run
-stations). About 2 minutes and 45,000 rows.
+**Rebuilt forecasts** (`outlook-hindcast.parquet` in `outlook-archive`, the last 60
+days): our combined forecast rebuilt for every offered day and leads 1-3 using only data
+available beforehand, as the parts of day of the outlook (`tmin`, `tmax`,
+`precipitation`, `wind`, `rain_probability`) at the okres's stations, averaged over them.
+How it is rebuilt is not published; the file is. The stored D+N have no cloud cover: the
+symbol is rain, sleet, snow or showers only. Columns `lead`, `trained_to`, `okres`,
+`day`, `part` and the parts archive's. An okres, variable and lead needs a warm-up of
+scored days before its first rebuilt day. The sky symbol thresholds (clear < 30 %,
+partly < 65 %, cloudy above) are `observed_map.sky_symbol`; the schemas and the parts of
+day of the archives are `observed_map.PARTS_ARCHIVE_SCHEMA`, `MEANS_SCHEMA` and
+`HINDCAST_SCHEMA`.
 
 **Files** (`--out`, default `site/data/observed/`, published as `observed-data.zip` in
 `data-latest` and unpacked by the Pages workflow to `data/scores/observed/`):
@@ -1923,7 +1744,7 @@ In summer `vis-ir` has more files and `night-M` fewer; the total stays similar.
 A **single run** is one model run as it was issued, which the Previous Runs API (D+N,
 above) cannot give: there each hour mixes runs. The stored runs (every 00, 06, 12 and
 18 UTC run of the 19 models at the ~100 stations below, leads 1–120 h) feed the error by
-lead hour (`mvd leads`), the farmers' events (`mvd farm`), the outlook's gusts and the D+N
+lead hour (`mvd leads`), the farmers' events (`mvd farm`), the forecast's gusts and the D+N
 of the most recent days, before the backfill reaches them
 ([Fresh D+N](#fresh-dn-from-the-single-runs)).
 
@@ -2249,7 +2070,7 @@ not change from run to run). The rule (`runs.select_stations`, regenerated with
 
 1. **One per okres** (all 77): among the okres's active stations, those with the most of
    our three elements at 10 minutes in ČHMÚ's `meta2` (`T`, `F`, `SRA10M`), and of
-   these the one closest to the okres's forecast point (the same point as the outlook).
+   these the one closest to the okres's forecast point (the same point as the forecast).
    Blansko has only precipitation stations, so its station verifies precipitation only;
    its temperature comes from the stations of step 4 (the nearest, Tišnov, Hájek, 409 m,
    15 km, is in its pool).
@@ -2356,8 +2177,8 @@ All workflows share the free tier's 10,000 weighted calls a day, 5,000 an hour a
 300,000 a month (per IP address; GitHub's runners share addresses, so a run can still
 meet the daily limit early and then stops cleanly). Each workflow has its own call
 budget (`--max-calls`); `forecasts.Budget` also paces one run below 550 a minute and
-4,800 an hour, and no single request weighs more than 500 (`runs.MAX_REQUEST`,
-`outlook.MAX_REQUEST`).
+4,800 an hour, and no single request weighs more than 500 (`runs.MAX_REQUEST`; the forecast's
+API fallback keeps to the same limit).
 
 **Order** (decided 2026-10-15, with all 19 models: "the backfill has the lowest
 priority; fill it from the date closest to today into the past"; since 2026-10-17 the
@@ -2365,11 +2186,10 @@ newest single runs come from the bucket and their API calls go to the backfill, 
 history is **one strict sweep from today into the past**: "download everything gradually
 from today into the past, so that the forecast keeps improving: D-1, D-2, D-3 …"):
 
-1. **Outlook** (user-facing, `outlook.yml`, four times a day: 04:50, 10:50, 16:50,
-   22:50): since 2026-10-20 the models come from the bucket
-   ([outlook from the bucket](#outlook-from-the-bucket)); only a model the bucket lacks
-   is asked from the API, at most 200 calls a run (`outlook.MAX_FALLBACK_CALLS`, 5
-   models), ≤ 800 a day. Until then every model with weights was asked: 77 okresy × 5
+1. **Outlook** (user-facing, the forecast's files, four times a day: 04:50, 10:50, 16:50,
+   22:50): since 2026-10-20 the models come from the bucket; only a model the bucket
+   lacks is asked from the API, at most 200 calls a run (5 models), ≤ 800 a day. Until
+   then every model was asked: 77 okresy × 5
    variables × models / 10, ~732 calls a run with all 19, 3,400 a day budgeted.
 2. **The bucket's gaps** (`runs.yml`, 100 at 04:20, 10:20, 16:20 and 22:20, ≤ 400 a
    day): the single runs the bucket lacks once 24 h old, newest first, then the few runs
@@ -2379,8 +2199,8 @@ from today into the past, so that the forecast keeps improving: D-1, D-2, D-3 �
 3. **The sweep** (`backfill.yml` at 02:41, the shared 8,300): 14-day windows newest
    first, each finished before the next older one: its D+N at every station and the
    rain gauges, then the single runs' API history of its days (before
-   `runs.history_edge`). The current windows (the last 90 days: the 90-day ranking and
-   the combination weights) are the newest, so a new window (every 14 days, ~10,100 +
+   `runs.history_edge`). The current windows (the last 90 days: the 90-day ranking)
+   are the newest, so a new window (every 14 days, ~10,100 +
    ~3,900 for the gauges every other one) or a newly added model comes first every
    day. A window of all 19 models costs **~10,070 calls** at the ~500 stations with the
    shared requests of models with the same lead days (~11,970 one model per request;
@@ -2425,7 +2245,7 @@ adds at most 100 there (9,600); a late 22:50 outlook does not (it is skipped fro
 UTC on). Hours: the backfill's ≤ 4,800 an hour (02:41), the outlook's fallback ≤ 200 at
 04:50, 10:50, 16:50 and 22:50 (4,800 + 200 = the hourly 5,000), the single runs ≤ 100
 each. `tests/test_budget.py` checks these
-sums and the outlook's schedule against the workflows.
+sums against the workflows.
 
 **The times above are when the runs are scheduled, not when they start.** GitHub starts
 scheduled workflows **up to ~5 hours late** (on 2026-10-15 every scheduled run started
@@ -2440,8 +2260,8 @@ ALADIN archive ran 4 of 8 times that day). So the budget assumes:
   (and stop cleanly on the daily limit, continuing next time).
 - **A run can slip into the next UTC day** (the single runs of 22:20 starting after
   00:00): only the 100 fallback calls move, inside the 500-call margin below 10,000.
-  The 22:50 outlook could too, with up to 850: the workflow skips a scheduled 22:50 run
-  that starts at 23:45 UTC or later (the next run follows at 04:50), so a UTC day never
+  The 22:50 outlook could too, with up to 850: a scheduled 22:50 run that would start at
+  23:45 UTC or later is skipped (the next run follows at 04:50), so a UTC day never
   has more than four. The backfill (02:41, ~1.75 h) cannot cross midnight even 5 h late.
 - **Two backfill runs are ~24 h apart by the schedule**, ~19–29 h with the delays; each
   spends at most 8,300 of its UTC day. Should Open-Meteo count a rolling 24 hours
@@ -2450,8 +2270,8 @@ ALADIN archive ran 4 of 8 times that day). So the budget assumes:
 - **The single runs no longer lag:** the bucket is read at every schedule, model by
   model as runs arrive (2–10 h after their start), so a run is stored at the first
   schedule after it is complete there, also when a schedule is late.
-- `mvd outlook` prints the Open-Meteo calls it used (retries included) to the log and the
-  job summary, so a day's total can be added up from the job summaries.
+- The forecast's runs report the Open-Meteo calls they used (retries included) in
+  their job summaries, so a day's total can be added up.
 
 **How long the histories take** (simulated day by day from the live states of
 2026-10-17 at 7,400 shared calls a day plus the 400 fallback, a new window every 14 days,
@@ -2474,9 +2294,9 @@ at 5,700 about July 2027, at today's 8,300 early April 2027).
 
 Every daily run (`mvd daily`) downloads all score months and aggregates them again, so
 each window the backfill scores reaches the "all time" and season windows (and the
-out-of-sample test) the next morning. The 90-day ranking and the combination weights
-read only the last 90 days (the current windows, always fetched first), so older
-history does not change the live weights; it fills the seasonal and all-time rankings
+out-of-sample test) the next morning. The 90-day ranking
+reads only the last 90 days (the current windows, always fetched first), so older
+history does not change the live ranking; it fills the seasonal and all-time rankings
 (by the fair comparison, only the days every model of a region has). The single runs
 before 2026-06-23 are stored for the run-by-run record; `mvd leads` and `mvd farm` read
 the last 90 days, and the lead-band ranking's "all" window starts at 2026-06-23
@@ -2608,7 +2428,7 @@ The measured page's model selector (measured.html). `meteoverdict.station_fc`. F
 station's own elevation) and the hourly observations, per station and Prague calendar day
 for the last 35 days: `tmax`, `tmin`, `r` (precipitation total), `wind` (mean), `gust`
 (highest), for **D+1** (the 00 UTC run of the day before) and **D+2** (two days before), per
-model, plus `blend` (the mean of the models that have the day, at least 3). A model-day counts
+model, plus `blend` (the plain mean of the models that have the day, at least `blend.MIN_MEMBERS`, no weights). A model-day counts
 only when the run's steps cover the day (first step in the first six hours, last in the last six,
 at least four steps), so 3- and 6-hourly models take their extremes from fewer points. The
 observations are aggregated the same way (days with at least 20 hourly values).
@@ -2744,12 +2564,12 @@ WGS 84 with pyproj and rounds to 4 decimals (about 10 m). Praha belongs to no ok
 RÚIAN; it is listed under "Hlavní město Praha". Rebuild after municipal changes (a few
 a year); the committed file is from 2026-09-30.
 
-## Forecast for every obec (`mvd obce-forecast`)
+## Forecast for every obec (`obce.zip`)
 
 Started 2026-10-18 for okres Litoměřice and extended the same day to every obec
 (about 6,250 in 77 okresy), that may be reworked or removed: a forecast for each obec
-instead of only the okres's forecast point. After each outlook run
-(`.github/workflows/outlook.yml`, its own step; a failure does not fail the outlook):
+instead of only the okres's forecast point. It is published after each outlook run; how
+it is derived is not published, its files are:
 
 - **Places:** `src/meteoverdict/data/obce-elevations.csv` (`okres`, `name`, `lat`, `lon`,
   `elevation`, `population`): the obce of the [municipalities](#municipalities-radar-page-place-search)
@@ -2761,22 +2581,6 @@ instead of only the okres's forecast point. After each outlook run
     `UZ35H`), matched by okres code and name. Two names are twice in one okres (Březina in
     Brno-venkov, Mezholezy in Domažlice); ČSÚ names them by their SO ORP, ours are told apart
     by position (`TWINS` in the script) and called e.g. "Březina (Tišnov)".
-- **Models:** every model with weights, its newest complete run in the bucket
-  ([single runs from the bucket](#single-runs-from-the-bucket)), at least 3 h old, read at
-  each obec's nearest grid cell with the temperature moved from the cell's terrain height to
-  the obec's (0.65 K per 100 m), as for the stations. All obce in one pass: the cells of a
-  file are read by grid row, points of a row at most 64 cells apart in one request
-  (`bucket.segments`), so 6,250 obce cost a few hundred reads per file. No Open-Meteo calls.
-- **Combination:** `outlook.combine_hourly` with each obec's okres weights and corrections
-  (`forecast-weights.parquet`), so each obec is combined as its okres's point, except
-  that the temperature and wind slot corrections take the regression's elevation term at
-  the obec's own height (at the point's half strength, `combine.POINT_LAPSE_FACTOR`;
-  `obce_forecast.at_obec_height`) instead of at the okres point (since 20 October 2026;
-  left out one station at a time this was better for every kind of station, most in the
-  mountains: [methodology.md](methodology.md#the-obec-forecast-away-from-the-stations-mvd-obce-loso)).
-  For that `forecast-weights.parquet` keeps the regression's bias, lapse, mean station
-  height and height range (`combine.ELEVATION_TERM_COLUMNS`); the okres JSON files do
-  not. With a weight file from before (no such columns) the point's corrections are used.
 - **Output:** `obce-<okres>.json` per okres (per obec the combined temperature,
   precipitation and wind and every model's temperature, from Prague midnight of the day),
   packed in `obce.zip` in the release `data-latest`; Pages unpacks it to
@@ -2797,8 +2601,8 @@ instead of only the okres's forecast point. After each outlook run
   obce differed by 2–3 °C in a part of day (Lovečkovice, 438 m, the coldest; the Labe valley
   the warmest).
 - **Checked away from the stations** with every ČHMÚ station held out in turn
-  (`mvd obce-loso`, `obce-loso.json` in the release `data-latest`): results and method in
-  [methodology.md](methodology.md#the-obec-forecast-away-from-the-stations-mvd-obce-loso).
+  (`obce-loso.json` in the release `data-latest`): results in
+  [methodology.md](methodology.md#our-own-forecast).
   The methodology page shows the key numbers read from that file (`web/src/obce-loso.js`,
   section `#obce-loso`: MAE, gain against the okres forecast and the plain model median,
   the mountain stations where it is worse than the median); the obec panel of the forecast

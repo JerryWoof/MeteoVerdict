@@ -183,7 +183,7 @@ export function parseForecasts(doc) {
         });
       }
       // kind: "stored" (the map's own parts of day), "stored_sky" (only the sky of a
-      // stored run) or "rebuilt" (rebuilt out of sample, meteoverdict.hindcast)
+      // stored run) or "rebuilt" (rebuilt out of sample, outlook-hindcast.parquet)
       return {
         lead: f.lead, kind: f.kind ?? "stored", issued: f.issued ?? null,
         trainedTo: f.trained_to ?? null, skyIssued: f.sky_issued ?? null, rows,

@@ -1,16 +1,8 @@
-# Is our combined forecast done the right way? (roadmap 6.5)
+# How operational centres combine weather models (roadmap 6.5)
 
 A review of how operational centres and the literature combine several weather models
-into one point forecast, compared with what `meteoverdict.combine` and the forecast
-page do (roadmap 6.2, 6.3). Written 2026-10-12; sources at the end.
-
-## What we do
-
-Per okres, variable and lead day: correct each model by its mean error (temperature,
-wind), weight it by `1 / (RMSE² − bias²)` (precipitation: `1 / RMSE²`), estimate both
-from the last 90 days of station scores, shrink the weights towards equal weights with
-`s = days / (days + 30)` and the correction towards none with `days / (days + 5)`, and
-average the current forecasts with these weights.
+into one point forecast, written 2026-10-12 for our combined forecast (roadmap 6.2,
+6.3); its method itself is not published. Sources at the end.
 
 ## What operational systems do
 
@@ -21,18 +13,16 @@ average the current forecasts with these weights.
 | NCEP/NAEFS bias correction (Cui et al.) | decaying average, new error weighted **2 %** (memory about 50 days); 1 % and 10 % tested, 2 % best in most regions and seasons | – | initialised with the mean error of days T−46…T−17 |
 | MeteoSwiss **Mixed EMOS** (Keller et al.) | regression per station and lead time | positive weights per station and lead time, fitted by CRPS | **45-day** rolling window ("worked well in sensitivity tests"); combining COSMO and IFS beat the better single post-processed model by about 9 % (CRPS) |
 
-So the structure we chose, **bias correction plus inverse-error weights per site and
-lead time**, is the established operational approach (OCF, NBM), not an invention.
-Two points differ from practice:
+The established operational approach (OCF, NBM) is **bias correction plus
+inverse-error weights per site and lead time**. Two choices matter:
 
-1. **Training length.** Operational systems use about **30–50 days**, not 90: model
-   biases change with season, weather regime and model upgrades. Cheng & Steenburgh
-   (2007) found that short running-mean bias removal and Kalman filters work well in
+1. **Training length.** Operational systems use about **30–50 days**: model biases
+   change with season, weather regime and model upgrades. Cheng & Steenburgh (2007)
+   found that short running-mean bias removal and Kalman filters work well in
    persistent regimes (valley cold pools) but lag when the regime changes; long MOS
    training handled sharp changes better. Short windows adapt, long windows are stable.
 2. **Inverse MAE vs inverse error variance.** Woodcock & Greenslade (2007) report
-   that the choice makes a negligible difference. Inverse variance (ours) reacts more
-   strongly to differences between models; our shrinkage dampens that.
+   that the choice makes a negligible difference.
 
 ## The risk: estimated weights can lose to a plain average
 
@@ -40,28 +30,26 @@ The "forecast combination puzzle" (Stock & Watson 2004; Smith & Wallis 2009; Qia
 al. 2015): a simple average often beats estimated "optimal" weights, because weights
 estimated from short samples carry noise that can cost more than they gain. Estimated
 weights pay off when one model is clearly better or when there is a lot of data.
-Consequences for us:
+Consequences:
 
-- **Shrinking towards the plain mean is right** and should stay. With 10 scored days
-  (Benešov, temperature) our weights are 75 % plain mean, which is the cautious choice.
-- **Our models are not independent.** IFS HRES, IFS 0.25° and AIFS share ECMWF's
+- **Shrinking towards the plain mean** is the cautious choice while the scores are short.
+- **The models are not independent.** IFS HRES, IFS 0.25° and AIFS share ECMWF's
   analysis; ICON-D2 and ICON-EU are both DWD; the two ALADINs are both ČHMÚ. Weights
   that ignore this give a model family several votes. Inverse-error weights do not
   correct for correlated errors; only weights fitted jointly (regression, EMOS) do, and
-  those need much more data. Note it; revisit once a year of scores exists.
+  those need much more data.
 - **It must be tested, not assumed** (roadmap 6.4): weights estimated only from days
   before the scored day, scored like a model, compared with the best single model and
-  the plain mean, with the day-bootstrap intervals we already use for the ranking.
-  Done by `mvd blend-test` since 2026-10-15; first result (24 days of September 2026)
-  in [methodology.md](methodology.md#does-it-beat-the-best-single-model-roadmap-64).
+  the plain mean, with the day-bootstrap intervals we already use for the ranking
+  (`blend-test.json`, the Compare page; [methodology.md](methodology.md#our-own-forecast)).
 
 ## Precipitation
 
 Averaging rain fields smooths them: the mean of several models forecasts light rain
 too often and heavy rain too weakly (Clark 2017; probability matching, Ebert 2001,
-is the usual remedy for gridded fields). For a point forecast this means our combined
-hourly rain will show drizzle where only some models have a shower, and will
-understate a downpour. Remedies that fit a TV-style forecast: show the **probability
+is the usual remedy for gridded fields). For a point forecast this means a combined
+hourly rain shows drizzle where only some models have a shower, and understates a
+downpour. Remedies that fit a TV-style forecast: show the **probability
 of precipitation** (the share of models that forecast rain) next to the
 amount, and draw rain symbols only when that probability is high.
 
@@ -70,21 +58,7 @@ amount, and draw rain symbols only when that probability is high.
 ICON-D2, AROME and ALADIN end after 1–3 days. When a model drops out, the remaining
 weights are rescaled and the combined curve can jump. MeteoSwiss tapers the outgoing
 model over its last hours (they tested two schemes; carrying the model's correction
-forward with decaying weight was best). We now taper a model's weight linearly over its
-last 3 hours (applied in the forecast page and the TV forecast).
-
-## Decisions
-
-| Question | Decision |
-|---|---|
-| Bias correction + inverse-error weights per okres and lead day | **Keep**: the OCF/NBM approach |
-| Shrink towards equal weights | **Keep** while scores are short |
-| 90-day window | **Test in 6.4** (`mvd blend-test --window 30d`/`45d`, once the history is longer than 45 days) against 30 and 45 days (the operational range) and a decaying average (NAEFS-style, 2–5 %); switch if shorter wins on our data |
-| Inverse variance vs inverse MAE | Keep (negligible difference reported) |
-| Correlated model families | Document; revisit with a year of data |
-| Rain | Show probability of precipitation, symbols only above a threshold |
-| Short-range models ending | Taper over the last 3 hours (done) |
-| Cloud cover (for TV symbols) | Plain mean of the models, corrected against ČHMÚ cloud cover (`a + b·mean`); sunshine corrected as a share of the day length; refitted nightly (methodology.md#sunshine-cloud-and-gusts) |
+forward with decaying weight was best).
 
 ## Sources
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
@@ -18,31 +17,18 @@ from meteoverdict import (
     aggregate,
     aladin,
     blend,
-    blend_interval,
-    blendtest,
     bucket,
     chmi_archive,
-    combine,
-    extras,
     farm,
     forecasts,
     fresh,
-    frost,
     gauges,
-    gusts,
-    hindcast,
     leads,
-    mos,
-    obce_forecast,
-    obce_loso,
     observations,
     observed_map,
-    outlook,
-    outlook_bucket,
     partitions,
     quality,
     radar,
-    rain_calibration,
     ranking,
     regions,
     runs,
@@ -53,7 +39,6 @@ from meteoverdict import (
     station_pages,
     stations,
     store,
-    sun_cloud_gust,
 )
 from meteoverdict import backfill as backfill_mod
 from meteoverdict import daily as daily_mod
@@ -567,7 +552,7 @@ def observed_map_cmd(
     ] = Path("data/stations.parquet"),
     parts_dir: Annotated[
         Path,
-        typer.Option(help="Folder of the outlook's parts-of-day archive (outlook-parts-*)."),
+        typer.Option(help="Folder of the forecast's archive (outlook-parts-*, outlook-archive-*)."),
     ] = Path("data/outlook-archive"),
     out: Annotated[Path, typer.Option(help="Folder for the day files.")] = Path("site/data")
     / observed_map.FOLDER,
@@ -575,7 +560,7 @@ def observed_map_cmd(
         bool,
         typer.Option(
             "--github-release",
-            help="First download the archive files and the outlook's parts archive needed "
+            help="First download the archive files and the forecast's archive needed "
             "from GitHub Releases (read only).",
         ),
     ] = False,
@@ -617,13 +602,13 @@ def observed_map_cmd(
         paths = found(names)
         return pl.concat([pl.read_parquet(p).cast(schema) for p in paths]) if paths else None
 
-    archived = read(observed_map.parts_archive_names(today), outlook.PARTS_ARCHIVE_SCHEMA)
-    means = read(observed_map.means_archive_names(today), sun_cloud_gust.ARCHIVE_SCHEMA)
-    hindcasts = read([observed_map.HINDCAST_ASSET], hindcast.SCHEMA)
+    archived = read(observed_map.parts_archive_names(today), observed_map.PARTS_ARCHIVE_SCHEMA)
+    means = read(observed_map.means_archive_names(today), observed_map.MEANS_SCHEMA)
+    hindcasts = read([observed_map.HINDCAST_ASSET], observed_map.HINDCAST_SCHEMA)
     observed_map.build(
         archive,
         pl.read_parquet(stations_path),
-        combine.okres_points(),
+        regions.okres_points(),
         out,
         today,
         parts_archive=archived,
@@ -636,188 +621,6 @@ def observed_map_cmd(
         with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
             store.publish_folder(_release_store(client), out, observed_map.ZIP)
         typer.echo(f"published {observed_map.ZIP} to the release {store.LATEST_TAG}")
-
-
-@app.command("hindcast")
-def hindcast_cmd(
-    data_dir: Annotated[Path, typer.Option(help="Folder with obs/, gauges/, fc/ and scores/.")] = (
-        Path("data")
-    ),
-    stations_path: Annotated[
-        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
-    ] = Path("data/stations.parquet"),
-    out: Annotated[Path, typer.Option(help="The rebuilt forecasts (Parquet).")] = Path(
-        "data/outlook-archive"
-    )
-    / hindcast.ASSET,
-    days: Annotated[
-        int, typer.Option(help="Rebuild the last N Prague days (the measured page's days).")
-    ] = observed_map.DAILY_DAYS,
-    redo: Annotated[
-        int,
-        typer.Option(help="Recompute only the newest N days of an existing file (0: all)."),
-    ] = 0,
-    github_release: Annotated[
-        bool,
-        typer.Option(
-            "--github-release",
-            help="Download the months' observations, forecasts, scores and the existing "
-            "file from GitHub Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
-        ),
-    ] = False,
-    publish: Annotated[
-        bool,
-        typer.Option(
-            "--publish", help=f"Put the file into the release {hindcast.TAG} ({hindcast.ASSET})."
-        ),
-    ] = False,
-) -> None:
-    """Our combined forecast for the measured page's past days, rebuilt out of sample from
-    the stored D+N forecasts (``meteoverdict.hindcast``): leads 1-3 days, parts of day."""
-    if publish and not github_release:
-        raise typer.BadParameter("--publish needs --github-release")
-    if not stations_path.exists():
-        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
-    today = observed_map.prague_today(datetime.now(UTC))
-    last_day = today - timedelta(days=1)
-    first_day = today - timedelta(days=days)
-    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
-        releases = _release_store(client) if github_release else None
-        if releases:
-            if hindcast.ASSET in releases.assets(hindcast.TAG):
-                releases.download(hindcast.TAG, hindcast.ASSET, out)
-            # the training window (90 days) before the first day
-            months = partitions.months(first_day - timedelta(days=100), last_day)
-            store.download(releases, data_dir, months, typer.echo, kinds=("scores",))
-            store.download(releases, data_dir, months, typer.echo, kinds=("obs", "gauges", "fc"))
-            oldest = last_day - timedelta(days=fresh.DAYS + catalogue.MAX_LEAD_DAY + 1)
-            runs.RunsSync(releases, data_dir, typer.echo).pull(partitions.months(oldest, last_day))
-        files = sorted((data_dir / "scores").glob("*.parquet"))
-        if not files:
-            typer.echo(f"mvd hindcast: no scores in {data_dir / 'scores'}", err=True)
-            raise typer.Exit(code=1)
-        variables = list(blendtest.SCORE_VARIABLES.values())
-        scores = (
-            pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
-            .filter(pl.col("variable").is_in(variables))
-            .collect()
-        )
-        wanted = [first_day + timedelta(days=k) for k in range((last_day - first_day).days + 1)]
-        if redo and out.exists():
-            done = set(pl.read_parquet(out)["day"].unique().to_list())
-            wanted = [d for d in wanted if d not in done or d > last_day - timedelta(days=redo)]
-        start = first_day - timedelta(days=100)
-        obs = observations.scan(data_dir, start, last_day + timedelta(days=1))
-        fc = partitions.scan_months(data_dir / "fc", start, last_day + timedelta(days=1))
-        enabled = [m for m in catalogue.load_models() if m.enabled]
-        fc, _ = daily_mod.add_fresh(data_dir, enabled, last_day, obs, fc, typer.echo)
-        if fc is None:
-            typer.echo("mvd hindcast: no forecasts", err=True)
-            raise typer.Exit(code=1)
-        rows = hindcast.rebuild(
-            scores, fc, obs, pl.read_parquet(stations_path), wanted, log=typer.echo
-        )
-        path = hindcast.merge(out, rows, first_day)
-        if publish:
-            releases.put(hindcast.TAG, hindcast.ASSET, path)
-            typer.echo(f"published {hindcast.ASSET} to the release {hindcast.TAG}")
-    typer.echo(f"wrote {path} ({rows['day'].n_unique()} days rebuilt)")
-
-
-@app.command("blend-interval")
-def blend_interval_cmd(
-    data_dir: Annotated[Path, typer.Option(help="Folder with obs/, gauges/, fc/ and scores/.")] = (
-        Path("data")
-    ),
-    stations_path: Annotated[
-        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
-    ] = Path("data/stations.parquet"),
-    errors_path: Annotated[
-        Path, typer.Option("--errors", help="The archive of the combined forecast's errors.")
-    ] = Path("data/outlook-archive") / blend_interval.ASSET,
-    out: Annotated[Path, typer.Option(help="The JSON file.")] = Path("data") / blend_interval.FILE,
-    days: Annotated[
-        int, typer.Option(help="Rebuild the errors of the last N days (the archive keeps more).")
-    ] = blend_interval.KEEP_DAYS,
-    redo: Annotated[
-        int,
-        typer.Option(help="Recompute only the newest N days of an existing archive (0: all)."),
-    ] = 0,
-    github_release: Annotated[
-        bool,
-        typer.Option(
-            "--github-release",
-            help="Download the months' observations, forecasts, scores and the archive from "
-            "GitHub Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
-        ),
-    ] = False,
-    publish: Annotated[
-        bool,
-        typer.Option(
-            "--publish",
-            help=f"Put {blend_interval.FILE} into the release data-latest and the archive "
-            f"({blend_interval.ASSET}) into {blend_interval.TAG}.",
-        ),
-    ] = False,
-) -> None:
-    """The range of the combined temperature forecast: the 10th and 90th percentile of its
-    own errors of the last 30 days (``meteoverdict.blend_interval``)."""
-    if publish and not github_release:
-        raise typer.BadParameter("--publish needs --github-release")
-    if not stations_path.exists():
-        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
-    now = datetime.now(UTC)
-    last_day = now.date() - timedelta(days=1)
-    first_day = last_day - timedelta(days=days - 1)
-    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
-        releases = _release_store(client) if github_release else None
-        if releases:
-            if blend_interval.ASSET in releases.assets(blend_interval.TAG):
-                releases.download(blend_interval.TAG, blend_interval.ASSET, errors_path)
-            months = partitions.months(first_day - timedelta(days=100), last_day)
-            store.download(releases, data_dir, months, typer.echo, kinds=("scores",))
-            store.download(releases, data_dir, months, typer.echo, kinds=("obs", "gauges", "fc"))
-            oldest = last_day - timedelta(days=fresh.DAYS + catalogue.MAX_LEAD_DAY + 1)
-            runs.RunsSync(releases, data_dir, typer.echo).pull(partitions.months(oldest, last_day))
-        files = sorted((data_dir / "scores").glob("*.parquet"))
-        if not files:
-            typer.echo(f"mvd blend-interval: no scores in {data_dir / 'scores'}", err=True)
-            raise typer.Exit(code=1)
-        variables = list(blendtest.SCORE_VARIABLES.values())
-        scores = (
-            pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
-            .filter(pl.col("variable").is_in(variables))
-            .collect()
-        )
-        wanted = [first_day + timedelta(days=k) for k in range((last_day - first_day).days + 1)]
-        if redo and errors_path.exists():
-            done = set(pl.read_parquet(errors_path)["date"].unique().to_list())
-            wanted = [d for d in wanted if d not in done or d > last_day - timedelta(days=redo)]
-        start = first_day - timedelta(days=100)
-        obs = observations.scan(data_dir, start, last_day + timedelta(days=1))
-        fc = partitions.scan_months(data_dir / "fc", start, last_day + timedelta(days=1))
-        enabled = [m for m in catalogue.load_models() if m.enabled]
-        fc, _ = daily_mod.add_fresh(data_dir, enabled, last_day, obs, fc, typer.echo)
-        if fc is None or obs is None:
-            typer.echo("mvd blend-interval: no forecasts or observations", err=True)
-            raise typer.Exit(code=1)
-        rows = blend_interval.rebuild(
-            scores, fc, obs, pl.read_parquet(stations_path), wanted, log=typer.echo
-        )
-        path = blend_interval.merge(errors_path, rows, first_day)
-        errors = pl.read_parquet(path)
-        last = errors["date"].max() if errors.height else None
-        if last is None:
-            typer.echo("mvd blend-interval: no errors yet", err=True)
-            raise typer.Exit(code=1)
-        table = blend_interval.quantiles(errors, last)
-        doc = blend_interval.document(table, last, now)
-        written = blend_interval.write(doc, out)
-        if publish:
-            releases.put(blend_interval.TAG, blend_interval.ASSET, path)
-            releases.put(store.LATEST_TAG, blend_interval.FILE, written)
-            typer.echo(f"published {blend_interval.FILE} and {blend_interval.ASSET}")
-    typer.echo(f"{len(doc['okresy'])} okresy (with CZ), errors to {last} → {written}")
 
 
 @app.command("leads")
@@ -1062,13 +865,9 @@ def station_fc_cmd(
         bool,
         typer.Option("--publish", help="Put station-fc.zip into the release data-latest."),
     ] = False,
-    stations_path: Annotated[
-        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
-    ] = Path("data/stations.parquet"),
 ) -> None:
     """Every model's forecast at the station point, by day, with the measured values: the
-    measured page's model selector (``meteoverdict.station_fc``). The blend is the weighted
-    mean (the forecast's weights, ``forecast-weights.parquet``), the plain mean without."""
+    measured page's model selector (``meteoverdict.station_fc``), with the plain mean."""
     if publish and not github_release:
         raise typer.BadParameter("--publish needs --github-release")
     last = datetime.now(UTC).date() - timedelta(days=1)
@@ -1085,20 +884,7 @@ def station_fc_cmd(
         if single is None or obs is None:
             typer.echo("mvd station-fc: no single runs or observations", err=True)
             raise typer.Exit(code=1)
-        weights_path = data_dir / combine.FORECAST_WEIGHTS_FILE
-        if releases and combine.FORECAST_WEIGHTS_FILE in releases.names(store.LATEST_TAG):
-            releases.download(store.LATEST_TAG, combine.FORECAST_WEIGHTS_FILE, weights_path)
-        weights_table = pl.read_parquet(weights_path) if weights_path.exists() else None
-        station_okres = (
-            pl.read_parquet(stations_path).select(pl.col("id").alias("station_id"), "okres_code")
-            if stations_path.exists()
-            else None
-        )
-        if weights_table is None or station_okres is None:
-            typer.echo(
-                "mvd station-fc: no weights or stations: the blend is the plain mean", err=True
-            )
-        forecasts_ = station_fc.daily_forecasts(single, first, last, weights_table, station_okres)
+        forecasts_ = station_fc.daily_forecasts(single, first, last)
         measured = station_fc.daily_observations(obs, first, last)
         docs = station_fc.documents(forecasts_, measured, first, last)
         paths = station_fc.write(docs, out, _model_names(), datetime.now(UTC))
@@ -1106,254 +892,6 @@ def station_fc_cmd(
         if publish:
             releases.put(store.LATEST_TAG, zipped.name, zipped)
     typer.echo(f"{len(docs)} stations, {first} … {last} → {out}, {zipped}")
-
-
-@app.command("blend-test")
-def blend_test_cmd(
-    data_dir: Annotated[Path, typer.Option(help="Folder with obs/, gauges/, fc/ and scores/.")] = (
-        Path("data")
-    ),
-    stations_path: Annotated[
-        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
-    ] = Path("data/stations.parquet"),
-    out: Annotated[Path, typer.Option(help="The JSON file.")] = Path("site/data/blend-test.json"),
-    days: Annotated[
-        int, typer.Option(help="Test the last N scored days (training uses the window before).")
-    ] = 180,
-    window: Annotated[
-        str, typer.Option(help="Training window of the weights, e.g. 90d (as live), 45d, 30d.")
-    ] = combine.WINDOW,
-    min_training_days: Annotated[
-        int, typer.Option(help="Warm-up: scored training days needed before a day is tested.")
-    ] = blendtest.MIN_TRAINING_DAYS,
-    resamples: Annotated[int, typer.Option(help="Bootstrap resamples (blocks of days).")] = 1000,
-    github_release: Annotated[
-        bool,
-        typer.Option(
-            "--github-release",
-            help="Download the months' observations, forecasts and scores from GitHub "
-            "Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
-        ),
-    ] = False,
-    publish: Annotated[
-        bool, typer.Option("--publish", help="Put the JSON file into the release data-latest.")
-    ] = False,
-    candidate: Annotated[
-        list[Path] | None,
-        typer.Option(
-            help="Experimental forecasts to compare as single models (Parquet in the "
-            "forecast table's layout, e.g. MeteoVerdict AI's hindcast); repeatable."
-        ),
-    ] = None,
-    compare_zip: Annotated[
-        Path | None,
-        typer.Option(
-            "--compare-zip",
-            help="Also write the Compare page's same-sample ranking (models, mean, our "
-            "combination and the candidates; one file per region) into this zip; "
-            "--publish puts it into the release too.",
-        ),
-    ] = None,
-) -> None:
-    """Out of sample: does our combined forecast beat the best single model? (roadmap 6.4)"""
-    if publish and not github_release:
-        raise typer.BadParameter("--publish needs --github-release")
-    if not stations_path.exists():
-        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
-    if not (window.endswith("d") and window[:-1].isdigit() and int(window[:-1]) > 0):
-        raise typer.BadParameter(f"window must be a number of days like 90d, not {window!r}")
-    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
-        releases = _release_store(client) if github_release else None
-        if releases:
-            remote = store.remote_months(releases)
-            store.download(releases, data_dir, remote, typer.echo, kinds=("scores",))
-        files = sorted((data_dir / "scores").glob("*.parquet"))
-        if not files:
-            typer.echo(f"mvd blend-test: no scores in {data_dir / 'scores'}", err=True)
-            raise typer.Exit(code=1)
-        variables = list(blendtest.SCORE_VARIABLES.values())
-        scores = (
-            pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
-            .filter(pl.col("variable").is_in(variables))
-            .collect()
-        )
-        last = scores["date"].max()
-        first = max(scores["date"].min(), last - timedelta(days=days - 1))
-        if releases:
-            months = partitions.months(first, last + timedelta(days=1))
-            store.download(releases, data_dir, months, typer.echo, kinds=("obs", "gauges", "fc"))
-            # the single runs the latest days' D+N are rebuilt from, as in `mvd daily`
-            oldest = last - timedelta(days=fresh.DAYS + catalogue.MAX_LEAD_DAY + 1)
-            runs.RunsSync(releases, data_dir, typer.echo).pull(partitions.months(oldest, last))
-        obs = observations.scan(data_dir, first, last + timedelta(days=1))
-        fc = partitions.scan_months(data_dir / "fc", first, last + timedelta(days=1))
-        # the fresh days were scored on D+N rebuilt from the single runs: the
-        # combination needs the same forecasts (none without data/runs)
-        enabled = [m for m in catalogue.load_models() if m.enabled]
-        fc, _ = daily_mod.add_fresh(data_dir, enabled, last, obs, fc, typer.echo)
-        if obs is None or fc is None:
-            typer.echo("mvd blend-test: no observations or forecasts for the test period", err=True)
-            raise typer.Exit(code=1)
-        table = pl.read_parquet(stations_path)
-        candidates = (
-            pl.concat([pl.read_parquet(p) for p in candidate]).cast(forecasts.SCHEMA)
-            if candidate
-            else None
-        )
-        test_days, groups, models, info = blendtest.run(
-            scores, fc, obs, table, first, last, window, min_training_days, resamples,
-            log=typer.echo, candidates=candidates,
-        )  # fmt: skip
-        if not groups:
-            typer.echo("mvd blend-test: nothing to test yet (warm-up)", err=True)
-            raise typer.Exit(code=1)
-        doc = blendtest.document(
-            test_days, groups, models, info, _model_names(), datetime.now(UTC), window,
-            min_training_days, resamples,
-        )  # fmt: skip
-        path = blendtest.write(doc, out)
-        if publish:
-            releases.put(store.LATEST_TAG, path.name, path)
-        if compare_zip is not None:
-            zipped = blendtest.write_compare(
-                test_days,
-                table,
-                doc,
-                compare_zip,
-                set(candidates["model"].unique()) if candidates is not None else set(),
-                resamples,
-            )
-            typer.echo(f"→ {zipped}")
-            if publish:
-                releases.put(store.LATEST_TAG, zipped.name, zipped)
-    typer.echo(
-        f"{doc['test_days']} test days {doc['from']} … {doc['to']} "
-        f"({doc['warm_up_days']} scored days before them left out as warm-up)"
-    )
-    for line in blendtest.summary(groups):
-        typer.echo(line)
-    typer.echo(f"→ {path}")
-
-
-@app.command("obce-loso")
-def obce_loso_cmd(
-    data_dir: Annotated[Path, typer.Option(help="Folder with obs/, gauges/, fc/ and scores/.")] = (
-        Path("data")
-    ),
-    stations_path: Annotated[
-        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
-    ] = Path("data/stations.parquet"),
-    out: Annotated[Path, typer.Option(help="The JSON file.")] = Path("site/data") / obce_loso.ASSET,
-    days: Annotated[
-        int, typer.Option(help="Test the last N scored days (training uses the window before).")
-    ] = 180,
-    variant: Annotated[
-        list[str] | None,
-        typer.Option(help="loso (the station held out) and/or buffer (also its neighbours)."),
-    ] = None,
-    buffer_km: Annotated[
-        float, typer.Option(help="The buffer variant also holds out stations this close (km).")
-    ] = obce_loso.BUFFER_KM,
-    block_days: Annotated[
-        int, typer.Option(help="Moving-block bootstrap: days per block.")
-    ] = obce_loso.BLOCK_DAYS,
-    resamples: Annotated[int, typer.Option(help="Bootstrap resamples.")] = obce_loso.RESAMPLES,
-    scored_out: Annotated[
-        Path | None,
-        typer.Option(
-            help="Keep the daily scores of every series here (Parquet, per variant; also "
-            "per batch, so that a stopped run carries on)."
-        ),
-    ] = None,
-    reuse: Annotated[
-        bool,
-        typer.Option(
-            "--reuse", help="Read the daily scores from --scored-out instead of recomputing."
-        ),
-    ] = False,
-    github_release: Annotated[
-        bool,
-        typer.Option(
-            "--github-release",
-            help="Download the months' observations, forecasts, scores and single runs "
-            "from GitHub Releases first (GITHUB_TOKEN, GITHUB_REPOSITORY).",
-        ),
-    ] = False,
-    publish: Annotated[
-        bool, typer.Option("--publish", help="Put the JSON file into the release data-latest.")
-    ] = False,
-) -> None:
-    """Leave one station out: how good is the obec forecast at a place without a station?"""
-    if publish and not github_release:
-        raise typer.BadParameter("--publish needs --github-release")
-    if reuse and scored_out is None:
-        raise typer.BadParameter("--reuse needs --scored-out")
-    if not stations_path.exists():
-        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
-    variants = variant or list(obce_loso.VARIANTS)
-    for v in variants:
-        if v not in obce_loso.VARIANTS:
-            raise typer.BadParameter(f"variant must be one of {obce_loso.VARIANTS}, not {v!r}")
-    with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
-        releases = _release_store(client) if github_release else None
-        if releases:
-            remote = store.remote_months(releases)
-            store.download(releases, data_dir, remote, typer.echo, kinds=("scores",))
-        files = sorted((data_dir / "scores").glob("*.parquet"))
-        if not files:
-            typer.echo(f"mvd obce-loso: no scores in {data_dir / 'scores'}", err=True)
-            raise typer.Exit(code=1)
-        variables = list(blendtest.SCORE_VARIABLES.values())
-        scores = (
-            pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
-            .filter(pl.col("variable").is_in(variables))
-            .collect()
-        )
-        last = scores["date"].max()
-        first = max(scores["date"].min(), last - timedelta(days=days - 1))
-        oldest = scores["date"].min()
-        if releases:
-            months = partitions.months(oldest, last + timedelta(days=1))
-            store.download(releases, data_dir, months, typer.echo, kinds=("obs", "gauges", "fc"))
-            since = last - timedelta(days=fresh.DAYS + catalogue.MAX_LEAD_DAY + 1)
-            runs.RunsSync(releases, data_dir, typer.echo).pull(partitions.months(since, last))
-        obs = observations.scan(data_dir, oldest, last + timedelta(days=1))
-        fc = partitions.scan_months(data_dir / "fc", oldest, last + timedelta(days=1))
-        enabled = [m for m in catalogue.load_models() if m.enabled]
-        fc, _ = daily_mod.add_fresh(data_dir, enabled, last, obs, fc, typer.echo)
-        if obs is None or fc is None:
-            typer.echo("mvd obce-loso: no observations or forecasts", err=True)
-            raise typer.Exit(code=1)
-        table = pl.read_parquet(stations_path)
-        scored = {}
-        for v in variants:
-            kept = scored_out / f"obce-loso-{v}.parquet" if scored_out is not None else None
-            if reuse and kept is not None and kept.exists():
-                scored[v] = pl.read_parquet(kept)
-                continue
-            scored[v] = obce_loso.run(
-                scores, fc, obs, table, first, last, v, buffer_km, log=typer.echo,
-                checkpoint=scored_out / "batches" if scored_out is not None else None,
-            )  # fmt: skip
-            if scored_out is not None and scored[v].height:
-                scored_out.mkdir(parents=True, exist_ok=True)
-                scored[v].write_parquet(scored_out / f"obce-loso-{v}.parquet")
-        groups = obce_loso.results(scored, table, block_days, resamples)
-        if not groups:
-            typer.echo("mvd obce-loso: nothing to test yet (warm-up)", err=True)
-            raise typer.Exit(code=1)
-        doc = obce_loso.document(
-            scored, groups, table, datetime.now(UTC), buffer_km, block=block_days,
-            resamples=resamples,
-        )  # fmt: skip
-        path = obce_loso.write(doc, out)
-        if publish:
-            releases.put(store.LATEST_TAG, path.name, path)
-    typer.echo(f"{doc['test_days']} test days {doc['from']} … {doc['to']}")
-    typer.echo(f"stations: {doc['stations']}")
-    for line in obce_loso.summary(groups):
-        typer.echo(line)
-    typer.echo(f"→ {path}")
 
 
 @app.command("fetch-runs")
@@ -1534,18 +1072,9 @@ def bucket_cells(
         Path | None,
         typer.Option("--stations", help="Station subset CSV. Default: the committed one."),
     ] = None,
-    okres: Annotated[
-        bool,
-        typer.Option(
-            "--okres",
-            help="The okres forecast points of the outlook instead of the stations "
-            "(default --out: src/meteoverdict/data/okres-cells.csv).",
-        ),
-    ] = False,
 ) -> None:
-    """Rebuild the grid cell of every run station (or, with --okres, every okres
-    forecast point of the outlook) in every bucket model (nearest cell, its model
-    surface height) from Open-Meteo's open-data bucket. Needed after the station subset
+    """Rebuild the grid cell of every run station in every bucket model (nearest cell,
+    its model surface height) from Open-Meteo's open-data bucket. Needed after the station subset
     or a model's grid changes (the bucket's reader then reports a grid not in the cells
     file and the API is asked instead)."""
     chosen = (
@@ -1557,14 +1086,8 @@ def bucket_cells(
     )
     limits = httpx.Limits(max_connections=64, max_keepalive_connections=64)
     with httpx.Client(timeout=60, limits=limits) as client:
-        points = (
-            outlook_bucket.point_table(combine.okres_points())
-            if okres
-            else runs.load_stations(stations_path)
-        )
+        points = runs.load_stations(stations_path)
         cells = bucket.build_cells(bucket.Bucket(client), points, chosen, log=typer.echo)
-    if okres and out == Path("src/meteoverdict/data") / bucket.CELLS_FILE:
-        out = out.with_name(outlook_bucket.CELLS_FILE)
     bucket.write_cells(cells, out)
     typer.echo(f"{cells.height} cells of {cells['bucket_model'].n_unique()} models → {out}")
 
@@ -1810,536 +1333,6 @@ def store_download(
     typer.echo(f"downloaded {len(done)} files")
 
 
-class _OpenMeteoMeter:
-    """Counts the requests to the Open-Meteo forecast API (``outlook.URL``) an httpx
-    client sends, retries included, and their weighted calls (``outlook.cost``), so the
-    daily budget can be checked from the log (an httpx ``request`` event hook)."""
-
-    def __init__(self, url: str = outlook.URL) -> None:
-        self.url = httpx.URL(url)
-        self.requests = 0
-        self.calls = 0.0
-
-    def __call__(self, request: httpx.Request) -> None:
-        if (request.url.host, request.url.path) != (self.url.host, self.url.path):
-            return
-        params = request.url.params
-        points = len(params.get("latitude", "").split(","))
-        models = len([m for m in params.get("models", "").split(",") if m])
-        self.requests += 1
-        self.calls += outlook.cost(points, max(models, 1))
-
-    def line(self) -> str:
-        return f"Open-Meteo: {self.calls:g} calls in {self.requests} requests"
-
-
-@app.command("outlook")
-def outlook_cmd(
-    aggregates_path: Annotated[
-        Path, typer.Option("--aggregates", help="aggregates.parquet from `mvd aggregate`.")
-    ] = Path("data/aggregates.parquet"),
-    out: Annotated[
-        Path, typer.Option(help="The JSON file to write; outlook-hourly.json goes beside it.")
-    ] = Path("site/data/outlook.json"),
-    calibration_path: Annotated[
-        Path,
-        typer.Option(
-            "--rain-calibration",
-            help="rain-calibration.json from `mvd daily` (missing or too old: the raw share).",
-        ),
-    ] = Path("site/data") / rain_calibration.FILE,
-    github_release: Annotated[
-        bool,
-        typer.Option(
-            "--github-release",
-            help="Take aggregates.parquet (and rain-calibration.json, frost.json) from and "
-            "put outlook.json and outlook-hourly.json into the release data-latest "
-            "(GITHUB_TOKEN, GITHUB_REPOSITORY); take the sunshine/cloud coefficients from "
-            "there, archive the plain model means in the release outlook-archive and the "
-            "models' nights in outlook-nights-YYYY-MM of data-YYYY-MM.",
-        ),
-    ] = False,
-    frost_path: Annotated[
-        Path, typer.Option("--frost", help="Frost calibration from `mvd frost-fit`.")
-    ] = Path("data/frost.json"),
-    data_dir: Annotated[
-        Path, typer.Option(help="Folder for the archived nights (outlook-nights/).")
-    ] = Path("data"),
-    interval_path: Annotated[
-        Path,
-        typer.Option(
-            "--interval",
-            help="blend-interval.json from `mvd blend-interval` (missing or older than a "
-            "week: no range).",
-        ),
-    ] = Path("data") / blend_interval.FILE,
-    corrections_path: Annotated[
-        Path,
-        typer.Option(
-            "--corrections",
-            help="Sunshine/cloud/gust coefficients from `mvd sun-cloud-gust` "
-            "(missing: the bootstrap in the package).",
-        ),
-    ] = Path("data/sun-cloud-gust.json"),
-    archive_dir: Annotated[
-        Path, typer.Option(help="Folder of the monthly archive of the plain model means.")
-    ] = Path("data/outlook-archive"),
-    api_only: Annotated[
-        bool,
-        typer.Option(
-            "--api",
-            help="Ask the Open-Meteo Forecast API for every model (as until 2026-10-20) "
-            "instead of reading the open-data bucket.",
-        ),
-    ] = False,
-) -> None:
-    """TV-style forecast for every okres: today's models combined by their okres scores.
-    The models come from Open-Meteo's open-data bucket (no API calls), a model missing
-    there from the Forecast API."""
-    meter = _OpenMeteoMeter()
-    limits = httpx.Limits(max_connections=64, max_keepalive_connections=64)
-    with (
-        httpx.Client(
-            timeout=300,
-            transport=httpx.HTTPTransport(retries=3),
-            event_hooks={"request": [meter]},
-        ) as client,
-        httpx.Client(timeout=60, limits=limits) as bucket_client,
-    ):
-        releases = _release_store(client) if github_release else None
-        weights_path = aggregates_path.with_name(combine.FORECAST_WEIGHTS_FILE)
-        if releases:
-            releases.download(store.LATEST_TAG, "aggregates.parquet", aggregates_path)
-            if combine.FORECAST_WEIGHTS_FILE in releases.names(store.LATEST_TAG):
-                releases.download(store.LATEST_TAG, combine.FORECAST_WEIGHTS_FILE, weights_path)
-            if rain_calibration.FILE in releases.names(store.LATEST_TAG):
-                releases.download(store.LATEST_TAG, rain_calibration.FILE, calibration_path)
-            if sun_cloud_gust.NAME in releases.names(store.LATEST_TAG):
-                releases.download(store.LATEST_TAG, sun_cloud_gust.NAME, corrections_path)
-        corrections = sun_cloud_gust.load(corrections_path)
-        if releases and blend_interval.FILE in releases.names(store.LATEST_TAG):
-            releases.download(store.LATEST_TAG, blend_interval.FILE, interval_path)
-        interval = blend_interval.load(interval_path)
-        if interval is None:
-            typer.echo(f"mvd outlook: no current {interval_path}, no temperature range", err=True)
-        if not aggregates_path.exists():
-            raise typer.BadParameter(f"{aggregates_path} not found; run `mvd aggregate`")
-        # the forecast's weights with the temperature and wind regression (mvd daily),
-        # else the inverse-error weights of the okres scores alone
-        if weights_path.exists():
-            weights = pl.read_parquet(weights_path)
-        else:
-            weights = combine.forecast_weights(pl.read_parquet(aggregates_path))
-        if weights.is_empty():
-            typer.echo("mvd outlook: no okres weights yet", err=True)
-            raise typer.Exit(code=1)
-        points = combine.okres_points()
-        calibration = rain_calibration.load(calibration_path, log=typer.echo)
-        if releases and frost_path.name in releases.names(store.LATEST_TAG):
-            releases.download(store.LATEST_TAG, frost_path.name, frost_path)
-        frost_calibration = frost.Calibration.read(frost_path) if frost_path.exists() else None
-        if frost_calibration is None:
-            typer.echo(f"mvd outlook: no {frost_path}, the frost fields stay empty", err=True)
-        nights: list[pl.DataFrame] = []
-        forecasts: list[pl.DataFrame] = []
-        single_runs = _outlook_runs(releases, data_dir)
-        bucket_store = None if api_only else bucket.Bucket(bucket_client)
-        sources: dict[str, list[str]] = {}
-        try:
-            table, hourly = outlook.outlook(
-                client,
-                weights,
-                points,
-                sleep=time.sleep,
-                calibration=calibration,
-                corrections=corrections,
-                frost_calibration=frost_calibration,
-                nights=nights,
-                single_runs=single_runs,
-                forecasts=forecasts,
-                interval=interval,
-                store=bucket_store,
-                sources=sources,
-                log=typer.echo,
-            )
-        finally:  # also when it fails: the calls count against the daily budget
-            lines = [meter.line()]
-            if bucket_store is not None:
-                lines.append(
-                    f"Bucket: {len(sources.get('bucket', []))} models in "
-                    f"{bucket_store.requests:,} requests (no API calls)"
-                )
-            if sources.get("api") and bucket_store is not None:
-                lines.append(
-                    f"From the API (not complete in the bucket): {', '.join(sources['api'])}"
-                )
-            if sources.get("left_out"):
-                lines.append(
-                    f"Left out (over the fallback's {outlook.MAX_FALLBACK_CALLS} calls): "
-                    + ", ".join(sources["left_out"])
-                )
-            for line in lines:
-                typer.echo(line)
-            _job_summary("## Outlook\n\n" + "".join(f"- {line}\n" for line in lines))
-        now = datetime.now(UTC)
-        path = outlook.write(table, points, out, now)
-        hourly_path = outlook.write_hourly(hourly, out.with_name("outlook-hourly.json"), now)
-        # every model's own hourly forecast per okres (the detailed forecast page and the
-        # model picker of the forecast map read these instead of asking Open-Meteo)
-        fc = pl.concat(forecasts)
-        models_folder = out.parent / outlook.MODELS_FOLDER
-        model_paths = outlook.write_models(fc, hourly, models_folder, now)
-        largest = max((p.stat().st_size for p in model_paths), default=0)
-        typer.echo(
-            f"{len(model_paths)} per-model files → {models_folder} (largest {largest:,} bytes)"
-        )
-        # every model's parts of day for all okresy, one file per model (the model
-        # switch of the forecast map)
-        parts_folder = out.parent / outlook.MODEL_PARTS_FOLDER
-        days = table["day"].unique().sort().to_list()
-        part_paths = outlook.write_model_parts(fc, weights, days, parts_folder, now)
-        largest = max((p.stat().st_size for p in part_paths), default=0)
-        typer.echo(
-            f"{len(part_paths) - 1} per-model part-of-day files → {parts_folder} "
-            f"(largest {largest:,} bytes)"
-        )
-        if releases:
-            releases.put(store.LATEST_TAG, "outlook.json", path)
-            releases.put(store.LATEST_TAG, "outlook-hourly.json", hourly_path)
-            store.publish_folder(releases, models_folder, outlook.MODELS_ZIP)
-            store.publish_folder(releases, parts_folder, outlook.MODEL_PARTS_ZIP)
-        try:  # training data for the corrections; must not fail the outlook
-            _archive_outlook(client, hourly, now, archive_dir, github_release)
-        except Exception as exc:
-            typer.echo(f"mvd outlook: archive not updated: {exc}", err=True)
-        try:  # our own copy of everything fetched; must not fail the outlook
-            _archive_outlook_models(client, fc, now, archive_dir, github_release)
-        except Exception as exc:
-            typer.echo(f"mvd outlook: model archive not updated: {exc}", err=True)
-        try:  # what the map showed, for "forecast vs. measured"; must not fail the outlook
-            _archive_outlook_parts(client, table, now, archive_dir, github_release)
-        except Exception as exc:
-            typer.echo(f"mvd outlook: parts archive not updated: {exc}", err=True)
-        try:  # training data for the frost clear-calm term; must not fail the outlook
-            _archive_outlook_nights(releases, nights, data_dir / frost.ARCHIVE_FOLDER)
-        except (httpx.HTTPError, OSError) as exc:
-            typer.echo(f"mvd outlook: archiving the nights failed: {exc}", err=True)
-    typer.echo(f"{table['okres'].n_unique()} okresy, {table.height} rows → {path}")
-
-
-def _outlook_runs(releases: GitHubReleaseStore | None, data_dir: Path) -> pl.LazyFrame | None:
-    """The single runs of the last ``gusts.MAX_RUN_AGE_H`` hours for the outlook's gusts
-    (with ``releases`` first downloaded from runs-YYYY-MM; no Open-Meteo calls); None
-    when there are none or they cannot be had (the gusts then stay empty)."""
-    now = datetime.now(UTC)
-    since = now - timedelta(hours=gusts.MAX_RUN_AGE_H)
-    try:
-        if releases:
-            runs.RunsSync(releases, data_dir, typer.echo).pull(
-                partitions.months(since.date(), now.date())
-            )
-        found = leads.scan_runs(data_dir / "runs", since, now)
-    except (httpx.HTTPError, OSError, RuntimeError) as exc:
-        typer.echo(f"mvd outlook: no single runs, the gusts stay empty: {exc}", err=True)
-        return None
-    if found is None:
-        typer.echo("mvd outlook: no single runs, the gusts stay empty", err=True)
-    return found
-
-
-def _archive_outlook_nights(
-    releases: GitHubReleaseStore | None, nights: list[pl.DataFrame], folder: Path
-) -> None:
-    """Merge the models' nights at the okres points into ``folder/YYYY-MM.parquet`` (by
-    run month) and, with ``releases``, into ``outlook-nights-YYYY-MM.parquet`` of the
-    release ``data-YYYY-MM``: training data for the clear-calm term, no extra calls."""
-    rows = [n for n in nights if n.height]
-    if not rows:
-        return
-    merged = pl.concat(rows)
-    for month in sorted({f"{run:%Y-%m}" for run in merged["run"].unique().to_list()}):
-        name = frost.archive_name(month)
-        if releases and name in releases.names(store.release_tag(month)):
-            releases.download(store.release_tag(month), name, folder / f"{month}.parquet")
-    for written in frost.write_archive(merged, folder):
-        if releases:
-            releases.put(store.release_tag(written.stem), frost.archive_name(written.stem), written)
-        typer.echo(f"archived the outlook nights → {written}")
-
-
-def _archive_outlook(
-    client: httpx.Client, hourly: pl.DataFrame, now: datetime, folder: Path, github: bool
-) -> None:
-    """Add this run's plain model means of cloud and sunshine to the month file (and to
-    the release outlook-archive)."""
-    tag, name = sun_cloud_gust.archive_asset(f"{now:%Y-%m}")
-    path = folder / name
-    archive = None
-    if github:
-        archive = GitHubReleaseStore(
-            client, *_github_credentials(), notes=sun_cloud_gust.ARCHIVE_NOTES
-        )
-        if name in archive.assets(tag):
-            archive.download(tag, name, path)
-    sun_cloud_gust.append_archive(path, sun_cloud_gust.archive_rows(hourly, now))
-    if archive:
-        archive.put(tag, name, path, label=store.sha256(path))
-    typer.echo(f"archived the plain means → {path}")
-
-
-def _archive_outlook_models(
-    client: httpx.Client, fc: pl.DataFrame, now: datetime, folder: Path, github: bool
-) -> None:
-    """Merge this run's answer (every model, variable and hour at the okres points) into
-    the day's ``outlook-models-YYYY-MM-DD.parquet`` (and the release
-    ``outlook-models-YYYY-MM``): our own copy of what the outlook fetched, one run per
-    ``issued``, no duplicates; a run moves only its day's file (a few MB)."""
-    tag, name = outlook.model_archive_asset(now)
-    path = folder / name
-    archive = None
-    if github:
-        archive = GitHubReleaseStore(
-            client, *_github_credentials(), notes=outlook.MODEL_ARCHIVE_NOTES
-        )
-        if name in archive.assets(tag):
-            archive.download(tag, name, path)
-    outlook.append_model_archive(path, outlook.model_archive_rows(fc, now))
-    if archive:
-        archive.put(tag, name, path, label=store.sha256(path))
-    typer.echo(f"archived the models' forecasts → {path} ({path.stat().st_size:,} bytes)")
-
-
-def _archive_outlook_parts(
-    client: httpx.Client, table: pl.DataFrame, now: datetime, folder: Path, github: bool
-) -> None:
-    """Merge this run's parts of day (outlook.json's values) into the month's
-    ``outlook-parts-YYYY-MM.parquet`` (and the release outlook-archive): the forecast
-    the observed map compares with what was measured (``mvd observed-map``)."""
-    tag, name = outlook.parts_archive_asset(now)
-    path = folder / name
-    archive = None
-    if github:
-        archive = GitHubReleaseStore(client, *_github_credentials())
-        if name in archive.assets(tag):
-            archive.download(tag, name, path)
-    outlook.append_parts_archive(path, outlook.parts_archive_rows(table, now))
-    if archive:
-        archive.put(tag, name, path, label=store.sha256(path))
-    typer.echo(f"archived the parts of day → {path} ({path.stat().st_size:,} bytes)")
-
-
-@app.command("obce-forecast")
-def obce_forecast_cmd(
-    weights_path: Annotated[
-        Path, typer.Option("--weights", help="forecast-weights.parquet (the okres weights).")
-    ] = Path("data") / combine.FORECAST_WEIGHTS_FILE,
-    out_dir: Annotated[
-        Path, typer.Option(help="Folder for obce-<okres>.json and obce.zip.")
-    ] = Path("site/data/forecast"),
-    github_release: Annotated[
-        bool,
-        typer.Option(
-            "--github-release",
-            help="Take the weights from and put the files into the release data-latest.",
-        ),
-    ] = False,
-) -> None:
-    """Test: forecast for every obec (obce-elevations.csv), from the bucket's newest runs
-    with its okres's weights; one file per okres, packed in obce.zip. No Open-Meteo calls."""
-    with httpx.Client(timeout=120, transport=httpx.HTTPTransport(retries=3)) as client:
-        releases = _release_store(client) if github_release else None
-        if releases:
-            releases.download(store.LATEST_TAG, combine.FORECAST_WEIGHTS_FILE, weights_path)
-        weights = pl.read_parquet(weights_path)
-        docs = obce_forecast.forecast(bucket.Bucket(client), weights, log=typer.echo)
-        paths = [obce_forecast.write(doc, out_dir) for doc in docs.values()]
-        packed = obce_forecast.write_zip(paths, out_dir / obce_forecast.ZIP_NAME)
-        obce = sum(len(doc["places"]) for doc in docs.values())
-        size = packed.stat().st_size / 1e6
-        typer.echo(f"{packed}: {len(paths)} okresy, {obce} obce, {size:.1f} MB")
-        if releases:
-            releases.put(store.LATEST_TAG, packed.name, packed)
-
-
-@app.command("frost-fit")
-def frost_fit_cmd(
-    data_dir: Annotated[
-        Path, typer.Option(help="Folder with fc/ and outlook-nights/ (monthly files).")
-    ] = Path("data"),
-    chmi_dir: Annotated[
-        Path, typer.Option(help="ČHMÚ archive folder (<tag>/<name>), for chmi-daily-*.")
-    ] = Path("data/chmi"),
-    stations_path: Annotated[
-        Path, typer.Option("--stations", help="Station table from `mvd stations`.")
-    ] = Path("data/stations.parquet"),
-    out: Annotated[Path, typer.Option(help="The calibration file.")] = Path("data/frost.json"),
-    nights: Annotated[
-        int, typer.Option(help="Training window: the last N nights with observations.")
-    ] = frost.WINDOW_NIGHTS,
-    github_release: Annotated[
-        bool,
-        typer.Option(
-            "--github-release",
-            help="Download the D+N forecasts (data-YYYY-MM), the archived outlook nights "
-            "and ČHMÚ's daily data (chmi-YYYY) from GitHub Releases first.",
-        ),
-    ] = False,
-    publish: Annotated[
-        bool, typer.Option("--publish", help="Put frost.json into the release data-latest.")
-    ] = False,
-) -> None:
-    """Night-minimum corrections for the frost fields of the outlook: per model and lead
-    day, per station, and the clear-calm term (docs/methodology.md#frost)."""
-    if publish and not github_release:
-        raise typer.BadParameter("--publish needs --github-release")
-    if not stations_path.exists():
-        raise typer.BadParameter(f"{stations_path} not found; run `mvd stations` first")
-    today = datetime.now(UTC).date()
-    first = today - timedelta(days=nights + 3)
-    months = partitions.months(first, today)
-    archive_dir = data_dir / frost.ARCHIVE_FOLDER
-    with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
-        releases = _release_store(client) if github_release else None
-        if releases:
-            store.download(releases, data_dir, months, typer.echo, kinds=("fc",))
-            for month in months:
-                name = frost.archive_name(month)
-                if name in releases.names(store.release_tag(month)):
-                    releases.download(
-                        store.release_tag(month), name, archive_dir / f"{month}.parquet"
-                    )
-            wanted = [chmi_archive.month_asset("daily", int(m[:4]), int(m[5:])) for m in months]
-            chmi_archive.sync(_archive_releases(client), chmi_dir, wanted, log=typer.echo)
-        daily = chmi_archive.scan(chmi_dir, "chmi-daily-*.parquet")
-        fc = partitions.scan_months(data_dir / "fc", first, today)
-        if daily is None or fc is None:
-            typer.echo("mvd frost-fit: no forecasts or no ČHMÚ daily data", err=True)
-            raise typer.Exit(code=1)
-        start = datetime.combine(first, datetime.min.time(), UTC)
-        obs = frost.observed_nights(daily.filter(pl.col("time") >= start))
-        fc = fc.filter(pl.col("lead_day") <= frost.MAX_LEAD, pl.col("time") >= start)
-        pairs = frost.forecast_pairs(fc, obs)
-        if pairs.is_empty():
-            typer.echo("mvd frost-fit: no forecast nights with observations", err=True)
-            raise typer.Exit(code=1)
-        calibration = frost.fit(pairs, pl.read_parquet(stations_path), window_nights=nights)
-        archive = partitions.scan_months(archive_dir, first, today)
-        if archive is not None:
-            calibration.clear_calm = frost.refit_clear_calm(archive.collect(), obs, calibration)
-        path = calibration.write(out)
-        if publish:
-            releases.put(store.LATEST_TAG, path.name, path)
-    cc = calibration.clear_calm
-    typer.echo(
-        f"{calibration.first} … {calibration.last}: {calibration.stations.height} stations, "
-        f"sigma {calibration.sigma:.2f} °C, clear-calm {cc['intercept']:+.2f} "
-        f"{cc['cloud']:+.2f}·cloud {cc['wind']:+.2f}·wind ({cc['source']}) → {path}"
-    )
-
-
-@app.command("sun-cloud-gust")
-def sun_cloud_gust_cmd(
-    archive_dir: Annotated[
-        Path, typer.Option(help="Folder of the outlook's monthly archive.")
-    ] = Path("data/outlook-archive"),
-    chmi_dir: Annotated[
-        Path, typer.Option(help="ČHMÚ archive folder (<tag>/<name>), as chmi-archive.")
-    ] = Path("data/chmi"),
-    data_dir: Annotated[
-        Path, typer.Option(help="Folder with runs/ (single runs) and obs/ (hourly gusts).")
-    ] = Path("data"),
-    out: Annotated[Path, typer.Option(help="The coefficients (JSON).")] = Path(
-        "data/sun-cloud-gust.json"
-    ),
-    github_release: Annotated[
-        bool,
-        typer.Option(
-            "--github-release",
-            help="Download the archive, the ČHMÚ files, the single runs, the hourly "
-            "observations (data-YYYY-MM) and the current coefficients from GitHub "
-            "Releases first (read only).",
-        ),
-    ] = False,
-    publish: Annotated[
-        bool, typer.Option("--publish", help="Put the JSON into the release data-latest.")
-    ] = False,
-) -> None:
-    """Refit the sunshine, cloud and gust corrections of the outlook on the last 60 days
-    of its archived forecasts and ČHMÚ observations (needs 21 days, else keeps the
-    current or bootstrap coefficients). No Open-Meteo calls."""
-    if publish and not github_release:
-        raise typer.BadParameter("--publish needs --github-release")
-    now = datetime.now(UTC)
-    today = now.date()
-    first = today - timedelta(days=sun_cloud_gust.WINDOW_DAYS + sun_cloud_gust.MAX_LEAD + 1)
-    months = partitions.months(first, today)
-    with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
-        releases = _release_store(client) if github_release else None
-        if releases:
-            if sun_cloud_gust.NAME in releases.names(store.LATEST_TAG):
-                releases.download(store.LATEST_TAG, sun_cloud_gust.NAME, out)
-            archive = GitHubReleaseStore(client, *_github_credentials())
-            names = archive.assets(sun_cloud_gust.ARCHIVE_TAG)
-            for month in months:
-                tag, name = sun_cloud_gust.archive_asset(month)
-                if name in names:
-                    archive.download(tag, name, archive_dir / name)
-            chmi_archive.sync(
-                _archive_releases(client), chmi_dir, sun_cloud_gust.wanted_chmi(today), typer.echo
-            )
-            runs.RunsSync(releases, data_dir, typer.echo).pull(months)
-            store.download(releases, data_dir, months, typer.echo, kinds=("obs",))
-    with _chmi_client() as client:
-        meta1 = fetch_current_meta(client, 1, today)
-    station_table = meta1.select(
-        pl.col("WSI").alias("id"),
-        pl.col("GEOGR2").cast(pl.Float64).alias("lat"),  # GEOGR1 is longitude
-        pl.col("GEOGR1").cast(pl.Float64).alias("lon"),
-        pl.col("ELEVATION").cast(pl.Float64).alias("elevation"),
-    ).unique("id")
-    chmi_daily, chmi_hourly = sun_cloud_gust.read_chmi(chmi_dir, today)
-    since = datetime.combine(first, datetime.min.time(), UTC)
-    single = leads.scan_runs(data_dir / "runs", since, now)
-    doc, info = sun_cloud_gust.fit_from_files(
-        sun_cloud_gust.load(out),
-        today,
-        sun_cloud_gust.read_archive(archive_dir, today),
-        chmi_daily,
-        chmi_hourly,
-        station_table,
-        combine.okres_points(),
-        runs.load_stations(),
-        single,
-        gusts.pairs(
-            single,
-            partitions.scan_months(data_dir / "obs", first, today),
-            gusts.okres_stations(
-                runs.load_stations(), combine.okres_points(), combine.point_elevations()
-            )["station"].unique(),
-        ),
-    )
-    sun_cloud_gust.write(doc, out)
-    lines = [
-        f"- {v}: {i['source']}, {i['days']} days, {i['pairs']} pairs, {i['okresy']} "
-        + ("stations" if v == "gust_part" else "okresy with a station")
-        for v, i in info.items()
-    ]
-    check = doc.get("gust_part", {}).get("check")
-    if check:
-        lines.append(
-            f"- gust_part check {check['from']}…{check['to']}: MAE plain {check['raw_mae']} → "
-            f"corrected {check['corrected_mae']} m/s ({check['pairs']} pairs); applied: "
-            f"{doc['gust_part'].get('apply', True)}"
-        )
-    for line in lines:
-        typer.echo(line)
-    _job_summary("## Sunshine, cloud and gust corrections\n\n" + "\n".join(lines) + "\n")
-    if publish:
-        with httpx.Client(timeout=600, transport=httpx.HTTPTransport(retries=3)) as client:
-            _release_store(client).put(store.LATEST_TAG, sun_cloud_gust.NAME, out)
-    typer.echo(f"→ {out}")
-
-
 @app.command("models")
 def models_cmd(
     show_all: Annotated[
@@ -2530,43 +1523,6 @@ def _model_names() -> dict[str, str]:
     return {m.id: m.name for m in [*catalogue.load_models(), blend.MODEL]}
 
 
-def _forecast_weights(
-    table: pl.DataFrame,
-    scores: pl.LazyFrame,
-    station_table: pl.DataFrame,
-    data_dir: Path,
-    as_of: date | None = None,
-) -> pl.DataFrame:
-    """The forecast's weight table (``combine.forecast_weights``), with the temperature
-    and wind regression fitted on the observations and forecasts of the last 90 days in
-    ``data_dir`` where they are there (``mvd daily``); written to
-    ``data_dir/forecast-weights.parquet`` for ``mvd outlook``."""
-    coefficients = None
-    if table.height:
-        as_of = table.filter(pl.col("window") == combine.WINDOW)["to"].max()
-        allowed = combine.weights(table).select("variable", "lead_day", "model").unique()
-        if as_of is not None:
-            # the forecasts of fc/ plus the recent days rebuilt from the single runs, as
-            # scored by mvd daily (fresh), so the regression is as recent as the scores
-            first, last = mos.training_span(as_of)
-            fc = partitions.scan_months(data_dir / "fc", first, last)
-            obs = observations.scan(data_dir, first, last)
-            models = [m for m in catalogue.load_models() if m.enabled]
-            fc, _ = daily_mod.add_fresh(data_dir, models, as_of, obs, fc)
-            coefficients = mos.recent(data_dir, scores, station_table, as_of, allowed, fc)
-    fitted = 0 if coefficients is None else coefficients["region"].n_unique()
-    typer.echo(f"regression blend (temperature, wind): {fitted} okresy")
-    # the further variables (humidity, dew point, gusts, pressure, direction): scored from
-    # the single runs (``extras``), weighed like temperature but without the regression
-    extra = extras.okres_table(data_dir, station_table, as_of)
-    if extra is not None:
-        typer.echo(f"further variables: {extra['variable'].n_unique()} scored")
-        table = pl.concat([table, extra], how="diagonal_relaxed")
-    forecast = combine.forecast_weights(table, coefficients)
-    forecast.write_parquet(data_dir / combine.FORECAST_WEIGHTS_FILE, compression="zstd")
-    return forecast
-
-
 def _publish_aggregates(
     files: list[Path],
     station_table: pl.DataFrame,
@@ -2575,14 +1531,17 @@ def _publish_aggregates(
     as_of: date | None,
     resamples: int,
 ) -> pl.DataFrame:
-    """Aggregate and rank all score files; write aggregates.parquet and the JSON."""
+    """Aggregate and rank all score files; write aggregates.parquet and the JSON (with
+    the forecast pages' ``forecast/`` files from the weight table in ``data_dir``, where
+    there is one, ``aggregate.FORECAST_WEIGHTS_FILE``)."""
     # files written before a column was added lack it (see partitions.scan_months)
     scores = pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
     table = aggregate.aggregate(scores, station_table, as_of)
     ranks = ranking.rank(scores, station_table, as_of, resamples=resamples)
     table = table.join(ranks, on=[*ranking.GROUP, "model"], how="left")
     table.write_parquet(data_dir / "aggregates.parquet", compression="zstd")
-    forecast = _forecast_weights(table, scores, station_table, data_dir, as_of)
+    weights_path = data_dir / aggregate.FORECAST_WEIGHTS_FILE
+    weights = pl.read_parquet(weights_path) if weights_path.exists() else None
     names = _model_names()
     meta = aggregate.metadata(table, names, datetime.now(UTC))
     meta["sources"] = fresh.sources(scores)
@@ -2595,7 +1554,7 @@ def _publish_aggregates(
     written = [
         *aggregate.write_json(table, out, meta),
         aggregate.write_stations(station_table, out),
-        *combine.write_forecast(table, out, forecast),
+        *aggregate.write_forecast(out, weights),
     ]
     if table.height:
         last = table["to"].max()
@@ -2781,54 +1740,20 @@ def daily(
             sync.push(months)
             remote = store.remote_months(sync.store)
             store.download(sync.store, data_dir, remote, typer.echo, kinds=("scores",))
+            # the forecast's published weight table, for the forecast pages' files
+            name = aggregate.FORECAST_WEIGHTS_FILE
+            if name in sync.store.names(store.LATEST_TAG):
+                sync.store.download(store.LATEST_TAG, name, data_dir / name)
     files = sorted((data_dir / "scores").glob("*.parquet"))
     if not files:
         typer.echo("no scores yet")
         return
     aggregates_table = _publish_aggregates(files, table, data_dir, out, None, resamples)
     _write_badge(aggregates_table, out)
-    calibration = _refit_rain_calibration(table, data_dir, target, out)
     if github_release:
         with httpx.Client(timeout=300, transport=httpx.HTTPTransport(retries=3)) as client:
-            releases = _release_store(client)
-            store.publish_latest(releases, data_dir, out)
-            if calibration:
-                releases.put(store.LATEST_TAG, calibration.name, calibration)
+            store.publish_latest(_release_store(client), data_dir, out)
         typer.echo(f"published aggregates and site data to the release {store.LATEST_TAG}")
-
-
-def _refit_rain_calibration(
-    station_table: pl.DataFrame, data_dir: Path, day: date, out: Path
-) -> Path | None:
-    """Refit the calibrated rain probability of the outlook on the verified 6-hour cases
-    of the last ``rain_calibration.WINDOW_DAYS`` days (``out/rain-calibration.json``).
-    Not fatal: on failure the outlook keeps the last published calibration until it is
-    ``rain_calibration.MAX_AGE_DAYS`` old, then the raw share of models."""
-    first = day - timedelta(days=rain_calibration.WINDOW_DAYS - 1)
-    obs = observations.scan(data_dir, first, day + timedelta(days=1))
-    fc = partitions.scan_months(data_dir / "fc", first, day + timedelta(days=1))
-    if obs is None or fc is None:
-        typer.echo("rain calibration: no forecasts or observations")
-        return None
-    try:
-        calibration = rain_calibration.refit(
-            fc, obs, station_table, combine.okres_points(), day, generated=datetime.now(UTC)
-        )
-    except Exception as exc:  # the daily scores matter more than this refit
-        typer.echo(f"rain calibration failed: {type(exc).__name__}: {exc}", err=True)
-        return None
-    if calibration is None:
-        typer.echo(f"rain calibration: fewer than {rain_calibration.MIN_DAYS} days of cases")
-        return None
-    path = rain_calibration.write(calibration, out / rain_calibration.FILE)
-    info = calibration.info
-    typer.echo(
-        f"rain calibration: {calibration.days} days, {calibration.cases} cases "
-        f"{calibration.first}..{calibration.last}; Brier in sample {info.get('brier')} "
-        f"(raw share {info.get('brier_share')}), heavy rain flag at "
-        f"{calibration.heavy_flag_at} → {path}"
-    )
-    return path
 
 
 @app.command()

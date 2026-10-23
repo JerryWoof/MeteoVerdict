@@ -1,8 +1,10 @@
 import math
+from pathlib import Path
 
 import polars as pl
 import pytest
 
+from meteoverdict import regions
 from meteoverdict.regions import (
     add_regions,
     elevation_class,
@@ -134,3 +136,31 @@ def test_okres_and_kraj_polygons_agree_away_from_borders():
     agree = sum(o.code[:5] == k.code for o, k in inside)
     assert len(inside) > 700
     assert agree / len(inside) > 0.99
+
+
+def test_every_okres_gets_a_point_inside_it():
+    for region in load_regions("okres"):
+        assert region.contains(*regions.representative_point(region)), region.code
+
+
+def test_a_crescent_gets_a_point_inside_not_its_centroid():
+    # a C shape: its centroid lies in the empty middle
+    ring = [(0, 0), (3, 0), (3, 1), (1, 1), (1, 2), (3, 2), (3, 3), (0, 3), (0, 0)]
+    region = regions.Region("X", "C", ((ring,),), (0, 0, 3, 3))
+    lon, lat = regions.representative_point(region)
+    assert region.contains(lon, lat)
+    assert not region.contains(1.5, 1.5)
+
+
+def test_the_okres_points_have_elevations():
+    path = Path(regions.__file__).parent / "data" / regions.ELEVATIONS_FILE
+    points = regions.okres_points().join(
+        pl.read_csv(path).rename({"lat": "lat_e", "lon": "lon_e"}), on="code", how="left"
+    )
+    assert points.height == 77
+    assert points["elevation"].null_count() == 0
+    # rebuild okres-elevations.csv (scripts/build_okres_elevations.py) when points move
+    assert (points["lat"] - points["lat_e"]).abs().max() < 1e-3
+    assert (points["lon"] - points["lon_e"]).abs().max() < 1e-3
+    assert points["elevation"].is_between(100, 1200).all()
+    assert regions.point_elevations().height == 77
