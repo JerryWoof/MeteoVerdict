@@ -162,7 +162,7 @@ export function okresDoc({ okres, outlook, hourly, scores, meta, models }) {
       window: "90d",
       from: window?.from ?? null,
       to: window?.to ?? null,
-      metrics: "MAE, bias (forecast minus observed) and RMSE at D+1…D+5; rank 1 = smallest MAE; tied_with_best: not significantly worse (95 % bootstrap interval over blocks of 4 days, or Diebold-Mariano test); p_best: share of bootstrap resamples in which the model is best (no clear winner below 0.6); small_sample: fewer than 30 days; weight/correction: as used in our forecast (correction: mean over the day); mos_weight: weight in the temperature and wind regression blend, used when all its models have a value; short_record: scores on fewer than 80 % of the window's days (e.g. a newly added model), not ranked and no weight, its MAE is over its own days",
+      metrics: "MAE, bias (forecast minus observed) and RMSE at D+1…D+5; rank 1 = smallest MAE; tied_with_best: not significantly worse (95 % bootstrap interval over blocks of 4 days, or Diebold-Mariano test); p_best: share of bootstrap resamples in which the model is best (no clear winner below 0.6); small_sample: fewer than 30 days; short_record: scores on fewer than 80 % of the window's days (e.g. a newly added model), not ranked, its MAE is over its own days",
       variables: okresModels(okres.code, scores, meta?.models ?? {}),
     },
   };
