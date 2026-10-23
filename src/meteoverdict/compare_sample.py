@@ -3,8 +3,8 @@ combined forecast (the Outlook blend) and experimental candidates (MeteoVerdict 
 all scored on the same station-days, ranked with the honest-scoring rules of
 ``meteoverdict.ranking`` (block bootstrap, Diebold-Mariano, ``p_best``).
 
-``blendtest.series`` already puts the candidates through ``aggregate.common_days`` with
-the models, the mean and the combination, region by region and day by day, so every
+The day totals given (``series``) have already been through ``aggregate.common_days``
+with the models, the mean and the combination, region by region and day by day, so every
 series of one region, variable and lead day has the same stations and hours; only
 series that cover every day of the group are compared. This module turns those day
 totals into one small JSON file per region (Czechia, kraj or okres): per variable and
@@ -33,7 +33,7 @@ import polars as pl
 from meteoverdict import blend, ranking
 
 OUTLOOK = "combined"
-#: the series of ``blendtest.series`` that are choices, not forecasts
+#: the series of the day totals that are choices, not forecasts
 CHOICES = ("best_oos", "best_cz_oos", "best_hindsight")
 KINDS = {blend.ID: "mean", OUTLOOK: "outlook"}
 #: files per sample: ``<dir>/<region>.json`` and ``<dir>/index.json``
@@ -139,7 +139,7 @@ def _versus(
 def from_days(
     group: pl.DataFrame, candidates: set[str], key: str, resamples: int, seed: int
 ) -> dict | None:
-    """``entry`` of one region, variable and lead day of ``blendtest.series``."""
+    """``entry`` of one region, variable and lead day of the day totals."""
     group = group.filter(~pl.col("model").is_in(CHOICES))
     abs_err = group.pivot(on="model", index="date", values="sum_abs_err").sort("date")
     n = group.pivot(on="model", index="date", values="n").sort("date")
@@ -191,8 +191,8 @@ def documents(
     min_days: int = 5,
 ) -> dict[str, dict]:
     """Region → ``{"name", "level", "entries": {"<variable>/<lead>": entry}}`` for
-    Czechia (``cz``), every kraj and every okres. ``czechia`` is ``blendtest.czechia``
-    (sums the okresy a series is compared in on every day); a kraj sums its okresy."""
+    Czechia (``cz``), every kraj and every okres. ``czechia`` (given) sums the okresy
+    a series is compared in on every day; a kraj sums its okresy."""
     days = days.filter(~pl.col("model").is_in(CHOICES))
     wide = same_okresy(days, candidates)
     frames: dict[str, tuple[str, str, pl.DataFrame]] = {"cz": ("cz", "Česko", czechia(wide))}

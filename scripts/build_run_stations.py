@@ -19,7 +19,7 @@ from pathlib import Path
 import httpx
 import polars as pl
 
-from meteoverdict import combine, runs
+from meteoverdict import regions, runs
 from meteoverdict.chmi import fetch_current_meta
 
 OUT = Path(__file__).resolve().parents[1] / "src" / "meteoverdict" / "data" / runs.STATIONS_FILE
@@ -33,7 +33,7 @@ def main() -> None:
     stations = pl.read_parquet(args.stations)
     with httpx.Client(timeout=120, follow_redirects=True) as client:
         meta2 = fetch_current_meta(client, 2, datetime.now(UTC).date())
-    subset = runs.select_stations(stations, meta2, combine.okres_points())
+    subset = runs.select_stations(stations, meta2, regions.okres_points())
     subset.write_csv(args.out)
     counts = subset.group_by("elevation_class").len().sort("elevation_class").rows()
     print(

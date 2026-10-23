@@ -1,5 +1,5 @@
 // Test (forecast for a place): the forecast for every obec of an okres that has one
-// (`mvd obce-forecast`, Litoměřice for now), shown on the forecast page in place of the
+// (obce.zip, Litoměřice for now), shown on the forecast page in place of the
 // okres's. One file per okres: data/scores/forecast/obce-<code>.json.
 
 const docs = new Map();
