@@ -14,7 +14,7 @@ import { asForecast, modelHorizon, modelPeriods, parseModels } from "./models.js
 import { fillPicker, issuedText } from "./picker.js";
 import { SEAT_OKRES, seatName, seatOkres } from "./seats.js";
 import { statusText } from "./status.js";
-import { chmiNotice, dayLabel, gustOver, gustOverText, parseOutlook, rowFor, sunFor, today } from "./tv.js";
+import { dayLabel, gustOver, gustOverText, parseOutlook, rowFor, sunFor, today } from "./tv.js";
 import { AI_FILES, aiPath, aiText } from "./ai-source.js";
 import { AI_MODEL, extraSeries, loadAi, withAi } from "./ai-model.js";
 import { dayWindDirection, extraDisplay } from "./ai-extra.js";
@@ -135,10 +135,6 @@ function renderDays(days, sunOf, gustOf, dirOf = () => null) {
     return tr;
   });
   table.replaceChildren(head, ...rows);
-  // the notice under the table, only where a gust is flagged
-  document.getElementById("gust-notice").replaceChildren(
-    ...(withGust && days.some((d) => gustOver(gustOf(d.day))) ? [chmiNotice(t)] : []),
-  );
 }
 
 // `selected`: COMBINED (our forecast highlighted, with the best model per lead day) or a
