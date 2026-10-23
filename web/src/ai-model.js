@@ -254,7 +254,7 @@ export function aiMapView(ai, outlook) {
   for (const o of outlook.okresy) {
     const own = ai.okresy[o.code];
     const periods = own
-      ? modelPeriods({ times: own.times, models: { [AI_MODEL]: Object.fromEntries(AI_VARIABLES.filter((v) => own[v]).map((v) => [v, own[v]])) } }, AI_MODEL)
+      ? modelPeriods({ times: own.times, models: { [AI_MODEL]: Object.fromEntries([...AI_VARIABLES, ...BLEND_VARIABLES].filter((v) => own[v]?.some((x) => x != null)).map((v) => [v, own[v]])) } }, AI_MODEL)
       : new Map();
     if (own) {
       for (let i = own.times.length - 1; i >= 0; i -= 1) {
@@ -267,9 +267,9 @@ export function aiMapView(ai, outlook) {
       for (const part of [...PARTS, "day"]) {
         const p = periods.get(`${day}|${part}`);
         const blend = outlook.rows.get(`${o.code}|${day}|${part}`);
-        const fill = blend ? Object.fromEntries(BLEND_FIELDS.map((f) => [f, blend[f] ?? null])) : {};
-        // the AI's own gusts (hourly series) stay; our blend's only where it has none
-        if (p?.gust != null) { fill.gust = p.gust; fill.gust_over_threshold = p.gust_over_threshold; }
+        // the AI's own hourly values stay (the same rows as in the okres's own file, so the panel
+        // does not change when that arrives); our blend's only where the AI has none
+        const fill = blend ? Object.fromEntries(BLEND_FIELDS.map((f) => [f, p?.[f] ?? blend[f] ?? null])) : {};
         // an okres the AI has no forecast for shows our blend's row whole (same look, rain in mm),
         // so the map has no gaps; a period beyond the AI's hours stays "–"
         const aiOnly = p ? outlookFill(p, ai, o.code, `${day}|${part}`) : {};
