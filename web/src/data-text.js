@@ -173,3 +173,58 @@ export function dataBlocks(language, c) {
   const split = all.findIndex((block) => block[2] === "files");
   return { api: all.slice(0, split), more: all.slice(split) };
 }
+
+/**
+ * What every field of the example under the okres picker means (the Data page): a table
+ * per part of the file, in the order the example shows them.
+ */
+export function exampleBlocks(language) {
+  const L = (cs, en) => (language === "cs" ? cs : en);
+  const table = (first, rows) => ["table", { head: [first, L("Význam", "Meaning")], rows }];
+  return [
+    ["h", L("Co znamenají pole v příkladu", "What the fields in the example mean"), "example-fields"],
+    ["p", L(
+      "Příklad výše je skutečný soubor, jen dlouhé seznamy jsou zkrácené: u řad jsou první hodnoty a `…`, u seznamu částí dne a modelů jedna položka. Nahoře každý soubor nese licenci a upozornění, dole je pořadí modelů.",
+      "The example above is a real file with the long lists cut short: series show their first values and `…`, the lists of parts of day and of models show one item. The licence and notice are at the top of every file, the ranking of the models at the bottom.")],
+    table(L("Záhlaví souboru", "File head"), [
+      ["`api`, `docs`", L("Verze API (`v1`) a odkaz na tuto stránku.", "The API version (`v1`) and a link to this page.")],
+      ["`licence`, `attribution`, `notice`", L("Licence (CC BY-SA 4.0), text, který uvést u zdroje, a upozornění, že prahy (mráz, vydatný déšť, nárazy) nejsou výstrahy ČHMÚ.", "The licence (CC BY-SA 4.0), the text to credit and the notice that the thresholds (frost, heavy rain, gusts) are not ČHMÚ warnings.")],
+      ["`deprecated`", L("Pole, která brzy zmizí, a čím je nahradit (`gust_warning` je starý název pro `gust_over_threshold`).", "Fields that will go, and what replaces them (`gust_warning` is the old name of `gust_over_threshold`).")],
+      ["`okres`", L("`code` (kód okresu, LAU 1), `name`, `lat` a `lon`: bod, pro který je předpověď.", "`code` (okres code, LAU 1), `name`, `lat` and `lon`: the point the forecast is for.")],
+    ]),
+    table(L("`forecast`: předpověď", "`forecast`: the forecast"), [
+      ["`generated`, `method`, `time_zone_of_parts`", L("Kdy byla předpověď vytvořena (UTC), věta o tom, jak vznikla, a časové pásmo částí dne (`Europe/Prague`).", "When the forecast was made (UTC), a sentence on how it was made and the time zone of the parts of day (`Europe/Prague`).")],
+      ["`units`", L("Jednotka každé hodinové řady.", "The unit of every hourly series.")],
+      ["`sources`", L("U dalších veličin, odkud jsou: `blend` je naše vážená kombinace modelů, `reference` medián nejlepších modelů. Veličiny, které tu nejsou (teplota, srážky, vítr, oblačnost, svit), jsou vždy z kombinace.", "For the further variables, where they come from: `blend` is our weighted combination of the models, `reference` the median of the best models. Variables not listed (temperature, precipitation, wind, cloud, sunshine) are always from the combination.")],
+    ]),
+    table(L("`forecast.hourly`: hodinové řady (každá má stejný počet hodnot jako `time`)", "`forecast.hourly`: hourly series (each has as many values as `time`)"), [
+      ["`time`", L("Čas každé hodiny v UTC. Pole se čtou po indexu: i-tá hodnota každé řady patří k i-tému času.", "The time of every hour in UTC. Read the arrays by index: the i-th value of every series belongs to the i-th time.")],
+      ["`temperature_2m`, `temperature_2m_lo`, `temperature_2m_hi`", L("Teplota ve 2 m (°C) a spodní a horní konec 80% rozpětí kolem ní („±“ v grafu), spočítaného z chyb naší předpovědi za posledních 30 dní.", "Temperature at 2 m (°C) and the lower and upper end of the 80 % range around it (the “±” in the chart), from the errors of our forecast over the last 30 days.")],
+      ["`precipitation`", L("Srážky (mm) za hodinu, která v daném čase končí.", "Precipitation (mm) in the hour that ends at the time.")],
+      ["`wind_speed_10m`, `wind_gusts_10m`, `wind_direction_10m`", L("Průměrný vítr v 10 m (m/s), nejsilnější náraz v hodině (m/s) a směr, odkud vane (°; `null` v bezvětří).", "Mean wind at 10 m (m/s), the highest gust in the hour (m/s) and the direction it blows from (°; `null` in calm).")],
+      ["`cloud_cover`, `cloud_cover_low`", L("Celková a nízká oblačnost (%). Celková je průměr modelů opravený podle pozorování ČHMÚ.", "Total and low cloud cover (%). The total is the mean of the models corrected against ČHMÚ observations.")],
+      ["`sunshine_duration`, `shortwave_radiation`", L("Sluneční svit (s za hodinu) a krátkovlnné záření (W/m²).", "Sunshine (s per hour) and shortwave radiation (W/m²).")],
+      ["`relative_humidity_2m`, `dew_point_2m`, `pressure_msl`", L("Relativní vlhkost (%), rosný bod (°C) a tlak přepočtený na hladinu moře (hPa).", "Relative humidity (%), dew point (°C) and pressure reduced to sea level (hPa).")],
+      ["`visibility`, `snowfall`, `snow_depth`, `snow_depth_water_equivalent`", L("Dohlednost (km, nejvýš 20), nový sníh za hodinu (cm), výška sněhu (cm) a vodní hodnota sněhu (mm).", "Visibility (km, up to 20), new snow per hour (cm), snow depth (cm) and its water equivalent (mm).")],
+    ]),
+    table(L("`forecast.parts`: části dne (jedna položka za den a část)", "`forecast.parts`: parts of day (one item per day and part)"), [
+      ["`day`, `part`", L("Den (pražský čas) a část dne: `night`, `morning`, `afternoon`, `evening` a `day` (celý den).", "The day (Prague time) and the part of day: `night`, `morning`, `afternoon`, `evening` and `day` (the whole day).")],
+      ["`tmin`, `tmax`", L("Nejnižší a nejvyšší teplota v části dne (°C).", "Lowest and highest temperature in the part (°C).")],
+      ["`precipitation`, `rain_probability`, `heavy_rain_probability`, `heavy_rain`", L("Úhrn srážek (mm), pravděpodobnost srážek ≥ 0,2 mm (0 až 1), pravděpodobnost ≥ 5 mm (0 až 1) a ano/ne, zda se čeká aspoň 5 mm.", "Precipitation total (mm), the probability of at least 0.2 mm (0 to 1), of at least 5 mm (0 to 1) and yes/no whether at least 5 mm is expected.")],
+      ["`wind`, `gust`, `gust_over_threshold`", L("Průměrný vítr a nejsilnější náraz (m/s) a ano/ne, zda náraz dosáhne 13,5 m/s. `gust_warning` je starý název téhož.", "Mean wind and the highest gust (m/s) and yes/no whether the gust reaches 13.5 m/s. `gust_warning` is the old name of the same.")],
+      ["`cloud`, `sunshine`, `symbol`", L("Oblačnost (%), sluneční svit (h) a symbol počasí (`clear`, `partly`, `cloudy`, `showers`, `rain`).", "Cloud cover (%), sunshine (h) and the weather symbol (`clear`, `partly`, `cloudy`, `showers`, `rain`).")],
+      ["`sunrise`, `sunset`", L("Východ a západ slunce (pražský čas); je to astronomie, ne předpověď.", "Sunrise and sunset (Prague time); astronomy, not a forecast.")],
+      ["`night_min`, `coldest_site`, `coldest_min`, `frost_probability`, `frost`, `ground_min`, `ground_frost`", L("Mráz, jen u řádků `night` a `day` data, kdy noc končí (jinde `null`): opravené noční minimum ve 2 m (°C), nejmrazivější stanice okresu a její minimum, pravděpodobnost mrazu (0 až 1), ano/ne mráz (minimum ≤ 1 °C), odhad přízemního minima 5 cm nad zemí a ano/ne přízemní mrazík (≤ 0 °C).", "Frost, only on the `night` and `day` rows of the date a night ends (`null` elsewhere): the corrected night minimum at 2 m (°C), the okres's most frost-prone station and its minimum, the probability of frost (0 to 1), yes/no frost (minimum ≤ 1 °C), the estimated minimum 5 cm above the ground and yes/no ground frost (≤ 0 °C).")],
+    ]),
+    table(L("`models`: pořadí modelů (jen v souboru okresu)", "`models`: ranking of the models (okres file only)"), [
+      ["`generated`, `window`, `from`, `to`, `metrics`", L("Kdy bylo pořadí spočítáno, okno (`90d` = posledních 90 dní), jeho první a poslední den a popis metrik.", "When the ranking was computed, the window (`90d` = the last 90 days), its first and last day and a description of the metrics.")],
+      ["`variables`", L("Pořadí zvlášť pro `temperature_2m`, `wind_speed_10m`, `precipitation_daily` (srážky za kalendářní den) a `precipitation_24h` (srážky od 06 do 06 hodin UTC, den srážkoměrných stanic ČHMÚ). U každé: `stations` (kolik stanic okresu se porovnává), `borrowed` (kolik z nich je z okolních okresů, když má okres málo vlastních), `days` (kolik dní se hodnotí).", "The ranking for each of `temperature_2m`, `wind_speed_10m`, `precipitation_daily` (precipitation per calendar day) and `precipitation_24h` (precipitation from 06 to 06 UTC, the day of ČHMÚ's rain gauges). Each has `stations` (how many stations of the okres are compared), `borrowed` (how many of them are from neighbouring okresy when the okres has few of its own) and `days` (how many days are scored).")],
+      ["`lead_days`", L("Klíče `1` až `5` jsou předstih D+N, tedy na kolik dní dopředu se předpověď dělá (D+1 je zítřek, D+5 za pět dní). Každý předstih má vlastní seznam, protože přesnost modelů se s předstihem mění a pořadí je jiné. Seznamy se zkracují, protože část modelů (hlavně místní, s krátkým dosahem) na vzdálenější dny nepředpovídá: dnes je 5 dní jen u globálních modelů.", "The keys `1` to `5` are the lead day D+N, how many days ahead the forecast is made (D+1 is tomorrow, D+5 is in five days). Every lead day has its own list because the models' accuracy changes with the lead and so does the order. The lists get shorter because some models (mainly local ones with a short range) do not forecast the later days: only the global models reach 5 days.")],
+      ["`model`, `name`, `rank`", L("Kód a název modelu a pořadí (1 = nejmenší střední chyba MAE).", "The model's code and name and its rank (1 = smallest mean absolute error, MAE).")],
+      ["`mae`, `bias`, `rmse`", L("Střední absolutní chyba, průměrná odchylka (předpověď minus naměřeno) a odmocnina středního kvadrátu chyby; v jednotce veličiny.", "Mean absolute error, mean deviation (forecast minus observed) and root mean square error, in the unit of the variable.")],
+      ["`days`, `small_sample`, `short_record`", L("Počet dní s hodnotou modelu, ano/ne méně než 30 dní a ano/ne nový model, který nemá hodnoty aspoň na 80 % dní okna (neřadí se).", "The number of days with a value of the model, yes/no fewer than 30 days and yes/no a new model with values on fewer than 80 % of the window's days (not ranked).")],
+      ["`p_best`, `tied_with_best`", L("Pravděpodobnost, že je model nejlepší (podíl bootstrapových přepočtů, kde má nejnižší MAE; pod 0,6 u prvního nejde o jasného vítěze), a ano/ne statisticky stejně dobrý jako nejlepší.", "The probability that the model is the best (the share of bootstrap resamples in which it has the lowest MAE; below 0.6 for the first there is no clear winner) and yes/no statistically as good as the best.")],
+      ["`weight`, `correction`, `mos_weight`", L("Jak model vstupuje do naší předpovědi: váha (součet vah je 1), oprava jeho průměrné chyby, kterou od něj odečítáme, a druhá váha teploty a větru (z regrese, může být záporná). Váhy se počítají jen pro teplotu, vítr a denní srážky; u `precipitation_24h` je jen pořadí.", "How the model enters our forecast: its weight (the weights add up to 1), the correction of its mean error that we subtract and the second weight of temperature and wind (from a regression, may be negative). Weights are made only for temperature, wind and daily precipitation; `precipitation_24h` has the ranking only.")],
+    ]),
+  ];
+}

@@ -1,6 +1,6 @@
 import "./style.css";
 
-import { dataBlocks } from "./data-text.js";
+import { dataBlocks, exampleBlocks } from "./data-text.js";
 import { setUpLanguage } from "./i18n.js";
 import { renderBlocks } from "./info-page.js";
 import { SCHEDULE, pragueClocks } from "./schedule.js";
@@ -42,6 +42,7 @@ function showSchedule() {
     sun: clocks(SCHEDULE.sun),
     zone,
   });
+  renderBlocks(document.getElementById("doc-example"), exampleBlocks(language));
   renderBlocks(document.getElementById("doc-api"), blocks.api);
   renderBlocks(document.getElementById("doc-more"), blocks.more);
   const id = decodeURIComponent(window.location.hash.slice(1));
