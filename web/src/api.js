@@ -16,12 +16,9 @@ export const DOCS = `${SITE}/data.html`;
 export const LICENCE = "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)";
 // the scores published per okres, and which weights of the combination belong to them
 // the threshold flags are ours: only ČHMÚ issues weather warnings (Act 262/2024 Sb.)
-export const FLAGS = ["gust_over_threshold", "gust_warning", "frost", "ground_frost", "heavy_rain"];
+export const FLAGS = ["gust_over_threshold", "frost", "ground_frost", "heavy_rain"];
 export const NOTICE =
   "Threshold flags (gust_over_threshold, frost, ground_frost, heavy_rain) are MeteoVerdict thresholds, not official ČHMÚ warnings; official warnings: https://www.chmi.cz/";
-export const DEPRECATED = {
-  gust_warning: "deprecated: the same value as gust_over_threshold; will be removed in the next API version",
-};
 
 export const SCORE_VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitation_daily", "precipitation_24h"];
 export const HOURLY = ["temperature_2m", "precipitation", "wind_speed_10m", "cloud_cover", "sunshine_duration", "temperature_2m_lo", "temperature_2m_hi"];
@@ -105,22 +102,31 @@ export function extraFromModels(models, times) {
 export function okresDoc({ okres, outlook, hourly, meta, models }) {
   const series = hourly?.okresy?.[okres.code];
   const extra = series ? extraFromModels(models, hourly.time) : { series: {}, sources: {} };
-  const parts = blendParts(outlook, okres.code);
+  // the same layout as the AI okres file: no deprecated alias, the origin of every field in `sources`
+  const parts = blendParts(outlook, okres.code).map((part) => {
+    delete part.gust_warning;
+    return part;
+  });
+  const fields = PART_FIELDS.filter((k) => !["day", "part", "gust_warning"].includes(k));
+  const sources = {
+    ...Object.fromEntries(HOURLY.filter((v) => series?.[v]).map((v) => [v, "blend"])),
+    ...Object.fromEntries(fields.map((k) => [k, ASTRONOMY.includes(k) ? "astronomy" : "blend"])),
+    ...extra.sources,
+  };
   return {
     api: `MeteoVerdict open data ${VERSION}`,
     docs: DOCS,
     licence: LICENCE,
     attribution: meta?.attribution ?? null,
     notice: NOTICE,
-    deprecated: DEPRECATED,
     okres: { code: okres.code, name: okres.name, lat: okres.lat, lon: okres.lon },
     forecast: {
+      model: "blend",
       generated: hourly?.generated ?? outlook?.generated ?? null,
       method: "MeteoVerdict: all models combined into one forecast for the okres (docs/methodology.md)",
+      sources,
       time_zone_of_parts: outlook?.time_zone ?? "Europe/Prague",
       units: hourly?.variables ? { ...hourly.variables, ...Object.fromEntries(Object.keys(extra.series).map((k) => [k, EXTRA_UNITS[k]])) } : null,
-      // the combination's own hours ("blend") and the models' median ("reference") of the further variables
-      ...(Object.keys(extra.sources).length ? { sources: extra.sources } : {}),
       hourly: series ? { time: hourly.time, ...series, ...extra.series } : null,
       parts,
     },

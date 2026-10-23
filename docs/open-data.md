@@ -48,8 +48,6 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
   Gusts, on every row the newest single model run covers (about the next 4–5 days,
   `null` beyond it and in files from before 2026-10-16): `gust` (the strongest gust of
   the period, m/s) and `gust_over_threshold` (true when `gust` ≥ 13.5 m/s).
-  `gust_warning` is a **deprecated alias** of `gust_over_threshold` (the same value)
-  and will be removed in the next API version.
   `gust_over_threshold`, `frost`, `ground_frost` and `heavy_rain` are MeteoVerdict
   thresholds, **not official warnings**: only ČHMÚ issues those
   ([chmi.cz](https://www.chmi.cz/); [licensing.md](licensing.md#weather-warnings-act-2622024-sb)).
@@ -60,7 +58,7 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
 
 `api/v1/ai/okresy/{code}.json` has the layout of the okres file (`okres`, `forecast`
 with `generated`, `time_zone_of_parts`, `units`, `hourly`, `parts`, and `licence`,
-`attribution`, `notice`), without the deprecated `gust_warning`.
+`attribution`, `notice`).
 It is the same file with **the MeteoVerdict AI's values**
 (experimental, still unverified): `forecast.model` is `"ai"`, `forecast.method` says so
 in a sentence, `forecast.ai_issued` is when the AI issued its forecast and

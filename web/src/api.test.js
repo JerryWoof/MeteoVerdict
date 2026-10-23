@@ -29,7 +29,7 @@ test("an okres file: forecast by hour and part of day, licence and attribution",
     "day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol",
     "sunrise", "sunset", "heavy_rain_probability", "heavy_rain",
     "night_min", "coldest_site", "coldest_min", "frost_probability", "frost", "ground_min", "ground_frost",
-    "gust", "gust_over_threshold", "gust_warning",
+    "gust", "gust_over_threshold",
   ]);
   // the saved outlook predates them: null, not missing
   assert.equal(parts[0].heavy_rain, null);
@@ -54,21 +54,20 @@ test("the gust fields of an outlook row are passed through", () => {
   const doc = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, scores: SCORES, meta: META });
   assert.equal(doc.forecast.parts[0].gust, 14.2);
   assert.equal(doc.forecast.parts[0].gust_over_threshold, true);
-  assert.equal(doc.forecast.parts[0].gust_warning, true);
+  assert.ok(!("gust_warning" in doc.forecast.parts[0]), "the old alias is not in the files");
 });
 
-test("an outlook row with only the old gust_warning fills both fields", () => {
+test("an outlook row with only the old gust_warning fills gust_over_threshold", () => {
   const columns = [...OUTLOOK.columns, "gust", "gust_warning"];
   const rows = OUTLOOK.rows.map((r) => [...r, 14.2, true]);
   const doc = okresDoc({ okres: BENESOV, outlook: { ...OUTLOOK, columns, rows }, hourly: HOURLY_DOC, scores: SCORES, meta: META });
   assert.equal(doc.forecast.parts[0].gust_over_threshold, true);
-  assert.equal(doc.forecast.parts[0].gust_warning, true);
 });
 
 test("the files say the flags are thresholds, not ČHMÚ warnings", () => {
   assert.match(DOC.notice, /not official ČHMÚ warnings/);
   assert.match(DOC.notice, /chmi\.cz/);
-  assert.match(DOC.deprecated.gust_warning, /gust_over_threshold/);
+  assert.ok(!("deprecated" in DOC));
 });
 
 test("the okres file has no ranking of the models", () => {
@@ -77,7 +76,7 @@ test("the okres file has no ranking of the models", () => {
 });
 
 test("every JSON file and the index carry the notice for every threshold flag", () => {
-  for (const flag of FLAGS.filter((f) => f !== "gust_warning")) assert.match(NOTICE, new RegExp(flag));
+  for (const flag of FLAGS) assert.match(NOTICE, new RegExp(flag));
   assert.equal(indexDoc([BENESOV], META, null).notice, NOTICE);
   assert.equal(DOC.notice, NOTICE);
 });
@@ -148,7 +147,7 @@ test("an AI okres file: parts take every field the AI outlook has a value for", 
   assert.equal(night.symbol, "rain");
   assert.equal(night.sunrise, DOC.forecast.parts[0].sunrise, "astronomy stays the combined file's");
   assert.equal(night.cloud, DOC.forecast.parts[0].cloud, "a field the AI row lacks keeps the blend's");
-  assert.deepEqual(morning, (({ gust_warning, ...rest }) => rest)(DOC.forecast.parts[1]));
+  assert.deepEqual(morning, DOC.forecast.parts[1]);
   assert.ok(!("gust_warning" in night));
   assert.equal(aiOkresDoc({ okres: { code: "CZ9999" }, outlook: OUTLOOK, hourly: HOURLY_DOC, aiForecast: AI_FORECAST, aiOutlook: AI_OUTLOOK, meta: META }), null);
 });
@@ -392,4 +391,15 @@ test("the Data page's example shows every property of the file with the long arr
     "}",
   ].join("\n"));
   assert.equal(docPreview(null), "");
+});
+
+test("the combined okres file and the AI okres file have the same layout", () => {
+  const keys = (x) => Object.keys(x).sort();
+  assert.deepEqual(keys(DOC), keys(AI_DOC));
+  assert.deepEqual(keys(DOC.forecast).filter((k) => k !== "model"), keys(AI_DOC.forecast).filter((k) => !["model", "ai_issued"].includes(k)));
+  assert.equal(DOC.forecast.model, "blend");
+  assert.deepEqual(Object.keys(DOC.forecast.parts[0]), Object.keys(AI_DOC.forecast.parts[0]));
+  // the origin of every hourly series and part field is named
+  for (const k of Object.keys(DOC.forecast.hourly).filter((k) => k !== "time")) assert.ok(k in DOC.forecast.sources, k);
+  for (const k of Object.keys(DOC.forecast.parts[0]).filter((k) => !["day", "part"].includes(k))) assert.ok(k in DOC.forecast.sources, k);
 });
