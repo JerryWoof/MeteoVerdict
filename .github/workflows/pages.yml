@@ -55,6 +55,12 @@ jobs:
           else
             echo "no published scores yet; the map shows the boundaries only"
           fi
+          # the forecast's weight files of the same day (forecast/*.json), newer than those in
+          # site-data.zip when the Daily ran before the weights were updated
+          if gh release download data-latest --pattern forecast-json.zip --dir /tmp --clobber 2>/dev/null; then
+            unzip -o -q /tmp/forecast-json.zip -d site/data
+            echo "forecast weight files from data-latest"
+          fi
           if gh release download data-latest --pattern station-data.zip --dir /tmp 2>/dev/null; then
             mkdir -p site/data/station
             unzip -o -q /tmp/station-data.zip -d site/data/station
