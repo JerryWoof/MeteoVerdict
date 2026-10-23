@@ -24,7 +24,7 @@ import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, currentPart, dayLabel, displayName, ease,
   iconName, labelFor, lerpRow, mixColor, okresColours, parseOutlook, parseView,
   placeMarkers, playSteps, rampKey, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary,
-  today, viewHash, gustOver, gustOverText, chmiNotice, CAPITALS, historyMode, leaveFor, measuredRedirect,
+  today, viewHash, gustOver, gustOverText, CAPITALS, historyMode, leaveFor, measuredRedirect,
 } from "./tv.js";
 import { keepRoomForPanels, panelRoom, scrollToPanel, userMoved } from "./panel-room.js";
 import { aiPath } from "./ai-source.js";
@@ -742,7 +742,6 @@ function renderPanel(outlook) {
     }
     if (gustOver(now)) {
       facts.append(element("li", gustOverText(t, language), "gust-over-threshold"));
-      facts.append(chmiNotice(t, "li"));
     }
   }
   const sun = sunFor(outlook, state.okres, state.day);
@@ -772,7 +771,6 @@ function renderPanel(outlook) {
     week.append(tr);
   }
   // the day table can flag a gust on another day than the one in the facts above
-  const weekFlagged = outlook.days.some((day) => gustOver(rowOf(day, "day")));
   const detail = townDetail(state.okres);
   panel.replaceChildren(
     close,
@@ -783,7 +781,6 @@ function renderPanel(outlook) {
     facts,
     strip,
     week,
-    ...(weekFlagged && !gustOver(now) ? [chmiNotice(t)] : []),
     detail,
   );
 }
