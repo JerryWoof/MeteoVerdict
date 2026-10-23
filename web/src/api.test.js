@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { FLAGS, HOURLY, NOTICE, SITE, aiOkresDoc, hourlyPreview, indexDoc, obceDocs, obceIndexDoc, obecIds, okresDoc, okresModels, slug } from "./api.js";
+import { FLAGS, HOURLY, NOTICE, SITE, aiOkresDoc, docPreview, hourlyPreview, indexDoc, obceDocs, obceIndexDoc, obecIds, okresDoc, okresModels, slug } from "./api.js";
 import { records } from "./data.js";
 
 const load = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
@@ -388,4 +388,30 @@ test("the further hourly variables of the combination come from forecast/models,
   assert.deepEqual(doc.forecast.hourly.cape, [3, 4]);
   assert.equal(doc.forecast.sources.dew_point_2m, "ai");
   assert.equal(doc.forecast.sources.cape, "reference");
+});
+
+test("the Data page's example shows every property of the file with the long arrays cut", () => {
+  const doc = { api: "v1", okres: { code: "CZ0100" }, hourly: { time: ["a", "b", "c", "d"], t: [1, null, 3, 4, 5] }, parts: [{ day: "x", tmin: null }, { day: "y", tmin: 1 }], empty: [], none: null };
+  assert.equal(docPreview(doc, 2), [
+    "{",
+    '  "api": "v1",',
+    '  "okres": {',
+    '    "code": "CZ0100"',
+    "  },",
+    '  "hourly": {',
+    '    "time": ["a","b",…],',
+    '    "t": [1,null,…]',
+    "  },",
+    '  "parts": [',
+    "    {",
+    '      "day": "y",',
+    '      "tmin": 1',
+    "    },",
+    "    …",
+    "  ],",
+    '  "empty": [],',
+    '  "none": null',
+    "}",
+  ].join("\n"));
+  assert.equal(docPreview(null), "");
 });

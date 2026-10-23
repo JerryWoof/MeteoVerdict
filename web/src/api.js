@@ -541,6 +541,37 @@ export function hourlyPreview(doc, n = 6) {
   return `"hourly": {\n${rows.map(([k, a]) => `  ${JSON.stringify(k)}: ${JSON.stringify(a.slice(0, n))}`).join(",\n")},\n  …\n}`;
 }
 
+/**
+ * The whole file as JSON text with every property, for the Data page's example: the long
+ * arrays (hours, parts of day, ranked models) show their first `n` items (the fullest one of the first for
+ * lists of objects) and then `…`, so the file's structure is complete but short.
+ */
+export function docPreview(doc, n = 3) {
+  if (doc == null) return "";
+  const text = (v, depth) => {
+    const pad = "  ".repeat(depth + 1);
+    const end = "  ".repeat(depth);
+    if (Array.isArray(v)) {
+      if (!v.length) return "[]";
+      if (v.every((x) => x === null || typeof x !== "object")) {
+        return `[${v.slice(0, n).map((x) => JSON.stringify(x)).join(",")}${v.length > n ? ",…" : ""}]`;
+      }
+      // the item with the most values filled in among the first ones (the sample shows what the fields hold)
+      const filled = (x) => (x && typeof x === "object" ? Object.values(x).filter((y) => y !== null).length : 0);
+      const best = v.slice(0, 12).reduce((a, x) => (filled(x) > filled(a) ? x : a), v[0]);
+      const shown = [pad + text(best, depth + 1)];
+      return `[\n${shown.join(",\n")}${v.length > 1 ? `,\n${pad}…` : ""}\n${end}]`;
+    }
+    if (v !== null && typeof v === "object") {
+      const keys = Object.keys(v);
+      if (!keys.length) return "{}";
+      return `{\n${keys.map((k) => `${pad}${JSON.stringify(k)}: ${text(v[k], depth + 1)}`).join(",\n")}\n${end}}`;
+    }
+    return JSON.stringify(v);
+  };
+  return text(doc, 0);
+}
+
 /** api/v1/obce/index.json: every obec as [okres, id, name, lat, lon]. */
 export function obceIndexDoc(rows, generated) {
   return {

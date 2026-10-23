@@ -3846,3 +3846,7 @@ svg[class^="plot-"],
   color: var(--muted);
   line-height: 1;
 }
+#preview {
+  max-height: 36rem;
+  overflow: auto;
+}
