@@ -1,14 +1,14 @@
 {
- "generated": "2026-10-22T10:38:42+00:00",
- "as_of": "2026-10-21",
+ "generated": "2026-10-23T01:09:01+00:00",
+ "as_of": "2026-10-22",
  "windows": {
   "90d": {
    "from": "2026-07-26",
-   "to": "2026-10-21"
+   "to": "2026-10-22"
   },
   "all": {
    "from": "2026-07-26",
-   "to": "2026-10-21"
+   "to": "2026-10-22"
   },
   "jja": {
    "from": "2026-07-26",
@@ -16,11 +16,11 @@
   },
   "season": {
    "from": "2026-09-01",
-   "to": "2026-10-21"
+   "to": "2026-10-22"
   },
   "son": {
    "from": "2026-09-01",
-   "to": "2026-10-21"
+   "to": "2026-10-22"
   }
  },
  "levels": [
@@ -89,6 +89,44 @@
  },
  "bias_corrected": "mae_bc: MAE after removing each model's own bias at the station and synoptic hour, estimated on the 30 days before the forecast was made (at least 10); only pairs where every compared model has one",
  "short_record": {
+  "90d": {
+   "gem_global": {
+    "coverage": 0.795,
+    "days": 70,
+    "variables": [
+     "temperature_2m_06utc",
+     "temperature_2m_18utc"
+    ]
+   },
+   "ukmo_global_deterministic_10km": {
+    "coverage": 0.795,
+    "days": 70,
+    "variables": [
+     "temperature_2m_06utc",
+     "temperature_2m_18utc",
+     "temperature_max"
+    ]
+   }
+  },
+  "all": {
+   "gem_global": {
+    "coverage": 0.795,
+    "days": 70,
+    "variables": [
+     "temperature_2m_06utc",
+     "temperature_2m_18utc"
+    ]
+   },
+   "ukmo_global_deterministic_10km": {
+    "coverage": 0.795,
+    "days": 70,
+    "variables": [
+     "temperature_2m_06utc",
+     "temperature_2m_18utc",
+     "temperature_max"
+    ]
+   }
+  },
   "jja": {
    "cma_grapes_global": {
     "coverage": 0.611,
@@ -241,7 +279,7 @@
   },
   "single_runs": {
    "from": "2026-10-18",
-   "to": "2026-10-21"
+   "to": "2026-10-22"
   }
  }
 }
