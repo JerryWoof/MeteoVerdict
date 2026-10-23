@@ -23,6 +23,7 @@ from meteoverdict import (
     bucket,
     chmi_archive,
     combine,
+    extras,
     farm,
     forecasts,
     fresh,
@@ -2513,7 +2514,11 @@ def _model_names() -> dict[str, str]:
 
 
 def _forecast_weights(
-    table: pl.DataFrame, scores: pl.LazyFrame, station_table: pl.DataFrame, data_dir: Path
+    table: pl.DataFrame,
+    scores: pl.LazyFrame,
+    station_table: pl.DataFrame,
+    data_dir: Path,
+    as_of: date | None = None,
 ) -> pl.DataFrame:
     """The forecast's weight table (``combine.forecast_weights``), with the temperature
     and wind regression fitted on the observations and forecasts of the last 90 days in
@@ -2534,6 +2539,12 @@ def _forecast_weights(
             coefficients = mos.recent(data_dir, scores, station_table, as_of, allowed, fc)
     fitted = 0 if coefficients is None else coefficients["region"].n_unique()
     typer.echo(f"regression blend (temperature, wind): {fitted} okresy")
+    # the further variables (humidity, dew point, gusts, pressure, direction): scored from
+    # the single runs (``extras``), weighed like temperature but without the regression
+    extra = extras.okres_table(data_dir, station_table, as_of)
+    if extra is not None:
+        typer.echo(f"further variables: {extra['variable'].n_unique()} scored")
+        table = pl.concat([table, extra], how="diagonal_relaxed")
     forecast = combine.forecast_weights(table, coefficients)
     forecast.write_parquet(data_dir / combine.FORECAST_WEIGHTS_FILE, compression="zstd")
     return forecast
@@ -2554,7 +2565,7 @@ def _publish_aggregates(
     ranks = ranking.rank(scores, station_table, as_of, resamples=resamples)
     table = table.join(ranks, on=[*ranking.GROUP, "model"], how="left")
     table.write_parquet(data_dir / "aggregates.parquet", compression="zstd")
-    forecast = _forecast_weights(table, scores, station_table, data_dir)
+    forecast = _forecast_weights(table, scores, station_table, data_dir, as_of)
     names = _model_names()
     meta = aggregate.metadata(table, names, datetime.now(UTC))
     meta["sources"] = fresh.sources(scores)

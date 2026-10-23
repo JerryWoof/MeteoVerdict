@@ -50,6 +50,7 @@ score files (``FORECAST_COLUMNS``: ``WEIGHT_COLUMNS`` plus the columns above).
 from __future__ import annotations
 
 import json
+import math
 from importlib.resources import files
 from itertools import pairwise
 from pathlib import Path
@@ -73,6 +74,19 @@ VARIABLES = {
     "wind_speed_10m": ("wind_speed_10m", True),
     "precipitation": ("precipitation_daily", False),
 }
+#: Further variables combined the same way as temperature (inverse error variance after
+#: the model's mean error is removed, shrunk as above, no regression and no hour-of-day
+#: corrections): scored from the single runs against the stations that measure them
+#: (``meteoverdict.extras``). Open-Meteo name → (score variable, bias-corrected). Direction
+#: is circular: errors and the correction are angles, combined as a vector mean.
+EXTRA_VARIABLES = {
+    "relative_humidity_2m": ("relative_humidity_2m", True),
+    "dew_point_2m": ("dew_point_2m", True),
+    "wind_gusts_10m": ("wind_gusts_10m", True),
+    "pressure_msl": ("pressure_msl", True),
+    "wind_direction_10m": ("wind_direction_10m", True),
+}
+CIRCULAR = ("wind_direction_10m",)
 WEIGHT_COLUMNS = ("variable", "lead_day", "model", "weight", "correction", "mae", "rank", "days")
 #: corrections at 00, 06, 12 and 18 UTC (``mos.SLOTS``)
 SLOT_CORRECTIONS = tuple(f"correction_{s}" for s in mos.SLOT_NAMES)
@@ -101,7 +115,9 @@ FORECAST_WEIGHTS_FILE = "forecast-weights.parquet"
 #: a combined value needs at least this many models with a value at that hour
 MIN_MODELS = 2
 #: combined variables that cannot be negative (clipped at 0 after the bias correction)
-NON_NEGATIVE = ("precipitation", "wind_speed_10m")
+NON_NEGATIVE = ("precipitation", "wind_speed_10m", "wind_gusts_10m", "relative_humidity_2m")
+#: combined variables with an upper limit
+UPPER_BOUND = {"relative_humidity_2m": 100.0}
 
 
 def weights(table: pl.DataFrame, window: str = WINDOW) -> pl.DataFrame:
@@ -114,7 +130,10 @@ def weights(table: pl.DataFrame, window: str = WINDOW) -> pl.DataFrame:
         table = table.with_columns(pl.lit(None, pl.Int16).alias("rank"))
     if "short_record" not in table.columns:  # tables from before the coverage rule
         table = table.with_columns(pl.lit(False).alias("short_record"))
-    by_score = {score: (name, corrected) for name, (score, corrected) in VARIABLES.items()}
+    by_score = {
+        score: (name, corrected)
+        for name, (score, corrected) in {**VARIABLES, **EXTRA_VARIABLES}.items()
+    }
     rows = table.filter(
         pl.col("level") == "okres",
         pl.col("window") == window,
@@ -247,6 +266,8 @@ def combine_values(
     """
     names = frame.collect_schema().names()
     w = pl.col(weight)
+    if variable in CIRCULAR:
+        return _combine_angles(frame, variable, by, weight)
     hourly = set(SLOT_CORRECTIONS) <= set(names) and "time" in names
     correction = hourly_correction() if hourly else pl.col("correction")
     value = pl.col(variable) - pl.col("_correction")
@@ -280,7 +301,37 @@ def combine_values(
     ).drop("_models")
     if variable in NON_NEGATIVE:
         combined = combined.with_columns(pl.col(variable).clip(lower_bound=0))
+    if variable in UPPER_BOUND:
+        combined = combined.with_columns(pl.col(variable).clip(upper_bound=UPPER_BOUND[variable]))
     return combined
+
+
+def _combine_angles(
+    frame: pl.LazyFrame | pl.DataFrame, variable: str, by: list[str], weight: str
+) -> pl.LazyFrame | pl.DataFrame:
+    """``combine_values`` for a direction in degrees: each model's angle less its
+    correction, averaged as a weighted vector (no jump at 0/360), 0 to 360; null with
+    fewer than ``MIN_MODELS`` models or when the vectors cancel out."""
+    angle = (pl.col(variable) - pl.col("correction")) * (math.pi / 180)
+    w = pl.col(weight)
+    combined = (
+        frame.drop_nulls(variable)
+        .group_by(by)
+        .agg(
+            (w * angle.sin()).sum().alias("_y"),
+            (w * angle.cos()).sum().alias("_x"),
+            pl.len().alias("_models"),
+        )
+    )
+    degrees = pl.arctan2("_y", "_x") * (180 / math.pi)
+    return combined.select(
+        *by,
+        pl.when(
+            (pl.col("_models") >= MIN_MODELS) & ((pl.col("_x") ** 2 + pl.col("_y") ** 2) > 1e-9)
+        )
+        .then(degrees % 360)
+        .alias(variable),
+    )
 
 
 def representative_point(region: Region) -> tuple[float, float]:

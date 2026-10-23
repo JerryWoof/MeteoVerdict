@@ -46,6 +46,7 @@ import polars as pl
 from meteoverdict import (
     blend_interval,
     bucket,
+    combine,
     frost,
     gusts,
     outlook_bucket,
@@ -74,6 +75,21 @@ EXTRA_VARIABLES = tuple(outlook_bucket.EXTRA_VARIABLES)
 #: (``sun_cloud_gust.correct_hourly``)
 MEANS = ("cloud_cover", "sunshine_duration")
 COMBINED = ("temperature_2m", "precipitation", "wind_speed_10m")
+#: further variables combined with weights (scored against the stations, ``extras``): only
+#: where the weight table has rows for them (a table from before has none: null series)
+COMBINED_EXTRA = tuple(combine.EXTRA_VARIABLES)
+#: variables of the models' own forecasts for which no weights exist (no or too few
+#: stations measure them, or not the same quantity): the plain mean of the models, labelled
+#: ``reference`` in the files, not a weighted forecast
+REFERENCE = (
+    "shortwave_radiation",
+    "cloud_cover_low",
+    "snowfall",
+    "snow_depth",
+    "snow_depth_water_equivalent",
+    "surface_temperature",
+    "visibility",
+)
 DAYS = 6
 MAX_LEAD_DAY = 5
 TAPER_HOURS = 3
@@ -282,6 +298,12 @@ def with_lead_and_fade(fc: pl.DataFrame, now: datetime) -> pl.DataFrame:
     )
 
 
+def _weighted_extras(fc: pl.DataFrame, lead: pl.DataFrame) -> list[str]:
+    """The ``COMBINED_EXTRA`` variables that ``fc`` has values for and ``lead`` weights."""
+    weighted = set(lead["variable"].unique().to_list())
+    return [v for v in COMBINED_EXTRA if v in weighted and v in fc.columns]
+
+
 def combine_hourly(fc: pl.DataFrame, weights: pl.DataFrame, now: datetime) -> pl.DataFrame:
     """One row per okres and hour: the combined temperature, precipitation and wind,
     the plain means of cloud cover and sunshine, and the number of models."""
@@ -290,9 +312,11 @@ def combine_hourly(fc: pl.DataFrame, weights: pl.DataFrame, now: datetime) -> pl
     # some models publish sunshine slightly outside the hour (seen: 3605.6 and -1.0 s)
     fc = fc.with_columns(pl.col("sunshine_duration").clip(0.0, 3600.0))
     out = fc.group_by("okres", "time").agg(
-        *[pl.col(v).mean() for v in MEANS], pl.col("model").n_unique().alias("models")
+        *[pl.col(v).mean() for v in MEANS],
+        *[pl.col(v).mean().alias(f"{v}_reference") for v in REFERENCE if v in fc.columns],
+        pl.col("model").n_unique().alias("models"),
     )
-    for variable in COMBINED:
+    for variable in (*COMBINED, *_weighted_extras(fc, lead)):
         # with the regression blend's weights and slot corrections where there are some
         blend_columns = [c for c in BLEND_COLUMNS if c in lead.columns]
         w = lead.filter(pl.col("variable") == variable).select(
@@ -307,6 +331,10 @@ def combine_hourly(fc: pl.DataFrame, weights: pl.DataFrame, now: datetime) -> pl
             weight="w",
         )
         out = out.join(part, on=["okres", "time"], how="left")
+    if "dew_point_2m" in out.columns:  # the dew point never above the air temperature
+        out = out.with_columns(
+            pl.min_horizontal("dew_point_2m", "temperature_2m").alias("dew_point_2m")
+        )
     return out.sort("okres", "time")
 
 
@@ -730,9 +758,15 @@ def models_doc(fc: pl.DataFrame, hourly: pl.DataFrame, code: str, generated: dat
     combined_rows = grid.join(ours, on="time", how="left").sort("time")
     combined = {
         v: _values(combined_rows[v], MODEL_DIGITS[v])
-        for v in (*HOURLY, *RANGE)
+        for v in (*HOURLY, *RANGE, *COMBINED_EXTRA)
         if v in combined_rows.columns
         and (v in HOURLY or combined_rows[v].null_count() < combined_rows.height)
+    }
+    reference = {
+        v: _values(combined_rows[f"{v}_reference"], MODEL_DIGITS[v])
+        for v in REFERENCE
+        if f"{v}_reference" in combined_rows.columns
+        and combined_rows[f"{v}_reference"].null_count() < combined_rows.height
     }
     models = {}
     for (model,), part in sorted(own.partition_by("model", as_dict=True).items()):
@@ -754,6 +788,8 @@ def models_doc(fc: pl.DataFrame, hourly: pl.DataFrame, code: str, generated: dat
         "time": [t.strftime("%Y-%m-%dT%H:%MZ") for t in times.to_list()],
         "variables": MODEL_UNITS,
         "combined": combined,
+        # plain means of the models, no weights behind them (``REFERENCE``)
+        **({"reference": reference} if reference else {}),
         "models": models,
         "licence": MODELS_LICENCE,
         "attribution": MODELS_ATTRIBUTION,

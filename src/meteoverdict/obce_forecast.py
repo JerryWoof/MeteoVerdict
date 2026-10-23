@@ -37,6 +37,16 @@ MIN_AGE_H = 3
 #: (release data-latest; the site unpacks it into ``data/forecast/``)
 NAME = "obce-{code}.json"
 ZIP_NAME = "obce.zip"
+#: further variables read from the bucket's extra files (gusts are in the base files)
+READ_EXTRA = ("relative_humidity_2m", "dew_point_2m", "pressure_msl", "wind_direction_10m")
+#: decimals of the combined series of ``outlook.COMBINED_EXTRA`` in the document
+EXTRA_DIGITS = {
+    "relative_humidity_2m": 0,
+    "dew_point_2m": 1,
+    "wind_gusts_10m": 1,
+    "pressure_msl": 1,
+    "wind_direction_10m": 0,
+}
 
 
 def places(code: str | None = None) -> pl.DataFrame:
@@ -92,7 +102,7 @@ def newest_runs(
                     cells = bucket.build_cells(store, points, run, names)
                 except FileNotFoundError:
                     continue
-                fetched = bucket.read_run(store, model, run, points, cells, pool)
+                fetched = bucket.read_run(store, model, run, points, cells, pool, extra=READ_EXTRA)
                 if fetched.rows is not None:
                     frames.append(fetched.rows)
                     log(f"{model.id}: run {run:%Y-%m-%d %H} UTC")
@@ -143,6 +153,7 @@ def combined(
         pl.col("valid_time").alias("time"),
         "model",
         *outlook.COMBINED,
+        *[pl.col(v) for v in outlook.COMBINED_EXTRA if v in rows.columns],
         *[pl.lit(None, pl.Float64).alias(v) for v in outlook.MEANS],
     ).filter(pl.col("time") >= start_of_day(now))
     height = [pl.col("elevation").cast(pl.Float64).alias("_elevation")]
@@ -174,7 +185,7 @@ def document(
         out = [None] * len(times)
         for t, v in frame.select("time", column).rows():
             if t in index and v is not None:
-                out[index[t]] = round(v, digits)
+                out[index[t]] = round(v, digits) if digits else round(v)
         return out
 
     def models_of(parts: list, column: str) -> dict[str, list]:
@@ -205,6 +216,11 @@ def document(
                 "temperature_2m": series(frame, "temperature_2m", 1),
                 "precipitation": series(frame, "precipitation", 1),
                 "wind_speed_10m": series(frame, "wind_speed_10m", 1),
+                **{
+                    v: series(frame, v, d)
+                    for v, d in EXTRA_DIGITS.items()
+                    if v in frame.columns and frame[v].null_count() < frame.height
+                },
                 "models": {m: series(part, "temperature_2m", 1) for (m,), part in parts},
                 "models_wind_speed_10m": models_of(parts, "wind_speed_10m"),
                 "models_precipitation": models_of(parts, "precipitation"),
