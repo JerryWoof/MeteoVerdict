@@ -150,6 +150,7 @@ quality checks) do not filter by `variable` and must see exactly what they saw b
 | `temperature_5cm` | `TPM` at HH:00 | °C | -50 to 60 |
 | `snow_depth` | `SCEa` at HH:00 | cm (as given; `meta2`: "Výška sněhu", cm) | 0 to 500 |
 | `snow_water_equivalent` | `SVHa` at HH:00 | mm (`meta2`: "Vodní hodnota", mm; 16 stations on 2026-10-22) | >= 0 |
+| `pressure_msl` | `P_hm` of the hourly (`1H`) files, 29 stations (`mvd daily`, `observations.fetch_hourly_elements`) | hPa, sea level | 850 to 1100 |
 | `dew_point_2m` | derived from `T` and `H` of the same hour: with `g = ln(H/100) + 17.62 T / (243.12 + T)`, `Td = 243.12 g / (17.62 - g)` (Magnus) | °C | -80 to 50 |
 
 The dew point exists only where both `T` and `H` passed the checks for that station and

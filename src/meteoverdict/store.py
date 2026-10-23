@@ -16,7 +16,7 @@ from pathlib import Path
 
 from meteoverdict.releases import GitHubReleaseStore
 
-KINDS = ("obs", "obs-extra", "gauges", "fc", "scores")
+KINDS = ("obs", "obs-extra", "gauges", "fc", "scores", "scores-extra")
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 RELEASE_NOTES = (
