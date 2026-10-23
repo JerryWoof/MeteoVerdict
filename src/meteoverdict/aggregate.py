@@ -63,7 +63,7 @@ from pathlib import Path
 
 import polars as pl
 
-from meteoverdict import metrics, neighbours, regions, scoring
+from meteoverdict import metrics, neighbours, scoring
 from meteoverdict.stations import MAIN_PREFIX
 
 LEVELS = ("station", "okres", "kraj", "elevation", "network", "high_sites", "cz")
@@ -794,45 +794,6 @@ def write_stations(stations: pl.DataFrame, out_dir: Path) -> Path:
     doc = {"columns": columns, "rows": rows}
     path.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), "utf-8")
     return path
-
-
-#: the forecast's published weight table (release data-latest); the forecast pages read
-#: it as ``forecast/<okres>.json`` (``write_forecast``)
-FORECAST_WEIGHTS_FILE = "forecast-weights.parquet"
-#: the columns of ``forecast/<okres>.json``, as far as the weight table has them
-FORECAST_COLUMNS = (
-    "variable", "lead_day", "model", "weight", "correction", "mae", "rank", "days",
-    "mos_weight", "mos_models", "correction_00", "correction_06", "correction_12",
-    "correction_18",
-)  # fmt: skip
-
-
-def _write_rows(path: Path, frame: pl.DataFrame) -> Path:
-    rows = frame.select(
-        pl.col(c).round(4) if frame.schema[c].is_float() else pl.col(c) for c in frame.columns
-    ).rows()
-    doc = {"columns": frame.columns, "rows": rows}
-    path.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), "utf-8")
-    return path
-
-
-def write_forecast(out_dir: Path, weights: pl.DataFrame | None = None) -> list[Path]:
-    """``out_dir/forecast/okresy.json``: the point of every okres (``regions.okres_points``)
-    and whether the published weight table (``FORECAST_WEIGHTS_FILE``, ``region`` and
-    ``FORECAST_COLUMNS``) covers it; ``out_dir/forecast/<okres>.json``: its rows of that
-    table. Both ``{"columns", "rows"}`` like the score files; without a table, the points
-    only."""
-    folder = out_dir / "forecast"
-    folder.mkdir(parents=True, exist_ok=True)
-    weights = weights if weights is not None else pl.DataFrame(schema={"region": pl.String})
-    index = regions.okres_points().with_columns(
-        pl.col("code").is_in(weights["region"].unique().implode()).alias("weights")
-    )
-    written = [_write_rows(folder / "okresy.json", index.sort("code"))]
-    columns = [c for c in FORECAST_COLUMNS if c in weights.columns]
-    for (code,), part in sorted(weights.partition_by("region", as_dict=True).items()):
-        written.append(_write_rows(folder / f"{code}.json", part.select(columns)))
-    return written
 
 
 #: Daily error series per station for the web map's charts (roadmap 4.4)
