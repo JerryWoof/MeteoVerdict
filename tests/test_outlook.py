@@ -770,3 +770,35 @@ def test_model_parts_files_stay_small(tmp_path):
     outlook.write_model_parts(fc, WEIGHTS, _parts_days(), tmp_path, NOW)
     size = (tmp_path / "ecmwf_ifs025.json").stat().st_size
     assert 50_000 < size < 100_000
+
+
+def test_last_day_keeps_only_parts_with_every_relied_on_model():
+    """D+5: a part needs a temperature of every model with 4 % weight or more; ``day`` all four."""
+    now = datetime(2026, 10, 23, 9, 13, tzinfo=UTC)
+    last = date(2026, 10, 28)
+    weights = pl.DataFrame({
+        "region": ["CZ1"] * 4, "variable": ["temperature_2m"] * 4, "lead_day": [5] * 4,
+        "model": ["a", "b", "c", "d"], "weight": [0.5, 0.45, 0.04, 0.01],
+    })  # fmt: skip
+    # a has all day, b stops at 12:00 local (11 UTC), c all day, d (1 %) never has a value
+    hours = [datetime(2026, 10, 28, h, tzinfo=UTC) for h in range(0, 23)]
+    rows = []
+    for t in hours:
+        for model in ("a", "b", "c"):
+            if model != "b" or t.hour < 11:
+                rows.append({"okres": "CZ1", "time": t, "model": model, "temperature_2m": 5.0})
+    fc = pl.DataFrame(rows)
+    parts = ["night", "morning", "afternoon", "evening", "day"]
+    table = pl.DataFrame({
+        "okres": ["CZ1"] * 10 + ["CZ2"], "day": [last] * 5 + [date(2026, 10, 27)] * 5 + [last],
+        "part": parts + parts + ["night"], "tmin": [1.0] * 11,
+    })  # fmt: skip
+    out = outlook.gate_last_day(table, fc, weights, now)
+    got = {(r["okres"], r["day"], r["part"]) for r in out.iter_rows(named=True)}
+    assert ("CZ1", last, "night") in got and ("CZ1", last, "morning") in got
+    assert ("CZ1", last, "afternoon") not in got
+    assert ("CZ1", last, "evening") not in got
+    assert ("CZ1", last, "day") not in got
+    d4 = {p for (o, d, p) in got if o == "CZ1" and d == date(2026, 10, 27)}
+    assert d4 == set(parts)  # D+4 untouched
+    assert ("CZ2", last, "night") in got  # an okres without weights is not gated

@@ -36,7 +36,7 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -442,6 +442,44 @@ def symbol(
     if cloud < CLEAR_BELOW:
         return "clear"
     return "partly" if cloud < PARTLY_BELOW else "cloudy"
+
+
+#: the last day (D+5) is kept only for the parts of day in which every model with at least this
+#: temperature weight at D+5 in the okres has a value (a bare "not zero" would let a 1 % model
+#: hide a part); ``day`` needs all four. The AI's files follow the same rule (``mvai d5gate``).
+LAST_DAY_MIN_WEIGHT = 0.04
+
+
+def gate_last_day(
+    table: pl.DataFrame,
+    fc: pl.DataFrame,
+    weights: pl.DataFrame,
+    now: datetime,
+    min_weight: float = LAST_DAY_MIN_WEIGHT,
+) -> pl.DataFrame:
+    """``table`` (``summarise``) without the rows of the last day (``now``'s local day +
+    ``MAX_LEAD_DAY``) for the parts in which a relied-on model has no temperature, and without
+    that day's ``day`` row of an okres with such a part."""
+    last = now.astimezone(ZoneInfo(TIME_ZONE)).date() + timedelta(days=MAX_LEAD_DAY)
+    relied = weights.filter(
+        (pl.col("variable") == "temperature_2m")
+        & (pl.col("lead_day") == MAX_LEAD_DAY)
+        & (pl.col("weight") >= min_weight)
+    ).select(pl.col("region").alias("okres"), "model")
+    have = (
+        _local(fc.filter(pl.col("temperature_2m").is_not_null()))
+        .filter(pl.col("day") == last)
+        .select("okres", "part", "model")
+        .unique()
+    )
+    need = relied.join(pl.DataFrame({"part": list(PARTS)}), how="cross")
+    missing = (
+        need.join(have, on=["okres", "part", "model"], how="anti").select("okres", "part").unique()
+    )
+    drop = pl.concat(
+        [missing, missing.select("okres").unique().with_columns(pl.lit("day").alias("part"))]
+    ).with_columns(pl.lit(last).alias("day"))
+    return table.join(drop, on=["okres", "day", "part"], how="anti")
 
 
 def summarise(hourly: pl.DataFrame, chances: pl.DataFrame) -> pl.DataFrame:
@@ -1220,6 +1258,7 @@ def outlook(
     )
     hourly = blend_interval.add_interval(hourly, interval, now)
     table = summarise(hourly, probability(fc, weights, now, calibration, points))
+    table = gate_last_day(table, fc, weights, now)
     night_rows = frost.point_nights(fc, payload, points["code"].to_list(), now)
     if nights is not None:
         nights.append(night_rows)
