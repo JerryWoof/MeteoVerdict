@@ -358,3 +358,34 @@ test("the Data page's preview: the first hours of an okres or obec file as JSON 
   assert.equal(okres[1], `  "time": ${JSON.stringify(HOURLY_DOC.time.slice(0, 3))},`);
   assert.equal(hourlyPreview(null), "");
 });
+
+test("the further hourly variables of the combination come from forecast/models, the AI's from its file", async () => {
+  const { extraFromModels, aiOkresDoc, EXTRA_UNITS } = await import("./api.js");
+  const times = ["2026-10-23T00:00Z", "2026-10-23T01:00Z"];
+  const models = {
+    time: ["2026-10-23T00:00+00:00", "2026-10-23T01:00+00:00"],
+    combined: { relative_humidity_2m: [71.4, 80.2], wind_gusts_10m: [4.26, null] },
+    reference: { visibility: [20000, 12500], snow_depth: [0, 0.02], cape: [5, 6] },
+  };
+  const { series, sources } = extraFromModels(models, times);
+  assert.deepEqual(series.relative_humidity_2m, [71, 80]);
+  assert.deepEqual(series.wind_gusts_10m, [4.3, null]);
+  assert.deepEqual(series.visibility, [20, 12.5]); // m → km
+  assert.deepEqual(series.snow_depth, [0, 2]); // m → cm
+  assert.equal(sources.relative_humidity_2m, "blend");
+  assert.equal(sources.visibility, "reference");
+  assert.equal(series.cape, undefined); // the combination has no CAPE
+  assert.equal(EXTRA_UNITS.visibility, "km (up to 20)");
+  const okres = { code: "CZ0100", name: "Praha", lat: 50, lon: 14 };
+  const hourly = { generated: "x", time: times, variables: {}, okresy: { CZ0100: { temperature_2m: [1, 2], wind_speed_10m: [1, 1] } } };
+  const aiForecast = {
+    issued: "2026-10-23T06:30:00+00:00",
+    extra: { sources: { dew_point_2m: "ai", cape: "reference" } },
+    okresy: { CZ0100: { time: times, temperature_2m: { ai: [1, 2] }, dew_point_2m: { ai: [0.04, 1.26], reference: [9, 9] }, cape: { ai: [null, null], reference: [3, 4] } } },
+  };
+  const doc = aiOkresDoc({ okres, outlook: { rows: [], columns: [] }, hourly, aiForecast, aiOutlook: null, meta: null });
+  assert.deepEqual(doc.forecast.hourly.dew_point_2m, [0, 1.3]);
+  assert.deepEqual(doc.forecast.hourly.cape, [3, 4]);
+  assert.equal(doc.forecast.sources.dew_point_2m, "ai");
+  assert.equal(doc.forecast.sources.cape, "reference");
+});

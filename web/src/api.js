@@ -26,6 +26,24 @@ export const DEPRECATED = {
 export const SCORE_VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitation_daily", "precipitation_24h"];
 const WEIGHTS_OF = { temperature_2m: "temperature_2m", wind_speed_10m: "wind_speed_10m", precipitation_daily: "precipitation" };
 export const HOURLY = ["temperature_2m", "precipitation", "wind_speed_10m", "cloud_cover", "sunshine_duration", "temperature_2m_lo", "temperature_2m_hi"];
+// further hourly variables (all 18 of a full model forecast, and the AI's own): [name, unit, digits].
+// The combination has the first five of its own (humidity, dew point, pressure, direction, gusts: hours
+// weighted by the stations' scores); the rest is the median of the best models (`reference`)
+export const EXTRA_HOURLY = [
+  ["relative_humidity_2m", "%", 0], ["dew_point_2m", "°C", 1], ["pressure_msl", "hPa, reduced to mean sea level", 1],
+  ["wind_direction_10m", "° the wind comes from (0 north, 90 east); null in calm", 0],
+  ["wind_gusts_10m", "m/s, highest gust in the hour ending at the time", 1],
+  ["shortwave_radiation", "W/m², mean of the hour ending at the time", 0], ["cloud_cover_low", "%", 0],
+  ["visibility", "km (up to 20)", 1], ["snowfall", "cm in the hour ending at the time", 1],
+  ["snow_depth", "cm", 0], ["snow_depth_water_equivalent", "mm", 0],
+  ["temperature_5cm", "°C, air 5 cm above the ground", 1], ["fog_probability", "0-1, visibility below 1 km", 2],
+  ["cape", "J/kg", 0],
+];
+export const EXTRA_UNITS = Object.fromEntries(EXTRA_HOURLY.map(([name, unit]) => [name, unit]));
+const EXTRA_DIGITS = Object.fromEntries(EXTRA_HOURLY.map(([name, , digits]) => [name, digits]));
+// forecast/models/<okres>.json: the combination's own series and the models' median, in the file's units
+const COMBINED_OWN = ["relative_humidity_2m", "dew_point_2m", "pressure_msl", "wind_direction_10m", "wind_gusts_10m"];
+const FROM_MODELS = { shortwave_radiation: 1, cloud_cover_low: 1, visibility: 0.001, snowfall: 1, snow_depth: 100, snow_depth_water_equivalent: 1 };
 const PART_FIELDS = [
   "day", "part", "tmin", "tmax", "precipitation", "rain_probability", "wind", "cloud", "sunshine", "symbol",
   "sunrise", "sunset",
@@ -94,9 +112,39 @@ function blendParts(outlook, code) {
     });
 }
 
+/**
+ * The further hourly variables of the combination on the axis `times`: its own series
+ * (`combined`) and the models' median (`reference`) of forecast/models/<okres>.json, as
+ * {series: {variable: [..]}, sources: {variable: "blend" | "reference"}}.
+ */
+export function extraFromModels(models, times) {
+  const series = {};
+  const sources = {};
+  if (!models?.time) return { series, sources };
+  const at = new Map(models.time.map((t, i) => [Date.parse(t), i]));
+  const take = (values, scale, name) => {
+    if (!Array.isArray(values) || !values.some((v) => v != null)) return null;
+    return times.map((t) => {
+      const j = at.get(Date.parse(t));
+      const v = j === undefined ? null : values[j];
+      return v == null ? null : round(v * scale, EXTRA_DIGITS[name] ?? 1);
+    });
+  };
+  for (const name of COMBINED_OWN) {
+    const v = take(models.combined?.[name], 1, name);
+    if (v) { series[name] = v; sources[name] = "blend"; }
+  }
+  for (const [name, scale] of Object.entries(FROM_MODELS)) {
+    const v = take(models.reference?.[name], scale, name);
+    if (v) { series[name] = v; sources[name] = "reference"; }
+  }
+  return { series, sources };
+}
+
 /** The JSON file of one okres. */
-export function okresDoc({ okres, outlook, hourly, weightsDoc, scores, meta }) {
+export function okresDoc({ okres, outlook, hourly, weightsDoc, scores, meta, models }) {
   const series = hourly?.okresy?.[okres.code];
+  const extra = series ? extraFromModels(models, hourly.time) : { series: {}, sources: {} };
   const parts = blendParts(outlook, okres.code);
   const window = meta?.windows?.["90d"] ?? null;
   return {
@@ -111,8 +159,10 @@ export function okresDoc({ okres, outlook, hourly, weightsDoc, scores, meta }) {
       generated: hourly?.generated ?? outlook?.generated ?? null,
       method: "all models combined with weights and bias corrections from their scores in this okres over the last 90 days; temperature and wind by a regression on the models with hour-of-day and elevation corrections (docs/methodology.md)",
       time_zone_of_parts: outlook?.time_zone ?? "Europe/Prague",
-      units: hourly?.variables ?? null,
-      hourly: series ? { time: hourly.time, ...series } : null,
+      units: hourly?.variables ? { ...hourly.variables, ...Object.fromEntries(Object.keys(extra.series).map((k) => [k, EXTRA_UNITS[k]])) } : null,
+      // the combination's own hours ("blend": weighted by the scores) and the models' median ("reference") of the further variables
+      ...(Object.keys(extra.sources).length ? { sources: extra.sources } : {}),
+      hourly: series ? { time: hourly.time, ...series, ...extra.series } : null,
       parts,
     },
     models: {
@@ -219,6 +269,7 @@ function fitHourlyToParts(h, parts, own = {}) {
  * field the AI has no value for, or a part it has no row for, keeps the combined forecast's.
  */
 export function aiOkresDoc({ okres, outlook, hourly, aiForecast, aiOutlook, meta }) {
+  const extraSources = aiForecast?.extra?.sources ?? {};
   const series = hourly?.okresy?.[okres.code];
   const ai = aiForecast?.okresy?.[okres.code];
   if (!series || !ai?.time) return null;
@@ -238,6 +289,21 @@ export function aiOkresDoc({ okres, outlook, hourly, aiForecast, aiOutlook, meta
       h[v][i] = x;
       used[v][i] = true;
     });
+  }
+  // the AI's further variables on the same axis: its own (`ai`) where its file says so, else the reference
+  const extraUsed = {};
+  for (const [name] of EXTRA_HOURLY) {
+    const pair = ai[name];
+    if (!pair || typeof pair !== "object") continue;
+    const kind = extraSources[name] === "ai" ? "ai" : "reference";
+    const values = pair[kind];
+    if (!Array.isArray(values) || !values.some((v) => v != null)) continue;
+    h[name] = hourly.time.map((t) => {
+      const j = at.get(t);
+      const v = j === undefined ? null : values[j];
+      return v == null ? null : round(v, EXTRA_DIGITS[name] ?? 1);
+    });
+    extraUsed[name] = kind === "ai" ? "ai" : "reference";
   }
   const usedTemperature = used.temperature_2m;
   const ownHourly = AI_OWN_HOURLY.some((v) => used[v].some(Boolean));
@@ -280,9 +346,9 @@ export function aiOkresDoc({ okres, outlook, hourly, aiForecast, aiOutlook, meta
       generated: hourly?.generated ?? outlook?.generated ?? null,
       ai_issued: aiForecast.issued ?? null,
       method: ownHourly ? AI_METHOD_HOURLY : AI_METHOD,
-      sources,
+      sources: { ...sources, ...extraUsed },
       time_zone_of_parts: outlook?.time_zone ?? "Europe/Prague",
-      units: hourly?.variables ?? null,
+      units: hourly?.variables ? { ...hourly.variables, ...Object.fromEntries(Object.keys(extraUsed).map((k) => [k, EXTRA_UNITS[k]])) } : null,
       hourly: h,
       parts,
     },
@@ -367,6 +433,15 @@ function onAxis(times, okres, sample, { interpolate, offset: useOffset, floor, d
 
 // what the obec has no value of its own for: the okres's value, as it is in the okres file
 const OKRES_HOURLY = ["cloud_cover", "sunshine_duration"];
+// the obec's own further series (the obce files since the combination's humidity, dew point, pressure,
+// direction and gusts); the okres's value where the obec has none, as for temperature
+const OBEC_EXTRA = [
+  ["relative_humidity_2m", { interpolate: true, offset: true, digits: 0 }],
+  ["dew_point_2m", { interpolate: true, offset: true, digits: 1 }],
+  ["pressure_msl", { interpolate: true, offset: true, digits: 1 }],
+  ["wind_direction_10m", { interpolate: false, offset: false, digits: 0 }],
+  ["wind_gusts_10m", { interpolate: true, offset: true, floor: 0, digits: 1 }],
+];
 const OKRES_PART_FIELDS = ["rain_probability", "cloud", "sunshine", "symbol", "sunrise", "sunset", "heavy_rain_probability", "heavy_rain", "coldest_site", "coldest_min", "frost_probability", "gust", "gust_over_threshold"];
 
 /** Hourly series and parts of day of one place on the axis of an okres file. */
@@ -412,6 +487,12 @@ export function obecForecast(place, times, okresHourly, okresParts) {
     return out; // night_min, frost, ground_min, ground_frost only on the rows that have them
   });
   const hourly = { start: times[0], step_hours: 1, hours: times.length, temperature_2m, precipitation, wind_speed_10m };
+  for (const [name, options] of OBEC_EXTRA) {
+    if (!place[name] || !okresHourly[name]) continue;
+    const [values] = onAxis(ms, okresHourly[name], sampleOf(name), options);
+    if (name === "relative_humidity_2m") values.forEach((v, i) => { if (v != null) values[i] = Math.min(100, Math.max(0, v)); });
+    hourly[name] = values;
+  }
   for (const k of OKRES_HOURLY) if (okresHourly[k]) hourly[k] = [...okresHourly[k]];
   return { hourly, parts, temperature_offset: tOffset };
 }
@@ -434,6 +515,8 @@ export function obceDocs({ okresDoc: doc, obceFile, meta }) {
         obec: { id: ids[i], name: place.name, okres: doc.okres.code, lat: place.lat, lon: place.lon, elevation: place.elevation ?? null },
         generated: obceFile.generated ?? null,
         sources: { okres: [...OKRES_HOURLY, ...OKRES_PART_FIELDS], obec: "all other fields" },
+        // the model of each further hourly series: the AI's file has them from the AI (see its `sources`), the combination's from the combination
+        ...(doc.forecast.sources ? { hourly_sources: Object.fromEntries(OBEC_EXTRA.filter(([n]) => f.hourly[n]).map(([n]) => [n, doc.forecast.sources[n] ?? "blend"])) } : {}),
         hourly: f.hourly,
         parts: f.parts,
       },
