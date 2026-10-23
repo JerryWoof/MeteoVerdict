@@ -1433,6 +1433,9 @@ archive captures complete UTC days, so there is no "so far today").
 | `gust` | `Fmax` (10 min, m/s) | strongest; 80 % of the hours |
 | `ssv` | `SSV1H` (0.1 h) | hours of sunshine; only periods with at least 0.5 h of daylight, values in 80 % of the daylight hours |
 | `cloud` | `N` (octas, 9 = sky obscured left out) | mean in %; half of the hours (synoptic stations only, ~36) |
+| `rh` | `H` (10 min) at the full hour (%) | mean; 80 % of the hours |
+| `pres` | `P_hm` (1 h, hPa, reduced to sea level) | mean; 80 % of the hours (few stations) |
+| `dir` | `D` (10 min) at the full hour (° the wind comes from) | circular mean; 80 % of the hours |
 
 A 10-minute value belongs to the period its 10 minutes fall in, an hourly total to the
 period of its hour, a value at the full hour to that time's period (as the outlook's
@@ -1527,7 +1530,7 @@ stations). About 2 minutes and 45,000 rows.
   "issued"?, "trained_to"?, "sky_issued"?, "columns", "okresy": {code: {column: [per
   period]}}}]}` (a forecast's columns without any value are left out);
 - `<YYYY-MM-DD>-stations.json`: the stations' own values (no page reads it now; the Pages build deletes it):
-  `{"parts", "columns": ["tmax", "tmin", "r", "wind", "gust", "ssv", "cloud"],
+  `{"parts", "columns": ["tmax", "tmin", "r", "wind", "gust", "ssv", "cloud", "rh", "pres", "dir"],
   "stations": {WSI: [value of each column, period by period]}}`; positions and names
   come from `station/index.json`.
 
