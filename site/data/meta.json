@@ -1,17 +1,17 @@
 {
- "generated": "2026-10-23T04:49:55+00:00",
+ "generated": "2026-10-23T10:34:28+00:00",
  "as_of": "2026-10-22",
  "windows": {
   "90d": {
-   "from": "2026-07-26",
+   "from": "2026-07-25",
    "to": "2026-10-22"
   },
   "all": {
-   "from": "2026-07-26",
+   "from": "2026-07-15",
    "to": "2026-10-22"
   },
   "jja": {
-   "from": "2026-07-26",
+   "from": "2026-07-15",
    "to": "2026-08-31"
   },
   "season": {
@@ -89,176 +89,51 @@
  },
  "bias_corrected": "mae_bc: MAE after removing each model's own bias at the station and synoptic hour, estimated on the 30 days before the forecast was made (at least 10); only pairs where every compared model has one",
  "short_record": {
-  "90d": {
-   "gem_global": {
-    "coverage": 0.795,
-    "days": 70,
-    "variables": [
-     "temperature_2m_06utc",
-     "temperature_2m_18utc"
-    ]
-   },
-   "ukmo_global_deterministic_10km": {
-    "coverage": 0.795,
-    "days": 70,
-    "variables": [
-     "temperature_2m_06utc",
-     "temperature_2m_18utc",
-     "temperature_max"
-    ]
-   }
-  },
-  "all": {
-   "gem_global": {
-    "coverage": 0.795,
-    "days": 70,
-    "variables": [
-     "temperature_2m_06utc",
-     "temperature_2m_18utc"
-    ]
-   },
-   "ukmo_global_deterministic_10km": {
-    "coverage": 0.795,
-    "days": 70,
-    "variables": [
-     "temperature_2m_06utc",
-     "temperature_2m_18utc",
-     "temperature_max"
-    ]
-   }
-  },
   "jja": {
-   "cma_grapes_global": {
-    "coverage": 0.611,
-    "days": 22,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily",
-     "temperature_2m",
-     "temperature_2m_00utc",
-     "temperature_2m_06utc",
-     "temperature_2m_12utc",
-     "temperature_2m_18utc",
-     "temperature_2m_hourly",
-     "wind_speed_10m",
-     "wind_speed_10m_hourly"
-    ]
-   },
    "dwd_icon": {
-    "coverage": 0.611,
-    "days": 22,
+    "coverage": 0.75,
+    "days": 36,
     "variables": [
-     "precipitation_24h",
-     "precipitation_daily",
-     "temperature_2m",
-     "temperature_2m_00utc",
-     "temperature_2m_06utc",
-     "temperature_2m_12utc",
-     "temperature_2m_18utc",
-     "temperature_2m_hourly",
-     "temperature_max",
-     "wind_speed_10m",
-     "wind_speed_10m_hourly"
+     "precipitation_24h"
     ]
    },
    "gem_global": {
-    "coverage": 0.611,
-    "days": 22,
+    "coverage": 0.75,
+    "days": 36,
     "variables": [
-     "precipitation_24h",
-     "precipitation_daily",
-     "temperature_2m",
-     "temperature_2m_00utc",
-     "temperature_2m_06utc",
-     "temperature_2m_12utc",
-     "temperature_2m_18utc",
-     "temperature_2m_hourly",
-     "temperature_max",
-     "wind_speed_10m",
-     "wind_speed_10m_hourly"
+     "precipitation_24h"
     ]
    },
    "jma_gsm": {
-    "coverage": 0.611,
-    "days": 22,
+    "coverage": 0.75,
+    "days": 36,
     "variables": [
-     "precipitation_24h",
-     "precipitation_daily",
-     "temperature_2m",
-     "temperature_2m_00utc",
-     "temperature_2m_06utc",
-     "temperature_2m_12utc",
-     "temperature_2m_18utc",
-     "temperature_2m_hourly",
-     "wind_speed_10m",
-     "wind_speed_10m_hourly"
+     "precipitation_24h"
     ]
    },
    "meteofrance_arpege_europe": {
-    "coverage": 0.611,
-    "days": 22,
+    "coverage": 0.75,
+    "days": 36,
     "variables": [
      "precipitation_24h",
-     "precipitation_daily",
-     "temperature_2m",
-     "temperature_2m_00utc",
-     "temperature_2m_06utc",
-     "temperature_2m_12utc",
-     "temperature_2m_18utc",
-     "temperature_2m_hourly",
-     "temperature_max",
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.611,
-    "days": 22,
+    "coverage": 0.75,
+    "days": 36,
     "variables": [
      "precipitation_24h",
-     "precipitation_daily",
-     "temperature_2m",
-     "temperature_2m_00utc",
-     "temperature_2m_06utc",
-     "temperature_2m_12utc",
-     "temperature_2m_18utc",
-     "temperature_2m_hourly",
-     "temperature_max",
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "ncep_aigfs025": {
-    "coverage": 0.611,
-    "days": 22,
+    "coverage": 0.75,
+    "days": 36,
     "variables": [
-     "precipitation_24h",
-     "precipitation_daily",
-     "temperature_2m",
-     "temperature_2m_00utc",
-     "temperature_2m_06utc",
-     "temperature_2m_12utc",
-     "temperature_2m_18utc",
-     "temperature_2m_hourly",
-     "wind_speed_10m",
-     "wind_speed_10m_hourly"
-    ]
-   },
-   "ukmo_global_deterministic_10km": {
-    "coverage": 0.611,
-    "days": 22,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily",
-     "temperature_2m",
-     "temperature_2m_00utc",
-     "temperature_2m_06utc",
-     "temperature_2m_12utc",
-     "temperature_2m_18utc",
-     "temperature_2m_hourly",
-     "temperature_max",
-     "wind_speed_10m",
-     "wind_speed_10m_hourly"
+     "precipitation_24h"
     ]
    }
   }
@@ -274,7 +149,7 @@
  "attribution": "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com (CC BY 4.0) from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, KNMI, DMI, ČHMÚ, Environment and Climate Change Canada, the Japan Meteorological Agency, the China Meteorological Administration and the UK Met Office (CC BY-SA 4.0). Boundaries: ČÚZK (CC BY 4.0).",
  "sources": {
   "previous_runs": {
-   "from": "2026-07-26",
+   "from": "2026-07-15",
    "to": "2026-10-18"
   },
   "single_runs": {
