@@ -28,7 +28,7 @@ import {
 } from "./tv.js";
 import { keepRoomForPanels, panelRoom, scrollToPanel, userMoved } from "./panel-room.js";
 import { aiPath } from "./ai-source.js";
-import { seatName, seatOkres } from "./seats.js";
+import { seatOkres } from "./seats.js";
 import { AI_MODEL, aiMapView, aiPeriods, hasAi, loadAi, withAi } from "./ai-model.js";
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
