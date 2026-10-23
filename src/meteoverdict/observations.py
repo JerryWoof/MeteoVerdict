@@ -50,6 +50,9 @@ ELEMENTS = {
     "SCEa": "snow_depth",
     "SVHa": "snow_water_equivalent",
 }
+#: Hourly (``1H``) elements, read from the hourly files of the stations that have them
+#: (``hourly_station_ids``): the value stamped HH:00 is the instant at the hour.
+HOURLY_ELEMENTS = {"P_hm": "pressure_msl"}
 #: Variables that are not verified (yet): kept in ``obs-extra/``, not ``obs/``, so that
 #: everything reading ``obs/`` sees exactly what it did before they existed.
 EXTRA_VARIABLES = (
@@ -59,6 +62,7 @@ EXTRA_VARIABLES = (
     "snow_depth",
     "snow_water_equivalent",
     "dew_point_2m",
+    "pressure_msl",
 )
 #: Instant values at HH:00 (the rest are built from six 10-minute values).
 INSTANT = (
@@ -69,6 +73,7 @@ INSTANT = (
     "temperature_5cm",
     "snow_depth",
     "snow_water_equivalent",
+    "pressure_msl",
 )
 #: Magnus formula constants (WMO-style, over water) for the dew point.
 MAGNUS_A, MAGNUS_B = 17.62, 243.12
@@ -94,6 +99,7 @@ PLAUSIBLE = {
     "snow_depth": (0.0, 500.0),
     "snow_water_equivalent": (0.0, 1e6),
     "dew_point_2m": (-80.0, 50.0),
+    "pressure_msl": (850.0, 1100.0),
 }
 
 #: QUALITY codes (meta4) we keep: 0 good, 3 estimated, 5 unknown (unchecked now/ data).
@@ -121,6 +127,23 @@ def month_urls(wsi: str, year: int, month: int) -> list[tuple[str, str]]:
 
 def day_url(wsi: str, day: date) -> str:
     return f"{BASE_URL}/now/data/10m-{wsi}-{day:%Y%m%d}.json"
+
+
+def hourly_month_urls(wsi: str, year: int, month: int) -> list[tuple[str, str]]:
+    """Candidate monthly files of the hourly (``1H``) elements, best first."""
+    stamp = f"{year}{month:02d}"
+    return [
+        ("recent", f"{BASE_URL}/recent/data/1hour/{month:02d}/1h-{wsi}-{stamp}.json"),
+        ("historical", f"{BASE_URL}/historical/data/1hour/{year}/1h-{wsi}-{stamp}.json"),
+    ]
+
+
+def hourly_day_urls(wsi: str, day: date) -> list[str]:
+    """The day file of the hourly elements: ``now/``, else the current month's ``recent/``."""
+    return [
+        f"{BASE_URL}/now/data/1h-{wsi}-{day:%Y%m%d}.json",
+        f"{BASE_URL}/recent/data/1hour/{day.month:02d}/1h-{wsi}-{day:%Y%m%d}.json",
+    ]
 
 
 log = logging.getLogger(__name__)
@@ -206,16 +229,16 @@ def raw_station(
     return parts
 
 
-def normalize(raw: pl.DataFrame, source: str) -> pl.DataFrame:
+def normalize(raw: pl.DataFrame, source: str, elements: dict[str, str] = ELEMENTS) -> pl.DataFrame:
     """Long 10-minute rows → typed rows of the elements we use, bad quality dropped."""
     if raw.height == 0:
         return pl.DataFrame(schema={**SCHEMA, "time": pl.Datetime("us", "UTC")})
     return (
-        raw.filter(pl.col("ELEMENT").is_in(list(ELEMENTS)))
+        raw.filter(pl.col("ELEMENT").is_in(list(elements)))
         .select(
             pl.col("STATION").alias("station_id"),
             pl.col("DT").str.to_datetime("%Y-%m-%dT%H:%M:%SZ", time_zone="UTC").alias("time"),
-            pl.col("ELEMENT").replace_strict(ELEMENTS).alias("variable"),
+            pl.col("ELEMENT").replace_strict(elements).alias("variable"),
             # missing values come as "" (QUALITY 4); real values as numbers
             pl.col("VAL").cast(pl.String).cast(pl.Float32, strict=False).alias("value"),
             pl.col("QUALITY").cast(pl.UInt8).alias("quality"),
@@ -318,6 +341,67 @@ def fetch_observations(
     return (
         pl.concat(frames)
         .filter(pl.col("time").is_between(first, last))
+        .unique(["station_id", "time", "variable"], keep="first", maintain_order=True)
+        .sort("station_id", "variable", "time")
+    )
+
+
+def hourly_station_ids(meta2: pl.DataFrame) -> set[str]:
+    """Stations that report one of ``HOURLY_ELEMENTS`` every hour (from ``meta2``)."""
+    return set(
+        meta2.filter(
+            pl.col("OBS_TYPE") == "1H", pl.col("EG_EL_ABBREVIATION").is_in(list(HOURLY_ELEMENTS))
+        )["WSI"].to_list()
+    )
+
+
+def fetch_hourly_elements(
+    client: httpx.Client,
+    station_ids: Iterable[str],
+    start: date,
+    end: date,
+    workers: int = 8,
+    today: date | None = None,
+    unreadable: list[str] | None = None,
+) -> pl.DataFrame:
+    """Hourly values of ``HOURLY_ELEMENTS`` (instants at HH:00), ``start`` 00:00 to
+    ``end`` 23:00 UTC, from the hourly files: the monthly file, and for the days it does
+    not hold yet the day files (``now/``, else this month's ``recent/``)."""
+    today = today or datetime.now(UTC).date()
+
+    def one(wsi: str) -> pl.DataFrame:
+        parts: list[pl.DataFrame] = []
+        for year, month in _months(start, end):
+            first = max(start, date(year, month, 1))
+            last = min(end, date(year, month, calendar.monthrange(year, month)[1]))
+            for source, url in hourly_month_urls(wsi, year, month):
+                if (doc := _get(client, url, unreadable=unreadable)) is not None:
+                    rows = parse_collection(doc)
+                    parts.append(normalize(rows, source, HOURLY_ELEMENTS))
+                    first = (
+                        max(first, date.fromisoformat(rows["DT"].max()[:10]) + timedelta(1))
+                        if rows.height
+                        else last + timedelta(days=1)
+                    )
+                    break
+            # the current month has no monthly file yet: its day files are in recent/
+            day = first if (year, month) == (today.year, today.month) else last + timedelta(days=1)
+            while day <= last:
+                for url in hourly_day_urls(wsi, day):
+                    if (doc := _get(client, url, unreadable=unreadable)) is not None:
+                        parts.append(normalize(parse_collection(doc), "now", HOURLY_ELEMENTS))
+                        break
+                day += timedelta(days=1)
+        return pl.concat(parts) if parts else pl.DataFrame(schema=SCHEMA)
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        frames = [pl.DataFrame(schema=SCHEMA), *pool.map(one, list(station_ids))]
+    first = datetime.combine(start, datetime.min.time(), UTC)
+    last = datetime.combine(end, datetime.min.time(), UTC) + timedelta(hours=23)
+    return (
+        pl.concat(frames)
+        .filter(plausible(), pl.col("time").is_between(first, last))
+        .cast(SCHEMA)
         .unique(["station_id", "time", "variable"], keep="first", maintain_order=True)
         .sort("station_id", "variable", "time")
     )
