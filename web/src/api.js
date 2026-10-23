@@ -27,7 +27,7 @@ export const SCORE_VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitati
 export const HOURLY = ["temperature_2m", "precipitation", "wind_speed_10m", "cloud_cover", "sunshine_duration", "temperature_2m_lo", "temperature_2m_hi"];
 // further hourly variables (all 18 of a full model forecast, and the AI's own): [name, unit, digits].
 // The combination has the first five of its own (humidity, dew point, pressure, direction, gusts: hours
-// weighted by the stations' scores); the rest is the median of the best models (`reference`)
+// by the stations' scores); the rest is the median of the best models (`reference`)
 export const EXTRA_HOURLY = [
   ["relative_humidity_2m", "%", 0], ["dew_point_2m", "°C", 1], ["pressure_msl", "hPa, reduced to mean sea level", 1],
   ["wind_direction_10m", "° the wind comes from (0 north, 90 east); null in calm", 0],
