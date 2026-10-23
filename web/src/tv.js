@@ -13,6 +13,15 @@ export const gustOver = (row) => row?.gust_over_threshold ?? row?.gust_warning ?
  * ``gusts.GUST_THRESHOLD`` in the pipeline). */
 export const gustOverText = (t, language) => t("tv.gustOverThreshold", { gust: GUST_THRESHOLD.toLocaleString(language) });
 
+/** The permanent line under the week table: red marks are our thresholds, not ČHMÚ warnings
+ * (only ČHMÚ may issue those, Act 262/2024 Sb.). Always there, so the page never jumps. */
+export function chmiNotice(t) {
+  const notice = document.createElement("p");
+  notice.className = "note small chmi-notice";
+  notice.textContent = t("tv.notChmi");
+  return notice;
+}
+
 export const PARTS = ["night", "morning", "afternoon", "evening", "day"];
 // the four forecast values; any of them can be shown at the okres markers, and one
 // colours the map
