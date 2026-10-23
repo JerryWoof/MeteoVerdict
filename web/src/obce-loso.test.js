@@ -14,7 +14,7 @@ const COLUMNS = [
 const row = (variant, variable, lead, stratum, value, stations, mae, okres, median, point) => [
   variant, variable, lead, stratum, value, 41, stations, 1000, mae, null, null, null, null, ...okres, ...median, ...point,
 ];
-// shaped like obce-loso.json (mvd obce-loso), a few rows
+// shaped like obce-loso.json, a few rows
 const DOC = {
   from: "2026-09-08",
   to: "2026-10-18",

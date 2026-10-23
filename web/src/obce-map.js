@@ -13,7 +13,7 @@ export const MIN_ZOOM = 8.5;
 // from this population a place is a town: larger text
 const TOWN = 5000;
 const PARTS = { night: [0, 6], morning: [6, 12], afternoon: [12, 18], evening: [18, 24] };
-// as the outlook (outlook.py MIN_PART_HOURS, MIN_DAY_HOURS)
+// as outlook.json (a part needs 4 hours, a day 18)
 const MIN_PART_HOURS = 4;
 const MIN_DAY_HOURS = 18;
 const HOUR = 3600000;

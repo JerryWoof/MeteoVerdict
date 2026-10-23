@@ -22,8 +22,8 @@ mvd monthly-report 2026-09                   # → site/reports/2026-09.json and
   also covers the manual gauges); leads D+1 … D+5.
 - Per variable and lead, for Czechia: every model's MAE and bias, who is best, who is
   tied with the best, whether there is a clear winner, and how the plain mean of all
-  models compares (`mean_of_all`; this is **not** our combined forecast, which
-  `mvd blend-test` evaluates).
+  models compares (`mean_of_all`; this is **not** our combined forecast, whose
+  out-of-sample check is `blend-test.json`).
 - For D+1 and D+3: in how many okresy each model is first, and in how many of them
   clearly.
 

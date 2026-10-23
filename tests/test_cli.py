@@ -31,8 +31,6 @@ COMMANDS = [
     "archive-aladin",
     "leads",
     "farm",
-    "blend-test",
-    "obce-loso",
     "fetch-runs",
     "fetch-obs",
     "fetch-fc",
@@ -432,34 +430,15 @@ def test_aggregate_reads_score_files_of_different_ages(tmp_path):
     assert result.exit_code == 0, result.output
     doc = json.loads((tmp_path / "site" / "stations.json").read_text(encoding="utf-8"))
     assert [r[0] for r in doc["rows"]] == ["s1", "s2", "s3"]
+    # no weight table in the data folder: the forecast pages get the okres points only
+    index = json.loads((tmp_path / "site" / "forecast" / "okresy.json").read_text("utf-8"))
+    assert index["columns"] == ["code", "name", "lat", "lon", "weights"]
+    assert len(index["rows"]) == 77 and not any(r[4] for r in index["rows"])
 
 
 def test_leads_publish_needs_github_release():
     result = runner.invoke(app, ["leads", "--publish"])
     assert result.exit_code == 2
-
-
-def test_blend_test_rejects_bad_options(tmp_path):
-    assert runner.invoke(app, ["blend-test", "--publish"]).exit_code == 2
-    stations_file = tmp_path / "stations.parquet"
-    stations_file.touch()
-    args = ["blend-test", "--stations", str(stations_file), "--data-dir", str(tmp_path)]
-    assert runner.invoke(app, [*args, "--window", "month"]).exit_code == 2
-    result = runner.invoke(app, args)
-    assert result.exit_code == 1
-    assert "no scores" in result.stderr
-
-
-def test_obce_loso_rejects_bad_options(tmp_path):
-    assert runner.invoke(app, ["obce-loso", "--publish"]).exit_code == 2
-    stations_file = tmp_path / "stations.parquet"
-    stations_file.touch()
-    args = ["obce-loso", "--stations", str(stations_file), "--data-dir", str(tmp_path)]
-    assert runner.invoke(app, [*args, "--variant", "kriging"]).exit_code == 2
-    assert runner.invoke(app, [*args, "--reuse"]).exit_code == 2
-    result = runner.invoke(app, args)
-    assert result.exit_code == 1
-    assert "no scores" in result.stderr
 
 
 def test_leads_without_archive_fails(tmp_path):
@@ -731,122 +710,3 @@ def test_satellite_release_notes_credit_eumetsat_with_the_year():
     notes = cli.satellite_release_notes("satellite-2025-12")
     assert "Contains modified EUMETSAT Meteosat data 2025 " in notes
     assert "creativecommons.org/licenses/by/4.0" in notes
-
-
-def test_outlook_meter_counts_open_meteo_calls_with_retries():
-    meter = cli._OpenMeteoMeter()
-    answers = iter([httpx.Response(503), httpx.Response(200, json={})])
-
-    def handler(request):
-        if request.url.host == "api.github.com":
-            return httpx.Response(200, json={})
-        return next(answers)
-
-    params = {"latitude": "50,49,48", "models": "a,b", "hourly": "x"}
-    with httpx.Client(
-        transport=httpx.MockTransport(handler), event_hooks={"request": [meter]}
-    ) as client:
-        client.get("https://api.open-meteo.com/v1/forecast", params=params)
-        client.get("https://api.open-meteo.com/v1/forecast", params=params)  # the retry
-        client.get("https://api.github.com/repos/o/r/releases")  # not counted
-    one = cli.outlook.cost(3, 2)  # 3 points x 5 variables x 2 models / 10, 6 days
-    assert meter.requests == 2
-    assert meter.calls == pytest.approx(2 * one)
-    assert meter.line() == f"Open-Meteo: {2 * one:g} calls in 2 requests"
-
-
-OUTLOOK_FIXTURES = Path(__file__).parent / "fixtures"
-OUTLOOK_PAYLOAD = json.loads(
-    (OUTLOOK_FIXTURES / "open-meteo" / "forecast-2-okresy.json").read_text("utf-8")
-)
-
-
-def _outlook_args(tmp_path):
-    frames = []
-    for code in ("CZ0100", "CZ0201"):
-        doc = json.loads((OUTLOOK_FIXTURES / "weights" / f"{code}.json").read_text("utf-8"))
-        frames.append(
-            pl.DataFrame(doc["rows"], schema=doc["columns"], orient="row").with_columns(
-                pl.lit(code).alias("region"), pl.col("lead_day").cast(pl.Int8)
-            )
-        )
-    weights = pl.concat(frames)
-    pl.DataFrame({"x": [1]}).write_parquet(tmp_path / "aggregates.parquet")
-    weights.write_parquet(tmp_path / "forecast-weights.parquet")
-    return [
-        "outlook",
-        "--aggregates",
-        str(tmp_path / "aggregates.parquet"),
-        "--out",
-        str(tmp_path / "site" / "outlook.json"),
-        "--rain-calibration",
-        str(tmp_path / "none.json"),
-        "--frost",
-        str(tmp_path / "frost.json"),
-        "--data-dir",
-        str(tmp_path / "data"),
-        "--corrections",
-        str(tmp_path / "none-scg.json"),
-        "--archive-dir",
-        str(tmp_path / "archive"),
-    ]
-
-
-def test_outlook_writes_the_per_model_files_and_archives_them(tmp_path, monkeypatch):
-    monkeypatch.setattr(cli.outlook, "fetch", lambda client, points, models, sleep: OUTLOOK_PAYLOAD)
-    result = runner.invoke(app, [*_outlook_args(tmp_path), "--api"])
-    assert result.exit_code == 0, result.output
-    models = tmp_path / "site" / "forecast" / "models"
-    assert sorted(p.name for p in models.glob("*.json")) == ["CZ0100.json", "CZ0201.json"]
-    doc = json.loads((models / "CZ0100.json").read_text("utf-8"))
-    assert doc["okres"] == "CZ0100" and doc["models"]
-    assert (tmp_path / "site" / "outlook-hourly.json").exists()
-    # every model's parts of day for all okresy, one file per model, and the index
-    parts = tmp_path / "site" / "forecast" / "models-parts"
-    index = json.loads((parts / "index.json").read_text("utf-8"))
-    assert len(index["models"]) == 11
-    assert {p.stem for p in parts.glob("*.json")} == {
-        "index",
-        *(m["model"] for m in index["models"]),
-    }
-    one = json.loads((parts / "dwd_icon_d2.json").read_text("utf-8"))
-    assert sorted(one["okresy"]) == ["CZ0100", "CZ0201"]
-    day = json.loads((tmp_path / "site" / "outlook.json").read_text("utf-8"))["generated"][:10]
-    archived = pl.read_parquet(tmp_path / "archive" / f"outlook-models-{day}.parquet")
-    assert archived["okres"].unique().sort().to_list() == ["CZ0100", "CZ0201"]
-    assert archived["issued"].n_unique() == 1
-
-
-def test_a_failing_model_archive_does_not_fail_the_outlook(tmp_path, monkeypatch):
-    def broken(*args):
-        raise OSError("disk full")
-
-    monkeypatch.setattr(cli.outlook, "fetch", lambda client, points, models, sleep: OUTLOOK_PAYLOAD)
-    monkeypatch.setattr(cli, "_archive_outlook_models", broken)
-    result = runner.invoke(app, [*_outlook_args(tmp_path), "--api"])
-    assert result.exit_code == 0, result.output
-    assert "model archive not updated: disk full" in plain(result.output)
-    assert (tmp_path / "site" / "outlook.json").exists()
-
-
-def test_outlook_reads_the_bucket_and_asks_the_api_for_nothing(tmp_path, monkeypatch):
-    from meteoverdict import outlook_bucket
-
-    codes = ["CZ0100", "CZ0201"]
-
-    def from_bucket(store, chosen, points, now, days, log):
-        models = [m.id for m in chosen]
-        fc = cli.outlook.parse(OUTLOOK_PAYLOAD, codes, models)
-        return fc, [outlook_bucket.ModelRead(m, fc) for m in models]
-
-    def no_api(*args):
-        raise AssertionError("the API was asked")
-
-    monkeypatch.setattr(outlook_bucket, "from_bucket", from_bucket)
-    monkeypatch.setattr(cli.outlook, "fetch", no_api)
-    result = runner.invoke(app, _outlook_args(tmp_path))
-    assert result.exit_code == 0, result.output
-    out = plain(result.output)
-    assert "Open-Meteo: 0 calls in 0 requests" in out
-    assert "Bucket: 11 models" in out
-    assert (tmp_path / "site" / "outlook.json").exists()

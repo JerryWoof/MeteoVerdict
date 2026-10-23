@@ -38,18 +38,14 @@ of the 6,258 obce.
    are ranked on their own, not in the okres. Okresy with fewer than three stations
    borrow the nearest stations of their neighbours, so every okres is ranked.
 5. **Combine.** Our forecast mixes all models for each okres and lead day, weighted by
-   how well each did there over the last 90 days (temperature and wind also corrected
-   for their usual bias), as operational consensus forecasts such as NOAA's National
-   Blend of Models do ([research](docs/forecast-research.md)).
-6. **Every obec.** The same combination for each of the 6,258 obce: every model's
-   newest run read at the obce's own grid cell from Open-Meteo's open-data bucket, the
-   temperature moved to the obec's height, weighted as its okres
-   ([details](docs/data-sources.md#forecast-for-every-obec-mvd-obce-forecast)).
+   how well each did there recently, as operational consensus forecasts such as NOAA's
+   National Blend of Models do ([research](docs/forecast-research.md)); also, as a test,
+   for each of the 6,258 obce. The method is not published; its results are, together
+   with an out-of-sample check against the best single model.
 
-Everything runs on GitHub Actions: scores are updated every morning, the forecast four
-times a day (04:50, 10:50, 16:50 and 22:50 UTC, after each model run), the obce right
-after it. What the results mean and where they can mislead:
-[methodology](docs/methodology.md).
+The scores, rankings and data collection run on GitHub Actions (scores every morning);
+the forecast is updated after the model runs. What the results mean and where they can
+mislead: [methodology](docs/methodology.md).
 
 **MeteoVerdict AI (experimental).** The AI forecast and the 100 m heatmap are trained and
 computed once a day from this project's data; their code is kept
@@ -75,14 +71,10 @@ Early days. The first results (October 2026) cover late September, and the histo
 fills in from today into the past as the backfill runs (back to 2025-10-01 around
 January 2027, to 2024 around April 2027) and ČHMÚ publishes its checked monthly
 observations. ALADIN has forecast history only from
-June 2026. Our combined forecast is now tested out of sample every day against the
-model our ranking would have picked: on the first 24 test days (September 2026) it was
-better for daily precipitation and mostly better or equal for temperature and wind,
-slightly worse only for wind on the next day; too little history to call it settled
-([details](docs/methodology.md#does-it-beat-the-best-single-model-roadmap-64)). The
-forecast for every obec and MeteoVerdict AI are tests that may change or go: nothing is
-measured at the obce themselves, and an obce forecast is not yet checked against stations
-held out of the weights. Next: a
+June 2026. Our combined forecast is tested out of sample every day against the
+model our ranking would have picked (the Compare page); too little history to call it
+settled. The forecast for every obec and MeteoVerdict AI are tests that may change or go: nothing is
+measured at the obce themselves. Next: a
 write-up of the findings ([roadmap](ROADMAP.md)).
 
 ## Use the data

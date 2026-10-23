@@ -23,36 +23,31 @@ Benešov, `CZ020A` Praha-západ, `CZ0100` Praha).
 
 ## An okres file
 
-- `okres`: code, name, and the forecast point inside the okres (`combine.okres_points`).
+- `okres`: code, name, and the forecast point inside the okres (`regions.okres_points`).
 - `forecast.generated`, `forecast.hourly`: `time` (UTC, `2026-10-12T00:00Z`) and the
   combined hourly series `temperature_2m` (°C), `precipitation` (mm in the hour ending at
   the time), `wind_speed_10m` (m/s), `cloud_cover` (%) and `sunshine_duration` (s of
-  sunshine in the hour ending at the time; both the mean of the models corrected
-  against ČHMÚ observations, the hourly sunshine scaled so that each UTC day adds up to
-  the corrected daily total: [methodology](methodology.md#sunshine-cloud-and-gusts));
+  sunshine in the hour ending at the time; both corrected against ČHMÚ observations);
   6 days; `null` where fewer than two models cover an hour. `temperature_2m_lo` and
   `temperature_2m_hi` (°C) are the 80 % range around the temperature (the "±" of the chart; absent
-  until computed; [methodology](methodology.md#the-range-around-the-temperature-mvd-blend-interval)).
+  until computed).
 - `forecast.parts`: per day and part of day in Prague time (`night`, `morning`,
   `afternoon`, `evening`, `day`): `tmin`, `tmax`, `precipitation`, `rain_probability`,
   `wind`, `cloud`, `sunshine` (hours), `symbol` (as on the forecast map;
-  [data-sources.md](data-sources.md#outlook-mvd-outlook-roadmap-66)), and `sunrise`,
+  [data-sources.md](data-sources.md#outlook-outlookjson)), and `sunrise`,
   `sunset` (Prague time, `"07:21"`, at the okres point, the same on every row of a day),
   `heavy_rain_probability` (calibrated chance of at least 5 mm in the period) and
   `heavy_rain` (true when it is high enough to flag); both `null` while there is no
-  rain calibration ([methodology.md](methodology.md#probability-of-precipitation-and-heavy-rain-meteoverdictrain_calibration)).
+  rain calibration.
   Frost, on the `night` and `day` rows of the date a night (18–06 UTC) ends and `null`
   elsewhere or when not available: `night_min` (corrected night minimum at 2 m, °C),
   `coldest_site` and `coldest_min` (the okres's most frost-prone ČHMÚ station and its
   corrected minimum), `frost_probability` (0–1, minimum ≤ 0 °C), `frost` (air-frost
   threshold flag, `night_min` ≤ 1 °C), `ground_min` (estimated minimum 5 cm above the ground)
-  and `ground_frost` (`ground_min` ≤ 0 °C); [methodology.md](methodology.md#frost-night-minimum-frost-and-ground-frost).
+  and `ground_frost` (`ground_min` ≤ 0 °C).
   Gusts, on every row the newest single model run covers (about the next 4–5 days,
   `null` beyond it and in files from before 2026-10-16): `gust` (the strongest gust of
-  the period, m/s: each model's largest hourly gust at the okres's lowland ČHMÚ
-  stations, mean over the models, corrected against ČHMÚ gust observations) and
-  `gust_over_threshold` (true when `gust` ≥ 13.5 m/s, the level that best caught
-  observed gusts of 15 m/s and more); [methodology.md](methodology.md#gusts-in-the-outlook).
+  the period, m/s) and `gust_over_threshold` (true when `gust` ≥ 13.5 m/s).
   `gust_warning` is a **deprecated alias** of `gust_over_threshold` (the same value)
   and will be removed in the next API version.
   `gust_over_threshold`, `frost`, `ground_frost` and `heavy_rain` are MeteoVerdict
@@ -88,7 +83,7 @@ in a sentence, `forecast.ai_issued` is when the AI issued its forecast and
   combined forecast's elsewhere. The AI's hourly precipitation, cloud and sunshine are its own
   hourly values, consistent with its value of each part of day (night, morning, afternoon,
   evening): the precipitation and sunshine of the hours add up to the AI's, the cloud has the AI's
-  mean. Its 80 % range comes from its own past errors (the combined forecast's method). Hours
+  mean. Its 80 % range comes from its own past errors. Hours
   without an AI value of their own (and every hour when an older AI file lacks them) take the
   combined forecast's hour-to-hour shape fitted to the AI's part, and the range is then the
   combined forecast's width around the AI's temperature. A part the AI has no row for keeps the
@@ -137,24 +132,24 @@ obce you need, at most once an hour.
 
 The forecast pages read `data/scores/forecast/models/{code}.json` (e.g.
 `https://meteoverdict.cz/data/scores/forecast/models/CZ0201.json`),
-written by `mvd outlook` with each of its four runs a day: every model's hourly
+written with each run of the forecast: every model's hourly
 forecast at the okres point as Open-Meteo gave it (no correction, rounded), and our
 combined series, in columns: `generated`, `okres`, `time` (UTC hours), `variables`
 (units), `combined.<variable>` and `models.<model>.<variable>` (a model's series ends at
 its last hour), `licence`, `attribution`
-([data-sources.md](data-sources.md#outlook-mvd-outlook-roadmap-66)). Public, but not
+([data-sources.md](data-sources.md#outlook-outlookjson)). Public, but not
 part of the versioned `api/v1`: its layout may change with the pages. Our own monthly
 archive of every run's full answer is in the releases `outlook-models-YYYY-MM`
 (`outlook-models-YYYY-MM-DD.parquet`, one file per UTC day).
 
 The forecast map's model switch reads `data/scores/forecast/models-parts/{model}.json`
 (e.g. `https://meteoverdict.cz/data/scores/forecast/models-parts/ecmwf_ifs.json`)
-and `data/scores/forecast/models-parts/index.json`, also written by `mvd outlook` with
-each run: one model's parts of day and whole days for all 77 okresy by the outlook's
+and `data/scores/forecast/models-parts/index.json`, also written with each run of the
+forecast: one model's parts of day and whole days for all 77 okresy by the outlook's
 rules (tmin, tmax, precipitation in mm, wind, cloud, sunshine and a simplified symbol;
 null beyond the model's horizon, `last_hour`; no probability of precipitation), and the
 models in order of their mean rank over Czechia
-([data-sources.md](data-sources.md#outlook-mvd-outlook-roadmap-66)). Raw model output,
+([data-sources.md](data-sources.md#outlook-outlookjson)). Raw model output,
 without our correction. Public, but not part of `api/v1` either.
 
 ## Files for the AI forecast and the heatmap (outside `api/v1`)
@@ -185,10 +180,10 @@ e-ink display, from the combined forecast (`okresy`) or the MeteoVerdict AI (`ai
 ## How they are made
 
 `web/scripts/build-api.mjs` (part of `npm run build`, logic in `web/src/api.js`) writes
-them from the data the pages use: `outlook.json` and `outlook-hourly.json` (`mvd
-outlook`, four times a day), `forecast/<okres>.json` and `90d/okres/<variable>.json` (`mvd
-aggregate`, daily). The Pages workflow runs after the Daily and the Outlook workflows,
-so the files follow both. The okres files are about 3.4 MB in total, 25 kB per okres (the AI files add 21 kB per okres); the obce files about 13 kB per obec.
+them from the data the pages use: `outlook.json` and `outlook-hourly.json` (published
+with each run of the forecast), `forecast/<okres>.json` and `90d/okres/<variable>.json`
+(`mvd aggregate`, daily). The Pages workflow runs after the Daily and the ČHMÚ archive
+workflows and takes the newest published forecast. The okres files are about 3.4 MB in total, 25 kB per okres (the AI files add 21 kB per okres); the obce files about 13 kB per obec.
 
 ## Terms
 

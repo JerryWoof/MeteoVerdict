@@ -83,9 +83,9 @@ below, and public data is the point of the project.
    is 600 a minute).
 4. **The forecast pages** do not ask Open-Meteo from the visitors' browsers (since
    2026-10-17; before, the detailed forecast page `forecast-detail.html` sent one request per
-   okres shown). `mvd outlook` makes the only requests, four times a day for all okresy
-   (about 420 calls with 11 weighted models, 732 with all 19, in at most two requests),
-   and publishes `outlook.json` and, per okres, every model's hourly forecast as Open-Meteo
+   okres shown). The forecast's runs make the only requests (from the open-data bucket;
+   the Forecast API only as a fallback, at most 4 × 200 calls a day), and publish
+   `outlook.json` and, per okres, every model's hourly forecast as Open-Meteo
    gave it (`data/scores/forecast/models/<okres>.json`, rounded, with our combined
    series). Redistributing these raw values is allowed by CC BY 4.0 (UK Met Office: CC
    BY-SA 4.0) with attribution: every file carries `licence` and `attribution`, and the

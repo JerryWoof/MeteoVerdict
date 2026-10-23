@@ -570,3 +570,29 @@ def test_wind_atypical_list_is_versioned_data():
     ids = agg.load_wind_atypical()
     assert len(ids) == 19
     assert not ids & {"0-20000-0-11457"}  # sample: a representative station
+
+
+def test_forecast_files_from_the_published_weights(tmp_path):
+    weights = pl.DataFrame(
+        {
+            "region": ["CZ0201", "CZ0201"],
+            "region_name": ["Benešov", "Benešov"],
+            "variable": ["temperature_2m"] * 2,
+            "lead_day": [1, 1],
+            "model": ["a", "b"],
+            "weight": [0.712345, 0.287655],
+            "correction": [0.1, -0.2],
+            "elsewhere": [1, 2],  # not a column of the files
+        }
+    )
+    written = agg.write_forecast(tmp_path, weights)
+    assert [p.name for p in written] == ["okresy.json", "CZ0201.json"]
+    index = json.loads((tmp_path / "forecast" / "okresy.json").read_text("utf-8"))
+    assert index["columns"] == ["code", "name", "lat", "lon", "weights"]
+    assert len(index["rows"]) == 77
+    benesov = next(r for r in index["rows"] if r[0] == "CZ0201")
+    assert benesov[1] == "Benešov" and benesov[4] is True
+    assert sum(r[4] for r in index["rows"]) == 1
+    doc = json.loads((tmp_path / "forecast" / "CZ0201.json").read_text("utf-8"))
+    assert doc["columns"] == ["variable", "lead_day", "model", "weight", "correction"]
+    assert doc["rows"][0] == ["temperature_2m", 1, "a", 0.7123, 0.1]

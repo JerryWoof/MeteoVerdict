@@ -6,12 +6,13 @@ from pathlib import Path
 
 import yaml
 
-from meteoverdict import outlook, runs
+from meteoverdict import runs
 
 WORKFLOWS = Path(__file__).resolve().parent.parent / ".github" / "workflows"
 DAY, MONTH, HOUR = 10_000, 300_000, 5_000
-#: the outlook's API fallback, four runs a day (since 2026-10-20 the models come from the
-#: bucket; before 3,400: four runs refused above outlook.MAX_CALLS, plus retries)
+#: kept for the forecast's API fallback: four runs a day of at most FALLBACK_CALLS (since
+#: 2026-10-20 the models come from the bucket)
+FALLBACK_CALLS = 200
 OUTLOOK_DAY = 800
 
 
@@ -50,7 +51,7 @@ def test_a_day_and_a_month_stay_within_the_free_tier():
     assert fallback <= 400  # the bucket's gaps only: the newest runs cost no calls
     shared = default_calls("backfill.yml")
     assert shared == 8_300
-    assert 4 * outlook.MAX_FALLBACK_CALLS <= OUTLOOK_DAY
+    assert 4 * FALLBACK_CALLS <= OUTLOOK_DAY
     day = OUTLOOK_DAY + fallback + shared
     assert day <= 9_500
     # scheduled runs start up to ~5 h late: the 22:20 single runs can slip into the next
@@ -61,7 +62,7 @@ def test_a_day_and_a_month_stay_within_the_free_tier():
     # below 4,800 an hour by forecasts.Budget)
     assert default_calls("runs.yml") < min(HOUR, 4_800)
     # the backfill's pace and an outlook fallback in the same hour stay within the hour
-    assert 4_800 + outlook.MAX_FALLBACK_CALLS <= HOUR
+    assert 4_800 + FALLBACK_CALLS <= HOUR
 
 
 def test_fallback_runs_fit_one_or_two_models():

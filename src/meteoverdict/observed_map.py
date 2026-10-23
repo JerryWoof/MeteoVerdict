@@ -5,7 +5,7 @@ For every past day the map offers, ``<out>/<YYYY-MM-DD>.json`` holds per okres t
 measured at its ČHMÚ stations, aggregated by the outlook's parts of day in Prague time
 (night 0-6, morning 6-12, afternoon 12-18, evening 18-24, and the whole day 0-24), with the
 number of stations behind each value, and, where the outlook's own parts of day were
-archived (``outlook.parts_archive_asset``), what our forecast said a few days before.
+archived (``parts_archive_asset``), what our forecast said a few days before.
 ``<out>/<YYYY-MM-DD>-stations.json`` has the stations' own values (the map's station
 dots), ``<out>/index.json`` the days.
 
@@ -57,20 +57,13 @@ from zoneinfo import ZoneInfo
 
 import polars as pl
 
-from meteoverdict import (
-    aggregate,
-    chmi_archive,
-    hindcast,
-    neighbours,
-    outlook,
-    station_diary,
-    sun_cloud_gust,
-)
+from meteoverdict import aggregate, chmi_archive, neighbours, station_diary
 from meteoverdict.sun import sun_times
 
-TIME_ZONE = outlook.TIME_ZONE
+TIME_ZONE = "Europe/Prague"
 PRAGUE = ZoneInfo(TIME_ZONE)
-PARTS = outlook.PARTS
+#: part of day → first and last local hour + 1 (the forecast map's parts of day)
+PARTS = {"night": (0, 6), "morning": (6, 12), "afternoon": (12, 18), "evening": (18, 24)}
 #: the parts of day, then the whole day (as the forecast map)
 PERIODS = (*PARTS, "day")
 #: days back with parts of day (the 10-minute and hourly data the station pages read)
@@ -183,7 +176,7 @@ def part_bounds(day: date, part: str) -> tuple[datetime, datetime]:
     """UTC start and end of a part of a Prague day ("day": the whole day)."""
     if part == "day":
         return day_bounds(day)
-    first, end = outlook.PARTS[part]
+    first, end = PARTS[part]
     start = datetime.combine(day, time(first), PRAGUE)
     stop = (
         datetime.combine(day + timedelta(days=1), time(), PRAGUE)
@@ -225,7 +218,7 @@ def _with_period(frame: pl.DataFrame) -> pl.DataFrame:
     )
     local = pl.col("slot").dt.convert_time_zone(TIME_ZONE)
     part = pl.lit(None, pl.String)
-    for name, (first, end) in outlook.PARTS.items():
+    for name, (first, end) in PARTS.items():
         part = (
             pl.when(local.dt.hour().is_between(first, end - 1)).then(pl.lit(name)).otherwise(part)
         )
@@ -670,21 +663,106 @@ def _value(v, column: str):
 
 
 # --- the forecast that was ---------------------------------------------------------------
+# The forecast's published archives (release ``ARCHIVE_TAG``), read only here:
+#
+# - ``outlook-parts-YYYY-MM.parquet``: what each run's parts of day said, as the forecast
+#   map showed them (``PARTS_ARCHIVE_SCHEMA``), one file per UTC month of the run;
+# - ``outlook-archive-YYYY-MM.parquet``: the plain model means of cloud cover and
+#   sunshine per okres and hour of each run (``MEANS_SCHEMA``);
+# - ``outlook-hindcast.parquet``: the forecast rebuilt out of sample for the days before
+#   the parts archive (``HINDCAST_SCHEMA``: no cloud, the symbol only when wet).
+ARCHIVE_TAG = "outlook-archive"
+PARTS_ARCHIVE_COLUMNS = (
+    "tmin",
+    "tmax",
+    "precipitation",
+    "rain_probability",
+    "wind",
+    "gust",
+    "cloud",
+    "sunshine",
+    "symbol",
+)
+PARTS_ARCHIVE_SCHEMA = {
+    "issued": pl.Datetime("us", "UTC"),
+    "okres": pl.String,
+    "day": pl.Date,
+    "part": pl.String,
+    **{c: pl.Float32 for c in PARTS_ARCHIVE_COLUMNS if c != "symbol"},
+    "symbol": pl.String,
+}
+MEANS_SCHEMA = {
+    "okres": pl.String,
+    "issued": pl.Datetime("us", "UTC"),
+    "time": pl.Datetime("us", "UTC"),
+    "cloud_cover": pl.Float32,
+    "sunshine_duration": pl.Float32,
+}
+HINDCAST_SCHEMA = {
+    "lead": pl.Int8,
+    "trained_to": pl.Date,
+    "okres": pl.String,
+    "day": pl.Date,
+    "part": pl.String,
+    **{c: pl.Float32 for c in PARTS_ARCHIVE_COLUMNS if c != "symbol"},
+    "symbol": pl.String,
+}
+#: a part of day (6 h) or day (24 h) of the plain means needs at least this many hours
+MIN_PART_HOURS = 4
+MIN_DAY_HOURS = 18
+#: the sky symbol of a cloud cover (%) as the forecast map's: clear below, partly cloudy
+#: below, cloudy above
+CLEAR_BELOW = 30.0
+PARTLY_BELOW = 65.0
+
+
+def parts_archive_asset(issued: datetime) -> tuple[str, str]:
+    """Release and asset of the parts archive: one file per UTC month of the run."""
+    return ARCHIVE_TAG, f"outlook-parts-{issued.astimezone(UTC):%Y-%m}.parquet"
+
+
+def means_archive_asset(month: str) -> tuple[str, str]:
+    """Release and asset of the plain-means archive of a month (``YYYY-MM``)."""
+    return ARCHIVE_TAG, f"outlook-archive-{month}.parquet"
+
+
+def sky_symbol(cloud: float | None) -> str | None:
+    """``clear``, ``partly`` or ``cloudy`` by cloud cover (%), null without one."""
+    if cloud is None:
+        return None
+    if cloud < CLEAR_BELOW:
+        return "clear"
+    return "partly" if cloud < PARTLY_BELOW else "cloudy"
+
+
+def _local(frame: pl.DataFrame, hour_ending: bool = False) -> pl.DataFrame:
+    """Add the local ``day`` and ``part`` of each row; ``hour_ending``: by the hour that
+    ends at ``time`` (sums such as sunshine), else by ``time`` itself."""
+    time = pl.col("time") - pl.duration(hours=1) if hour_ending else pl.col("time")
+    local = time.dt.convert_time_zone(TIME_ZONE)
+    part = pl.lit(None, pl.String)
+    for name, (first, end) in PARTS.items():
+        part = (
+            pl.when(local.dt.hour().is_between(first, end - 1)).then(pl.lit(name)).otherwise(part)
+        )
+    return frame.with_columns(local.dt.date().alias("day"), part.alias("part"))
+
+
 def read_parts_archive(folder: Path, first: date, last: date) -> pl.DataFrame:
-    """The archived outlook parts of day (``outlook.parts_archive_asset``) of the runs
+    """The archived parts of day (``parts_archive_asset``) of the runs
     that may forecast ``first`` … ``last``."""
     since = datetime.combine(first - timedelta(days=max(LEADS) + 1), time(), UTC)
     names = {
-        outlook.parts_archive_asset(datetime(y, m, 1, tzinfo=UTC))[1]
+        parts_archive_asset(datetime(y, m, 1, tzinfo=UTC))[1]
         for y, m in _months(since.date(), last)
     }
     frames = [
-        pl.read_parquet(folder / n).cast(outlook.PARTS_ARCHIVE_SCHEMA)
+        pl.read_parquet(folder / n).cast(PARTS_ARCHIVE_SCHEMA)
         for n in sorted(names)
         if (folder / n).exists()
     ]
     if not frames:
-        return pl.DataFrame(schema=outlook.PARTS_ARCHIVE_SCHEMA)
+        return pl.DataFrame(schema=PARTS_ARCHIVE_SCHEMA)
     return pl.concat(frames).filter(pl.col("day").is_between(first, last))
 
 
@@ -749,16 +827,16 @@ SKY_COLUMNS = ("cloud", "sunshine", "symbol")
 
 
 def sky_parts(means: pl.DataFrame, issued: datetime, day: date) -> pl.DataFrame:
-    """One stored run of the plain-means archive (``sun_cloud_gust.archive_rows``: hourly
-    cloud cover and sunshine per okres) as parts of ``day``: ``cloud`` (mean; the whole
-    day 6-18 as the map), ``sunshine`` (h) and the sky symbol (``outlook.symbol``)."""
+    """One stored run of the plain-means archive (hourly cloud cover and sunshine per
+    okres) as parts of ``day``: ``cloud`` (mean; the whole day 6-18 as the map),
+    ``sunshine`` (h) and the sky symbol (``sky_symbol``)."""
     run = means.filter(pl.col("issued") == issued)
-    rows = outlook._local(run).filter(pl.col("day") == day)
-    sums = outlook._local(run, hour_ending=True).filter(pl.col("day") == day)
+    rows = _local(run).filter(pl.col("day") == day)
+    sums = _local(run, hour_ending=True).filter(pl.col("day") == day)
     parts = rows.group_by("okres", "part").agg(
         pl.col("cloud_cover").mean().alias("cloud"), pl.len().alias("hours")
     )
-    parts = parts.filter(pl.col("hours") >= outlook.MIN_PART_HOURS).join(
+    parts = parts.filter(pl.col("hours") >= MIN_PART_HOURS).join(
         sums.group_by("okres", "part").agg(
             (pl.col("sunshine_duration").sum() / 3600).alias("sunshine")
         ),
@@ -769,7 +847,7 @@ def sky_parts(means: pl.DataFrame, issued: datetime, day: date) -> pl.DataFrame:
     whole = (
         rows.group_by("okres")
         .agg(pl.col("cloud_cover").filter(daytime).mean().alias("cloud"), pl.len().alias("hours"))
-        .filter(pl.col("hours") >= outlook.MIN_DAY_HOURS)
+        .filter(pl.col("hours") >= MIN_DAY_HOURS)
         .join(
             sums.group_by("okres").agg(
                 (pl.col("sunshine_duration").sum() / 3600).alias("sunshine")
@@ -782,7 +860,7 @@ def sky_parts(means: pl.DataFrame, issued: datetime, day: date) -> pl.DataFrame:
     table = pl.concat(
         [parts.drop("hours"), whole.drop("hours").select(parts.drop("hours").columns)]
     )
-    symbols = [outlook.symbol(c, None, None, None) for c in table["cloud"].to_list()]
+    symbols = [sky_symbol(c) for c in table["cloud"].to_list()]
     return table.with_columns(pl.Series("symbol", symbols, pl.String))
 
 
@@ -797,11 +875,11 @@ def forecast_doc(
     morning run), each ``{"lead", "kind", "issued"?, "trained_to"?, "columns",
     "okresy"}``, by lead:
 
-    - ``stored``: the map's own parts of day (``archive``, ``outlook.parts_archive_rows``);
-    - ``stored_sky``: where only the plain means of a run were stored (``means``,
-      ``sun_cloud_gust.archive_rows``): cloud cover, sunshine and the sky symbol;
-    - ``rebuilt``: our forecast rebuilt out of sample (``hindcasts``,
-      ``meteoverdict.hindcast``: no cloud, the symbol only when wet); where a stored
+    - ``stored``: the map's own parts of day (``archive``, the parts archive);
+    - ``stored_sky``: where only the plain means of a run were stored (``means``, the
+      plain-means archive): cloud cover, sunshine and the sky symbol;
+    - ``rebuilt``: our forecast rebuilt out of sample (``hindcasts``, the hindcast
+      archive: no cloud, the symbol only when wet); where a stored
       run of the same lead has the sky, its cloud, sunshine and symbol fill in
       (``sky_issued``).
 
@@ -810,7 +888,7 @@ def forecast_doc(
     for lead, issued in pick_runs(archive, day):
         run = archive.filter(pl.col("day") == day, pl.col("issued") == issued)
         entries[lead] = _entry(
-            lead, "stored", run, periods, outlook.PARTS_ARCHIVE_COLUMNS, issued=_stamp(issued)
+            lead, "stored", run, periods, PARTS_ARCHIVE_COLUMNS, issued=_stamp(issued)
         )
     skies: dict[int, tuple[datetime, pl.DataFrame]] = {}
     if means is not None and means.height:
@@ -835,9 +913,7 @@ def forecast_doc(
                     .with_columns(pl.coalesce("symbol", "sky").alias("symbol"))
                 )
                 extra["sky_issued"] = _stamp(issued)
-            entries[lead] = _entry(
-                lead, "rebuilt", rows, periods, outlook.PARTS_ARCHIVE_COLUMNS, **extra
-            )
+            entries[lead] = _entry(lead, "rebuilt", rows, periods, PARTS_ARCHIVE_COLUMNS, **extra)
     for lead, (issued, sky) in skies.items():
         entries[lead] = _entry(lead, "stored_sky", sky, periods, SKY_COLUMNS, issued=_stamp(issued))
     return [entries[k] for k in sorted(entries) if entries[k]["okresy"]]
@@ -1070,9 +1146,7 @@ def build(
     measured = hourly.filter(pl.col("part") == "day", pl.col("tmax").is_not_null())
     counts = dict(measured.group_by("day").len().iter_rows())
     archive = (
-        parts_archive
-        if parts_archive is not None
-        else pl.DataFrame(schema=outlook.PARTS_ARCHIVE_SCHEMA)
+        parts_archive if parts_archive is not None else pl.DataFrame(schema=PARTS_ARCHIVE_SCHEMA)
     )
     written, entries, keep = [], [], {INDEX}
     day = last
@@ -1153,18 +1227,16 @@ def wanted_assets(today: date) -> list[tuple[str, str]]:
 
 
 def parts_archive_names(today: date) -> list[tuple[str, str]]:
-    """The outlook parts archive files the forecasts of the offered days are in."""
+    """The parts archive files the forecasts of the offered days are in."""
     first = today - timedelta(days=DAILY_DAYS + max(LEADS) + 1)
-    return [
-        outlook.parts_archive_asset(datetime(y, m, 1, tzinfo=UTC)) for y, m in _months(first, today)
-    ]
+    return [parts_archive_asset(datetime(y, m, 1, tzinfo=UTC)) for y, m in _months(first, today)]
 
 
 def means_archive_names(today: date) -> list[tuple[str, str]]:
-    """The plain-means archive files (``sun_cloud_gust.archive_asset``) of those days."""
+    """The plain-means archive files (``means_archive_asset``) of those days."""
     first = today - timedelta(days=DAILY_DAYS + max(LEADS) + 1)
-    return [sun_cloud_gust.archive_asset(f"{y}-{m:02d}") for y, m in _months(first, today)]
+    return [means_archive_asset(f"{y}-{m:02d}") for y, m in _months(first, today)]
 
 
-#: the rebuilt forecasts (``mvd hindcast``)
-HINDCAST_ASSET = (hindcast.TAG, hindcast.ASSET)
+#: the rebuilt forecasts
+HINDCAST_ASSET = (ARCHIVE_TAG, "outlook-hindcast.parquet")

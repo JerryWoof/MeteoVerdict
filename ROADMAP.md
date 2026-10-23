@@ -54,7 +54,7 @@ start later for one variable (ARPEGE wind); see `docs/data-sources.md#models`.
 | ALADIN archive | `mvd archive-aladin` every 3 h, one Parquet per run as Release assets (`aladin-YYYY-MM`) | GitHub Actions |
 | Backfill | `mvd backfill` daily within the shared 5,700 Open-Meteo calls: one sweep from today into the past, each 14-day window whole (D+N at all stations and the rain gauges, then the single runs' API history of its days) before the next older one; progress in Releases `data-state` and `runs-state` | GitHub Actions |
 | Single runs | `mvd fetch-runs` four times a day: every run from Open-Meteo's open-data bucket on AWS (~100 stations, no API calls, catching up the bucket's last 90 days), the Single Runs API only for the bucket's gaps (≤ 400 calls a day); older runs come with the backfill; progress in Release `runs-state` | GitHub Actions |
-| Outlook | `mvd outlook` four times a day: combined forecast for every okres (≈ 420–730 calls) → `outlook.json`, `outlook-hourly.json` and every model's forecast per okres (`outlook-models.zip`) in Release `data-latest`; the full answer archived per UTC day in `outlook-models-YYYY-MM` | GitHub Actions |
+| Outlook | combined forecast for every okres after the model runs (its method is not published) → `outlook.json`, `outlook-hourly.json` and every model's forecast per okres (`outlook-models.zip`) in Release `data-latest` | |
 | Development | Claude scheduled task, weekdays, works from this roadmap, opens PRs | Claude (Cowork) |
 
 Two separate loops:
@@ -171,12 +171,10 @@ Each item should fit one PR (≈ one working session). Check items off in the PR
 
 ### Phase 6: Every okres, and our own forecast
 - [x] 6.1 Rank every okres: okresy with fewer than 3 stations borrow the nearest stations of their neighbours (≤ 30 km beyond the border), same fair comparison
-- [x] 6.2 Combination weights per okres × variable × lead day from the 90-day scores (inverse-MSE weights, bias corrections) and a forecast point per okres → `site/data/forecast.json`
+- [x] 6.2 Combination weights per okres × variable × lead day from the scores and a forecast point per okres → `forecast/<okres>.json`
 - [x] 6.3 Web: MeteoVerdict forecast for a chosen okres: today's Open-Meteo forecasts of all models combined with the 6.2 weights, next to the best single model
-- [ ] 6.4 Verify the combination out of sample (weights from earlier days, scored like a model) and rank it against the best single model; compare training windows of 30, 45 and 90 days and a decaying average (`docs/forecast-research.md`)
-  - [x] Out-of-sample test against the best model at the time, the best in hindsight, the mean and every model, with day-bootstrap intervals, per lead day, Czechia and okres: `mvd blend-test` → `site/data/blend-test.json`, daily, shown on the comparison page. First result (24 days, September 2026): never clearly worse except wind D+1 (+0.03 m/s), better for daily precipitation at all lead days and temperature at D+2, D+3, D+5; too short to call
-  - [ ] Training windows 30 / 45 / 90 days (`--window`) and a decaying average, once the history is longer than 45 days
-- [x] 6.5 Review the combination method against operational practice and the literature (`docs/forecast-research.md`); taper models that end early
+- [x] 6.4 Verify the combination out of sample (scored like a model) and rank it against the best single model: `blend-test.json`, daily, shown on the comparison page. The combination's method is no longer part of this repository; its results are published
+- [x] 6.5 Review the combination method against operational practice and the literature (`docs/forecast-research.md`)
 - [x] 6.6 TV-style forecast: combined forecast for all okresy by part of day (night, morning, afternoon, evening), with precipitation probability and cloud symbols, refreshed four times a day (twice until 2026-10-17)
 - [x] 6.7 TV-style forecast map: symbols and temperatures per okres, day and part-of-day controls, click an okres for details
 - [x] 6.8 Forecast map: time controls apart from what the map shows; temperature, rain, wind and cloud at once
