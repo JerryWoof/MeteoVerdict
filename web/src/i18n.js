@@ -213,7 +213,7 @@ export const STRINGS = {
     "ai.titleFor": "Předpověď MeteoVerdict AI – {town}",
     "api.title": "Otevřená data",
     "api.intro":
-      "Naši kombinovanou předpověď a pořadí modelů si můžete stáhnout pro každý okres jako JSON, zdarma, bez registrace a bez klíče; velké archivy jsou v releasech na GitHubu. Soubory jsou statické a dají se načíst i přímo z prohlížeče na jiném webu (CORS povolený). Stránka níže popisuje API, další soubory, archivy, licence a jak data citovat.",
+      "Naši kombinovanou předpověď si můžete stáhnout pro každý okres jako JSON, zdarma, bez registrace a bez klíče; velké archivy jsou v releasech na GitHubu. Soubory jsou statické a dají se načíst i přímo z prohlížeče na jiném webu (CORS povolený). Stránka níže popisuje API, další soubory, archivy, licence a jak data citovat.",
     "api.when":
       "Aktualizováno denně: skóre modelů v {daily} a předpověď čtyřikrát denně v {outlook} (pražský čas, teď {zone}; po každém běhu modelů); ostatní archivy v tabulce níže. Čas vytvoření je v každém souboru.",
     "api.try": "Váš okres",
@@ -1253,7 +1253,7 @@ export const STRINGS = {
     "ai.titleFor": "MeteoVerdict AI forecast – {town}",
     "api.title": "Open data",
     "api.intro":
-      "Our combined forecast and the ranking of the models can be downloaded for every okres as JSON, free, without registration or a key; the large archives are in the releases on GitHub. The files are static and can be fetched straight from a browser on another site (CORS allowed). The page below describes the API, more files, the archives, the licences and how to cite the data.",
+      "Our combined forecast can be downloaded for every okres as JSON, free, without registration or a key; the large archives are in the releases on GitHub. The files are static and can be fetched straight from a browser on another site (CORS allowed). The page below describes the API, more files, the archives, the licences and how to cite the data.",
     "api.when":
       "Updated daily: the model scores at {daily} and the forecast four times a day at {outlook} (Prague time, now {zone}; after each model run); the other archives in the table below. The time of creation is in every file.",
     "api.try": "Your okres",

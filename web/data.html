@@ -57,8 +57,8 @@ for time, temp in zip(hourly["time"][:6], hourly["temperature_2m"][:6]):
     print(time, temp, "°C")</pre>
       <pre class="code">const url = "https://meteoverdict.cz/api/v1/okresy/CZ0201.json";
 const okres = await (await fetch(url)).json();
-const best = okres.models.variables.temperature_2m.lead_days[1][0];
-console.log(`best model for tomorrow's temperature: ${best.name}`);</pre>
+const day = okres.forecast.parts.find((p) => p.part === "day");
+console.log(`${day.day}: ${day.tmin} to ${day.tmax} °C`);</pre>
 
       <h2 id="trmnl" data-i18n="api.eink">On an e-ink display</h2>
       <p data-i18n="api.einkText"></p>

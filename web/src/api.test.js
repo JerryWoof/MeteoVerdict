@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { FLAGS, HOURLY, NOTICE, SITE, aiOkresDoc, docPreview, hourlyPreview, indexDoc, obceDocs, obceIndexDoc, obecIds, okresDoc, okresModels, slug } from "./api.js";
+import { FLAGS, HOURLY, NOTICE, SITE, aiOkresDoc, docPreview, hourlyPreview, indexDoc, obceDocs, obceIndexDoc, obecIds, okresDoc, slug } from "./api.js";
 import { records } from "./data.js";
 
 const load = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
@@ -71,27 +71,9 @@ test("the files say the flags are thresholds, not ČHMÚ warnings", () => {
   assert.match(DOC.deprecated.gust_warning, /gust_over_threshold/);
 });
 
-test("model ranking per variable and lead day, without the weights of our forecast", () => {
-  const t = DOC.models.variables.temperature_2m;
-  assert.deepEqual(Object.keys(t.lead_days), ["1", "2", "3", "4", "5"]);
-  const d1 = t.lead_days[1];
-  assert.equal(d1[0].rank, 1);
-  assert.ok(d1.every((r) => r.model !== "blend"));
-  assert.ok(d1.every((r) => !("weight" in r) && !("correction" in r) && !("mos_weight" in r)), "no weights published");
-  assert.equal(d1[0].name, META.models[d1[0].model]);
-  assert.equal(DOC.models.from, META.windows["90d"].from);
-  assert.deepEqual(okresModels("CZ9999", SCORES, {}), {});
-  // score files written before the block bootstrap have no p_best
-  assert.ok(d1.every((r) => r.p_best === null && r.small_sample === false));
-});
-
-test("the probability of being best and the small-sample flag are passed on", () => {
-  const rows = [
-    { region: "CZ0201", model: "icon", lead_day: 1, rank: 1, mae: 1.1, p_best: 0.7234, small_sample: true },
-    { region: "CZ0201", model: "ifs", lead_day: 1, rank: 2, mae: 1.2, p_best: 0.2766, small_sample: true },
-  ];
-  const lead = okresModels("CZ0201", { temperature_2m: rows }, {}).temperature_2m.lead_days[1];
-  assert.deepEqual(lead.map((r) => [r.model, r.p_best, r.small_sample]), [["icon", 0.723, true], ["ifs", 0.277, true]]);
+test("the okres file has no ranking of the models", () => {
+  assert.ok(!("models" in DOC), "the ranking of the models is not part of the okres file");
+  assert.ok(!JSON.stringify(DOC).includes("mos_weight"));
 });
 
 test("every JSON file and the index carry the notice for every threshold flag", () => {

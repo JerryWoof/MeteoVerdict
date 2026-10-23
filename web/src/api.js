@@ -59,38 +59,6 @@ const PART_FIELDS = [
 
 const round = (v, digits) => (v == null ? null : Number(v.toFixed(digits)));
 
-/** Ranking of the models in one okres per variable and lead day. */
-export function okresModels(code, scores, names) {
-  const variables = {};
-  for (const variable of SCORE_VARIABLES) {
-    const rows = (scores[variable] ?? []).filter((r) => r.region === code && r.model !== "blend");
-    if (rows.length === 0) continue;
-    const byLead = {};
-    for (const r of rows.sort((a, b) => a.lead_day - b.lead_day || (a.rank ?? 99) - (b.rank ?? 99))) {
-      (byLead[r.lead_day] ??= []).push({
-        model: r.model,
-        name: names[r.model] ?? r.model,
-        rank: r.rank,
-        mae: round(r.mae, 3),
-        bias: round(r.bias, 3),
-        rmse: round(r.rmse, 3),
-        tied_with_best: Boolean(r.tied_with_best),
-        // probability of being the best (share of the block-bootstrap resamples; null in
-        // older score files) and whether the ranking rests on fewer than 30 days
-        p_best: r.p_best != null ? round(r.p_best, 3) : null,
-        small_sample: Boolean(r.small_sample),
-        // too short a record in the window (e.g. added recently): not ranked;
-        // its MAE is over its own `days` only
-        short_record: Boolean(r.short_record),
-        days: r.days ?? null,
-      });
-    }
-    const first = rows[0];
-    variables[variable] = { stations: first.stations, borrowed: first.borrowed ?? 0, days: first.days, lead_days: byLead };
-  }
-  return variables;
-}
-
 /** The parts of day of one okres from an outlook file. */
 function blendParts(outlook, code) {
   return records(outlook)
@@ -134,11 +102,10 @@ export function extraFromModels(models, times) {
 }
 
 /** The JSON file of one okres. */
-export function okresDoc({ okres, outlook, hourly, scores, meta, models }) {
+export function okresDoc({ okres, outlook, hourly, meta, models }) {
   const series = hourly?.okresy?.[okres.code];
   const extra = series ? extraFromModels(models, hourly.time) : { series: {}, sources: {} };
   const parts = blendParts(outlook, okres.code);
-  const window = meta?.windows?.["90d"] ?? null;
   return {
     api: `MeteoVerdict open data ${VERSION}`,
     docs: DOCS,
@@ -149,21 +116,13 @@ export function okresDoc({ okres, outlook, hourly, scores, meta, models }) {
     okres: { code: okres.code, name: okres.name, lat: okres.lat, lon: okres.lon },
     forecast: {
       generated: hourly?.generated ?? outlook?.generated ?? null,
-      method: "all models combined, weighted and corrected by their recent scores in this okres (docs/methodology.md)",
+      method: "MeteoVerdict: all models combined into one forecast for the okres (docs/methodology.md)",
       time_zone_of_parts: outlook?.time_zone ?? "Europe/Prague",
       units: hourly?.variables ? { ...hourly.variables, ...Object.fromEntries(Object.keys(extra.series).map((k) => [k, EXTRA_UNITS[k]])) } : null,
-      // the combination's own hours ("blend": weighted by the scores) and the models' median ("reference") of the further variables
+      // the combination's own hours ("blend") and the models' median ("reference") of the further variables
       ...(Object.keys(extra.sources).length ? { sources: extra.sources } : {}),
       hourly: series ? { time: hourly.time, ...series, ...extra.series } : null,
       parts,
-    },
-    models: {
-      generated: meta?.generated ?? null,
-      window: "90d",
-      from: window?.from ?? null,
-      to: window?.to ?? null,
-      metrics: "MAE, bias (forecast minus observed) and RMSE at D+1…D+5; rank 1 = smallest MAE; tied_with_best: not significantly worse (95 % bootstrap interval over blocks of 4 days, or Diebold-Mariano test); p_best: share of bootstrap resamples in which the model is best (no clear winner below 0.6); small_sample: fewer than 30 days; short_record: scores on fewer than 80 % of the window's days (e.g. a newly added model), not ranked, its MAE is over its own days",
-      variables: okresModels(okres.code, scores, meta?.models ?? {}),
     },
   };
 }
