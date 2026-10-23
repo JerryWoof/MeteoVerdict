@@ -119,7 +119,7 @@ test("parsing a day: rows per okres and part, counts, every okres present", () =
   assert.equal(row.measured, true);
   assert.equal(row.tmax, 10.4);
   assert.equal(row.precipitation, 2.4);
-  assert.deepEqual(row.counts, { t: 2, r: 5, w: 2, g: 2, s: 2, c: 1 });
+  assert.deepEqual(row.counts, { t: 2, r: 5, w: 2, g: 2, s: 2, c: 1, h: 0, p: 0, d: 0 });
   const praha = rowFor(VIEW, "CZ0100", "2026-10-16", "afternoon");
   assert.equal(praha.tmax, null);
   assert.equal(praha.counts.t, 0);
