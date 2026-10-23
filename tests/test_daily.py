@@ -30,6 +30,13 @@ def write_forecasts(data_dir, start: date, days: int):
     partitions.write_monthly(forecasts_table, data_dir / "fc", forecasts.KEYS)
 
 
+@pytest.fixture(autouse=True)
+def no_hourly_capture(monkeypatch):
+    monkeypatch.setattr(
+        daily, "capture_hourly", lambda *a, **k: pl.DataFrame(schema=observations.SCHEMA)
+    )
+
+
 def test_run_captures_observations_and_rescores(tmp_path, monkeypatch):
     asked = []
 

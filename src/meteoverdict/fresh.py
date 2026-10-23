@@ -76,7 +76,11 @@ def _expected_run_offsets(models: list[Model]) -> pl.LazyFrame:
     )
 
 
-def spread(single_runs: pl.LazyFrame | pl.DataFrame, models: list[Model]) -> pl.LazyFrame:
+def spread(
+    single_runs: pl.LazyFrame | pl.DataFrame,
+    models: list[Model],
+    instant: list[str] | None = None,
+) -> pl.LazyFrame:
     """Rows at native steps (with a ``source``) → one row per hour: the precipitation of
     a step of ``s`` hours divided evenly over its ``s`` hours (Open-Meteo's convention),
     the other variables only at the native hour. Rows without a ``source`` (the API,
@@ -85,7 +89,8 @@ def spread(single_runs: pl.LazyFrame | pl.DataFrame, models: list[Model]) -> pl.
     if "source" not in frame.collect_schema().names():
         frame = frame.with_columns(pl.lit(None, pl.String).alias("source"))
     columns = frame.collect_schema().names()
-    instant = [v for v in runs_mod.VARIABLES if v != "precipitation"]
+    if instant is None:
+        instant = [v for v in runs_mod.VARIABLES if v != "precipitation"]
     back = pl.col("_back")
     hourly = (
         frame.filter(pl.col("source").is_not_null())
@@ -110,10 +115,19 @@ def previous_days(
     models: list[Model],
     first: datetime,
     last: datetime,
+    variables: tuple[str, ...] | None = None,
 ) -> pl.LazyFrame:
     """D+N rows (``forecasts.SCHEMA``) for valid hours ``first`` to ``last`` (UTC) from
-    the single runs (``runs.SCHEMA``), as the Previous Runs API defines them."""
-    runs = spread(single_runs.lazy().filter(pl.col("model").is_in([m.id for m in models])), models)
+    the single runs (``runs.SCHEMA``), as the Previous Runs API defines them.
+
+    ``variables``: instead of ``models.VARIABLES`` these columns of the runs (instant
+    values such as the further variables of ``runs.EXTRA_VARIABLES``); the rows then
+    have no ``forecasts.SCHEMA`` cast."""
+    runs = spread(
+        single_runs.lazy().filter(pl.col("model").is_in([m.id for m in models])),
+        models,
+        None if variables is None else list(variables),
+    )
     lead_days = pl.LazyFrame(
         [(m.id, n) for m in models for n in m.lead_days],
         schema={"model": pl.String, "lead_day": pl.Int8},
@@ -151,7 +165,7 @@ def previous_days(
     )
     target = pl.col("valid_time") - pl.duration(hours=24 * pl.col("lead_day"))
     from_expected = (pl.col("valid_time") - pl.col("_expected")).dt.total_hours()
-    return (
+    rows = (
         newest.with_columns(target.alias("_target"), target.dt.truncate("6h").alias("_base"))
         .with_columns(pl.col("_base").dt.hour().cast(pl.Int8).alias("_base_hour"))
         .join(_expected_run_offsets(models), on=["model", "_base_hour"], how="inner")
@@ -167,10 +181,10 @@ def previous_days(
             pl.col("valid_time").alias("time"),
             "model",
             "lead_day",
-            *VARIABLES,
+            *(VARIABLES if variables is None else variables),
         )
-        .cast(SCHEMA)
     )
+    return rows.cast(SCHEMA) if variables is None else rows
 
 
 def fill(
