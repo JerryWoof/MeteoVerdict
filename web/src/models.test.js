@@ -9,7 +9,7 @@ import {
 
 // real: forecast/models/CZ0201.json from the saved Open-Meteo answer of 12 Oct 2026
 const DOC = JSON.parse(readFileSync(new URL("./fixtures/models-CZ0201.json", import.meta.url)));
-const WEIGHTS = JSON.parse(readFileSync(new URL("./fixtures/weights-CZ0201.json", import.meta.url)));
+const WEIGHTS = JSON.parse(readFileSync(new URL("./fixtures/ranking-CZ0201.json", import.meta.url)));
 const PARSED = parseModels(DOC);
 const HOUR = 3600 * 1000;
 

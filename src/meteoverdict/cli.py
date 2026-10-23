@@ -1531,17 +1531,13 @@ def _publish_aggregates(
     as_of: date | None,
     resamples: int,
 ) -> pl.DataFrame:
-    """Aggregate and rank all score files; write aggregates.parquet and the JSON (with
-    the forecast pages' ``forecast/`` files from the weight table in ``data_dir``, where
-    there is one, ``aggregate.FORECAST_WEIGHTS_FILE``)."""
+    """Aggregate and rank all score files; write aggregates.parquet and the JSON."""
     # files written before a column was added lack it (see partitions.scan_months)
     scores = pl.concat([pl.scan_parquet(f) for f in files], how="diagonal_relaxed")
     table = aggregate.aggregate(scores, station_table, as_of)
     ranks = ranking.rank(scores, station_table, as_of, resamples=resamples)
     table = table.join(ranks, on=[*ranking.GROUP, "model"], how="left")
     table.write_parquet(data_dir / "aggregates.parquet", compression="zstd")
-    weights_path = data_dir / aggregate.FORECAST_WEIGHTS_FILE
-    weights = pl.read_parquet(weights_path) if weights_path.exists() else None
     names = _model_names()
     meta = aggregate.metadata(table, names, datetime.now(UTC))
     meta["sources"] = fresh.sources(scores)
@@ -1550,11 +1546,10 @@ def _publish_aggregates(
             f"{m} ({f['days']} days, {f['coverage']:.0%}: {', '.join(f['variables'])})"
             for m, f in left_out.items()
         )
-        typer.echo(f"{window}: left out for too short a record (not ranked, no weight): {listed}")
+        typer.echo(f"{window}: left out for too short a record (not ranked): {listed}")
     written = [
         *aggregate.write_json(table, out, meta),
         aggregate.write_stations(station_table, out),
-        *aggregate.write_forecast(out, weights),
     ]
     if table.height:
         last = table["to"].max()
@@ -1740,10 +1735,6 @@ def daily(
             sync.push(months)
             remote = store.remote_months(sync.store)
             store.download(sync.store, data_dir, remote, typer.echo, kinds=("scores",))
-            # the forecast's published weight table, for the forecast pages' files
-            name = aggregate.FORECAST_WEIGHTS_FILE
-            if name in sync.store.names(store.LATEST_TAG):
-                sync.store.download(store.LATEST_TAG, name, data_dir / name)
     files = sorted((data_dir / "scores").glob("*.parquet"))
     if not files:
         typer.echo("no scores yet")
