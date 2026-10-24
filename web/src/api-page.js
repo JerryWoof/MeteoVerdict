@@ -1,6 +1,6 @@
 import "./style.css";
 
-import { dataBlocks, exampleBlocks } from "./data-text.js";
+import { dataBlocks, exampleBlocks, legalBlocks } from "./data-text.js";
 import { setUpLanguage } from "./i18n.js";
 import { renderBlocks } from "./info-page.js";
 import { displayName } from "./tv.js";
@@ -26,6 +26,7 @@ function showText() {
   renderBlocks(document.getElementById("doc-example"), exampleBlocks(language));
   renderBlocks(document.getElementById("doc-api"), blocks.api);
   renderBlocks(document.getElementById("doc-more"), blocks.more);
+  renderBlocks(document.getElementById("doc-legal"), legalBlocks(language));
   const id = decodeURIComponent(window.location.hash.slice(1));
   const target = id && !/^CZ/.test(id) ? document.getElementById(id) : null;
   if (!target) return;

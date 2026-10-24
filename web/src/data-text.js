@@ -1,9 +1,11 @@
 // The text of the Data page (data.html) below the okres picker, as two lists of blocks (the API
 // part and the downloads) for info-page.js's renderBlocks (one function for both languages:
-// L(cs, en)). Licences, how to cite and the terms are on the credits page (credits-text.js).
+// L(cs, en)); legalBlocks is the licences, citing and terms fold.
 
 const REPO = "https://github.com/JerryWoof/MeteoVerdict";
 const SITE = "https://meteoverdict.cz";
+
+const BY_SA = "https://creativecommons.org/licenses/by-sa/4.0/";
 
 const release = (tag) => `[${tag}](${REPO}/releases/tag/${tag})`;
 const releases = (label, query) => `[${label}](${REPO}/releases?q=${query})`;
@@ -48,6 +50,23 @@ export function dataBlocks(language) {
   ];
   const split = all.findIndex((block) => block[2] === "releases");
   return { api: all.slice(0, split), more: all.slice(split) };
+}
+
+/** The Licences, citing and terms fold of the Data page; the full list of sources is on zdroje.html. */
+export function legalBlocks(language) {
+  const L = (cs, en) => (language === "cs" ? cs : en);
+  return [
+    ["p", L(
+      `Naše výstupy (\`api/v1\`, předpovědi, skóre, výstupy AI) jsou pod licencí [CC BY-SA 4.0](${BY_SA}), kód pod [MIT](${REPO}/blob/main/LICENSE). Každý soubor v \`api/v1\` nese licenci a text ke zdroji. Všechny zdroje a jejich licence jsou na stránce [Zdroje a licence](zdroje.html).`,
+      `Our outputs (\`api/v1\`, forecasts, scores, AI outputs) are under [CC BY-SA 4.0](${BY_SA}), the code under [MIT](${REPO}/blob/main/LICENSE). Every file in \`api/v1\` carries the licence and the text to credit. All sources and their licences are on the page [Sources and licences](zdroje.html).`)],
+    ["p", L("Jak citovat: zkopírujte pole `attribution` ze souboru, nebo použijte tuto větu:", "How to cite: copy the `attribution` field of the file, or use this sentence:")],
+    ["code", L(
+      `MeteoVerdict, ${SITE}/ (CC BY-SA 4.0). Data: ČHMÚ, Open-Meteo.com a poskytovatelé modelů; údaje byly kombinovány a opraveny.`,
+      `MeteoVerdict, ${SITE}/ (CC BY-SA 4.0). Data: ČHMÚ, Open-Meteo.com and the model providers; the values were combined and corrected.`)],
+    ["p", L(
+      "Neříkejte, že data schvaluje ČHMÚ, Open-Meteo nebo poskytovatel modelu. Stahujte nejvýš jednou za hodinu: předpověď se mění jen čtyřikrát denně. Je to statistická kombinace modelů, ne oficiální předpověď ČHMÚ; prahy (mráz, přízemní mrazík, vydatný déšť, nárazy) nejsou výstrahy, ty vydává jen [ČHMÚ](https://www.chmi.cz/). Za použití dat neručíme.",
+      "Do not imply that ČHMÚ, Open-Meteo or a model provider endorses the data. Please fetch at most once an hour: the forecast changes only four times a day. It is a statistical combination of models, not an official ČHMÚ forecast; the thresholds (frost, ground frost, heavy rain, gusts) are not warnings, only [ČHMÚ](https://www.chmi.cz/) issues those. Use the data at your own risk.")],
+  ];
 }
 
 /**
