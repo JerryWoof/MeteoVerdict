@@ -192,7 +192,7 @@ jobs:
           else
             echo "no live verification data yet; the page keeps its committed test data"
           fi
-      - name: Verification page: the snapshot explorer data (every variable of every district and station)
+      - name: Verification page - the snapshot explorer data (every variable of every district and station)
         # derived/explorer/ is made by scripts/build_explorer.py of the Verify repository from the newest
         # public snapshot; one JSON per district and station, loaded by the page's second tab on click
         run: |
