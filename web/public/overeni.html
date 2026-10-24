@@ -163,5 +163,7 @@ $("sParts").innerHTML=h}
 function obsTable(){if(level!="st"||!DOC.obs||!DOC.obs.last){$("sObs").innerHTML="";return}$("sObs").innerHTML=ptable("Naposledy naměřeno na stanici (všechny prvky ČHMÚ, surové hodnoty, kód kvality)",DOC.obs.last,["step","element","time","value","quality"])}
 function prov(){const s=IDX.snapshot,a=s.asset;$("sProv").innerHTML=`<span class="pill">snímek</span><span class="sub">Původ dat této záložky:</span><div class="hash">Snímek <b>${esc(s.time.slice(0,16).replace("T"," "))} UTC</b> (vydání ${esc((s.issue_time||"").slice(0,16).replace("T"," "))} UTC, ${esc(s.model_version||"")}, politika ${esc(IDX.policy||"")})<br>Asset <b>${esc(a.name||"")}</b> · sha256 <b>${esc((a.sha256||"").slice(0,12))}…${esc((a.sha256||"").slice(-8))}</b> · chain hash <b>${esc((s.chain_hash||"").slice(0,12))}…</b><br>Soubory ve snímku: ${(IDX.files||[]).map(esc).join(", ")}<br>Váhy blendu jsou soukromé (v logu je jen jejich hash). Přepočet: <b>python3 scripts/build_explorer.py</b> · <a href="https://github.com/JerryWoof/MeteoVerdict-Verify">MeteoVerdict-Verify</a></div>`}
 document.querySelectorAll("#modes .tab").forEach(t=>t.onclick=()=>{document.querySelectorAll("#modes .tab").forEach(x=>x.classList.toggle("on",x==t));const snap=t.dataset.m=="snap";$("snapView").hidden=!snap;$("scoreView").hidden=snap;if(snap)load()});
+// the score tab has no pairs of forecast and measurement yet: open on the snapshot data
+const first=document.querySelector('#modes .tab[data-m=snap]');if(first)first.click();
 })();
 </script></body></html>
