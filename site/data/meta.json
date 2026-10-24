@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-24T04:56:29+00:00",
+ "generated": "2026-10-24T10:01:21+00:00",
  "as_of": "2026-10-23",
  "windows": {
   "90d": {
@@ -7,11 +7,11 @@
    "to": "2026-10-23"
   },
   "all": {
-   "from": "2026-07-15",
+   "from": "2026-07-13",
    "to": "2026-10-23"
   },
   "jja": {
-   "from": "2026-07-15",
+   "from": "2026-07-13",
    "to": "2026-08-31"
   },
   "season": {
@@ -89,51 +89,116 @@
  },
  "bias_corrected": "mae_bc: MAE after removing each model's own bias at the station and synoptic hour, estimated on the 30 days before the forecast was made (at least 10); only pairs where every compared model has one",
  "short_record": {
-  "jja": {
-   "dwd_icon": {
-    "coverage": 0.75,
-    "days": 36,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "gem_global": {
-    "coverage": 0.75,
-    "days": 36,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
-   "jma_gsm": {
-    "coverage": 0.75,
-    "days": 36,
-    "variables": [
-     "precipitation_24h"
-    ]
-   },
+  "all": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.75,
-    "days": 36,
+    "coverage": 0.78,
+    "days": 78,
     "variables": [
-     "precipitation_24h",
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.75,
+    "coverage": 0.78,
+    "days": 78,
+    "variables": [
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
+    ]
+   }
+  },
+  "jja": {
+   "cma_grapes_global": {
+    "coverage": 0.766,
     "days": 36,
     "variables": [
-     "precipitation_24h",
+     "precipitation_daily",
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
+     "temperature_2m_18utc",
+     "temperature_2m_hourly",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
+    ]
+   },
+   "dwd_icon": {
+    "coverage": 0.766,
+    "days": 36,
+    "variables": [
+     "precipitation_daily",
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
+     "temperature_2m_18utc",
+     "temperature_2m_hourly",
+     "temperature_max",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
+    ]
+   },
+   "gem_global": {
+    "coverage": 0.766,
+    "days": 36,
+    "variables": [
+     "precipitation_daily",
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
+     "temperature_2m_18utc",
+     "temperature_2m_hourly",
+     "temperature_max",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
+    ]
+   },
+   "jma_gsm": {
+    "coverage": 0.766,
+    "days": 36,
+    "variables": [
+     "precipitation_daily",
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
+     "temperature_2m_18utc",
+     "temperature_2m_hourly",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
+    ]
+   },
+   "meteofrance_arpege_europe": {
+    "coverage": 0.532,
+    "days": 25,
+    "variables": [
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
+    ]
+   },
+   "meteofrance_arpege_world": {
+    "coverage": 0.532,
+    "days": 25,
+    "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "ncep_aigfs025": {
-    "coverage": 0.75,
+    "coverage": 0.766,
     "days": 36,
     "variables": [
-     "precipitation_24h"
+     "precipitation_daily",
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
+     "temperature_2m_18utc",
+     "temperature_2m_hourly",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
     ]
    }
   }
@@ -149,7 +214,7 @@
  "attribution": "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com (CC BY 4.0) from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, KNMI, DMI, ČHMÚ, Environment and Climate Change Canada, the Japan Meteorological Agency, the China Meteorological Administration and the UK Met Office (CC BY-SA 4.0). Boundaries: ČÚZK (CC BY 4.0).",
  "sources": {
   "previous_runs": {
-   "from": "2026-07-15",
+   "from": "2026-07-13",
    "to": "2026-10-18"
   },
   "single_runs": {
