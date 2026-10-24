@@ -21,11 +21,17 @@ table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}td,th{pa
 .pill{display:inline-block;background:#868e96;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;margin-right:6px}
 .leg{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin:2px 0}.leg i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:4px}
 .gap{background:#fff5f5;border:1px solid #ffc9c9;border-radius:6px;padding:6px 10px;font-size:12px;margin:6px 0}
+.snap-ctl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}.snap-ctl select{border:1px solid var(--line);border-radius:5px;padding:4px 6px;background:var(--card);color:var(--ink);font-size:13px;max-width:100%}
+.lg{display:flex;gap:4px 12px;flex-wrap:wrap;font-size:12px;margin:4px 0}.lg label{display:inline-flex;gap:4px;align-items:center;cursor:pointer;white-space:nowrap}.lg i{display:inline-block;width:14px;height:3px}
+.tip{font:12px/1.4 ui-monospace,Menlo,monospace;min-height:1.4em;color:var(--ink)}
+.parts td,.parts th{font-size:12px}details.d summary{cursor:pointer;color:var(--mut);font-size:12px;margin:6px 0}
 </style></head><body><div class="wrap">
 <div class="banner" id="banner"></div>
 <h1>Naměřeno vs. předpověď</h1><div class="sub">Jedna záložka místo „Naměřeno“ a „Porovnání“. Klikni na stanici ČHMÚ na mapě.</div>
 <div class="tabs"><span class="tab">Předpověď</span><span class="tab on">Ověření</span><span class="tab">Mapy</span></div>
-<div class="grid">
+<div class="tabs" id="modes"><span class="tab on" data-m="score">Skóre AI proti měření</span><span class="tab" data-m="snap">Snímek: všechna data (okresy a stanice)</span></div>
+<div id="snapView" hidden></div>
+<div class="grid" id="scoreView">
 <div class="card"><div class="sub" style="margin-bottom:4px"><b style="color:var(--ink)">40 hlavních stanic ČHMÚ</b> (stanice WMO)</div><div class="ctl" id="vars"></div><svg id="map" viewBox="0 0 415 240" width="100%"></svg>
 <div class="leg" style="margin-top:4px"><span><i style="background:#2f9e44;height:9px;width:9px;border-radius:50%"></i>AI lepší než nejlepší model</span><span><i style="background:#868e96;height:9px;width:9px;border-radius:50%"></i>stejně</span><span><i style="background:#e03131;height:9px;width:9px;border-radius:50%"></i>horší</span></div><div class="sub">Bledé body: méně než 24 srovnatelných hodin, zatím všechny.</div></div>
 <div class="card"><div class="head"><b id="nm"></b><span id="meta"></span></div>
@@ -95,4 +101,67 @@ Měření ČHMÚ (${P.obs.quality.startsWith("provisional")?"předběžná, neko
 Seznam stanic: <b>${sh(P.stations.sha256)}</b> (${P.stations.n}) · skript <b>${esc(P.script.version)}</b> sha256 <b>${sh(P.script.sha256)}</b><br>
 Přepočet: <b>${esc(P.command)}</b> · repozitář <a href="https://github.com/JerryWoof/MeteoVerdict-Verify">MeteoVerdict-Verify</a></div>`}
 fetch('overeni-data.json').then(r=>r.json()).then(j=>{D=j;S=D.stations;cur=S.find(s=>/Ruzyn/.test(s.name))||S[0];prov();init()}).catch(()=>{document.querySelector('.grid').innerHTML='<div class="card">Data se nepodařilo načíst.</div>'});
+</script><script>
+(()=>{
+const BASE="overeni-data/explorer/",$=id=>document.getElementById(id);
+const VL={temperature_2m:"Teplota 2 m",temperature_2m_lo:"Teplota, spodní odhad",temperature_2m_hi:"Teplota, horní odhad",temperature_5cm:"Teplota 5 cm nad zemí",dew_point_2m:"Rosný bod",surface_temperature:"Teplota povrchu",wind_speed_10m:"Vítr 10 m",wind_gusts_10m:"Nárazy větru",wind_direction_10m:"Směr větru",precipitation:"Srážky",snowfall:"Sněžení",snow_depth:"Výška sněhu",snow_depth_water_equivalent:"Vodní hodnota sněhu",cloud_cover:"Oblačnost",cloud_cover_low:"Nízká oblačnost",relative_humidity_2m:"Relativní vlhkost",pressure_msl:"Tlak (hladina moře)",sunshine_duration:"Sluneční svit",shortwave_radiation:"Globální záření",visibility:"Dohlednost",cape:"CAPE",fog_probability:"Pravděpodobnost mlhy"};
+const MN={ai:"MeteoVerdict AI",combined:"MeteoVerdict (blend)",blend:"MeteoVerdict (blend)",reference:"Průměr modelů",dwd_icon_d2:"ICON-D2",dwd_icon_eu:"ICON-EU",dwd_icon:"ICON",ecmwf_ifs:"ECMWF IFS",ecmwf_ifs025:"ECMWF IFS 0,25°",ecmwf_aifs025_single:"ECMWF AIFS",chmi_aladin_cz_1km:"ALADIN 1 km",chmi_aladin_central_europe_2km:"ALADIN 2 km",geosphere_arome_austria:"AROME Austria",knmi_harmonie_arome_europe:"KNMI HARMONIE",dmi_harmonie_arome_europe:"DMI HARMONIE",meteofrance_arpege_europe:"ARPEGE EU",meteofrance_arpege_world:"ARPEGE světový",ncep_gfs_global:"GFS",ncep_aigfs025:"AIGFS",gem_global:"GEM",jma_gsm:"JMA GSM",cma_grapes_global:"CMA GRAPES",ukmo_global_deterministic_10km:"UKMO"};
+const PAL=["#1c7ed6","#2f9e44","#9c36b5","#f08c00","#0c8599","#c2255c","#5c940d","#7048e8","#e8590c","#1098ad","#a61e4d","#37b24d","#364fc7","#d6336c","#099268","#862e9c","#e67700","#0b7285","#862e9c"];
+const nm=k=>MN[k]||k,esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let IDX=null,OK=null,level="st",place=null,variable="temperature_2m",DOC=null,shown=new Set(),OBS=true;
+const root=$("snapView");
+root.innerHTML=`<div class="card"><div class="snap-ctl"><select id="sLevel"><option value="st">Stanice (40 stanic ČHMÚ)</option><option value="ok">Okres (77)</option></select><select id="sPlace"></select><select id="sVar"></select></div>
+<div id="sInfo" class="sub"></div><svg id="sChart" viewBox="0 0 760 300" width="100%"></svg><div class="tip" id="sTip"></div><div class="lg" id="sLeg"></div><div class="ctl" id="sQuick"></div>
+<div id="sTable"></div><div id="sParts"></div><div id="sObs"></div><div id="sProv" style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px"></div></div>`;
+async function load(){if(IDX)return;try{IDX=await (await fetch(BASE+"index.json")).json();OK=await (await fetch("overeni-okresy.json")).json()}catch(e){root.innerHTML='<div class="card">Data snímku zatím nejsou k dispozici.</div>';throw e}
+fill()}
+function fill(){const lv=$("sLevel");lv.onchange=()=>{level=lv.value;fillPlace();pick()};
+const sv=$("sVar");sv.innerHTML=Object.keys(IDX.variables).map(v=>`<option value="${v}">${esc(VL[v]||v)}${IDX.variables[v]?" ("+esc(IDX.variables[v])+")":""}</option>`).join("");sv.value=variable;sv.onchange=()=>{variable=sv.value;draw()};
+$("sPlace").onchange=pick;fillPlace();pick();prov()}
+function fillPlace(){const el=$("sPlace");if(level=="st"){el.innerHTML=IDX.stations.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join("");el.value=(IDX.stations.find(s=>/Ruzyn/.test(s.name))||IDX.stations[0]).id}
+else{el.innerHTML=IDX.okresy.map(c=>`<option value="${c}">${esc((OK[c]||[c])[0])}</option>`).join("");el.value=IDX.okresy.includes("CZ0100")?"CZ0100":IDX.okresy[0]}}
+async function pick(){place=$("sPlace").value;DOC=null;$("sInfo").textContent="Načítám…";const url=BASE+(level=="st"?"stations/":"okresy/")+place+".json";
+try{DOC=await (await fetch(url)).json()}catch(e){$("sInfo").textContent="Soubor se nepodařilo načíst.";return}
+shown=new Set();draw()}
+function vars(){return Object.keys(DOC.variables)}
+function draw(){if(!DOC)return;if(!DOC.variables[variable]){const v=vars();if(!v.length)return;if(!v.includes(variable))variable=v[0];$("sVar").value=variable}
+const ser=DOC.variables[variable],ORD=["ai","combined","blend","reference"],keys=Object.keys(ser).sort((a,b)=>{const ia=ORD.indexOf(a),ib=ORD.indexOf(b);return (ia<0?9:ia)-(ib<0?9:ib)||nm(a).localeCompare(nm(b))});
+if(!shown.size)keys.filter(k=>["ai","combined","blend","reference"].includes(k)).forEach(k=>shown.add(k));
+const col=k=>k=="ai"?"#d9480f":k=="combined"||k=="blend"?"#868e96":k=="reference"?"#14202b":PAL[keys.filter(x=>!["ai","combined","blend","reference"].includes(x)).indexOf(k)%PAL.length];
+const o=level=="st"&&DOC.obs&&DOC.obs.series&&DOC.obs.series[variable]?DOC.obs:null;
+const times=[...new Set([...(o&&OBS?o.times:[]),...DOC.times])].sort(),idx=new Map(times.map((t,i)=>[t,i]));
+const arr=(ts,a)=>{const r=new Array(times.length).fill(null);ts.forEach((t,i)=>{r[idx.get(t)]=a[i]});return r};
+const data=keys.filter(k=>shown.has(k)).map(k=>[k,arr(DOC.times,ser[k])]);const ob=o&&OBS?arr(o.times,o.series[variable]):null;
+const all=[...data.flatMap(d=>d[1]),...(ob||[])].filter(v=>v!=null);
+let h="";const unit=IDX.variables[variable]||"";
+if(!all.length){$("sChart").innerHTML='<text x="20" y="40" fill="var(--mut)">Pro tuto veličinu nejsou zobrazené řady (zapni některou níže).</text>'}
+else{let lo=Math.min(...all),hi=Math.max(...all);if(lo==hi){lo-=1;hi+=1}const pad=(hi-lo)*.06;lo-=pad;hi+=pad;const n=times.length,px=i=>46+i*(700/Math.max(1,n-1)),py=v=>270-(v-lo)/(hi-lo)*245;
+const step=(hi-lo)/5,fmt=v=>Math.abs(step)>=1?Math.round(v):v.toFixed(Math.abs(step)<.1?2:1);
+for(let k=0;k<=5;k++){const v=lo+k*step;h+=`<line x1="46" x2="746" y1="${py(v)}" y2="${py(v)}" stroke="var(--line)"/><text x="40" y="${py(v)+4}" font-size="11" text-anchor="end" fill="var(--mut)">${fmt(v)}</text>`}
+let lastDay="";times.forEach((t,i)=>{if(t.slice(11,13)=="00"||i==0){const d=t.slice(8,10)+"."+t.slice(5,7)+".";if(d!=lastDay){lastDay=d;h+=`<line x1="${px(i)}" x2="${px(i)}" y1="25" y2="272" stroke="var(--line)" stroke-dasharray="2 3"/><text x="${px(i)+2}" y="288" font-size="11" fill="var(--mut)">${d}</text>`}}});
+const st=IDX.snapshot.time.slice(0,16)+"Z",si=times.findIndex(t=>t>=st);if(si>0&&o&&OBS)h+=`<line x1="${px(si)}" x2="${px(si)}" y1="14" y2="272" stroke="#d9480f" stroke-dasharray="4 3"/><text x="${px(si)+3}" y="12" font-size="10" fill="#d9480f">snímek</text>`;
+h+=`<text x="46" y="12" font-size="11" fill="var(--mut)">${esc(unit)}, čas UTC</text>`;
+const line=(a,c,w,dash)=>{let d="",pen=false;a.forEach((v,i)=>{if(v==null){pen=false;return}d+=(pen?"L":"M")+px(i).toFixed(1)+","+py(v).toFixed(1);pen=true});return d?`<path d="${d}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linejoin="round"${dash?' stroke-dasharray="'+dash+'"':""}/>`:""};
+data.forEach(([k,a])=>{if(k!="ai"&&k!="combined"&&k!="blend"&&k!="reference")h+=line(a,col(k),1.3)});data.forEach(([k,a])=>{if(k=="reference")h+=line(a,col(k),1.8,"5 3");if(k=="combined"||k=="blend")h+=line(a,col(k),2);if(k=="ai")h+=line(a,col(k),2.8)});
+if(ob)h+=line(ob,"#000",2.4);
+$("sChart").innerHTML=h;
+$("sChart").onmousemove=ev=>{const r=$("sChart").getBoundingClientRect(),x=(ev.clientX-r.left)/r.width*760,i=Math.max(0,Math.min(n-1,Math.round((x-46)/(700/Math.max(1,n-1)))));
+const vals=data.map(([k,a])=>a[i]!=null?`${nm(k)} ${a[i]}`:null).filter(Boolean);if(ob&&ob[i]!=null)vals.unshift(`naměřeno ${ob[i]}`);$("sTip").textContent=times[i].replace("T"," ")+" UTC: "+(vals.join(" · ")||"–")}}
+$("sLeg").innerHTML=(o?`<label><input type="checkbox" id="sObsOn" ${OBS?"checked":""}><i style="background:#000;height:4px"></i>naměřeno (ČHMÚ)</label>`:"")+keys.map(k=>`<label><input type="checkbox" data-k="${k}" ${shown.has(k)?"checked":""}><i style="background:${col(k)}"></i>${esc(nm(k))}</label>`).join("");
+$("sLeg").querySelectorAll("input[data-k]").forEach(c=>c.onchange=()=>{c.checked?shown.add(c.dataset.k):shown.delete(c.dataset.k);draw()});const oo=$("sObsOn");if(oo)oo.onchange=()=>{OBS=oo.checked;draw()};
+$("sQuick").innerHTML=`<button>Jen MeteoVerdict</button><button>Všechny řady</button><button>Žádné</button>`;const q=$("sQuick").querySelectorAll("button");
+q[0].onclick=()=>{shown=new Set(keys.filter(k=>["ai","combined","blend","reference"].includes(k)));draw()};q[1].onclick=()=>{shown=new Set(keys);draw()};q[2].onclick=()=>{shown=new Set();draw()};
+const meta=level=="st"?`${esc(DOC.name)} · WMO ${DOC.id.split("-").pop()} · ${DOC.elev} m n. m. · okres ${esc(DOC.okres||"")}`:`${esc((OK[DOC.code]||[DOC.code])[0])} (${DOC.code})`;
+$("sInfo").innerHTML=`<b style="color:var(--ink)">${meta}</b> · snímek ${esc(IDX.snapshot.time.slice(0,16).replace("T"," "))} UTC · ${keys.length} řad, ${vars().length} veličin`+(level=="st"?" · vlevo od čárky „snímek“ je naměřeno, vpravo předpověď":"");
+const mm=(a)=>{const v=a.filter(x=>x!=null);return v.length?[Math.min(...v),Math.max(...v),v.reduce((s,x)=>s+x,0)/v.length]:null};
+$("sTable").innerHTML=`<details class="d" open><summary>Řady veličiny „${esc(VL[variable]||variable)}“ (min / průměr / max za celý výhled)</summary><table><thead><tr><th>Řada</th><th>min</th><th>průměr</th><th>max</th><th>hodin</th></tr></thead><tbody>${keys.map(k=>{const m=mm(ser[k]);return `<tr><td><span class="dot" style="background:${col(k)}"></span>${esc(nm(k))}</td>${m?`<td>${m[0].toFixed(1)}</td><td>${m[2].toFixed(1)}</td><td>${m[1].toFixed(1)}</td>`:"<td>–</td><td>–</td><td>–</td>"}<td>${ser[k].filter(x=>x!=null).length}</td></tr>`}).join("")}</tbody></table></details>`;
+parts();obsTable()}
+function ptable(title,rows,cols){if(!rows||!rows.length)return"";return `<details class="d"><summary>${title}</summary><table class="parts"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${cols.map(c=>`<td>${r[c]==null?"–":esc(r[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></details>`}
+function parts(){let h="";if(level=="ok"){const p=DOC.parts||{};h+=ptable("Srážky po částech dne (MeteoVerdict)",p.rain,["day","part","rain_probability","p1","heavy_rain_probability","precipitation"]);h+=ptable("Oblačnost, slunce a nárazy po částech dne (MeteoVerdict)",p.sky,["day","part","cloud","sunshine","gust"])}
+else{const mp=(DOC.parts||[]).filter(r=>["ai","blend"].includes(r.model)||true);h+=ptable("Části dne všech řad (součty a průměry z hodinových hodnot, pražský čas)",mp,Object.keys(mp[0]||{}));h+=ptable("Části dne MeteoVerdict AI (vlastní model částí dne)",DOC.ai_parts,["day","part","cloud","sunshine","gust"])}
+$("sParts").innerHTML=h}
+function obsTable(){if(level!="st"||!DOC.obs||!DOC.obs.last){$("sObs").innerHTML="";return}$("sObs").innerHTML=ptable("Naposledy naměřeno na stanici (všechny prvky ČHMÚ, surové hodnoty, kód kvality)",DOC.obs.last,["step","element","time","value","quality"])}
+function prov(){const s=IDX.snapshot,a=s.asset;$("sProv").innerHTML=`<span class="pill">snímek</span><span class="sub">Původ dat této záložky:</span><div class="hash">Snímek <b>${esc(s.time.slice(0,16).replace("T"," "))} UTC</b> (vydání ${esc((s.issue_time||"").slice(0,16).replace("T"," "))} UTC, ${esc(s.model_version||"")}, politika ${esc(IDX.policy||"")})<br>Asset <b>${esc(a.name||"")}</b> · sha256 <b>${esc((a.sha256||"").slice(0,12))}…${esc((a.sha256||"").slice(-8))}</b> · chain hash <b>${esc((s.chain_hash||"").slice(0,12))}…</b><br>Soubory ve snímku: ${(IDX.files||[]).map(esc).join(", ")}<br>Váhy blendu jsou soukromé (v logu je jen jejich hash). Přepočet: <b>python3 scripts/build_explorer.py</b> · <a href="https://github.com/JerryWoof/MeteoVerdict-Verify">MeteoVerdict-Verify</a></div>`}
+document.querySelectorAll("#modes .tab").forEach(t=>t.onclick=()=>{document.querySelectorAll("#modes .tab").forEach(x=>x.classList.toggle("on",x==t));const snap=t.dataset.m=="snap";$("snapView").hidden=!snap;$("scoreView").hidden=snap;if(snap)load()});
+})();
 </script></body></html>
