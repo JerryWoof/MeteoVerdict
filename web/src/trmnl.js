@@ -38,7 +38,6 @@ export function setUpBuilder(okresSelect, t, baseUrl = "") {
   const obecField = document.getElementById("trmnl-obec-field");
   const obecNote = document.getElementById("trmnl-obec-note");
   const output = document.getElementById("trmnl-lines");
-  const test = document.getElementById("trmnl-test");
   forecast.replaceChildren(
     ...[["ai/okresy", "api.modelAi"], ["okresy", "api.modelBlend"]].map(([value, key]) =>
       Object.assign(document.createElement("option"), { value, textContent: t(key) })),
@@ -50,9 +49,6 @@ export function setUpBuilder(okresSelect, t, baseUrl = "") {
 
   function render() {
     output.textContent = pollingLines(okres(), chosen(), forecast.value).join("\n");
-    const url = forecastUrl(forecast.value, okres());
-    test.href = url;
-    test.textContent = url;
   }
   function fillObce() {
     obce = obceOf(index, okres());

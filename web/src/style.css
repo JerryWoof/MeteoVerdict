@@ -1681,8 +1681,7 @@ pre.code {
   vertical-align: top;
 }
 /* long addresses in text (data.html) wrap instead of widening the page */
-.content p code,
-#trmnl-test {
+.content p code {
   overflow-wrap: anywhere;
 }
 #links {
