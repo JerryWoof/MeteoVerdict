@@ -94,8 +94,8 @@ async function main() {
       ? `api/v1/${ai ? "ai/obce" : "obce"}/${okresCode}/${obec}.json`
       : `api/v1/${ai ? "ai/okresy" : "okresy"}/${okresCode}.json`;
     file = href;
-    links.replaceChildren(linkItem("JSON", href),
-      ...(obec ? [Object.assign(document.createElement("li"), { textContent: t("api.obecNote") })] : []));
+    const note = (key) => Object.assign(document.createElement("li"), { textContent: t(key) });
+    links.replaceChildren(linkItem("JSON", href), note(obec ? "api.obecNote" : "api.okresNote"), note(ai ? "api.modelNoteAi" : "api.modelNoteBlend"));
     preview.dataset.doc = docPreview(await get(href));
     showTab();
     if (remember) window.history.replaceState(null, "", `#${okresCode}${obec ? `/${obec}` : ""}`);
