@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { FLAGS, HOURLY, NOTICE, SITE, aiOkresDoc, docPreview, hourlyPreview, indexDoc, obceDocs, obceIndexDoc, obecIds, okresDoc, slug } from "./api.js";
+import { FLAGS, HOURLY, NOTICE, SITE, aiOkresDoc, docPreview, hourlyPreview, indexDoc, obceDocs, obceIndexDoc, obecIds, okresDoc, slug, snippet } from "./api.js";
 import { records } from "./data.js";
 
 const load = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
@@ -402,4 +402,11 @@ test("the combined okres file and the AI okres file have the same layout", () =>
   // the origin of every hourly series and part field is named
   for (const k of Object.keys(DOC.forecast.hourly).filter((k) => k !== "time")) assert.ok(k in DOC.forecast.sources, k);
   for (const k of Object.keys(DOC.forecast.parts[0]).filter((k) => !["day", "part"].includes(k))) assert.ok(k in DOC.forecast.sources, k);
+});
+
+test("the code tabs of the Data page name the file's address", () => {
+  const url = "https://meteoverdict.cz/api/v1/okresy/CZ0100.json";
+  assert.equal(snippet("curl", url), `curl -s ${url}`);
+  assert.ok(snippet("python", url).includes(`url = "${url}"`));
+  assert.ok(snippet("js", url).includes(`const url = "${url}";`));
 });

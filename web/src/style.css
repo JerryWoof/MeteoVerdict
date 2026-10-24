@@ -1688,6 +1688,14 @@ pre.code {
   font-size: 0.85rem;
   word-break: break-all;
 }
+/* the Files and fields and Downloads folds of data.html */
+main details {
+  margin: 0.75rem 0;
+}
+main details > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
 
 /* score map (index.html): legend, hover, okres panel */
 #legend .legend-title {
