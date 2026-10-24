@@ -1,6 +1,6 @@
 import "./style.css";
 
-import { dataBlocks, exampleBlocks, legalBlocks } from "./data-text.js";
+import { dataBlocks, fieldBlocks, legalBlocks } from "./data-text.js";
 import { setUpLanguage } from "./i18n.js";
 import { renderBlocks } from "./info-page.js";
 import { displayName } from "./tv.js";
@@ -22,10 +22,8 @@ async function get(path, as = "json") {
 /** The text below the picker, and a link to a section (#releases) opens its fold. */
 function showText() {
   const language = document.documentElement.lang;
-  const blocks = dataBlocks(language);
-  renderBlocks(document.getElementById("doc-example"), exampleBlocks(language));
-  renderBlocks(document.getElementById("doc-api"), blocks.api);
-  renderBlocks(document.getElementById("doc-more"), blocks.more);
+  renderBlocks(document.getElementById("doc-fields"), fieldBlocks(language));
+  renderBlocks(document.getElementById("doc-more"), dataBlocks(language));
   renderBlocks(document.getElementById("doc-legal"), legalBlocks(language));
   const id = decodeURIComponent(window.location.hash.slice(1));
   const target = id && !/^CZ/.test(id) ? document.getElementById(id) : null;
