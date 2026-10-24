@@ -14,15 +14,11 @@ const releases = (label, query) => `[${label}](${REPO}/releases?q=${query})`;
 export function dataBlocks(language) {
   const L = (cs, en) => (language === "cs" ? cs : en);
   return [
-    ["p", L(
-      `Velké soubory jsou v [releasech repozitáře](${REPO}/releases) (Parquet, JSON, ZIP, TAR), každý do 2 GiB. Formát je popsán v [dokumentaci](${REPO}/blob/main/docs/data-sources.md).`,
-      `Large files are in the [releases of the repository](${REPO}/releases) (Parquet, JSON, ZIP, TAR), each up to 2 GiB. The formats are described in the [documentation](${REPO}/blob/main/docs/data-sources.md).`), "releases"],
     ["table", {
       head: [L("Release", "Release"), L("Obsah", "Contains"), L("Licence", "Licence")],
       rows: [
         [release("data-latest"), L("Měřené hodnoty, archivované předpovědi na stanicích a denní skóre (`obs-`, `fc-`, `scores-YYYY-MM.parquet`, `aggregates.parquet`), `compare.zip`, `outlook*.zip`, `site-data.zip`. Starší měsíce: " + releases("data-YYYY-MM", "data-20") + ".", "Observed values, archived forecasts at the stations and daily scores (`obs-`, `fc-`, `scores-YYYY-MM.parquet`, `aggregates.parquet`), `compare.zip`, `outlook*.zip`, `site-data.zip`. Older months: " + releases("data-YYYY-MM", "data-20") + "."), "CC BY-SA 4.0"],
         [release("ai-latest"), L("`ai.zip`: výstupy MeteoVerdict AI, denně nové.", "`ai.zip`: the MeteoVerdict AI outputs, new every day."), "CC BY-SA 4.0"],
-        [L("ostatní", "others"), L("Archivy ČHMÚ (`chmi-*`, `aladin-*`), radar a družice, samostatné běhy modelů: [všechny releasy](" + REPO + "/releases).", "ČHMÚ archives (`chmi-*`, `aladin-*`), radar and satellite, single model runs: [all releases](" + REPO + "/releases)."), L("podle zdroje", "by source")],
       ],
     }],
   ];
