@@ -102,8 +102,7 @@ async function main() {
       preview.textContent = docPreview(await get(href));
     } else {
       const base = `api/v1/${ai ? "ai/okresy" : "okresy"}/${code}`;
-      links.replaceChildren(linkItem("JSON", `${base}.json`),
-        ...(ai ? [Object.assign(document.createElement("li"), { textContent: t("api.aiNote") })] : []));
+      links.replaceChildren(linkItem("JSON", `${base}.json`));
       preview.textContent = docPreview(await get(`${base}.json`));
     }
     if (remember) window.history.replaceState(null, "", `#${code}${obec ? `/${obec}` : ""}`);
