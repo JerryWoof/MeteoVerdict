@@ -539,3 +539,21 @@ export function obceIndexDoc(rows, generated) {
     obce: rows,
   };
 }
+
+/** The code of the Data page's curl, Python and JavaScript tabs for one file's address. */
+export function snippet(kind, url) {
+  if (kind === "curl") return `curl -s ${url}`;
+  if (kind === "python") {
+    return `import json, urllib.request
+
+url = "${url}"
+okres = json.load(urllib.request.urlopen(url))
+hourly = okres["forecast"]["hourly"]
+for time, temp in zip(hourly["time"][:6], hourly["temperature_2m"][:6]):
+    print(time, temp, "°C")`;
+  }
+  return `const url = "${url}";
+const okres = await (await fetch(url)).json();
+const day = okres.forecast.parts.find((p) => p.part === "day");
+console.log(\`\${day.day}: \${day.tmin} to \${day.tmax} °C\`);`;
+}

@@ -30,9 +30,7 @@
         <h2 class="page-title" data-i18n="api.title">Open data</h2>
       </div>
       <p data-i18n="api.intro"></p>
-      <p id="updates"></p>
 
-      <h2 data-i18n="api.try">Your okres</h2>
       <div class="strip standalone">
         <div class="strip-row">
           <label class="field"><span data-i18n="control.okres">Okres</span> <select id="okres"></select></label>
@@ -40,33 +38,30 @@
           <label class="field"><span data-i18n="api.model">Model</span> <select id="model"></select></label>
         </div>
       </div>
+      <div class="strip standalone">
+        <div class="segmented" id="tabs" role="group" aria-label="Formát / Format">
+          <button type="button" data-tab="url" aria-pressed="true">URL</button>
+          <button type="button" data-tab="preview" aria-pressed="false" data-i18n="api.tabPreview">Preview</button>
+          <button type="button" data-tab="curl" aria-pressed="false">curl</button>
+          <button type="button" data-tab="python" aria-pressed="false">Python</button>
+          <button type="button" data-tab="js" aria-pressed="false">JavaScript</button>
+        </div>
+      </div>
       <ul id="links"></ul>
-      <pre id="preview" class="code"></pre>
-      <div id="doc-example"></div>
+      <pre id="preview" class="code" hidden></pre>
 
-      <div id="doc-api"></div>
-
-      <h2 data-i18n="api.examples">Examples</h2>
-      <pre class="code">curl -s https://meteoverdict.cz/api/v1/okresy/CZ0201.json</pre>
-      <pre class="code">import json, urllib.request
-
-url = "https://meteoverdict.cz/api/v1/okresy/CZ0201.json"
-okres = json.load(urllib.request.urlopen(url))
-hourly = okres["forecast"]["hourly"]
-for time, temp in zip(hourly["time"][:6], hourly["temperature_2m"][:6]):
-    print(time, temp, "°C")</pre>
-      <pre class="code">const url = "https://meteoverdict.cz/api/v1/okresy/CZ0201.json";
-const okres = await (await fetch(url)).json();
-const day = okres.forecast.parts.find((p) => p.part === "day");
-console.log(`${day.day}: ${day.tmin} to ${day.tmax} °C`);</pre>
+      <details id="api">
+        <summary data-i18n="api.docs">Files and fields</summary>
+        <div id="doc-api"></div>
+        <div id="doc-example"></div>
+      </details>
+      <details id="releases">
+        <summary data-i18n="api.downloads">Downloads</summary>
+        <div id="doc-more"></div>
+      </details>
 
       <h2 id="trmnl" data-i18n="api.eink">On an e-ink display</h2>
       <p data-i18n="api.einkText"></p>
-      <ul>
-        <li data-i18n="api.einkForecast"></li>
-        <li data-i18n="api.einkObec"></li>
-        <li data-i18n="api.einkBadges"></li>
-      </ul>
       <div class="eink-grid">
         <a href="https://github.com/JerryWoof/MeteoVerdict-TRMNL"><img class="eink" src="https://raw.githubusercontent.com/JerryWoof/MeteoVerdict-TRMNL/main/screenshots/next-24-hours.png" width="800" height="480" alt="MeteoVerdict on a TRMNL e-ink display: the next 48 hours in Prague" data-i18n-alt="api.eink24" loading="lazy" /></a>
         <a href="https://github.com/JerryWoof/MeteoVerdict-TRMNL"><img class="eink" src="https://raw.githubusercontent.com/JerryWoof/MeteoVerdict-TRMNL/main/screenshots/today-tomorrow.png" width="800" height="480" alt="MeteoVerdict on a TRMNL e-ink display: today and tomorrow in Prague" data-i18n-alt="api.einkToday" loading="lazy" /></a>
@@ -74,21 +69,7 @@ console.log(`${day.day}: ${day.tmin} to ${day.tmax} °C`);</pre>
       </div>
       <p><a href="https://github.com/JerryWoof/MeteoVerdict-TRMNL" data-i18n="api.einkLink">MeteoVerdict for TRMNL</a></p>
 
-      <h3 data-i18n="api.einkUrl">Polling URL</h3>
-      <div id="trmnl-builder">
-        <div class="strip standalone">
-          <div class="strip-row">
-            <label class="field"><span data-i18n="api.einkForecastLabel">Forecast</span> <select id="trmnl-forecast"></select></label>
-            <label class="field" id="trmnl-obec-field"><span data-i18n="api.einkObecLabel">Obec (optional)</span> <input id="trmnl-obec" type="text" list="trmnl-obce" autocomplete="off" /></label>
-            <datalist id="trmnl-obce"></datalist>
-          </div>
-        </div>
-        <p id="trmnl-obec-note" data-i18n="api.einkObecNone" hidden></p>
-        <p data-i18n="api.einkPaste"></p>
-        <pre id="trmnl-lines" class="code"></pre>
-      </div>
-
-      <div id="doc-more"></div>
+      <p class="legal"><a href="zdroje.html" data-i18n="api.licenceLink">Licences and sources</a> · <a href="zdroje.html#cite" data-i18n="api.citeLink">How to cite</a> · <a href="zdroje.html#terms" data-i18n="api.termsLink">Terms</a></p>
     </main>
     <footer data-footer>
       <nav class="site-links" aria-label="O projektu"><a href="about.html">O projektu</a> · <a href="methodology.html">Metodika</a> · <a href="report.html">Report</a> · <a href="collaboration.html">Spolupráce</a> · <a href="mailto:info@meteoverdict.cz">Kontakt</a> · <a href="soukromi.html">Soukromí</a> · <a href="zdroje.html">Zdroje a licence</a> · <a href="https://pudomer.cz/">Půdoměr</a></nav> · © MeteoVerdict, data <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>
