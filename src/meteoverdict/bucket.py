@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import math
 import re
+import threading
 import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -378,28 +379,65 @@ class Bucket:
         self.client, self.base, self.tries, self.sleep = client, base.rstrip("/"), tries, sleep
         self._sizes: dict[str, int] = {}
         self.requests = 0
+        # what the run cost (``summary``): retries after a dropped connection, 429/5xx answer or
+        # a 403/404 miss, bytes received, seconds spent in requests and asleep between retries
+        self.retries = self.throttled = self.missing = self.bytes = 0
+        self.request_s = self.sleep_s = 0.0
+        self._stats_lock = threading.Lock()
+
+    def summary(self) -> str:
+        """One line: requests, retries, throttled answers, misses, MB, and the seconds all
+        threads together spent waiting for answers and sleeping before retries."""
+        return (
+            f"bucket: {self.requests} requests, {self.retries} retries, {self.throttled} "
+            f"throttled (429/5xx), {self.missing} missing, {self.bytes / 1e6:.1f} MB, "
+            f"{self.request_s:.0f} s in requests (all threads), {self.sleep_s:.0f} s asleep"
+        )
 
     def url(self, path: str) -> str:
         return f"{self.base}/{path}"
 
     def _request(self, method: str, url: str, headers: dict | None = None) -> httpx.Response:
         for attempt in range(self.tries):
+            started = time.monotonic()
             try:
-                self.requests += 1
                 response = self.client.request(method, url, headers=headers)
             except httpx.TransportError:  # dropped connections, timeouts
+                self._count(time.monotonic() - started, retry=attempt < self.tries - 1)
                 if attempt == self.tries - 1:
                     raise
             else:
-                if response.status_code in (403, 404):
+                body = len(response.content) if response.status_code < 400 else 0
+                miss = response.status_code in (403, 404)
+                bad = response.status_code >= 500 or response.status_code == 429
+                self._count(
+                    time.monotonic() - started,
+                    nbytes=body,
+                    miss=miss,
+                    throttled=bad,
+                    retry=bad and attempt < self.tries - 1,
+                )
+                if miss:
                     raise FileNotFoundError(url)
                 if response.status_code < 500 and response.status_code != 429:
                     response.raise_for_status()
                     return response
                 if attempt == self.tries - 1:
                     response.raise_for_status()
-            self.sleep(min(30.0, 0.5 * 2**attempt))
+            wait = min(30.0, 0.5 * 2**attempt)
+            with self._stats_lock:
+                self.sleep_s += wait
+            self.sleep(wait)
         raise RuntimeError("unreachable")
+
+    def _count(self, seconds: float, nbytes: int = 0, miss=False, throttled=False, retry=False) -> None:
+        with self._stats_lock:
+            self.requests += 1
+            self.request_s += seconds
+            self.bytes += nbytes
+            self.missing += miss
+            self.throttled += throttled
+            self.retries += retry
 
     def meta(self, bucket_model: str, run: datetime) -> dict | None:
         """The run's ``meta.json``, or None when it is not there."""
