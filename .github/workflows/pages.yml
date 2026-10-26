@@ -109,6 +109,17 @@ jobs:
           else
             echo "no ai.zip yet; the AI forecast tab says so"
           fi
+          # the heatmap's hourly 100 m maps (fc/heat/: index.json and a few PNGs) have their
+          # own rolling release heat-web (heat.zip, files relative to fc/heat/); it wins over
+          # a heat/ folder that an older ai.zip may still carry
+          if gh release download heat-web --pattern heat.zip --dir /tmp 2>/dev/null; then
+            rm -rf site/data/ai/fc/heat
+            mkdir -p site/data/ai/fc/heat
+            unzip -o -q /tmp/heat.zip -d site/data/ai/fc/heat
+            echo "heatmap from heat-web ($(ls site/data/ai/fc/heat | wc -l) files)"
+          else
+            echo "no heat.zip yet; the heatmap comes from ai.zip when it has heat/"
+          fi
           # the Compare page's same-sample ranking without the AI (compare.zip; the AI's own
           # run publishes the one with MeteoVerdict AI)
           if gh release download data-latest --pattern compare.zip --dir /tmp --clobber 2>/dev/null; then
@@ -237,7 +248,7 @@ jobs:
           meta["aliases"] = aliases
           meta_path.write_text(json.dumps(meta, ensure_ascii=False, separators=(",", ":")))
           PY
-      - name: Radar days (web-YYYYMMDD.tar of the last 7 days from the releases radar-YYYY-MM)
+      - name: Radar days (web-YYYYMMDD.tar of the last 7 days from the release radar-web)
         # Satellite images only for the last 7 days and echo tops for the last 14 (size);
         # if the site would still pass PAGES_BUDGET_MB, the oldest days go first.
         env:
@@ -245,8 +256,11 @@ jobs:
           PAGES_BUDGET_MB: 900
         run: |
           mkdir -p /tmp/radar web/dist/radar/days
-          for back in 0 1 2; do
-            tag="radar-$(date -u -d "$(date -u +%Y-%m-01) -${back} month" +%Y-%m)"
+          # the rolling release radar-web holds only the last days; the monthly releases
+          # radar-YYYY-MM are the fallback until the archive job there is switched off
+          for tag in radar-web \
+              "radar-$(date -u +%Y-%m)" \
+              "radar-$(date -u -d "$(date -u +%Y-%m-01) -1 day" +%Y-%m)"; do
             gh release download "$tag" --pattern 'web-*.tar' --dir /tmp/radar --skip-existing 2>/dev/null \
               || echo "no $tag yet"
           done
