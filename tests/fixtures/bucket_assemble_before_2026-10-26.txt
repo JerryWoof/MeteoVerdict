@@ -1,0 +1,120 @@
+# _on_times, _extras and _assemble of meteoverdict.bucket before the per-run position cache and the single
+# frame (2026-10-26), kept as the reference the new ones are tested against (tests/test_bucket.py)
+
+def _on_times(axis: list[datetime], value: np.ndarray, times: list[datetime]) -> np.ndarray:
+    """``value`` (on ``axis``) at ``times``, NaN where the file has none."""
+    lookup = dict(zip(axis, value[: len(axis)].tolist(), strict=True))
+    return np.array([lookup.get(t, np.nan) for t in times], dtype=np.float32)
+
+
+
+def _extras(chosen, sid, axes, values, main, shift: float) -> dict[str, np.ndarray]:
+    """The further variables of one station on the run's times ``main``; ``shift``: the
+    elevation correction (K) of ``LAPSE_FILES``."""
+    found = {}
+    for variable, (bucket_model, derived) in chosen.items():
+        keys = [(bucket_model, name) for name in derived.files]
+        arrays = [values.get((key, sid)) for key in keys]
+        if any(a is None for a in arrays):
+            continue
+        arrays = [
+            _on_times(axes[k], a, main) + np.float32(shift if k[1] in LAPSE_FILES else 0)
+            for k, a in zip(keys, arrays, strict=True)
+        ]
+        with np.errstate(invalid="ignore", over="ignore"):
+            value = derived.combine(*arrays) if derived.combine else arrays[0]
+        if variable in RADIATION:
+            value = value * np.float32(RADIATION_SCALE.get(bucket_model, 1.0))
+        found[variable] = np.asarray(value, dtype=np.float32)
+    return found
+
+
+def _assemble(
+    model,
+    source,
+    run,
+    stations,
+    cells,
+    times,
+    axes,
+    values,
+    need,
+    chosen=None,
+    max_lead_h=runs.MAX_LEAD_H,
+):
+    """Rows from the point values; ``(rows, "")`` or ``(None, reason)``. ``chosen``: the
+    further variables read (``Source.extra_files``); the others are null; the
+    ``AUXILIARY`` ones read become columns after ``runs.SCHEMA``'s."""
+    auxiliary = [v for v in AUXILIARY if v in (chosen or {})]
+    main = times[source.bucket]
+    elevation = dict(
+        cells.filter(pl.col("bucket_model") == source.bucket)
+        .select("station_id", "grid_elevation")
+        .rows()
+    )
+    nan = np.full(len(main), np.nan, dtype=np.float32)
+    frames = []
+    for sid, height in stations.select("id", "elevation").rows():
+        series = {}
+        for variable, parts in source.files().items():
+            arrays = [values.get((key, sid)) for key in parts]
+            if any(a is None for a in arrays):
+                series[variable] = nan
+                continue
+            axis = axes[parts[0]]  # u and v share their axis
+            arrays = [a[: len(axis)] for a in arrays]
+            value = np.hypot(*arrays) if len(arrays) == 2 else arrays[0]
+            lookup = dict(zip(axis, value.tolist(), strict=True))
+            series[variable] = np.array([lookup.get(t, np.nan) for t in main], dtype=np.float32)
+        grid_height = elevation.get(sid)
+        temperature = series["temperature_2m"]
+        shift = 0.0
+        if grid_height is not None and height is not None and not math.isnan(height):
+            shift = (grid_height - height) * LAPSE_RATE
+            temperature = temperature + np.float32(shift)
+        extras = _extras(chosen or {}, sid, axes, values, main, shift)
+        frames.append(
+            pl.DataFrame(
+                {
+                    "run": [run] * len(main),
+                    "model": model.id,
+                    "station_id": sid,
+                    "lead_h": [int((t - run).total_seconds() // 3600) for t in main],
+                    "valid_time": main,
+                    "temperature_2m": temperature,
+                    "precipitation": series["precipitation"],
+                    "wind_speed_10m": series["wind_speed_10m"],
+                    "wind_gusts_10m": series.get("wind_gusts_10m", nan),
+                    **{v: extras.get(v, nan) for v in runs.EXTRA_VARIABLES},
+                    **{v: extras.get(v, nan) for v in auxiliary},
+                },
+                schema={
+                    **runs.HOURLY_SCHEMA,
+                    **{v: pl.Float32 for v in (*runs.EXTRA_VARIABLES, *auxiliary)},
+                },
+            )
+        )
+    table = (
+        pl.concat(frames)
+        .filter(pl.col("lead_h").is_between(1, max_lead_h))
+        .with_columns(pl.col(v).fill_nan(None) for v in runs.VARIABLES)
+        # a station outside the model's domain (ICON-D2 in the far east): no rows, as
+        # in the API's answers
+        .filter(~pl.all_horizontal(pl.col(v).is_null() for v in runs.VARIABLES))
+    )
+    for variable, (low, high) in PLAUSIBLE.items():
+        bad = table.filter(~pl.col(variable).is_between(low, high)).height
+        if bad:
+            return None, f"{bad} implausible {variable} values"
+    reason = _coverage_gap(table, source, need, stations.height)
+    if reason:
+        return None, reason
+    table = table.with_columns(
+        pl.col("precipitation").clip(lower_bound=0.0), pl.lit("bucket").alias("source")
+    ).with_columns(pl.col(v).round(DECIMALS) for v in runs.VARIABLES)
+    tidy = tidy_extras(table).with_columns(
+        pl.col(v).fill_nan(None).round(DECIMALS) for v in auxiliary
+    )
+    return tidy.select(*runs.SCHEMA, *auxiliary), ""
+
+
