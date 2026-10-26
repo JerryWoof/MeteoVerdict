@@ -811,7 +811,7 @@ def _read_run(bucket, model, run, stations, cells, pool, readers, extra, max_lea
 
 
 def _positions(axis: list[datetime], times: list[datetime]) -> np.ndarray:
-    """Where each of ``times`` sits on ``axis`` (the last one if a time repeats), -1 if it does not."""
+    """Where each of ``times`` sits on ``axis`` (last one if a time repeats), -1 if absent."""
     index = {t: i for i, t in enumerate(axis)}
     return np.array([index.get(t, -1) for t in times], dtype=np.int64)
 
@@ -935,7 +935,9 @@ def _assemble(
         {
             "run": tiled["run"],
             "model": pl.Series("model", [model.id] * (len(ids) * n_times), dtype=pl.String),
-            "station_id": pl.Series("station_id", ids, dtype=pl.String).repeat_by(n_times).explode(),
+            "station_id": (
+                pl.Series("station_id", ids, dtype=pl.String).repeat_by(n_times).explode()
+            ),
             "lead_h": tiled["lead_h"],
             "valid_time": tiled["valid_time"],
             **{name: np.concatenate(parts) for name, parts in columns.items()},

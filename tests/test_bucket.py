@@ -2,9 +2,9 @@
 an httpx mock with range requests (no network)."""
 
 import math
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import httpx
 import numpy as np
@@ -751,7 +751,7 @@ REFERENCE = Path(__file__).parent / "fixtures" / "bucket_assemble_before_2026-10
 
 def _reference_assemble():
     namespace = dict(vars(bucket))
-    exec(REFERENCE.read_text(), namespace)  # noqa: S102 - the old source, kept in tests/fixtures
+    exec(REFERENCE.read_text(), namespace)
     return namespace["_assemble"]
 
 
