@@ -341,6 +341,25 @@ def test_dropped_connections_are_retried(tmp_path):
     assert [r for r in fake.requests if r[1] == path].__len__() == 3
 
 
+def test_the_request_counters_tell_retries_throttling_and_misses():
+    answers = iter([503, 429, 200, 404])
+
+    def server(request):
+        status = next(answers)
+        return httpx.Response(status, content=b"{}" if status == 200 else b"")
+
+    source = bucket.Bucket(
+        httpx.Client(transport=httpx.MockTransport(server)), tries=4, sleep=lambda _: None
+    )
+    assert source.meta("dwd_icon_eu", RUN) == {}  # 503, 429, then 200: two retries
+    assert source.meta("dwd_icon_eu", RUN) is None  # 404: a miss, no retry
+    assert (source.requests, source.retries, source.throttled, source.missing) == (4, 2, 2, 1)
+    assert source.bytes == 2 and source.sleep_s == 1.5  # 0.5 s + 1 s asleep
+    assert source.summary().startswith(
+        "bucket: 4 requests, 2 retries, 2 throttled (429/5xx), 1 missing"
+    )
+
+
 def test_errors_that_persist_propagate_and_missing_keys_are_none():
     def down(request):
         return httpx.Response(503)
