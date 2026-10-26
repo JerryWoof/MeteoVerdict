@@ -355,7 +355,9 @@ def test_the_request_counters_tell_retries_throttling_and_misses():
     assert source.meta("dwd_icon_eu", RUN) is None  # 404: a miss, no retry
     assert (source.requests, source.retries, source.throttled, source.missing) == (4, 2, 2, 1)
     assert source.bytes == 2 and source.sleep_s == 1.5  # 0.5 s + 1 s asleep
-    assert source.summary().startswith("bucket: 4 requests, 2 retries, 2 throttled (429/5xx), 1 missing")
+    assert source.summary().startswith(
+        "bucket: 4 requests, 2 retries, 2 throttled (429/5xx), 1 missing"
+    )
 
 
 def test_errors_that_persist_propagate_and_missing_keys_are_none():

@@ -430,7 +430,9 @@ class Bucket:
             self.sleep(wait)
         raise RuntimeError("unreachable")
 
-    def _count(self, seconds: float, nbytes: int = 0, miss=False, throttled=False, retry=False) -> None:
+    def _count(
+        self, seconds: float, nbytes: int = 0, miss=False, throttled=False, retry=False
+    ) -> None:
         with self._stats_lock:
             self.requests += 1
             self.request_s += seconds
