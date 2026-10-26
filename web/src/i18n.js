@@ -213,7 +213,7 @@ export const STRINGS = {
     "ai.titleFor": "Předpověď MeteoVerdict AI – {town}",
     "api.title": "Otevřená data",
     "api.intro":
-      "Naši kombinovanou předpověď si můžete stáhnout pro každý okres jako JSON, zdarma, bez registrace a bez klíče; velké archivy jsou v releasech na GitHubu. Soubory jsou statické a dají se načíst i přímo z prohlížeče na jiném webu (CORS povolený). Pod výběrem je popis souborů a polí, archivy ke stažení a odkazy na licence.",
+      "Naši kombinovanou předpověď si můžete stáhnout pro každý okres jako JSON, zdarma, bez registrace a bez klíče; aktuální data jsou v releasech na GitHubu. Soubory jsou statické a dají se načíst i přímo z prohlížeče na jiném webu (CORS povolený). Pod výběrem je popis souborů a polí, archivy ke stažení a odkazy na licence.",
     "api.none": "Otevřená data zatím nejsou k dispozici.",
     "api.tabPreview": "Náhled",
     "api.docs": "Pole souboru",
@@ -1246,7 +1246,7 @@ export const STRINGS = {
     "ai.titleFor": "MeteoVerdict AI forecast – {town}",
     "api.title": "Open data",
     "api.intro":
-      "Our combined forecast can be downloaded for every okres as JSON, free, without registration or a key; the large archives are in the releases on GitHub. The files are static and can be fetched straight from a browser on another site (CORS allowed). Below the picker are the description of the files and fields, the archives to download and the links to the licences.",
+      "Our combined forecast can be downloaded for every okres as JSON, free, without registration or a key; the current data are in the releases on GitHub. The files are static and can be fetched straight from a browser on another site (CORS allowed). Below the picker are the description of the files and fields, the archives to download and the links to the licences.",
     "api.none": "The open data files are not available yet.",
     "api.tabPreview": "Preview",
     "api.docs": "File fields",
