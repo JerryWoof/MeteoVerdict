@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-26T05:57:42+00:00",
+ "generated": "2026-10-26T11:43:24+00:00",
  "as_of": "2026-10-25",
  "windows": {
   "90d": {
@@ -91,7 +91,7 @@
  "short_record": {
   "all": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.784,
+    "coverage": 0.762,
     "days": 80,
     "variables": [
      "wind_speed_10m",
@@ -99,7 +99,7 @@
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.784,
+    "coverage": 0.762,
     "days": 80,
     "variables": [
      "wind_speed_10m",
@@ -108,70 +108,8 @@
    }
   },
   "jja": {
-   "cma_grapes_global": {
-    "coverage": 0.766,
-    "days": 36,
-    "variables": [
-     "precipitation_daily",
-     "temperature_2m",
-     "temperature_2m_00utc",
-     "temperature_2m_06utc",
-     "temperature_2m_12utc",
-     "temperature_2m_18utc",
-     "temperature_2m_hourly",
-     "wind_speed_10m",
-     "wind_speed_10m_hourly"
-    ]
-   },
-   "dwd_icon": {
-    "coverage": 0.766,
-    "days": 36,
-    "variables": [
-     "precipitation_daily",
-     "temperature_2m",
-     "temperature_2m_00utc",
-     "temperature_2m_06utc",
-     "temperature_2m_12utc",
-     "temperature_2m_18utc",
-     "temperature_2m_hourly",
-     "temperature_max",
-     "wind_speed_10m",
-     "wind_speed_10m_hourly"
-    ]
-   },
-   "gem_global": {
-    "coverage": 0.766,
-    "days": 36,
-    "variables": [
-     "precipitation_daily",
-     "temperature_2m",
-     "temperature_2m_00utc",
-     "temperature_2m_06utc",
-     "temperature_2m_12utc",
-     "temperature_2m_18utc",
-     "temperature_2m_hourly",
-     "temperature_max",
-     "wind_speed_10m",
-     "wind_speed_10m_hourly"
-    ]
-   },
-   "jma_gsm": {
-    "coverage": 0.766,
-    "days": 36,
-    "variables": [
-     "precipitation_daily",
-     "temperature_2m",
-     "temperature_2m_00utc",
-     "temperature_2m_06utc",
-     "temperature_2m_12utc",
-     "temperature_2m_18utc",
-     "temperature_2m_hourly",
-     "wind_speed_10m",
-     "wind_speed_10m_hourly"
-    ]
-   },
    "meteofrance_arpege_europe": {
-    "coverage": 0.532,
+    "coverage": 0.5,
     "days": 25,
     "variables": [
      "wind_speed_10m",
@@ -179,24 +117,9 @@
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.532,
+    "coverage": 0.5,
     "days": 25,
     "variables": [
-     "wind_speed_10m",
-     "wind_speed_10m_hourly"
-    ]
-   },
-   "ncep_aigfs025": {
-    "coverage": 0.766,
-    "days": 36,
-    "variables": [
-     "precipitation_daily",
-     "temperature_2m",
-     "temperature_2m_00utc",
-     "temperature_2m_06utc",
-     "temperature_2m_12utc",
-     "temperature_2m_18utc",
-     "temperature_2m_hourly",
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
