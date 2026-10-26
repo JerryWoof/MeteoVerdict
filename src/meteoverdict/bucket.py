@@ -810,10 +810,32 @@ def _read_run(bucket, model, run, stations, cells, pool, readers, extra, max_lea
     return Fetched(rows, reason, extra_complete)
 
 
-def _on_times(axis: list[datetime], value: np.ndarray, times: list[datetime]) -> np.ndarray:
-    """``value`` (on ``axis``) at ``times``, NaN where the file has none."""
-    lookup = dict(zip(axis, value[: len(axis)].tolist(), strict=True))
-    return np.array([lookup.get(t, np.nan) for t in times], dtype=np.float32)
+def _positions(axis: list[datetime], times: list[datetime]) -> np.ndarray:
+    """Where each of ``times`` sits on ``axis`` (the last one if a time repeats), -1 if it does not."""
+    index = {t: i for i, t in enumerate(axis)}
+    return np.array([index.get(t, -1) for t in times], dtype=np.int64)
+
+
+def _on_times(
+    axis: list[datetime], value: np.ndarray, times: list[datetime], cache: dict | None = None
+) -> np.ndarray:
+    """``value`` (on ``axis``) at ``times``, NaN where the file has none. ``cache``: the
+    positions per (axis, times) pair, kept by the caller across the stations of one run
+    (the axis is the same for all of them)."""
+    n = len(axis)
+    value = np.asarray(value)[:n]
+    if len(value) != n:  # as the strict zip of the dict this replaces
+        raise ValueError(f"value has {len(value)} entries for an axis of {n}")
+    key = (id(axis), id(times))
+    positions = cache.get(key) if cache is not None else None
+    if positions is None:
+        positions = _positions(axis, times)
+        if cache is not None:
+            cache[key] = positions
+    out = np.full(len(times), np.nan, dtype=np.float32)
+    found = positions >= 0
+    out[found] = value[positions[found]]
+    return out
 
 
 #: Files moved to the station's elevation like temperature_2m (the API does so for the
@@ -822,7 +844,7 @@ def _on_times(axis: list[datetime], value: np.ndarray, times: list[datetime]) ->
 LAPSE_FILES = ("temperature_2m", "dew_point_2m", "surface_temperature", "soil_temperature_0cm")
 
 
-def _extras(chosen, sid, axes, values, main, shift: float) -> dict[str, np.ndarray]:
+def _extras(chosen, sid, axes, values, main, shift: float, cache=None) -> dict[str, np.ndarray]:
     """The further variables of one station on the run's times ``main``; ``shift``: the
     elevation correction (K) of ``LAPSE_FILES``."""
     found = {}
@@ -832,7 +854,7 @@ def _extras(chosen, sid, axes, values, main, shift: float) -> dict[str, np.ndarr
         if any(a is None for a in arrays):
             continue
         arrays = [
-            _on_times(axes[k], a, main) + np.float32(shift if k[1] in LAPSE_FILES else 0)
+            _on_times(axes[k], a, main, cache) + np.float32(shift if k[1] in LAPSE_FILES else 0)
             for k, a in zip(keys, arrays, strict=True)
         ]
         with np.errstate(invalid="ignore", over="ignore"):
@@ -867,7 +889,10 @@ def _assemble(
         .rows()
     )
     nan = np.full(len(main), np.nan, dtype=np.float32)
-    frames = []
+    cache: dict = {}  # positions of the run's times on each file's axis (the same for all stations)
+    ids: list[str] = []
+    columns: dict[str, list[np.ndarray]] = {}
+    extra_names = [*runs.EXTRA_VARIABLES, *auxiliary]
     for sid, height in stations.select("id", "elevation").rows():
         series = {}
         for variable, parts in source.files().items():
@@ -878,39 +903,47 @@ def _assemble(
             axis = axes[parts[0]]  # u and v share their axis
             arrays = [a[: len(axis)] for a in arrays]
             value = np.hypot(*arrays) if len(arrays) == 2 else arrays[0]
-            lookup = dict(zip(axis, value.tolist(), strict=True))
-            series[variable] = np.array([lookup.get(t, np.nan) for t in main], dtype=np.float32)
+            series[variable] = _on_times(axis, value, main, cache)
         grid_height = elevation.get(sid)
         temperature = series["temperature_2m"]
         shift = 0.0
         if grid_height is not None and height is not None and not math.isnan(height):
             shift = (grid_height - height) * LAPSE_RATE
             temperature = temperature + np.float32(shift)
-        extras = _extras(chosen or {}, sid, axes, values, main, shift)
-        frames.append(
-            pl.DataFrame(
-                {
-                    "run": [run] * len(main),
-                    "model": model.id,
-                    "station_id": sid,
-                    "lead_h": [int((t - run).total_seconds() // 3600) for t in main],
-                    "valid_time": main,
-                    "temperature_2m": temperature,
-                    "precipitation": series["precipitation"],
-                    "wind_speed_10m": series["wind_speed_10m"],
-                    "wind_gusts_10m": series.get("wind_gusts_10m", nan),
-                    **{v: extras.get(v, nan) for v in runs.EXTRA_VARIABLES},
-                    **{v: extras.get(v, nan) for v in auxiliary},
-                },
-                schema={
-                    **runs.HOURLY_SCHEMA,
-                    **{v: pl.Float32 for v in (*runs.EXTRA_VARIABLES, *auxiliary)},
-                },
-            )
-        )
+        extras = _extras(chosen or {}, sid, axes, values, main, shift, cache)
+        ids.append(sid)
+        for name, array in (
+            ("temperature_2m", temperature),
+            ("precipitation", series["precipitation"]),
+            ("wind_speed_10m", series["wind_speed_10m"]),
+            ("wind_gusts_10m", series.get("wind_gusts_10m", nan)),
+            *((v, extras.get(v, nan)) for v in extra_names),
+        ):
+            columns.setdefault(name, []).append(np.asarray(array, dtype=np.float32))
+    schema = {**runs.HOURLY_SCHEMA, **{v: pl.Float32 for v in (*runs.EXTRA_VARIABLES, *auxiliary)}}
+    n_times = len(main)
+    base = pl.DataFrame(
+        {
+            "run": [run] * n_times,
+            "lead_h": [int((t - run).total_seconds() // 3600) for t in main],
+            "valid_time": main,
+        },
+        schema={k: schema[k] for k in ("run", "lead_h", "valid_time")},
+    )
+    tiled = pl.concat([base] * len(ids)) if ids else pl.concat([])
+    table = pl.DataFrame(
+        {
+            "run": tiled["run"],
+            "model": pl.Series("model", [model.id] * (len(ids) * n_times), dtype=pl.String),
+            "station_id": pl.Series("station_id", ids, dtype=pl.String).repeat_by(n_times).explode(),
+            "lead_h": tiled["lead_h"],
+            "valid_time": tiled["valid_time"],
+            **{name: np.concatenate(parts) for name, parts in columns.items()},
+        },
+        schema=schema,
+    )
     table = (
-        pl.concat(frames)
-        .filter(pl.col("lead_h").is_between(1, max_lead_h))
+        table.filter(pl.col("lead_h").is_between(1, max_lead_h))
         .with_columns(pl.col(v).fill_nan(None) for v in runs.VARIABLES)
         # a station outside the model's domain (ICON-D2 in the far east): no rows, as
         # in the API's answers

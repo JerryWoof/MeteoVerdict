@@ -2,6 +2,7 @@
 an httpx mock with range requests (no network)."""
 
 import math
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
@@ -741,3 +742,50 @@ def test_arpege_radiation_undoes_meteo_france_s_storage_factor(tmp_path):
     assert fetched.rows is not None, fetched.reason
     # 1296 W/m² as stored is 1296 x 10^7 / 3600² = 1000 W/m² in the API
     assert fetched.rows["shortwave_radiation"].unique().to_list() == [1000.0]
+
+
+# --- _assemble: gathered positions and one frame give the rows of the per-station version -----
+
+REFERENCE = Path(__file__).parent / "fixtures" / "bucket_assemble_before_2026-10-26.txt"
+
+
+def _reference_assemble():
+    namespace = dict(vars(bucket))
+    exec(REFERENCE.read_text(), namespace)  # noqa: S102 - the old source, kept in tests/fixtures
+    return namespace["_assemble"]
+
+
+@pytest.mark.parametrize("model", [AIFS, ICON_EU, ALADIN], ids=lambda m: m.id)
+def test_assemble_gives_the_rows_of_the_per_station_version(tmp_path, monkeypatch, model):
+    fake = FakeBucket()
+    complete(fake, tmp_path, model)
+    new = read(fake, model)
+    monkeypatch.setattr(bucket, "_assemble", _reference_assemble())
+    old = read(fake, model)
+    assert new.rows is not None and old.rows is not None
+    assert new.rows.equals(old.rows) and new.rows.schema == old.rows.schema
+    assert new.reason == old.reason
+
+
+def test_assemble_with_extra_variables_matches(tmp_path, monkeypatch):
+    fake = FakeBucket()
+    with_extras(fake, tmp_path)
+    with ThreadPoolExecutor(4) as pool:
+        new = bucket.read_run(reader(fake), ICON_EU, RUN, STATIONS, cells(), pool, extra=True)
+    monkeypatch.setattr(bucket, "_assemble", _reference_assemble())
+    with ThreadPoolExecutor(4) as pool:
+        old = bucket.read_run(reader(fake), ICON_EU, RUN, STATIONS, cells(), pool, extra=True)
+    assert new.rows is not None
+    assert new.rows.equals(old.rows) and new.rows.schema == old.rows.schema
+    assert new.extra_complete == old.extra_complete
+
+
+def test_on_times_gathers_the_values_on_the_times_it_has():
+    axis = [RUN + timedelta(hours=h) for h in (0, 1, 2, 3)]
+    times = [RUN + timedelta(hours=h) for h in (1, 3, 5)]
+    value = np.array([10.0, 11.0, 12.0, 13.0])
+    out = bucket._on_times(axis, value, times)
+    assert out.dtype == np.float32 and out[:2].tolist() == [11.0, 13.0] and math.isnan(out[2])
+    assert bucket._on_times(axis, value, times, {}).tolist()[:2] == [11.0, 13.0]
+    with pytest.raises(ValueError):
+        bucket._on_times(axis, value[:2], times)  # an axis longer than the file, as before
