@@ -8,7 +8,6 @@ const SITE = "https://meteoverdict.cz";
 const BY_SA = "https://creativecommons.org/licenses/by-sa/4.0/";
 
 const release = (tag) => `[${tag}](${REPO}/releases/tag/${tag})`;
-const releases = (label, query) => `[${label}](${REPO}/releases?q=${query})`;
 
 /** The downloads fold of the Data page: the releases on GitHub. */
 export function dataBlocks(language) {
@@ -17,7 +16,7 @@ export function dataBlocks(language) {
     ["table", {
       head: [L("Release", "Release"), L("Obsah", "Contains"), L("Licence", "Licence")],
       rows: [
-        [release("data-latest"), L("Měřené hodnoty, archivované předpovědi na stanicích a denní skóre (`obs-`, `fc-`, `scores-YYYY-MM.parquet`, `aggregates.parquet`), `compare.zip`, `outlook*.zip`, `site-data.zip`. Starší měsíce: " + releases("data-YYYY-MM", "data-20") + ".", "Observed values, archived forecasts at the stations and daily scores (`obs-`, `fc-`, `scores-YYYY-MM.parquet`, `aggregates.parquet`), `compare.zip`, `outlook*.zip`, `site-data.zip`. Older months: " + releases("data-YYYY-MM", "data-20") + "."), "CC BY-SA 4.0"],
+        [release("data-latest"), L("Měřené hodnoty, archivované předpovědi na stanicích a denní skóre (`obs-`, `fc-`, `scores-YYYY-MM.parquet`, `aggregates.parquet`), `compare.zip`, `outlook*.zip`, `site-data.zip`.", "Observed values, archived forecasts at the stations and daily scores (`obs-`, `fc-`, `scores-YYYY-MM.parquet`, `aggregates.parquet`), `compare.zip`, `outlook*.zip`, `site-data.zip`."), "CC BY-SA 4.0"],
         [release("ai-latest"), L("`ai.zip`: výstupy MeteoVerdict AI, denně nové.", "`ai.zip`: the MeteoVerdict AI outputs, new every day."), "CC BY-SA 4.0"],
       ],
     }],
