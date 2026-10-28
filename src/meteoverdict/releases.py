@@ -353,12 +353,22 @@ class GitHubReleaseStore:
             response.raise_for_status()
 
     def _rename(self, asset: dict, name: str, label: str) -> dict:
-        response = self._request(
-            "PATCH",
-            f"{API}/repos/{self.repo}/releases/assets/{asset['id']}",
-            headers=self.headers,
-            json={"name": name, **({"label": label} if label else {})},
-        )
+        response = self._patch_name(asset, name, label)
+        if response.status_code == 422:
+            # another writer (e.g. runs.yml and the backfill both put runs-state.json)
+            # replaced the asset between our delete and this rename: its copy is
+            # older than ours, so delete it and rename again (last writer wins)
+            release = self._ids.get(asset["_tag"])
+            taken = [
+                a
+                for a in (self._list_release(release) if release is not None else [])
+                if a.get("name") == name and a.get("id") != asset["id"]
+            ]
+            if taken:
+                self.log(f"{name} was replaced by another writer; replacing it again")
+                for other in taken:
+                    self._delete(other)
+                response = self._patch_name(asset, name, label)
         response.raise_for_status()
         try:
             renamed = response.json()
@@ -367,6 +377,14 @@ class GitHubReleaseStore:
         if not isinstance(renamed, dict):
             renamed = {}
         return {**asset, **renamed, "name": name, "_tag": asset["_tag"]}
+
+    def _patch_name(self, asset: dict, name: str, label: str) -> httpx.Response:
+        return self._request(
+            "PATCH",
+            f"{API}/repos/{self.repo}/releases/assets/{asset['id']}",
+            headers=self.headers,
+            json={"name": name, **({"label": label} if label else {})},
+        )
 
     def download(self, tag: str, name: str, dest: Path) -> Path:
         """Download the asset ``name`` of ``tag`` to ``dest``: from its

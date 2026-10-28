@@ -331,6 +331,28 @@ def test_replace_uploads_first_then_deletes_and_renames(tmp_path):
     assert asset["name"] == "obs-2026-10.parquet" and asset["id"] % 100000 == 2
 
 
+def test_replace_survives_another_writer_replacing_the_same_asset(tmp_path):
+    gh = FakeGitHub({"runs-state": ["runs-state.json"]})
+    path = tmp_path / "f"
+    path.write_bytes(b"x")
+    real = gh.handler
+    raced: list[bool] = []
+
+    def racing(request: httpx.Request) -> httpx.Response:
+        response = real(request)
+        if request.method == "DELETE" and not raced:  # the other writer's rename lands
+            gh.releases["runs-state"]["assets"].append("runs-state.json")
+            raced.append(True)
+        return response
+
+    gh.handler = racing
+    store = gh.store()
+    store.put("runs-state", "runs-state.json", path)
+    assert live(gh, "runs-state") == ["runs-state.json"]
+    asset = store.assets("runs-state")["runs-state.json"]
+    assert asset["id"] % 100000 == 1  # ours, the upload; the other copy is deleted
+
+
 def test_a_failed_upload_leaves_the_old_asset(tmp_path):
     gh = FakeGitHub({"data-2026-10": ["obs-2026-10.parquet"]})
     store = gh.store()
