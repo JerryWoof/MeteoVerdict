@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-28T06:01:03+00:00",
+ "generated": "2026-10-28T11:59:16+00:00",
  "as_of": "2026-10-27",
  "windows": {
   "90d": {
@@ -7,11 +7,11 @@
    "to": "2026-10-27"
   },
   "all": {
-   "from": "2026-07-13",
+   "from": "2026-06-15",
    "to": "2026-10-27"
   },
   "jja": {
-   "from": "2026-07-13",
+   "from": "2026-06-15",
    "to": "2026-08-31"
   },
   "season": {
@@ -91,7 +91,7 @@
  "short_record": {
   "all": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.766,
+    "coverage": 0.678,
     "days": 82,
     "variables": [
      "wind_speed_10m",
@@ -99,7 +99,7 @@
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.766,
+    "coverage": 0.678,
     "days": 82,
     "variables": [
      "wind_speed_10m",
@@ -109,7 +109,7 @@
   },
   "jja": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.5,
+    "coverage": 0.391,
     "days": 25,
     "variables": [
      "wind_speed_10m",
@@ -117,7 +117,7 @@
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.5,
+    "coverage": 0.391,
     "days": 25,
     "variables": [
      "wind_speed_10m",
@@ -137,7 +137,7 @@
  "attribution": "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com (CC BY 4.0) from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, KNMI, DMI, ČHMÚ, Environment and Climate Change Canada, the Japan Meteorological Agency, the China Meteorological Administration and the UK Met Office (CC BY-SA 4.0). Boundaries: ČÚZK (CC BY 4.0).",
  "sources": {
   "previous_runs": {
-   "from": "2026-07-13",
+   "from": "2026-06-15",
    "to": "2026-10-18"
   },
   "single_runs": {
