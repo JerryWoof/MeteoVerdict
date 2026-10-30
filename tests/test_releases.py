@@ -399,3 +399,22 @@ def test_replace_in_a_release_with_one_free_slot(tmp_path):
     store.put("t", "a5", path)
     assert len(live(gh, "t")) == rel.MAX_ASSETS - 1
     assert "a5" in live(gh, "t") and "t.2" not in gh.releases
+
+
+def test_a_server_error_is_retried_for_a_delete_but_not_for_an_upload():
+    gh = FakeGitHub({"chmi-2026": ["a"]})
+    gh.limited = [httpx.Response(500), httpx.Response(502)]
+    store = gh.store()
+    assert store.names("chmi-2026") == {"a"}
+    assert gh.waits == [2.0, 10.0]
+    gh.limited = [httpx.Response(500)]
+    response = gh.store()._request("POST", "https://uploads.github.com/x")
+    assert response.status_code == 500 and gh.waits == []
+
+
+def test_a_server_error_that_lasts_is_returned_after_the_retries():
+    gh = FakeGitHub({"chmi-2026": ["a"]})
+    gh.limited = [httpx.Response(500)] * 4
+    with pytest.raises(httpx.HTTPStatusError):
+        gh.store().names("chmi-2026")
+    assert gh.waits == [2.0, 10.0, 30.0]

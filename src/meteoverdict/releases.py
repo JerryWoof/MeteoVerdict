@@ -43,6 +43,8 @@ UPLOADS = "https://uploads.github.com"
 MAX_ASSETS = 1000
 #: retries of one request held up by a rate limit, and the longest wait accepted
 RATE_LIMIT_RETRIES = 6
+SERVER_ERROR_WAITS = (2.0, 10.0, 30.0)  # seconds before each retry of a 5xx
+IDEMPOTENT = {"GET", "DELETE", "PATCH"}  # an upload (POST) is not repeated blindly
 MAX_WAIT = 3700.0  # the primary limit resets within an hour
 #: first wait for a secondary rate limit without a retry-after (doubles each time)
 SECONDARY_WAIT = 60.0
@@ -133,12 +135,23 @@ class GitHubReleaseStore:
 
     # --- requests -------------------------------------------------------------------
     def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
-        """One API request, retried while GitHub answers that a rate limit is reached."""
+        """One API request, retried while GitHub answers that a rate limit is reached, and
+        (GET, DELETE, PATCH) a few times on a 5xx."""
+        server_errors = 0
         for attempt in range(RATE_LIMIT_RETRIES + 1):
             self.api_calls += 1
             response = self.client.request(method, url, **kwargs)
             wait = rate_limit_wait(response, self.clock(), attempt)
             if wait is None:
+                if (
+                    response.status_code >= 500
+                    and method in IDEMPOTENT
+                    and server_errors < len(SERVER_ERROR_WAITS)
+                ):
+                    self.log(f"GitHub {response.status_code} for {method} {url}; retrying")
+                    self.sleep(SERVER_ERROR_WAITS[server_errors])
+                    server_errors += 1
+                    continue
                 return response
             if attempt == RATE_LIMIT_RETRIES or wait > self.max_wait:
                 raise RateLimitError(
