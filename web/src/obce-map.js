@@ -45,7 +45,7 @@ export function obcePartRows(doc) {
     const acc = new Map();
     const entry = (day, part) => {
       const key = `${day}|${part}`;
-      if (!acc.has(key)) acc.set(key, { t: [], w: [], p: 0, pn: 0, g: [], h: [], d: [], pr: [], x: 0, y: 0, dn: 0 });
+      if (!acc.has(key)) acc.set(key, { t: [], w: [], p: 0, pn: 0, g: [], h: [], d: [], pr: [], x: 0, y: 0, dn: 0, wet: null });
       return acc.get(key);
     };
     times.forEach((_, i) => {
@@ -78,6 +78,14 @@ export function obcePartRows(doc) {
           e.pn += 1;
         }
       }
+      // the chance of a wet hour belongs to the hour before its time, like rain; a part keeps its highest
+      const chance = place.precipitation_probability?.[i];
+      if (chance != null) {
+        for (const part of [partOf(before[i].hour), "day"]) {
+          const e = entry(before[i].day, part);
+          e.wet = e.wet == null ? chance : Math.max(e.wet, chance);
+        }
+      }
       // a gust belongs to the hour before its time, like rain
       const gust = place.wind_gusts_10m?.[i];
       if (gust != null) {
@@ -95,6 +103,7 @@ export function obcePartRows(doc) {
         tmax: Math.max(...e.t),
         wind: e.w.length ? Math.max(...e.w) : null,
         precipitation: e.pn ? e.p : null,
+        wet_hour_max: e.wet,
         gust,
         gust_over_threshold: gust == null ? null : gust >= GUST_THRESHOLD,
         humidity: mean(e.h),

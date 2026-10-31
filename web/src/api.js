@@ -451,6 +451,11 @@ export function obecForecast(place, times, okresHourly, okresParts) {
     hourly[name] = values;
   }
   for (const k of OKRES_HOURLY) if (okresHourly[k]) hourly[k] = [...okresHourly[k]];
+  // the chance of a wet hour (>= 0.1 mm) at the obec itself, percent, for the hour ending at the time: only where the obec file has it
+  if (place.precipitation_probability) {
+    const wet = sampleOf("precipitation_probability");
+    hourly.precipitation_probability = ms.map((m) => wet.get(m) ?? null);
+  }
   return { hourly, parts, temperature_offset: tOffset };
 }
 

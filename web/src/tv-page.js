@@ -645,6 +645,7 @@ function renderObecPanel(panel, { doc, rows, ai: ownAi }) {
     for (const text of [
       t("tv.range", { low: fmt(now.tmin), high: fmt(now.tmax) }),
       t("tv.obecRain", { amount: fmt(now.precipitation, 1) }),
+      ...(now.wet_hour_max != null ? [t("tv.obecWet", { chance: fmt(now.wet_hour_max, 0) })] : []),
       now.gust != null ? t("tv.windGust", { value: fmt(now.wind), gust: fmt(now.gust) }) : t("tv.wind", { value: fmt(now.wind) }),
       ...(now.direction != null ? [t("tv.obecDirection", { dir: Math.round(now.direction) })] : []),
       ...(now.cloud != null ? [t("tv.cloud", { value: fmt(now.cloud, 0) })] : []),

@@ -410,3 +410,12 @@ test("the code tabs of the Data page name the file's address", () => {
   assert.ok(snippet("python", url).includes(`url = "${url}"`));
   assert.ok(snippet("js", url).includes(`const url = "${url}";`));
 });
+
+test("an obec's hourly chance of a wet hour is passed on where the obec file has it", () => {
+  const n = HOURLY_DOC.time.length;
+  const chance = Array.from({ length: n }, (_, i) => (i % 5 === 0 ? null : i % 100));
+  const [{ doc }] = obceDocs({ okresDoc: DOC, obceFile: obceOf(0, 1, { precipitation_probability: chance }), meta: META });
+  assert.deepEqual(doc.hourly.precipitation_probability, chance);
+  const [{ doc: plain }] = obceDocs({ okresDoc: DOC, obceFile: obceOf(0, 1), meta: META });
+  assert.equal(plain.hourly.precipitation_probability, undefined);
+});
