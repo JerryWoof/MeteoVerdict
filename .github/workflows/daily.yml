@@ -64,7 +64,8 @@ jobs:
       - name: Error by lead hour (all models and ALADIN)
         # optional: a failure here must not fail the daily update
         continue-on-error: true
-        timeout-minutes: 30
+        # ~20 min, ~35 when the 90-day window's fair sets differ and its runs are scored again
+        timeout-minutes: 60
         run: uv run --frozen mvd leads --github-release --publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
