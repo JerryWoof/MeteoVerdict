@@ -1,14 +1,14 @@
 {
- "generated": "2026-10-30T11:57:34+00:00",
- "as_of": "2026-10-29",
+ "generated": "2026-10-31T06:05:33+00:00",
+ "as_of": "2026-10-30",
  "windows": {
   "90d": {
-   "from": "2026-08-01",
-   "to": "2026-10-29"
+   "from": "2026-08-02",
+   "to": "2026-10-30"
   },
   "all": {
    "from": "2026-06-15",
-   "to": "2026-10-29"
+   "to": "2026-10-30"
   },
   "jja": {
    "from": "2026-06-15",
@@ -16,11 +16,11 @@
   },
   "season": {
    "from": "2026-09-01",
-   "to": "2026-10-29"
+   "to": "2026-10-30"
   },
   "son": {
    "from": "2026-09-01",
-   "to": "2026-10-29"
+   "to": "2026-10-30"
   }
  },
  "levels": [
@@ -91,16 +91,16 @@
  "short_record": {
   "all": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.683,
-    "days": 84,
+    "coverage": 0.685,
+    "days": 85,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.683,
-    "days": 84,
+    "coverage": 0.685,
+    "days": 85,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
@@ -124,6 +124,88 @@
      "wind_speed_10m_hourly"
     ]
    }
+  },
+  "season": {
+   "dmi_harmonie_arome_europe": {
+    "coverage": 0.797,
+    "days": 47,
+    "variables": [
+     "precipitation_24h",
+     "temperature_max"
+    ]
+   },
+   "dwd_icon_d2": {
+    "coverage": 0.797,
+    "days": 47,
+    "variables": [
+     "precipitation_24h",
+     "temperature_max"
+    ]
+   },
+   "geosphere_arome_austria": {
+    "coverage": 0.797,
+    "days": 47,
+    "variables": [
+     "precipitation_24h",
+     "temperature_max"
+    ]
+   },
+   "knmi_harmonie_arome_europe": {
+    "coverage": 0.797,
+    "days": 47,
+    "variables": [
+     "precipitation_24h",
+     "temperature_max"
+    ]
+   },
+   "ukmo_global_deterministic_10km": {
+    "coverage": 0.797,
+    "days": 47,
+    "variables": [
+     "temperature_max"
+    ]
+   }
+  },
+  "son": {
+   "dmi_harmonie_arome_europe": {
+    "coverage": 0.797,
+    "days": 47,
+    "variables": [
+     "precipitation_24h",
+     "temperature_max"
+    ]
+   },
+   "dwd_icon_d2": {
+    "coverage": 0.797,
+    "days": 47,
+    "variables": [
+     "precipitation_24h",
+     "temperature_max"
+    ]
+   },
+   "geosphere_arome_austria": {
+    "coverage": 0.797,
+    "days": 47,
+    "variables": [
+     "precipitation_24h",
+     "temperature_max"
+    ]
+   },
+   "knmi_harmonie_arome_europe": {
+    "coverage": 0.797,
+    "days": 47,
+    "variables": [
+     "precipitation_24h",
+     "temperature_max"
+    ]
+   },
+   "ukmo_global_deterministic_10km": {
+    "coverage": 0.797,
+    "days": 47,
+    "variables": [
+     "temperature_max"
+    ]
+   }
   }
  },
  "ranking": "by MAE; 95 % moving-block bootstrap interval of the MAE difference to the best model (blocks of 4 consecutive days); tied_with_best unless that interval excludes 0 and the Diebold-Mariano test (Newey-West variance, 3 lags) gives dm_p < 0.05; clear_winner when nobody is tied; p_best: share of the resamples in which the model has the lowest MAE, the map names a winner only from 0.6; small_sample: fewer than 30 days; the blend (mean of all models) is not ranked, its difference and interval are relative to the best single model",
@@ -142,7 +224,7 @@
   },
   "single_runs": {
    "from": "2026-10-18",
-   "to": "2026-10-29"
+   "to": "2026-10-30"
   }
  }
 }
