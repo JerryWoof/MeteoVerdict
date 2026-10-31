@@ -54,3 +54,26 @@ test("an obec's gusts, humidity, pressure and direction by part, and the okres's
   assert.equal(row.okres.visibility, 10);
   assert.equal(row.okres.cape, 40);
 });
+
+test("an obec's part keeps its highest hourly chance of a wet hour", () => {
+  const times = [9, 10, 11, 12, 13, 14, 15].map((h) => `2026-10-18T${String(h).padStart(2, "0")}:00+00:00`);
+  const doc = {
+    times,
+    places: [{
+      name: "Lovosice",
+      temperature_2m: [10, 11, 12, 14, 13, 12, 11],
+      precipitation: [0, 0.4, 0, 0, 0.2, 0, 0],
+      wind_speed_10m: [1, 2, 3, 2, 1, 1, 1],
+      precipitation_probability: [5, 70, 10, 20, 35, 5, null],
+    }, {
+      name: "Bez",
+      temperature_2m: [10, 11, 12, 14, 13, 12, 11],
+      precipitation: [0, 0, 0, 0, 0, 0, 0],
+      wind_speed_10m: [1, 2, 3, 2, 1, 1, 1],
+    }],
+  };
+  const rows = obcePartRows(doc);
+  // the hour ending at 10Z (70) is before noon; the afternoon's are 11Z..14Z (10, 20, 35, 5)
+  assert.equal(rows.get("Lovosice").get("2026-10-18|afternoon").wet_hour_max, 35);
+  assert.equal(rows.get("Bez").get("2026-10-18|afternoon").wet_hour_max, null);
+});
