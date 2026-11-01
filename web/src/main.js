@@ -17,6 +17,7 @@ import { availableLeadDays, availableVariables, availableWindows, filesWindow, p
 import { keepRoomForPanels, panelRoom, scrollToPanel, userMoved } from "./panel-room.js";
 import { EDGE, INK, KRAJE, PAGE_BG, pick, themeMap } from "./map-theme.js";
 import { onThemeChange } from "./theme.js";
+import { MV_AI, MV_MODEL } from "./mv-compare.js";
 
 setWorkerUrl(workerUrl);
 const t = setUpLanguage();
@@ -65,8 +66,26 @@ async function getJson(path) {
   }
 }
 
+// "Include MeteoVerdict models" (mv-compare.js): on by default, `?mv=0` turns it off. It applies to
+// the variables the engine's same-sample files cover (temperature, wind), where the map ranks every
+// model, ours and the AI on the same recent days; the period and the station dots then do not apply
+const mvOn = new URLSearchParams(window.location.search).get("mv") !== "0";
+const mvPath = (level, variable) => `data/scores/mv/${level}/${variable}.json`;
+/** Do the same-sample files exist for the variable (and the level)? Remembered. */
+const mvFiles = new Map();
+function hasMv(level, variable) {
+  const path = mvPath(level, variable);
+  if (!mvFiles.has(path)) mvFiles.set(path, getJson(path).then((doc) => (doc ? records(doc).length > 0 && doc : null)));
+  return mvFiles.get(path);
+}
+
 const cache = new Map();
 function scores(view, level, variable = view.variable) {
+  if (current.mv && variable === view.variable) {
+    // the station dots are a different sample: none with the same-sample comparison
+    if (level === "station") return Promise.resolve([]);
+    return hasMv(level, variable).then((doc) => records(doc));
+  }
   const path = `data/scores/${filesWindow(view.window, current.meta)}/${level}/${variable}.json`;
   if (!cache.has(path)) {
     // a failed fetch is not remembered: the next view tries again
@@ -108,8 +127,20 @@ function fillSelect(id, options, current) {
 // --- state: the view (variable, lead day, window) and the chosen region, in the URL ----
 const current = {
   view: null, level: "okres", rows: [], regions: new Map(), stations: new Map(),
-  names: {}, colors: {}, stationTable: null, highlight: null, pBestMin: P_BEST_MIN,
+  names: {}, colors: {}, stationTable: null, highlight: null, pBestMin: P_BEST_MIN, mv: false, mvSample: null,
 };
+
+/** Our own models stand out among the public ones (their colours are not from the palette). */
+const MV_COLORS = { light: { [MV_MODEL]: "#c2255c", [MV_AI]: "#5f3dc4" }, dark: { [MV_MODEL]: "#f06595", [MV_AI]: "#9775fa" } };
+const colorsFor = (names) => ({ ...modelColors(names), ...MV_COLORS[document.documentElement.dataset.theme === "dark" ? "dark" : "light"] });
+
+/** Does the view use the same-sample comparison (the choice is on and its files cover the variable)? */
+async function resolveMv(view) {
+  const doc = mvOn ? await hasMv("okres", view.variable) : null;
+  current.mv = Boolean(doc);
+  current.mvSample = doc?.sample ?? null;
+  return current.mv;
+}
 
 function readView() {
   const view = parseHash(window.location.hash);
@@ -303,7 +334,7 @@ async function nearestStations(region, facts) {
 // the panel chart is drawn in the theme's colours: draw it again on a switch
 onThemeChange(() => {
   // the model colours are lighter in dark: the fills, stations, legend and panel again
-  current.colors = modelColors(current.names);
+  current.colors = colorsFor(current.names);
   if (current.regions?.size && map.getLayer("regions-fill")) {
     map.setPaintProperty("regions-fill", "fill-color", fillExpression(current.regions, current.colors));
     map.getSource("stations")?.setData(stationFeatures(current.stationTable, mapStations(), current.colors));
@@ -313,6 +344,13 @@ onThemeChange(() => {
   if (current.view.region) showRegion(current.view.region);
 });
 
+/** The period of the view in words: the chosen window, or the same recent days of the comparison with our models. */
+function windowText(view) {
+  if (!current.mv) return t(`window.${view.window}`).toLowerCase();
+  const days = current.mvSample?.days;
+  return days ? t("mv.window", { days }) : t("mv.windowNoDays");
+}
+
 async function showRegion(region) {
   const view = current.view;
   const box = panel();
@@ -321,7 +359,7 @@ async function showRegion(region) {
     return;
   }
   box.scrollTop = 0;
-  const hourRows = isTemperature(view.variable)
+  const hourRows = isTemperature(view.variable) && !current.mv
     ? Object.fromEntries(
         await Promise.all(HOURS.map(async (h) => [h, await scores(view, current.level, `temperature_2m_${h}utc`)])),
       )
@@ -331,7 +369,7 @@ async function showRegion(region) {
   const name = displayName(facts?.name ?? entry?.name ?? region);
   const close = closeButton(() => select(null, true));
   const heading = element("h2", `${t(current.level === "okres" ? "detail.kindOkres" : "detail.kindKraj")}: ${name}`);
-  const sub = element("p", `${t(`variable.${view.variable}`)} · D+${view.leadDay} · ${t(`window.${view.window}`).toLowerCase()}`, "muted");
+  const sub = element("p", `${t(`variable.${view.variable}`)} · D+${view.leadDay} · ${windowText(view)}`, "muted");
   const nearest = await nearestStations(region, facts);
   const top = nearest ? [close, heading, sub, nearest] : [close, heading, sub];
   if (!facts) {
@@ -375,7 +413,7 @@ async function showRegion(region) {
   const links = element("p", null, "links");
   if (current.level === "okres") {
     const forecast = element("a", t("detail.forecast"));
-    forecast.href = `forecast.html#${region}/`;
+    forecast.href = `./#${region}/`;
     links.append(forecast);
   }
   blocks.push(links);
@@ -481,9 +519,9 @@ map.on("load", async () => {
   const meta = await getJson("data/scores/meta.json");
   current.meta = meta;
   document.getElementById("status").textContent = statusText(meta, t);
-  current.names = { ...meta?.models, blend: t("model.blend") };
+  current.names = { ...meta?.models, blend: t("model.blend"), [MV_MODEL]: t("mv.model"), [MV_AI]: t("mv.ai") };
   current.pBestMin = meta?.p_best_min ?? P_BEST_MIN;
-  current.colors = modelColors(current.names);
+  current.colors = colorsFor(current.names);
   current.stationTable = await getJson("data/scores/stations.json");
 
   const view = readView();
@@ -491,6 +529,7 @@ map.on("load", async () => {
   const windows = availableWindows(meta?.windows);
   view.window = pickWindow(view.window, windows);
   current.view = view;
+  await resolveMv(view);
   // okres choropleth where the okres level is published, kraj otherwise
   current.level = (await scores(view, "okres")).length ? "okres" : "kraj";
   addLayers(current.level === "okres" ? "okresy" : "kraje");
@@ -499,6 +538,9 @@ map.on("load", async () => {
   let renderToken = 0;
   async function render() {
     const token = ++renderToken;
+    await resolveMv(view);
+    if (token !== renderToken) return;
+    syncWindowSelect();
     const rows = await scores(view, current.level);
     if (token !== renderToken) return;
     current.rows = rows;
@@ -526,7 +568,31 @@ map.on("load", async () => {
   fillSelect("variable", availableVariables(meta).map((v) => [v, t(`variable.${v}`)]), view.variable);
   // each period with its real dates and days, so a short history explains itself
   const language = document.documentElement.lang;
-  fillSelect("window", windows.map((w) => [w, windowLabel(w, meta?.windows, t, language)]), view.window);
+  const windowOptions = windows.map((w) => [w, windowLabel(w, meta?.windows, t, language)]);
+  fillSelect("window", windowOptions, view.window);
+  /** With the same-sample comparison the period is fixed: say which, and lock the choice. */
+  function syncWindowSelect() {
+    const select = document.getElementById("window");
+    if (current.mv) {
+      const sample = current.mvSample;
+      const range = sample?.from && sample?.to ? ` (${sample.from} – ${sample.to})` : "";
+      fillSelect("window", [["mv", `${windowText(view)}${range}`]], "mv");
+    } else if (select.disabled || select.options.length !== windowOptions.length) {
+      fillSelect("window", windowOptions, view.window);
+    }
+    select.disabled = current.mv;
+  }
+  // the choice itself, only where the files exist (the engine's run has written them)
+  const mvBox = document.getElementById("mv-box");
+  const mvInput = document.getElementById("mv");
+  mvInput.checked = mvOn;
+  if (await hasMv("okres", "temperature_2m")) mvBox.hidden = false;
+  mvInput.addEventListener("change", () => {
+    const url = new URL(window.location.href);
+    if (mvInput.checked) url.searchParams.delete("mv");
+    else url.searchParams.set("mv", "0");
+    window.location.href = url.toString();
+  });
   for (const [id, key, parse] of [
     ["variable", "variable", String],
     ["lead", "leadDay", Number],

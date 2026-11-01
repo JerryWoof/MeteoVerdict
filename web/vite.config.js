@@ -10,11 +10,11 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     chunkSizeWarningLimit: 1200,
-    // one page per tab (Map, Forecast with Measured, Radar, Heatmap, Data) and the detailed
+    // one page per tab (Forecast, Radar, Heatmap, Model comparison, Data) and the detailed
     // forecast per okres; the old names (tv, station, measured, api) redirect from public/
     rollupOptions: {
       input: {
-        map: "index.html", forecast: "forecast.html", detail: "forecast-detail.html", radar: "radar.html", heatmap: "heatmap.html", data: "data.html", about: "about.html", methodology: "methodology.html", collaboration: "collaboration.html", models: "nejpresnejsi-model.html", privacy: "soukromi.html", credits: "zdroje.html",
+        home: "index.html", compareModels: "compare-models.html", detail: "forecast-detail.html", radar: "radar.html", heatmap: "heatmap.html", data: "data.html", about: "about.html", methodology: "methodology.html", collaboration: "collaboration.html", models: "nejpresnejsi-model.html", privacy: "soukromi.html", credits: "zdroje.html",
       },
     },
   },

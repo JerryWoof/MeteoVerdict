@@ -2,16 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { prerenderI18n } from "../scripts/prerender-i18n.mjs";
 
-const PAGE = `<body><header><nav class="site-nav"><a href="./" data-i18n="page.map">Map</a>
-<a href="forecast.html" data-i18n="page.tv" aria-current="page">Forecast</a></nav>
+const PAGE = `<body><header><nav class="site-nav"><a href="./" data-i18n="page.tv">Forecast</a>
+<a href="radar.html" data-i18n="page.radar" aria-current="page">Radar</a></nav>
 <div id="language" class="langsw"><button data-lang="cs" aria-pressed="true">CS</button><button data-lang="en" aria-pressed="false">EN</button></div></header></body>`;
 
 test("menu and language button are Czech in the HTML, the active item follows the file", () => {
-  const out = prerenderI18n(PAGE, "radar.html");
-  assert.match(out, /data-i18n="page.map">Mapa</);
+  const out = prerenderI18n(PAGE, "heatmap.html");
   assert.match(out, /data-i18n="page.tv">Předpověď</);
+  assert.match(out, /data-i18n="page.radar">Radar</);
   assert.ok(!out.includes("aria-current"));
-  assert.match(prerenderI18n(PAGE, "forecast.html"), /href="forecast.html"[^>]*aria-current="page"/);
+  assert.match(prerenderI18n(PAGE, "radar.html"), /href="radar.html"[^>]*aria-current="page"/);
   assert.match(prerenderI18n(PAGE, "index.html"), /href="\.\/"[^>]*aria-current="page"/);
 });
 
