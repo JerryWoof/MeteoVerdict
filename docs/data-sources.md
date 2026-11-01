@@ -1418,7 +1418,7 @@ be smaller.
 
 Once a UTC day is complete (3 hours after midnight, for MERGE), each product of that
 day becomes one uncompressed tar of the files as published, named after the product and
-day, as an asset of the monthly release `radar-YYYY-MM`:
+day, as `radar-YYYY-MM/<asset>` (until 2026-10 an asset of the monthly GitHub release of that name; since then written to a private archive, only the page's `web-YYYYMMDD.tar` of the last nine days are public, in the release `radar-web`):
 
 ```
 radar-2026-10/
