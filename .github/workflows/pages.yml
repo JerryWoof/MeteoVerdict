@@ -166,19 +166,6 @@ jobs:
               after += path.stat().st_size
           print(f"{len(paths)} obce files: {before / 1e6:.0f} MB -> {after / 1e6:.0f} MB")
           PY
-      - name: Verification page data (scored by the public Verify repository)
-        # derived/stations.json is recomputed by the MeteoVerdict-Verify repository from its public
-        # ledger, snapshots and frozen observations and published on its branch `derived`. Until
-        # the official log is live (kind "live" with snapshots) the page keeps the test data
-        # committed in web/public/overeni-data.json.
-        run: |
-          if curl -fsSL https://raw.githubusercontent.com/JerryWoof/MeteoVerdict-Verify/derived/stations.json -o /tmp/stations.json \
-             && python3 -c "import json,sys; d=json.load(open('/tmp/stations.json')); sys.exit(0 if d.get('kind')=='live' and d['provenance']['snapshots']['ok_used']>0 else 1)"; then
-            cp /tmp/stations.json web/public/overeni-data.json
-            echo "verification data from the Verify repository"
-          else
-            echo "no live verification data yet; the page keeps its committed test data"
-          fi
       - uses: actions/setup-node@v7
         with:
           node-version: 22
