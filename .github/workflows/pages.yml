@@ -50,18 +50,37 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release download data-latest --pattern site-data.zip --dir /tmp 2>/dev/null; then
+          # dl <tag> <pattern> <gh args>: gh release download that tells "the asset is not there" (the
+          # message says so; one second look after 10 s, because the publisher swaps an asset by delete
+          # + rename) from a GitHub or network error, which is retried (5, 20, 45 s). Before, every
+          # failure was read as "not published yet" and the site went up without the forecast (no
+          # outlook.json, ai.zip, obce.zip) until the next build. Still returns 1 after the retries.
+          dl() {
+            local tag=$1 pat=$2 err n=0 absent=0
+            shift 2
+            while :; do
+              if err=$(gh release download "$tag" --pattern "$pat" --clobber "$@" 2>&1); then return 0; fi
+              n=$((n + 1))
+              case $err in
+                *"no assets match"*) absent=$((absent + 1)); [ "$absent" -ge 2 ] && return 1; sleep 10 ;;
+                *) echo "::warning::gh release download $tag $pat failed (try $n): ${err:0:200}" >&2
+                   [ "$n" -ge 4 ] && return 1
+                   sleep $((n * n * 5)) ;;
+              esac
+            done
+          }
+          if dl data-latest site-data.zip --dir /tmp; then
             unzip -o -q /tmp/site-data.zip -d site/data
           else
             echo "no published scores yet; the map shows the boundaries only"
           fi
           # the forecast's weight files of the same day (forecast/*.json), newer than those in
           # site-data.zip when the Daily ran before the weights were updated
-          if gh release download data-latest --pattern forecast-json.zip --dir /tmp --clobber 2>/dev/null; then
+          if dl data-latest forecast-json.zip --dir /tmp; then
             unzip -o -q /tmp/forecast-json.zip -d site/data
             echo "forecast weight files from data-latest"
           fi
-          if gh release download data-latest --pattern station-data.zip --dir /tmp 2>/dev/null; then
+          if dl data-latest station-data.zip --dir /tmp; then
             mkdir -p site/data/station
             unzip -o -q /tmp/station-data.zip -d site/data/station
             # the site has no station page (measured.html shows only the station index: names,
@@ -73,7 +92,7 @@ jobs:
             echo "no station index yet; the Stations tab of measured.html says so"
           fi
           # the past days of the forecast map: what was measured per okres (`mvd observed-map`)
-          if gh release download data-latest --pattern observed-data.zip --dir /tmp 2>/dev/null; then
+          if dl data-latest observed-data.zip --dir /tmp; then
             rm -rf site/data/observed
             mkdir -p site/data/observed
             unzip -o -q /tmp/observed-data.zip -d site/data/observed
@@ -86,7 +105,7 @@ jobs:
           # every model's forecast at the station point, by day, with the measured values
           # (`mvd station-fc`): the measured page's model selector, and the per-day error
           # files (err-<day>.json) of the Stations map's model-error colours
-          if gh release download data-latest --pattern station-fc.zip --dir /tmp 2>/dev/null; then
+          if dl data-latest station-fc.zip --dir /tmp; then
             rm -rf site/data/station-fc
             mkdir -p site/data/station-fc
             unzip -o -q /tmp/station-fc.zip -d site/data/station-fc
@@ -96,7 +115,7 @@ jobs:
           fi
           # the AI forecast tab (experimental): MeteoVerdict AI's scores and the
           # experiments, computed daily and published as release ai-latest
-          if gh release download ai-latest --pattern ai.zip --dir /tmp 2>/dev/null; then
+          if dl ai-latest ai.zip --dir /tmp; then
             rm -rf site/data/ai
             mkdir -p site/data/ai
             unzip -o -q /tmp/ai.zip -d site/data/ai
@@ -112,7 +131,7 @@ jobs:
           # the heatmap's hourly 100 m maps (fc/heat/: index.json and a few PNGs) have their
           # own rolling release heat-web (heat.zip, files relative to fc/heat/); it wins over
           # a heat/ folder that an older ai.zip may still carry
-          if gh release download heat-web --pattern heat.zip --dir /tmp 2>/dev/null; then
+          if dl heat-web heat.zip --dir /tmp; then
             rm -rf site/data/ai/fc/heat
             mkdir -p site/data/ai/fc/heat
             unzip -o -q /tmp/heat.zip -d site/data/ai/fc/heat
@@ -122,7 +141,7 @@ jobs:
           fi
           # the Compare page's same-sample ranking without the AI (compare.zip; the AI's own
           # run publishes the one with MeteoVerdict AI)
-          if gh release download data-latest --pattern compare.zip --dir /tmp --clobber 2>/dev/null; then
+          if dl data-latest compare.zip --dir /tmp; then
             rm -rf site/data/compare
             mkdir -p site/data/compare
             unzip -o -q /tmp/compare.zip -d site/data/compare
@@ -132,7 +151,7 @@ jobs:
           fi
           # every model's own hourly forecast per okres (outlook-models.zip): the forecast
           # pages read these instead of asking Open-Meteo from the visitor's browser
-          if gh release download data-latest --pattern outlook-models.zip --dir /tmp 2>/dev/null; then
+          if dl data-latest outlook-models.zip --dir /tmp; then
             rm -rf site/data/forecast/models
             mkdir -p site/data/forecast/models
             unzip -o -q /tmp/outlook-models.zip -d site/data/forecast/models
@@ -142,7 +161,7 @@ jobs:
           fi
           # every model's parts of day for all okresy, one file per model (outlook-models-parts.zip):
           # the model switch of the forecast map
-          if gh release download data-latest --pattern outlook-models-parts.zip --dir /tmp 2>/dev/null; then
+          if dl data-latest outlook-models-parts.zip --dir /tmp; then
             rm -rf site/data/forecast/models-parts
             mkdir -p site/data/forecast/models-parts
             unzip -o -q /tmp/outlook-models-parts.zip -d site/data/forecast/models-parts
@@ -153,7 +172,7 @@ jobs:
           for name in outlook.json outlook-hourly.json leads.json \
             leads-bands-90d.json leads-bands-90d-kraj.json leads-bands-all.json leads-bands-all-kraj.json \
             farm.json blend-test.json obce-loso.json; do
-            if gh release download data-latest --pattern "$name" --dir site/data --clobber 2>/dev/null; then
+            if dl data-latest "$name" --dir site/data; then
               echo "$name from data-latest"
             else
               echo "no $name yet; the pages that use it say so or hide that part"
@@ -161,7 +180,7 @@ jobs:
           done
           # test: the forecast for every obec, one file per okres (obce.zip)
           mkdir -p site/data/forecast
-          if gh release download data-latest --pattern obce.zip --dir /tmp --clobber 2>/dev/null; then
+          if dl data-latest obce.zip --dir /tmp; then
             unzip -o -q /tmp/obce.zip -d site/data/forecast
             echo "obce forecast from data-latest ($(ls site/data/forecast/obce-*.json | wc -l) okresy)"
           else
