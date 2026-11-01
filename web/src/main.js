@@ -68,13 +68,18 @@ async function getJson(path) {
 
 // "Include MeteoVerdict models" (mv-compare.js): on by default, `?mv=0` turns it off. It applies to
 // the variables the engine's same-sample files cover (temperature, wind), where the map ranks every
-// model, ours and the AI on the same recent days; the period and the station dots then do not apply
-const mvOn = new URLSearchParams(window.location.search).get("mv") !== "0";
-const mvPath = (level, variable) => `data/scores/mv/${level}/${variable}.json`;
-/** Do the same-sample files exist for the variable (and the level)? Remembered. */
+// model, ours and the AI on the same days; the station dots then do not apply. Its periods are the
+// last week (the default, where MeteoVerdict AI has enough days) and the last 60 days (without it);
+// `?period=60d` picks the second
+const query = new URLSearchParams(window.location.search);
+const mvOn = query.get("mv") !== "0";
+const MV_PERIODS = ["week", "60d"];
+let mvPeriod = query.get("period") === "60d" ? "60d" : "week";
+const mvPath = (period, level, variable) => `data/scores/mv/${period}/${level}/${variable}.json`;
+/** Do the same-sample files exist for the period, variable and level? Remembered. */
 const mvFiles = new Map();
-function hasMv(level, variable) {
-  const path = mvPath(level, variable);
+function hasMv(level, variable, period = mvPeriod) {
+  const path = mvPath(period, level, variable);
   if (!mvFiles.has(path)) mvFiles.set(path, getJson(path).then((doc) => (doc ? records(doc).length > 0 && doc : null)));
   return mvFiles.get(path);
 }
@@ -84,7 +89,7 @@ function scores(view, level, variable = view.variable) {
   if (current.mv && variable === view.variable) {
     // the station dots are a different sample: none with the same-sample comparison
     if (level === "station") return Promise.resolve([]);
-    return hasMv(level, variable).then((doc) => records(doc));
+    return hasMv(level, variable, current.mvPeriod).then((doc) => records(doc));
   }
   const path = `data/scores/${filesWindow(view.window, current.meta)}/${level}/${variable}.json`;
   if (!cache.has(path)) {
@@ -127,7 +132,7 @@ function fillSelect(id, options, current) {
 // --- state: the view (variable, lead day, window) and the chosen region, in the URL ----
 const current = {
   view: null, level: "okres", rows: [], regions: new Map(), stations: new Map(),
-  names: {}, colors: {}, stationTable: null, highlight: null, pBestMin: P_BEST_MIN, mv: false, mvSample: null,
+  names: {}, colors: {}, stationTable: null, highlight: null, pBestMin: P_BEST_MIN, mv: false, mvSample: null, mvPeriod: "week", mvSamples: {},
 };
 
 /** Our own models stand out among the public ones (their colours are not from the palette). */
@@ -136,9 +141,14 @@ const colorsFor = (names) => ({ ...modelColors(names), ...MV_COLORS[document.doc
 
 /** Does the view use the same-sample comparison (the choice is on and its files cover the variable)? */
 async function resolveMv(view) {
-  const doc = mvOn ? await hasMv("okres", view.variable) : null;
-  current.mv = Boolean(doc);
-  current.mvSample = doc?.sample ?? null;
+  const docs = mvOn ? await Promise.all(MV_PERIODS.map((p) => hasMv("okres", view.variable, p))) : [];
+  const byPeriod = Object.fromEntries(MV_PERIODS.map((p, i) => [p, docs[i] ?? null]));
+  // the chosen period, or the other one where the files of the chosen one are missing
+  const period = byPeriod[mvPeriod] ? mvPeriod : MV_PERIODS.find((p) => byPeriod[p]);
+  current.mv = Boolean(period);
+  current.mvPeriod = period ?? mvPeriod;
+  current.mvSample = byPeriod[period]?.sample ?? null;
+  current.mvSamples = Object.fromEntries(MV_PERIODS.filter((p) => byPeriod[p]).map((p) => [p, byPeriod[p].sample]));
   return current.mv;
 }
 
@@ -573,20 +583,26 @@ map.on("load", async () => {
   /** With the same-sample comparison the period is fixed: say which, and lock the choice. */
   function syncWindowSelect() {
     const select = document.getElementById("window");
+    const note = document.getElementById("mv-note");
+    note.hidden = !current.mv;
     if (current.mv) {
-      const sample = current.mvSample;
-      const range = sample?.from && sample?.to ? ` (${sample.from} – ${sample.to})` : "";
-      fillSelect("window", [["mv", `${windowText(view)}${range}`]], "mv");
-    } else if (select.disabled || select.options.length !== windowOptions.length) {
+      const label = (period) => {
+        const sample = current.mvSamples[period];
+        const range = sample?.from && sample?.to ? ` (${sample.from} – ${sample.to})` : "";
+        return `${t("mv.days", { days: sample?.days ?? (period === "week" ? 7 : 60) })}${range}`;
+      };
+      fillSelect("window", Object.keys(current.mvSamples).map((p) => [p, label(p)]), current.mvPeriod);
+      note.textContent = t(current.mvPeriod === "week" ? "mv.noteWeek" : "mv.note60d");
+    } else if (select.options.length !== windowOptions.length || ![...select.options].some((o) => o.value === view.window)) {
       fillSelect("window", windowOptions, view.window);
     }
-    select.disabled = current.mv;
+    select.disabled = false;
   }
   // the choice itself, only where the files exist (the engine's run has written them)
   const mvBox = document.getElementById("mv-box");
   const mvInput = document.getElementById("mv");
   mvInput.checked = mvOn;
-  if (await hasMv("okres", "temperature_2m")) mvBox.hidden = false;
+  if ((await Promise.all(MV_PERIODS.map((p) => hasMv("okres", "temperature_2m", p)))).some(Boolean)) mvBox.hidden = false;
   mvInput.addEventListener("change", () => {
     const url = new URL(window.location.href);
     if (mvInput.checked) url.searchParams.delete("mv");
@@ -599,7 +615,15 @@ map.on("load", async () => {
     ["window", "window", String],
   ]) {
     document.getElementById(id).addEventListener("change", (event) => {
-      view[key] = parse(event.target.value);
+      if (id === "window" && current.mv) {
+        mvPeriod = event.target.value;
+        const url = new URL(window.location.href);
+        if (mvPeriod === "week") url.searchParams.delete("period");
+        else url.searchParams.set("period", mvPeriod);
+        window.history.replaceState(null, "", url);
+      } else {
+        view[key] = parse(event.target.value);
+      }
       render();
     });
   }
