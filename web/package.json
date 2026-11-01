@@ -6,7 +6,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "data": "node scripts/copy-data.mjs && node scripts/build-api.mjs",
+    "data": "node scripts/copy-data.mjs && node scripts/build-api.mjs && node scripts/build-mv-compare.mjs",
     "dev": "npm run data && vite",
     "build": "npm run data && vite build",
     "preview": "vite preview",

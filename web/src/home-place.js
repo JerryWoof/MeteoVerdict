@@ -37,4 +37,4 @@ export function locateErrorKey(error) {
 
 /** The forecast page's map with an okres and an obec in it selected (panel open). */
 export const forecastLink = (code, obec) =>
-  `forecast.html#${code}${obec ? `/${encodeURIComponent(obec)}` : ""}`;
+  `./#${code}${obec ? `/${encodeURIComponent(obec)}` : ""}`;

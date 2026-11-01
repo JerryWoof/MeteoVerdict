@@ -3857,3 +3857,10 @@ svg[class^="plot-"],
   max-height: 36rem;
   overflow: auto;
 }
+
+/* the choice "Include MeteoVerdict models" in the model comparison's controls */
+.field.check {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}

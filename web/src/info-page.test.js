@@ -23,8 +23,8 @@ test("every page has both languages with the same block kinds", () => {
 });
 
 test("parseInline: a link inside bold is a bold link, not raw Markdown", () => {
-  assert.deepEqual(parseInline("**[Předpověď](forecast.html)**: dny"), [
-    { text: "Předpověď", href: "forecast.html", bold: true },
+  assert.deepEqual(parseInline("**[Předpověď](./)**: dny"), [
+    { text: "Předpověď", href: "./", bold: true },
     { text: ": dny" },
   ]);
   assert.deepEqual(parseInline("**a [b](x.html) c**"), [

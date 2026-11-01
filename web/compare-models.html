@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n-page="page.compareModelsTitle">MeteoVerdict: Compare models</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta
+      name="description"
+      content="Předpověď počasí pro každou obec v Česku a denní ověřování, který model se trefuje nejlépe, proti měření stanic ČHMÚ."
+    />
+  </head>
+  <body class="page map-page theme-map">
+    <header>
+      <h1><a href="./">MeteoVerdict</a></h1>
+      <p id="status">Načítám…</p>
+      <nav class="site-nav" aria-label="MeteoVerdict">
+        <a href="./" data-i18n="page.tv">Předpověď</a>
+        <a href="radar.html" data-i18n="page.radar">Radar</a>
+        <a href="heatmap.html" data-i18n="page.heatmap">Heatmapa</a>
+        <a href="compare-models.html" data-i18n="page.compareModels">Porovnání modelů</a>
+      </nav>
+      <div id="language" class="langsw" role="group" aria-label="Jazyk / Language"><button type="button" data-lang="cs" lang="cs" aria-pressed="true" title="Čeština" aria-label="Čeština">CS</button><button type="button" data-lang="en" lang="en" aria-pressed="false" title="English" aria-label="English">EN</button></div>
+    </header>
+    <main class="content map-page">
+      <div class="page-head">
+        <h2 class="page-title" data-i18n="page.compareModelsTitle">Porovnání modelů</h2>
+      </div>
+      <p class="page-intro" data-i18n="page.mapIntro"></p>
+      <p class="page-intro" data-i18n="home.bestModel"></p>
+      <!-- what the map shows: right above it -->
+      <form id="controls" class="strip attached">
+        <div class="strip-row">
+          <label class="field"><span data-i18n="control.okres">Okres</span> <select id="find"></select></label>
+          <label class="field"><span data-i18n="control.variable">Variable</span> <select id="variable"></select></label>
+          <label class="field"><span data-i18n="control.lead">Lead time</span> <select id="lead"></select></label>
+          <label class="field"><span data-i18n="control.window">Period</span> <select id="window"></select>
+            <span class="help" tabindex="0" role="note" data-i18n-title="window.help">?</span></label>
+          <label id="mv-box" class="field check" hidden><input type="checkbox" id="mv" checked />
+            <span data-i18n="mv.include">Zahrnout MeteoVerdict modely</span>
+            <span class="help" tabindex="0" role="note" data-i18n-title="mv.help">?</span></label>
+        </div>
+      </form>
+      <div class="map-wrap">
+        <div id="map" class="map-frame" role="region" aria-label="Map of Czechia" data-i18n-aria="map.aria">
+          <div id="hover" role="tooltip" hidden></div>
+        </div>
+        <aside id="legend" class="map-box legend after" aria-label="Legend"></aside>
+        <aside id="detail" class="map-box panel" aria-live="polite"></aside>
+      </div>
+    </main>
+    <footer data-footer>
+      <nav class="site-links" aria-label="O projektu"><a href="about.html">O projektu</a> · <a href="methodology.html">Metodika</a> · <a href="data.html">Data</a> · <a href="https://verify.meteoverdict.cz/" target="_blank" rel="noopener">Nezávislá verifikace měření</a> · <a href="collaboration.html">Kontakt</a> · <a href="soukromi.html">Soukromí</a> · <a href="zdroje.html">Zdroje a licence</a> · <a href="https://pudomer.cz/">Půdoměr</a></nav> · © MeteoVerdict, data <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>
+    </footer>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

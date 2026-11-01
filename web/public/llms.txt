@@ -5,8 +5,8 @@
 Web je v češtině (výchozí) a angličtině. Nejde o oficiální předpověď; oficiální výstrahy vydává ČHMÚ.
 
 ## Hlavní stránky
-- [Mapa přesnosti: který model vede v kterém okrese](https://meteoverdict.cz/)
-- [Předpověď pro okresy a obce](https://meteoverdict.cz/forecast.html)
+- [Předpověď pro okresy a obce](https://meteoverdict.cz/)
+- [Porovnání modelů: který model vede v kterém okrese](https://meteoverdict.cz/compare-models.html)
 - [Radar srážek](https://meteoverdict.cz/radar.html)
 - [Který model počasí je nejpřesnější? (výklad)](https://meteoverdict.cz/nejpresnejsi-model.html)
 - [Metodika: jak počítáme přesnost](https://meteoverdict.cz/methodology.html)
