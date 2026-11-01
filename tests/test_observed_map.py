@@ -274,6 +274,14 @@ def test_daily_values_for_older_days():
     assert (got["tmax"], got["r"], got["sno"], got["part"]) == (15.5, 2.0, 3.0, "day")
     assert got["tmin"] == pytest.approx(4.2)
     assert got["wind"] is None and got["cloud"] is None
+    # the daily rows carry every station column: okres_periods reads them (a missing rh/pres/dir
+    # column crashed `mvd observed-map` for every day older than the hourly window)
+    assert set(om.STATION_COLUMNS) <= set(days.columns)
+    stations = pl.DataFrame(
+        {"id": [A], "okres_code": ["CZ0423"], "elevation": [200.0]},
+    )
+    rows = om.okres_periods(days, stations)
+    assert rows.height == 1 and rows["tmax"][0] == 15.5 and rows["n_h"][0] == 0
     phen = pl.DataFrame(
         [
             {"station": A, "resolution": "phenomena", "time": utc(DAY, 0), "element": code}
