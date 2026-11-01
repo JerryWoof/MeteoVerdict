@@ -19,6 +19,7 @@ import {
   SPEEDS, advanceClock, locate, motionFor, msPerDataMinute, quantize, upsampleFlow, validMotion,
   warpBlend,
 } from "./radar-motion.js";
+import { smoothDraw } from "./radar-smooth.js";
 import {
   bracket, cellFeatures, compass, hourTicks, lonLatToPixel, nowcastSentence, relativeTime, sample,
   satelliteProduct,
@@ -306,7 +307,8 @@ function makeLuts() {
 }
 
 // frame time of drawing (ms), to choose the resolution on slow devices
-const perf = { samples: [], scale: 1, draws: 0 };
+// `k`: the frames are drawn k × finer than the ~1 km grid, smoothly (radar-smooth.js); 1 = plain cells
+const perf = { samples: [], scale: 1, k: 2, draws: 0 };
 window.__radarPerf = perf;
 function measure(ms) {
   perf.samples.push(ms);
@@ -315,8 +317,11 @@ function measure(ms) {
   perf.last = ms;
   perf.avg = perf.samples.reduce((a, b) => a + b, 0) / perf.samples.length;
   perf.max = Math.max(...perf.samples);
-  // half resolution (4× fewer pixels) when a full-size frame takes too long
-  if (perf.scale === 1 && perf.samples.length >= 8 && perf.avg > 14) {
+  // too slow: first the plain cells (4× fewer pixels), then half the grid's resolution as well
+  if (perf.scale === 1 && perf.k > 1 && perf.samples.length >= 8 && perf.avg > 20) {
+    perf.k = 1;
+    perf.samples = [];
+  } else if (perf.scale === 1 && perf.k === 1 && perf.samples.length >= 8 && perf.avg > 14) {
     perf.scale = 2;
     perf.samples = [];
     flows.clear();
@@ -341,11 +346,17 @@ function drawRadar() {
     return false;
   }
   const scale = perf.scale;
-  const key = `${urlA}|${scale}`;
+  const k = scale === 1 ? perf.k : 1;
+  const key = `${urlA}|${scale}|${k}`;
   if (radarCanvas.key === key) return true;
   const start = performance.now();
-  radarCanvas.ensure(A.w, A.h, scale);
-  warpBlend(radarCanvas.pixels, A.codes, null, A.w, A.h, null, 0, lutRadar, scale);
+  if (k > 1) {
+    radarCanvas.ensure(A.w * k, A.h * k, 1);
+    smoothDraw(radarCanvas.pixels, A.codes, A.w, A.h, k, lutRadar);
+  } else {
+    radarCanvas.ensure(A.w, A.h, scale);
+    warpBlend(radarCanvas.pixels, A.codes, null, A.w, A.h, null, 0, lutRadar, scale);
+  }
   radarCanvas.commit(a.forecast ? 0.75 : 0.9);
   measure(performance.now() - start);
   perf.mode = "frame";
@@ -366,11 +377,18 @@ function drawRain() {
     frame(url).then(() => requestDraw());
     return false;
   }
-  if (rainCanvas.key === url) return true;
-  rainCanvas.ensure(R.w, R.h, 1);
-  warpBlend(rainCanvas.pixels, R.codes, null, R.w, R.h, null, 0, lutRain, 1);
+  const k = perf.k;
+  const key = `${url}|${k}`;
+  if (rainCanvas.key === key) return true;
+  if (k > 1) {
+    rainCanvas.ensure(R.w * k, R.h * k, 1);
+    smoothDraw(rainCanvas.pixels, R.codes, R.w, R.h, k, lutRain);
+  } else {
+    rainCanvas.ensure(R.w, R.h, 1);
+    warpBlend(rainCanvas.pixels, R.codes, null, R.w, R.h, null, 0, lutRain, 1);
+  }
   rainCanvas.commit(0.8);
-  rainCanvas.key = url;
+  rainCanvas.key = key;
   return true;
 }
 
