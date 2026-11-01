@@ -143,7 +143,7 @@ class GitHubReleaseStore:
             try:
                 response = self.client.request(method, url, **kwargs)
             except httpx.TransportError as error:
-                # the server hung up (RemoteProtocolError) or the connection broke: retried like a 5xx
+                # the server hung up or the connection broke: retried like a 5xx
                 if method not in IDEMPOTENT or server_errors >= len(SERVER_ERROR_WAITS):
                     raise
                 self.log(f"GitHub connection error for {method} {url} ({error!r}); retrying")
