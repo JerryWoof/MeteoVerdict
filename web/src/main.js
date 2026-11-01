@@ -394,12 +394,6 @@ async function showStation(code, title, backTo, models = null) {
   if (backTo) children.push(back);
   const sub = element("p", `${t(`variable.${current.view.variable}`)} · D+${current.view.leadDay} · ${t(`window.${current.view.window}`).toLowerCase()}`, "muted");
   children.push(element("h2", `${t("detail.kindStation")}: ${title}`), sub, stationChart(doc, current.view, current.colors, current.names, t, models));
-  // the station on the Stations tab of measured.html
-  const all = element("a", t("station.link"));
-  all.href = `measured.html#kinds/${encodeURIComponent(code)}`;
-  const links = element("p", null, "links");
-  links.append(all);
-  children.push(links);
   box.replaceChildren(...children);
   fitView();
 }

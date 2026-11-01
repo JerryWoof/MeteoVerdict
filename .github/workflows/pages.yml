@@ -8,7 +8,7 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: ["web/**", "site/reports/**", "src/meteoverdict/data/*.geojson", ".github/workflows/pages.yml"]
+    paths: ["web/**", "src/meteoverdict/data/*.geojson", ".github/workflows/pages.yml"]
   workflow_run:
     workflows: [Daily, CHMI archive]
     types: [completed]
@@ -80,39 +80,6 @@ jobs:
             unzip -o -q /tmp/forecast-json.zip -d site/data
             echo "forecast weight files from data-latest"
           fi
-          if dl data-latest station-data.zip --dir /tmp; then
-            mkdir -p site/data/station
-            unzip -o -q /tmp/station-data.zip -d site/data/station
-            # the site has no station page (measured.html shows only the station index: names,
-            # places, kinds): the per-station histories are not published on Pages
-            find site/data/station -type f ! -name index.json -delete
-            find site/data/station -mindepth 1 -type d -empty -delete
-            echo "station index from data-latest ($(ls site/data/station | wc -l) files)"
-          else
-            echo "no station index yet; the Stations tab of measured.html says so"
-          fi
-          # the past days of the forecast map: what was measured per okres (`mvd observed-map`)
-          if dl data-latest observed-data.zip --dir /tmp; then
-            rm -rf site/data/observed
-            mkdir -p site/data/observed
-            unzip -o -q /tmp/observed-data.zip -d site/data/observed
-            # the map shows okresy only: no single stations' values per day
-            rm -f site/data/observed/*-stations.json
-            echo "observed days from data-latest ($(ls site/data/observed | wc -l) files, $(du -sh site/data/observed | cut -f1))"
-          else
-            echo "no observed-data.zip yet; the forecast map offers no past days"
-          fi
-          # every model's forecast at the station point, by day, with the measured values
-          # (`mvd station-fc`): the measured page's model selector, and the per-day error
-          # files (err-<day>.json) of the Stations map's model-error colours
-          if dl data-latest station-fc.zip --dir /tmp; then
-            rm -rf site/data/station-fc
-            mkdir -p site/data/station-fc
-            unzip -o -q /tmp/station-fc.zip -d site/data/station-fc
-            echo "station forecasts from data-latest ($(ls site/data/station-fc | wc -l) files, $(ls site/data/station-fc | grep -c '^err-') error days, $(du -sh site/data/station-fc | cut -f1))"
-          else
-            echo "no station-fc.zip yet; the measured page's model selector and error colours say so"
-          fi
           # the AI forecast tab (experimental): MeteoVerdict AI's scores and the
           # experiments, computed daily and published as release ai-latest
           if dl ai-latest ai.zip --dir /tmp; then
@@ -138,16 +105,6 @@ jobs:
             echo "heatmap from heat-web ($(ls site/data/ai/fc/heat | wc -l) files)"
           else
             echo "no heat.zip yet; the heatmap comes from ai.zip when it has heat/"
-          fi
-          # the Compare page's same-sample ranking without the AI (compare.zip; the AI's own
-          # run publishes the one with MeteoVerdict AI)
-          if dl data-latest compare.zip --dir /tmp; then
-            rm -rf site/data/compare
-            mkdir -p site/data/compare
-            unzip -o -q /tmp/compare.zip -d site/data/compare
-            echo "compare files from data-latest ($(ls site/data/compare | wc -l) files)"
-          else
-            echo "no compare.zip yet; the Compare page uses only the AI's files"
           fi
           # every model's own hourly forecast per okres (outlook-models.zip): the forecast
           # pages read these instead of asking Open-Meteo from the visitor's browser

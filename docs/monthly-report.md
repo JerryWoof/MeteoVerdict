@@ -1,8 +1,7 @@
 # Monthly accuracy report
 
 `mvd monthly-report YYYY-MM` writes the accuracy report of one finished calendar month
-from the scores we already have; <https://meteoverdict.cz/report.html>
-draws it (Czech and English, printable, with a PDF).
+from the scores we already have; used to be drawn by `report.html`; the page and its footer link were removed in November 2026 (the files under `site/reports` are still written).
 
 ```
 mvd store download --from 2026-09            # scores-2026-09.parquet from the release data-2026-09

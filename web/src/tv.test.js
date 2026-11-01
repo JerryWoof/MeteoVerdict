@@ -191,11 +191,9 @@ test("history: another day, okres or obec is a step back, the rest replaces the 
   assert.equal(historyMode(view, { ...view, obec: null }), "replace");
 });
 
-test("hashes that belong to another page: the old okres detail and past days", () => {
+test("hashes that belong to another page: the old okres detail", () => {
   assert.equal(leaveFor("#CZ0423", "2026-10-17"), "forecast-detail.html#CZ0423");
   assert.equal(leaveFor("#CZ020A", "2026-10-17"), "forecast-detail.html#CZ020A");
-  assert.equal(leaveFor("#2026-10-16/night/temperature/tp", "2026-10-17"), "measured.html#2026-10-16/night/temperature/tp/okresy");
-  assert.equal(leaveFor("#2026-10-16/morning/wind/w/CZ0100", "2026-10-17"), "measured.html#2026-10-16/morning/wind/w/CZ0100");
   assert.equal(leaveFor("#2026-10-17/night/temperature/tp", "2026-10-17"), null);
   assert.equal(leaveFor("#CZ0423/Libotenice", "2026-10-17"), null);
   assert.equal(leaveFor("", "2026-10-17"), null);

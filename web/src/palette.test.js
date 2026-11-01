@@ -7,18 +7,15 @@ import * as tv from "./tv.js";
 
 const source = (name) => readFileSync(new URL(`./${name}`, import.meta.url), "utf8");
 
-test("the forecast map and the measured page share one palette", () => {
+test("the forecast map takes its palette from palette.js", () => {
   // tv.js re-exports the very same scales and functions
   for (const name of ["RAMPS", "colorFor", "rampKey", "NEUTRAL", "BEYOND"]) assert.equal(tv[name], palette[name], name);
-  // both pages draw the legend with palette.renderScale, and neither builds its own
-  for (const file of ["tv-page.js", "station-page.js"]) {
+  // the page draws the legend with palette.renderScale, and builds none of its own
+  for (const file of ["tv-page.js"]) {
     const code = source(file);
     assert.match(code, /import \{[^}]*\brenderScale\b[^}]*\} from "\.\/palette\.js"/, file);
     assert.doesNotMatch(code, /linear-gradient/, file);
   }
-  // the measured map's okres fills and station dots take the palette's colours
-  assert.match(source("measured-map-view.js"), /from "\.\/palette\.js"/);
-  assert.doesNotMatch(source("measured-map-view.js"), /RAMPS = \{/);
 });
 
 test("gust and sunshine scales are derived in the forecast's style", () => {

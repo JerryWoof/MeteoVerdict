@@ -28,7 +28,7 @@ export function prerenderI18n(html, file) {
     return `<${tag}${attrs}>${cs}</${tag}>`;
   });
   // the active menu item, the same on every page
-  const page = file === "index.html" ? "./" : file === "compare-models.html" ? "compare.html" : file;
+  const page = file === "index.html" ? "./" : file;
   out = out.replace(/<nav class="site-nav"[\s\S]*?<\/nav>/, (nav) =>
     nav.replace(/ aria-current="page"/g, "").replace(NAV_LINK, (a, href) =>
       href === page ? a.replace(/>$/, ' aria-current="page">') : a));

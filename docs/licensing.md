@@ -38,7 +38,6 @@ is a summary for the project, not legal advice.
 | Code | this repository | MIT |
 | ALADIN station archive (`aladin-YYYY-MM` releases) | GitHub Release assets | CC BY 4.0, derived from ČHMÚ data only; release notes credit ČHMÚ and list our changes |
 | ČHMÚ station data archive (`chmi-*` releases: every element of every station) | GitHub Release assets | CC BY 4.0, ČHMÚ data only, values unchanged (JSON → Parquet); release notes credit ČHMÚ and state the change |
-| Station index (`measured.html`; the full `station-data.zip` in `data-latest` is only a download) | GitHub Pages | CC BY 4.0, ČHMÚ data only; the page credits ČHMÚ with a link and the licence |
 | Radar archive (`radar-YYYY-MM` releases) and live frames (branch `radar-live`) | GitHub Release assets, a git branch | CC BY 4.0, derived from ČHMÚ data only (echo-top frames, motion fields and storm cells are our derivations from the ČHMÚ composites); release notes and the branch README credit ČHMÚ and list our changes |
 | Satellite archive (`satellite-YYYY-MM` releases), satellite frames in `radar-live` and the radar day sets | GitHub Release assets, a git branch, GitHub Pages | CC BY 4.0; the release notes, the branch README and `index.json` (`satellite_attribution`) credit EUMETSAT ("contains modified EUMETSAT Meteosat data <year>") and ČHMÚ and list our changes |
 | Single model runs at ~100 stations (`runs-YYYY-MM` releases) | GitHub Release assets | **CC BY-SA 4.0** (includes UK Met Office data); release notes credit Open-Meteo and the providers |
