@@ -307,8 +307,13 @@ function makeLuts() {
 }
 
 // frame time of drawing (ms), to choose the resolution on slow devices
-// `k`: the frames are drawn k × finer than the ~1 km grid, smoothly (radar-smooth.js); 1 = plain cells
-const perf = { samples: [], scale: 1, k: 2, draws: 0 };
+// `k`: the frames are drawn k × finer than the ~1 km grid, smoothly (radar-smooth.js); 1 = plain
+// cells. `?smooth=bands` draws the smooth classes of the legend, `?smooth=off` the plain cells,
+// `?k=2…4` sets the resolution
+const smoothQuery = new URLSearchParams(window.location.search);
+const SMOOTH_MODE = smoothQuery.get("smooth") === "bands" ? "bands" : "gradient";
+const startK = smoothQuery.get("smooth") === "off" ? 1 : Math.min(4, Math.max(1, Number(smoothQuery.get("k")) || 3));
+const perf = { samples: [], scale: 1, k: startK, draws: 0 };
 window.__radarPerf = perf;
 function measure(ms) {
   perf.samples.push(ms);
@@ -319,7 +324,7 @@ function measure(ms) {
   perf.max = Math.max(...perf.samples);
   // too slow: first the plain cells (4× fewer pixels), then half the grid's resolution as well
   if (perf.scale === 1 && perf.k > 1 && perf.samples.length >= 8 && perf.avg > 20) {
-    perf.k = 1;
+    perf.k -= 1;
     perf.samples = [];
   } else if (perf.scale === 1 && perf.k === 1 && perf.samples.length >= 8 && perf.avg > 14) {
     perf.scale = 2;
@@ -352,7 +357,7 @@ function drawRadar() {
   const start = performance.now();
   if (k > 1) {
     radarCanvas.ensure(A.w * k, A.h * k, 1);
-    smoothDraw(radarCanvas.pixels, A.codes, A.w, A.h, k, lutRadar);
+    smoothDraw(radarCanvas.pixels, A.codes, A.w, A.h, k, lutRadar, SMOOTH_MODE);
   } else {
     radarCanvas.ensure(A.w, A.h, scale);
     warpBlend(radarCanvas.pixels, A.codes, null, A.w, A.h, null, 0, lutRadar, scale);
@@ -382,7 +387,7 @@ function drawRain() {
   if (rainCanvas.key === key) return true;
   if (k > 1) {
     rainCanvas.ensure(R.w * k, R.h * k, 1);
-    smoothDraw(rainCanvas.pixels, R.codes, R.w, R.h, k, lutRain);
+    smoothDraw(rainCanvas.pixels, R.codes, R.w, R.h, k, lutRain, SMOOTH_MODE);
   } else {
     rainCanvas.ensure(R.w, R.h, 1);
     warpBlend(rainCanvas.pixels, R.codes, null, R.w, R.h, null, 0, lutRain, 1);
