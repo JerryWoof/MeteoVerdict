@@ -150,7 +150,10 @@ class FakeGitHub:
             return httpx.Response(200, content=b"file")
         self.api.append((request.method, url.path))
         if self.limited:
-            return self.limited.pop(0)
+            item = self.limited.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
         path = url.path.removeprefix("/repos/o/r")
         if path.startswith("/releases/tags/"):
             tag = path.rsplit("/", 1)[1]
@@ -418,3 +421,13 @@ def test_a_server_error_that_lasts_is_returned_after_the_retries():
     with pytest.raises(httpx.HTTPStatusError):
         gh.store().names("chmi-2026")
     assert gh.waits == [2.0, 10.0, 30.0]
+
+
+def test_a_dropped_connection_is_retried_for_a_get_but_not_for_an_upload():
+    gh = FakeGitHub({"chmi-2026": ["a"]})
+    gh.limited = [httpx.RemoteProtocolError("Server disconnected"), httpx.ReadError("reset")]
+    assert gh.store().names("chmi-2026") == {"a"}
+    assert gh.waits == [2.0, 10.0]
+    gh.limited = [httpx.RemoteProtocolError("Server disconnected")]
+    with pytest.raises(httpx.RemoteProtocolError):
+        gh.store()._request("POST", "https://uploads.github.com/x")
