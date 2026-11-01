@@ -24,7 +24,7 @@ import {
   COLOURS, LAYERS, NEUTRAL, PARTS, RAMPS, currentPart, dayLabel, displayName, ease,
   iconName, labelFor, lerpRow, mixColor, okresColours, parseOutlook, parseView,
   placeMarkers, playSteps, rampKey, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary,
-  today, viewHash, gustOver, gustOverText, chmiNotice, CAPITALS, historyMode, leaveFor, measuredRedirect,
+  today, viewHash, gustOver, gustOverText, chmiNotice, CAPITALS, historyMode, leaveFor,
 } from "./tv.js";
 import { keepRoomForPanels, panelRoom, scrollToPanel, userMoved } from "./panel-room.js";
 import { aiPath } from "./ai-source.js";
@@ -48,9 +48,9 @@ const FILL_OPACITY = ["step", ["zoom"], 0.85, BASE_ZOOM, 0.45, MIN_ZOOM, 0.2];
 const HOURS = { night: "0–6", morning: "6–12", afternoon: "12–18", evening: "18–24", day: "0–24" };
 
 // the detailed forecast per okres used to live at forecast.html#CZ0423 (now
-// forecast-detail.html), the past days moved to the measured page: such links open there
+// forecast-detail.html): such links open there
 // (also when pasted into the address bar of the open page, see applyHash)
-const elsewhere = leaveFor(window.location.hash, today(Date.now()));
+const elsewhere = leaveFor(window.location.hash);
 if (elsewhere) window.location.replace(elsewhere);
 
 const map = new MapLibreMap({
@@ -841,11 +841,8 @@ function townDetail(code) {
   const seat = seatOkres(code);
   const detail = element("a", t("tv.detail"));
   detail.href = `${DETAIL}#${seat}`;
-  // directly under it, the link to what was measured in this okres
-  const measured = element("a", t("tv.measuredLink"));
-  measured.href = `measured.html#${code}`;
   const links = element("div", null, "detail-links");
-  links.append(detail, measured);
+  links.append(detail);
   return links;
 }
 let padding = null;
@@ -876,15 +873,6 @@ function paintFill(colours) {
  * (opening a link, Back and Forward themselves).
  */
 function update(change = {}, { fromPlay = false, replace = false } = {}) {
-  // a past day ("Yesterday", the first tab) is what was measured: the measured page shows
-  // that day, as a link or a reload of that day's address would
-  if (!fromPlay && change.day && change.day < today(Date.now())) {
-    const hash = measuredRedirect(viewHash({ ...state, ...change, obec: null }), today(Date.now()));
-    if (hash) {
-      window.location.assign(`measured.html${hash}`);
-      return;
-    }
-  }
   if (!fromPlay) stopPlay();
   const before = { ...state, obec: panelObec };
   // another okres (or none) starts on the forecast the map shows
@@ -900,7 +888,6 @@ function update(change = {}, { fromPlay = false, replace = false } = {}) {
     else window.history.replaceState(null, "", hash);
   }
   const view = shownView();
-  paintMeasuredLink();
   renderWhen(outlook);
   renderShow();
   paintFill(okresColours(view, state.day, state.part, state.colour));
@@ -1030,12 +1017,6 @@ function renderMapPicker() {
 function defaultToAi() {
   if (!aiData || !mapReady || mapChosen || mapModel !== COMBINED) return;
   setMapModel(AI_MODEL);
-}
-
-/** The link below the map to the measured page, for the okres open in the panel (measured.html#CZxxxx). */
-function paintMeasuredLink() {
-  // with a panel open the link is in the panel (townDetail); without one it stays below the map
-  document.getElementById("measured-link").hidden = Boolean(state.okres);
 }
 
 /** After the map's model changed: the obce of the open okres and of those in view, for the new source. */
@@ -1196,7 +1177,7 @@ async function openObec({ okres, obec: name }) {
 
 /** The view of the address now (pasted, or Back and Forward), unless it is shown already. */
 async function applyHash() {
-  const elsewhere = leaveFor(window.location.hash, today(Date.now()));
+  const elsewhere = leaveFor(window.location.hash);
   if (elsewhere) {
     window.location.replace(elsewhere);
     return;

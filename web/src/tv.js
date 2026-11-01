@@ -300,29 +300,11 @@ export function parseView(hash, outlook, fallback) {
 }
 
 /**
- * An old forecast-map link to a past day ("#2026-10-16/afternoon/…", from when the map
- * showed what was measured): the measured page's hash for it (measured.html, measured.js),
- * with the okres layer and the okres open as before; null for any other hash.
- */
-export function measuredRedirect(hash, todayIso) {
-  const parts = (hash ?? "").replace(/^#/, "").split("/");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(parts[0]) || parts[0] >= todayIso) return null;
-  const [day, part, colour, values, okres] = parts;
-  const layer = /^CZ/.test(values ?? "") ? values : /^CZ/.test(okres ?? "") ? okres : "okresy";
-  const rest = [part, colour, /^CZ/.test(values ?? "") ? undefined : values].filter(Boolean);
-  while (rest.length < 3) rest.push(["day", "temperature", "tp"][rest.length]);
-  return `#${[day, ...rest, layer].join("/")}`;
-}
-
-/**
  * Where a forecast-map hash belongs when it is not this page's: the old "#CZ0423" (the
- * detailed forecast per okres, now forecast-detail.html) or a past day (the measured
- * page, measuredRedirect). The address to open, or null to stay.
+ * detailed forecast per okres, now forecast-detail.html). The address to open, or null to stay.
  */
-export function leaveFor(hash, todayIso) {
-  if (/^#CZ\w{4}$/.test(hash ?? "")) return `forecast-detail.html${hash}`;
-  const measured = measuredRedirect(hash, todayIso);
-  return measured ? `measured.html${measured}` : null;
+export function leaveFor(hash) {
+  return /^#CZ\w{4}$/.test(hash ?? "") ? `forecast-detail.html${hash}` : null;
 }
 
 /**

@@ -19,9 +19,4 @@ const scores = join(repo, "site", "data");
 if (existsSync(scores)) {
   cpSync(scores, join(out, "scores"), { recursive: true });
 }
-// the monthly accuracy reports (`mvd monthly-report`, committed under site/reports)
-const reports = join(repo, "site", "reports");
-if (existsSync(reports)) {
-  cpSync(reports, join(out, "..", "reports"), { recursive: true });
-}
 console.log(`copied boundaries${existsSync(scores) ? " and scores" : ""} to ${out}`);
