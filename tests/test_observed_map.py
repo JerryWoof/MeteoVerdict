@@ -274,6 +274,9 @@ def test_daily_values_for_older_days():
     assert (got["tmax"], got["r"], got["sno"], got["part"]) == (15.5, 2.0, 3.0, "day")
     assert got["tmin"] == pytest.approx(4.2)
     assert got["wind"] is None and got["cloud"] is None
+    # a daily-only day must still go through okres_periods (rh, pres, dir columns)
+    assert set(om.STATION_COLUMNS) <= set(days.columns)
+    om.okres_periods(days, STATIONS)
     phen = pl.DataFrame(
         [
             {"station": A, "resolution": "phenomena", "time": utc(DAY, 0), "element": code}
