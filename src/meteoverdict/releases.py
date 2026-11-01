@@ -140,7 +140,16 @@ class GitHubReleaseStore:
         server_errors = 0
         for attempt in range(RATE_LIMIT_RETRIES + 1):
             self.api_calls += 1
-            response = self.client.request(method, url, **kwargs)
+            try:
+                response = self.client.request(method, url, **kwargs)
+            except httpx.TransportError as error:
+                # the server hung up or the connection broke: retried like a 5xx
+                if method not in IDEMPOTENT or server_errors >= len(SERVER_ERROR_WAITS):
+                    raise
+                self.log(f"GitHub connection error for {method} {url} ({error!r}); retrying")
+                self.sleep(SERVER_ERROR_WAITS[server_errors])
+                server_errors += 1
+                continue
             wait = rate_limit_wait(response, self.clock(), attempt)
             if wait is None:
                 if (
