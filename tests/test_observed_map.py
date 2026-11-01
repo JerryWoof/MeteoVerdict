@@ -274,6 +274,10 @@ def test_daily_values_for_older_days():
     assert (got["tmax"], got["r"], got["sno"], got["part"]) == (15.5, 2.0, 3.0, "day")
     assert got["tmin"] == pytest.approx(4.2)
     assert got["wind"] is None and got["cloud"] is None
+    # the okres mean (build) needs every station column, also those the daily values lack
+    assert set(om.STATION_COLUMNS) <= set(days.columns)
+    stations = pl.DataFrame({"id": [A], "okres_code": ["X"], "elevation": [300.0]})
+    assert om.okres_periods(days, stations).height == 1
     phen = pl.DataFrame(
         [
             {"station": A, "resolution": "phenomena", "time": utc(DAY, 0), "element": code}

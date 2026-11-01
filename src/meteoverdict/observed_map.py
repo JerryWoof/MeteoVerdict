@@ -434,7 +434,7 @@ def station_periods(
 def station_days(daily: pl.DataFrame) -> pl.DataFrame:
     """The whole day from ČHMÚ's daily climate values (``station_diary.FIELDS`` and
     windows): one row per station and day with ``part`` "day", ``STATION_COLUMNS`` (no
-    wind, no cloud) and ``sno`` (new snow, cm)."""
+    wind, cloud, humidity, pressure or direction: null) and ``sno`` (new snow, cm)."""
     choice = pl.DataFrame(
         {
             "element": [e for e, _ in station_diary.FIELDS.values()],
@@ -463,6 +463,10 @@ def station_days(daily: pl.DataFrame) -> pl.DataFrame:
         pl.col("g").cast(pl.Float64).alias("gust"),
         pl.col("ssv").cast(pl.Float64).alias("ssv"),
         pl.lit(None, pl.Float64).alias("cloud"),
+        # the daily values have no humidity, pressure or direction; okres_periods needs the columns
+        pl.lit(None, pl.Float64).alias("rh"),
+        pl.lit(None, pl.Float64).alias("pres"),
+        pl.lit(None, pl.Float64).alias("dir"),
         pl.col("sno").cast(pl.Float64).alias("sno"),
     ).sort("station", "day")
 
