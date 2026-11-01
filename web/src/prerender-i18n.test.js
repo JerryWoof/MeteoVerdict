@@ -10,7 +10,8 @@ test("menu and language button are Czech in the HTML, the active item follows th
   const out = prerenderI18n(PAGE, "heatmap.html");
   assert.match(out, /data-i18n="page.tv">Předpověď</);
   assert.match(out, /data-i18n="page.radar">Radar</);
-  assert.ok(!out.includes("aria-current"));
+  assert.match(out, /href="heatmap.html"[^>]*aria-current="page"/);
+  assert.equal(out.match(/aria-current/g).length, 1);
   assert.match(prerenderI18n(PAGE, "radar.html"), /href="radar.html"[^>]*aria-current="page"/);
   assert.match(prerenderI18n(PAGE, "index.html"), /href="\.\/"[^>]*aria-current="page"/);
 });

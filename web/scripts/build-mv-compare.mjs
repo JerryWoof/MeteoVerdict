@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { MV_COLUMNS, regionRows } from "../src/mv-compare.js";
+import { MV_COLUMNS, regionRows, windowStart } from "../src/mv-compare.js";
 
 const web = join(dirname(fileURLToPath(import.meta.url)), "..");
 const scores = join(web, "public", "data", "scores");
@@ -19,24 +19,38 @@ if (!existsSync(join(from, "index.json"))) {
   process.exit(0);
 }
 const read = (path) => JSON.parse(readFileSync(path, "utf-8"));
-const index = read(join(from, "index.json"));
 const meta = existsSync(join(scores, "meta.json")) ? read(join(scores, "meta.json")) : {};
 const minStations = meta.min_stations ?? 3;
-const sample = { from: index.from ?? null, to: index.to ?? null, days: index.test_days ?? null };
+const WEEK = 7;
 
-const files = new Map(); // "level/variable" → rows
-for (const name of readdirSync(from)) {
-  if (!/^CZ\w+\.json$/.test(name)) continue;
-  const doc = read(join(from, name));
-  if (doc.level !== "okres" && doc.level !== "kraj") continue;
-  for (const [variable, rows] of regionRows(doc, minStations)) {
-    const key = `${doc.level}/${variable}`;
-    files.set(key, [...(files.get(key) ?? []), ...rows]);
+// the periods: "60d" the validation sample (ours and the public models; MeteoVerdict AI is too
+// young for it), "week" the last 7 days of the live sample, where the AI is scored too
+const index = read(join(from, "index.json"));
+const liveDir = join(from, "live");
+const periods = [{ name: "60d", dir: from, sample: { from: index.from ?? null, to: index.to ?? null, days: index.test_days ?? null }, week: null }];
+if (existsSync(join(liveDir, "index.json"))) {
+  const live = read(join(liveDir, "index.json"));
+  if (live.to) {
+    const week = { from: windowStart(live.to, WEEK), to: live.to };
+    periods.push({ name: "week", dir: liveDir, sample: { ...week, days: WEEK }, week });
   }
 }
-for (const [key, rows] of files) {
-  const path = join(out, `${key}.json`);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify({ columns: MV_COLUMNS, rows, sample }));
+
+for (const period of periods) {
+  const files = new Map(); // "level/variable" → rows
+  for (const name of readdirSync(period.dir)) {
+    if (!/^CZ\w+\.json$/.test(name)) continue;
+    const doc = read(join(period.dir, name));
+    if (doc.level !== "okres" && doc.level !== "kraj") continue;
+    for (const [variable, rows] of regionRows(doc, minStations, period.week)) {
+      const key = `${doc.level}/${variable}`;
+      files.set(key, [...(files.get(key) ?? []), ...rows]);
+    }
+  }
+  for (const [key, rows] of files) {
+    const path = join(out, period.name, `${key}.json`);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify({ columns: MV_COLUMNS, rows, sample: period.sample }));
+  }
+  console.log(`MeteoVerdict models, ${period.name}: ${files.size} files (${period.sample.from} to ${period.sample.to})`);
 }
-console.log(`MeteoVerdict models in the comparison: ${files.size} files (${sample.from} to ${sample.to})`);
