@@ -36,7 +36,7 @@ export const PAGES = {
         ["h3", "Je MeteoVerdict zdarma a mohu data použít?"],
         ["p", "Ano. Web je zdarma a nekomerční a [otevřená data](data.html) jsou pod licencí CC BY-SA 4.0 (zdroje CC BY 4.0), s uvedením zdroje."],
         ["h", "Kontakt", "contact"],
-        ["p", "Napište nám na [info@meteoverdict.cz](mailto:info@meteoverdict.cz). Chyby a nápady můžete hlásit i jako [issue na GitHubu]("+REPO+"/issues): vidí je i ostatní a nic se neztratí. Ke spolupráci je určená stránka [Spolupráce](collaboration.html)."],
+        ["p", "Napište nám na [info@meteoverdict.cz](mailto:info@meteoverdict.cz). Chyby a nápady můžete hlásit i jako [issue na GitHubu]("+REPO+"/issues): vidí je i ostatní a nic se neztratí. Ke spolupráci viz stránka [Kontakt](collaboration.html)."],
       ],
     },
     en: {
@@ -69,7 +69,7 @@ export const PAGES = {
         ["h3", "Is MeteoVerdict free and may I use the data?"],
         ["p", "Yes. The site is free and non-commercial, and the [open data](data.html) is under CC BY-SA 4.0 (sources CC BY 4.0), with attribution."],
         ["h", "Contact", "contact"],
-        ["p", "Write to us at [info@meteoverdict.cz](mailto:info@meteoverdict.cz). Bugs and ideas can also be reported as an [issue on GitHub]("+REPO+"/issues): others can see them and nothing gets lost. For collaboration, see the [Collaboration](collaboration.html) page."],
+        ["p", "Write to us at [info@meteoverdict.cz](mailto:info@meteoverdict.cz). Bugs and ideas can also be reported as an [issue on GitHub]("+REPO+"/issues): others can see them and nothing gets lost. For collaboration, see the [Contact](collaboration.html) page."],
       ],
     },
   },
@@ -215,8 +215,9 @@ export const PAGES = {
   },
   collaboration: {
     cs: {
-      title: "Spolupráce",
+      title: "Kontakt",
       blocks: [
+        ["p", "Napište nám na [info@meteoverdict.cz](mailto:info@meteoverdict.cz). Chyby a nápady můžete hlásit i jako [issue na GitHubu]("+REPO+"/issues): vidí je i ostatní a nic se neztratí."],
         ["p", "MeteoVerdict měří, jak přesné jsou předpovědi počasí v Česku, po okresech a proti stanicím ČHMÚ. Je to open-source projekt a web zůstává zdarma a nekomerční."],
         ["h", "Co je k dispozici"],
         ["ul", [
@@ -231,8 +232,9 @@ export const PAGES = {
       ],
     },
     en: {
-      title: "Collaboration",
+      title: "Contact",
       blocks: [
+        ["p", "Write to us at [info@meteoverdict.cz](mailto:info@meteoverdict.cz). Bugs and ideas can also be reported as an [issue on GitHub]("+REPO+"/issues): others can see them and nothing gets lost."],
         ["p", "MeteoVerdict measures how accurate weather forecasts in Czechia are, by okres and against ČHMÚ stations. It is an open-source project and the site stays free and non-commercial."],
         ["h", "What is available"],
         ["ul", [

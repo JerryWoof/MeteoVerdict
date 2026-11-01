@@ -16,15 +16,15 @@ export function renderFooter(footer, t) {
   footer.replaceChildren(siteLinks(t), ` · © MeteoVerdict, ${t("footer.data")} `, licence);
 }
 
-/** The links on every page: About, Methodology, the independent verification of the
- * measurements (verify.meteoverdict.cz, opens in a new tab), Collaboration, Contact, Privacy,
+/** The links on every page: About, Methodology, Data, the independent verification of the
+ * measurements (verify.meteoverdict.cz, opens in a new tab), Contact (with the collaboration), Privacy,
  * Sources and licences, and the sister site Půdoměr (soil temperature and moisture). */
 export const SITE_LINKS = [
   ["site.about", "about.html"],
   ["site.method", "methodology.html"],
+  ["page.api", "data.html"],
   ["site.verify", "https://verify.meteoverdict.cz/"],
-  ["site.business", "collaboration.html"],
-  ["site.contact", "mailto:info@meteoverdict.cz"],
+  ["site.contact", "collaboration.html"],
   ["site.privacy", "soukromi.html"],
   ["site.credits", "zdroje.html"],
   ["site.pudomer", "https://pudomer.cz/"],
