@@ -1,14 +1,14 @@
 {
- "generated": "2026-10-31T15:23:50+00:00",
- "as_of": "2026-10-30",
+ "generated": "2026-11-01T06:00:57+00:00",
+ "as_of": "2026-10-31",
  "windows": {
   "90d": {
-   "from": "2026-08-02",
-   "to": "2026-10-30"
+   "from": "2026-08-03",
+   "to": "2026-10-31"
   },
   "all": {
    "from": "2026-06-15",
-   "to": "2026-10-30"
+   "to": "2026-10-31"
   },
   "jja": {
    "from": "2026-06-15",
@@ -16,11 +16,11 @@
   },
   "season": {
    "from": "2026-09-01",
-   "to": "2026-10-30"
+   "to": "2026-10-31"
   },
   "son": {
    "from": "2026-09-01",
-   "to": "2026-10-30"
+   "to": "2026-10-31"
   }
  },
  "levels": [
@@ -91,16 +91,16 @@
  "short_record": {
   "all": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.685,
-    "days": 85,
+    "coverage": 0.688,
+    "days": 86,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.685,
-    "days": 85,
+    "coverage": 0.688,
+    "days": 86,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
@@ -131,6 +131,7 @@
     "days": 47,
     "variables": [
      "precipitation_24h",
+     "precipitation_daily",
      "temperature_max"
     ]
    },
@@ -139,7 +140,16 @@
     "days": 47,
     "variables": [
      "precipitation_24h",
+     "precipitation_daily",
      "temperature_max"
+    ]
+   },
+   "gem_global": {
+    "coverage": 0.787,
+    "days": 48,
+    "variables": [
+     "temperature_2m_06utc",
+     "temperature_2m_18utc"
     ]
    },
    "geosphere_arome_austria": {
@@ -147,6 +157,7 @@
     "days": 47,
     "variables": [
      "precipitation_24h",
+     "precipitation_daily",
      "temperature_max"
     ]
    },
@@ -155,13 +166,16 @@
     "days": 47,
     "variables": [
      "precipitation_24h",
+     "precipitation_daily",
      "temperature_max"
     ]
    },
    "ukmo_global_deterministic_10km": {
-    "coverage": 0.797,
-    "days": 47,
+    "coverage": 0.787,
+    "days": 48,
     "variables": [
+     "temperature_2m_06utc",
+     "temperature_2m_18utc",
      "temperature_max"
     ]
    }
@@ -172,6 +186,7 @@
     "days": 47,
     "variables": [
      "precipitation_24h",
+     "precipitation_daily",
      "temperature_max"
     ]
    },
@@ -180,7 +195,16 @@
     "days": 47,
     "variables": [
      "precipitation_24h",
+     "precipitation_daily",
      "temperature_max"
+    ]
+   },
+   "gem_global": {
+    "coverage": 0.787,
+    "days": 48,
+    "variables": [
+     "temperature_2m_06utc",
+     "temperature_2m_18utc"
     ]
    },
    "geosphere_arome_austria": {
@@ -188,6 +212,7 @@
     "days": 47,
     "variables": [
      "precipitation_24h",
+     "precipitation_daily",
      "temperature_max"
     ]
    },
@@ -196,13 +221,16 @@
     "days": 47,
     "variables": [
      "precipitation_24h",
+     "precipitation_daily",
      "temperature_max"
     ]
    },
    "ukmo_global_deterministic_10km": {
-    "coverage": 0.797,
-    "days": 47,
+    "coverage": 0.787,
+    "days": 48,
     "variables": [
+     "temperature_2m_06utc",
+     "temperature_2m_18utc",
      "temperature_max"
     ]
    }
@@ -224,7 +252,7 @@
   },
   "single_runs": {
    "from": "2026-10-18",
-   "to": "2026-10-30"
+   "to": "2026-10-31"
   }
  }
 }
