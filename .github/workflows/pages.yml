@@ -232,11 +232,8 @@ jobs:
           PAGES_BUDGET_MB: 900
         run: |
           mkdir -p /tmp/radar web/dist/radar/days
-          # the rolling release radar-web holds only the last days; the monthly releases
-          # radar-YYYY-MM are the fallback until the archive job there is switched off
-          for tag in radar-web \
-              "radar-$(date -u +%Y-%m)" \
-              "radar-$(date -u -d "$(date -u +%Y-%m-01) -1 day" +%Y-%m)"; do
+          # the rolling release radar-web holds the last nine days (made on the DGX Spark)
+          for tag in radar-web; do
             gh release download "$tag" --pattern 'web-*.tar' --dir /tmp/radar --skip-existing 2>/dev/null \
               || echo "no $tag yet"
           done
