@@ -102,7 +102,7 @@ layout may change.
   end of the 6 days) the okres value plus the obec's mean difference from the okres over
   the hours both have (wind not below 0); precipitation then is the okres value.
   Where the okres has no value, neither has the obec.
-- `hourly.precipitation_probability` (only where the obec file has it, from 2026-10-31): the calibrated chance, in percent, that the hour ending at the time is wet (at least 0.1 mm) at the obec itself, from the public models' hourly values (all models in the obec file, fitted daily on the stations' hours); a chance for one place, not the okres's `rain_probability` (part of day, okres mean). Null in the past and where fewer than three models have a value.
+- `hourly.precipitation_probability` (only in the MeteoVerdict AI obec files, `api/v1/ai/obce/…`, from 2026-10-31; not in the plain blend files): the calibrated chance, in percent, that the hour ending at the time is wet (at least 0.1 mm) at the obec itself, from the public models' hourly values (all models in the obec file, fitted daily on the stations' hours); a chance for one place, not the okres's `rain_probability` (part of day, okres mean). Null in the past and where fewer than three models have a value.
 - `sources.okres` lists the fields that are the okres's value (the rest is the obec's own); a copied field is missing on a row where the okres has none.
 - `hourly` also has `cloud_cover` and `sunshine_duration` (the okres's, as in the okres file: nothing is
   forecast for an obec itself) and `parts` also `rain_probability`, `cloud`, `sunshine`, `symbol`,
