@@ -1143,6 +1143,12 @@ export function pathLanguage(pathname) {
   return /^\/en(\/|$)/.test(pathname) ? "en" : null;
 }
 
+/** The language asked for in the address (`?lang=en`), else null: it is remembered like the switch. */
+export function queryLanguage(search) {
+  const asked = new URLSearchParams(search).get("lang");
+  return LANGUAGES.includes(asked) ? asked : null;
+}
+
 /** The address of the same page in `language`: "/radar.html" ↔ "/en/radar.html", "/" ↔ "/en/". */
 export function languagePath(pathname, language) {
   const bare = pathname.replace(/^\/en(?=\/|$)/, "") || "/";
@@ -1169,7 +1175,18 @@ function storeLanguage(language) {
 /** Language of this page view; sets <html lang>, the [data-i18n] texts, the footer and the
  * switch. */
 export function setUpLanguage() {
-  const language = pathLanguage(window.location.pathname) ?? pickLanguage(storedLanguage());
+  const asked = queryLanguage(window.location.search);
+  if (asked) {
+    // ?lang=en / ?lang=cs: remember it and go to that language's page (the built site has the English
+    // twin under /en/), without the parameter; the dev server has no twin and just uses it
+    storeLanguage(asked);
+    const { pathname, search, hash } = window.location;
+    const rest = new URLSearchParams(search);
+    rest.delete("lang");
+    const to = `${languagePath(pathname, asked)}${[...rest].length ? `?${rest}` : ""}${hash}`;
+    if (import.meta.env?.PROD && to !== `${pathname}${search}${hash}`) window.location.replace(to);
+  }
+  const language = asked ?? pathLanguage(window.location.pathname) ?? pickLanguage(storedLanguage());
   const t = translator(language);
   document.documentElement.lang = language;
   for (const element of document.querySelectorAll("[data-i18n]")) {

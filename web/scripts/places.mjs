@@ -4,6 +4,8 @@
 // for the 6 258 obce (decided against: too many near-identical pages).
 // Pure functions: the file work is in build-places.mjs.
 import { fold } from "../src/places.js";
+import { translator } from "../src/i18n.js";
+import { SITE_LINKS } from "../src/footer.js";
 
 export const SITE = "https://meteoverdict.cz";
 
@@ -154,9 +156,21 @@ export function shell(spec, assets) {
 ${spec.bodyHtml}
       <p class="note">${t.note}</p>
     </main>
+    ${footer(spec.lang)}
   </body>
 </html>
 `;
+}
+
+/** The footer of the app pages without JavaScript: the same links (src/footer.js), under /en/ in English. */
+function footer(lang) {
+  const t = translator(lang);
+  const prefix = lang === "en" ? "/en/" : "/";
+  const links = SITE_LINKS.map(([key, href]) => {
+    const external = /^https:/.test(href);
+    return `<a href="${external ? href : prefix + href}"${/^https:\/\/verify\./.test(href) ? ' target="_blank" rel="noopener"' : ""}>${esc(t(key))}</a>`;
+  }).join(" · ");
+  return `<footer><nav class="site-links" aria-label="${esc(t("site.about"))}">${links}</nav> · © MeteoVerdict, ${esc(t("footer.data"))} <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></footer>`;
 }
 
 const breadcrumbLd = (crumbs) => ({
