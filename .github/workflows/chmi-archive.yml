@@ -54,11 +54,20 @@ jobs:
         # what the stations measured per okres and part of day, the last 30 days (60 whole
         # days), with our archived forecast beside it (outlook-parts-* of outlook-archive);
         # reads the archive files the station pages downloaded; observed-data.zip in
-        # data-latest. Optional: must not fail the archive (the map then keeps the last one).
+        # data-latest. Optional: must not fail the archive (the map then keeps the last one);
+        # the next step turns a failure that lasts into a red run.
         # Runs even when the station pages failed (it downloads what it needs itself).
         if: ${{ !cancelled() }}
         continue-on-error: true
         timeout-minutes: 20
         run: uv run --frozen mvd observed-map --github-release --publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: observed-data.zip is not older than 36 hours
+        # the step above is continue-on-error, so its failure was silent: the measured page stood
+        # on 22 Oct for nine days (2026-11-01 audit). A failure of one run is no alarm (the zip is
+        # from the run before, at most ~12 h), a zip older than 36 h is.
+        if: ${{ !cancelled() }}
+        run: python3 scripts/external_watch.py --only observed-zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,63 @@
+name: External watch
+
+# An independent check of the public data from outside the Spark and the Mac (the watchdog that
+# runs there tells through the Spark, so a dead Spark would stay silent): every 30 minutes it reads
+# what a visitor of meteoverdict.cz gets and the release asset the measured page stands on, and
+# compares their ages with the limits of scripts/external_watch.py (index and outlook 6 h, AI 8 h,
+# observed-data.zip 36 h; 77 okresy in the index).
+# When something is stale it opens one issue "Monitoring: public data is stale" (e-mail to the
+# watchers of the repository), reminds at most every 12 hours and closes it when all is fresh again;
+# the run itself also ends red, which GitHub mails to the person who last changed the schedule.
+# No secrets, no paid service; GitHub's cron may be late by several minutes, which the limits absorb.
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: external-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Is the public data fresh?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TITLE: "Monitoring: public data is stale"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Check the ages
+        id: check
+        continue-on-error: true
+        run: python3 scripts/external_watch.py | tee watch.txt; exit "${PIPESTATUS[0]}"
+      - name: Open, remind or close the issue
+        if: ${{ !cancelled() }}
+        run: |
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" \
+            --json number,title,updatedAt --jq "map(select(.title == \"$TITLE\"))[0].number // empty")
+          if [ "${{ steps.check.outcome }}" = success ]; then
+            [ -n "$number" ] && gh issue close "$number" --repo "$GITHUB_REPOSITORY" \
+              --comment "Fresh again ($(date -u +%FT%TZ)): $(tr '\n' ' ' < watch.txt)"
+            exit 0
+          fi
+          body=$(printf 'Run %s/%s/actions/runs/%s\n\n```\n%s\n```\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$(cat watch.txt)")
+          if [ -z "$number" ]; then
+            gh label create monitoring --repo "$GITHUB_REPOSITORY" --color D93F0B --force >/dev/null || true
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label monitoring --body "$body"
+          else
+            updated=$(gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json updatedAt --jq .updatedAt)
+            age=$(( $(date -u +%s) - $(date -u -d "$updated" +%s) ))
+            [ "$age" -ge 43200 ] && gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "Still stale. $body"
+          fi
+          exit 0
+      - name: Fail the run when something is stale
+        if: ${{ steps.check.outcome == 'failure' }}
+        run: exit 1
