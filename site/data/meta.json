@@ -1,14 +1,14 @@
 {
- "generated": "2026-11-01T12:27:16+00:00",
- "as_of": "2026-10-31",
+ "generated": "2026-11-02T06:00:20+00:00",
+ "as_of": "2026-11-01",
  "windows": {
   "90d": {
-   "from": "2026-08-03",
-   "to": "2026-10-31"
+   "from": "2026-08-04",
+   "to": "2026-11-01"
   },
   "all": {
    "from": "2026-06-15",
-   "to": "2026-10-31"
+   "to": "2026-11-01"
   },
   "jja": {
    "from": "2026-06-15",
@@ -16,11 +16,11 @@
   },
   "season": {
    "from": "2026-09-01",
-   "to": "2026-10-31"
+   "to": "2026-11-01"
   },
   "son": {
    "from": "2026-09-01",
-   "to": "2026-10-31"
+   "to": "2026-11-01"
   }
  },
  "levels": [
@@ -91,16 +91,16 @@
  "short_record": {
   "all": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.688,
-    "days": 86,
+    "coverage": 0.69,
+    "days": 87,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.688,
-    "days": 86,
+    "coverage": 0.69,
+    "days": 87,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
@@ -127,7 +127,7 @@
   },
   "season": {
    "dmi_harmonie_arome_europe": {
-    "coverage": 0.797,
+    "coverage": 0.783,
     "days": 47,
     "variables": [
      "precipitation_24h",
@@ -136,7 +136,7 @@
     ]
    },
    "dwd_icon_d2": {
-    "coverage": 0.797,
+    "coverage": 0.783,
     "days": 47,
     "variables": [
      "precipitation_24h",
@@ -145,7 +145,7 @@
     ]
    },
    "gem_global": {
-    "coverage": 0.787,
+    "coverage": 0.774,
     "days": 48,
     "variables": [
      "temperature_2m_06utc",
@@ -153,7 +153,7 @@
     ]
    },
    "geosphere_arome_austria": {
-    "coverage": 0.797,
+    "coverage": 0.783,
     "days": 47,
     "variables": [
      "precipitation_24h",
@@ -162,7 +162,7 @@
     ]
    },
    "knmi_harmonie_arome_europe": {
-    "coverage": 0.797,
+    "coverage": 0.783,
     "days": 47,
     "variables": [
      "precipitation_24h",
@@ -171,7 +171,7 @@
     ]
    },
    "ukmo_global_deterministic_10km": {
-    "coverage": 0.787,
+    "coverage": 0.774,
     "days": 48,
     "variables": [
      "temperature_2m_06utc",
@@ -182,7 +182,7 @@
   },
   "son": {
    "dmi_harmonie_arome_europe": {
-    "coverage": 0.797,
+    "coverage": 0.783,
     "days": 47,
     "variables": [
      "precipitation_24h",
@@ -191,7 +191,7 @@
     ]
    },
    "dwd_icon_d2": {
-    "coverage": 0.797,
+    "coverage": 0.783,
     "days": 47,
     "variables": [
      "precipitation_24h",
@@ -200,7 +200,7 @@
     ]
    },
    "gem_global": {
-    "coverage": 0.787,
+    "coverage": 0.774,
     "days": 48,
     "variables": [
      "temperature_2m_06utc",
@@ -208,7 +208,7 @@
     ]
    },
    "geosphere_arome_austria": {
-    "coverage": 0.797,
+    "coverage": 0.783,
     "days": 47,
     "variables": [
      "precipitation_24h",
@@ -217,7 +217,7 @@
     ]
    },
    "knmi_harmonie_arome_europe": {
-    "coverage": 0.797,
+    "coverage": 0.783,
     "days": 47,
     "variables": [
      "precipitation_24h",
@@ -226,7 +226,7 @@
     ]
    },
    "ukmo_global_deterministic_10km": {
-    "coverage": 0.787,
+    "coverage": 0.774,
     "days": 48,
     "variables": [
      "temperature_2m_06utc",
@@ -252,7 +252,7 @@
   },
   "single_runs": {
    "from": "2026-10-18",
-   "to": "2026-10-31"
+   "to": "2026-11-01"
   }
  }
 }
