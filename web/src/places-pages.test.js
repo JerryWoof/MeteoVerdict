@@ -79,3 +79,13 @@ test("the language follows the /en/ path, and the switch maps between the twins"
   assert.equal(languagePath("/en/", "cs"), "/");
   assert.equal(languagePath("/en/radar.html", "en"), "/en/radar.html");
 });
+
+test("the pages have the same footer links as the app pages, under /en/ in English", () => {
+  const cs = okresPage("cs", litomerice, days, "3. 11. 2026", "");
+  assert.match(cs, /<footer><nav class="site-links"[^>]*><a href="\/about\.html">O projektu<\/a>/);
+  assert.match(cs, /href="\/collaboration\.html">Kontakt<\/a>/);
+  assert.match(cs, /href="https:\/\/verify\.meteoverdict\.cz\/" target="_blank" rel="noopener"/);
+  const en = okresPage("en", litomerice, days, "2026-11-03", "");
+  assert.match(en, /href="\/en\/about\.html">About<\/a>/);
+  assert.match(en, /href="\/en\/data\.html">Data<\/a>/);
+});

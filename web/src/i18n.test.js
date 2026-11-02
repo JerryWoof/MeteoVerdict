@@ -23,3 +23,11 @@ test("translation with parameters and fallbacks", () => {
   assert.equal(translator("cs")("status.scores", { asOf: "2026-10-19", updated: "2026-10-20" }), "Skóre do 19. 10. 2026 · aktualizováno 20. 10. 2026");
   assert.equal(translator("en")("status.scores", { asOf: "2026-10-19", updated: "2026-10-20" }), "Scores up to 19 Oct 2026 · updated 20 Oct 2026");
 });
+
+test("queryLanguage reads ?lang= (cs or en only)", async () => {
+  const { queryLanguage } = await import("./i18n.js");
+  assert.equal(queryLanguage("?lang=en"), "en");
+  assert.equal(queryLanguage("?a=1&lang=cs"), "cs");
+  assert.equal(queryLanguage("?lang=de"), null);
+  assert.equal(queryLanguage(""), null);
+});
