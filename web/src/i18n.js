@@ -1138,6 +1138,17 @@ function dateFormat(language) {
 
 const STORAGE_KEY = "meteoverdict.language";
 
+/** "en" for a page under /en/ (the English twin of a page), else null: the stored choice rules. */
+export function pathLanguage(pathname) {
+  return /^\/en(\/|$)/.test(pathname) ? "en" : null;
+}
+
+/** The address of the same page in `language`: "/radar.html" ↔ "/en/radar.html", "/" ↔ "/en/". */
+export function languagePath(pathname, language) {
+  const bare = pathname.replace(/^\/en(?=\/|$)/, "") || "/";
+  return language === "en" ? `/en${bare}` : bare;
+}
+
 // the choice is a per-browser convenience; storage may be unavailable
 export function storedLanguage() {
   try {
@@ -1158,7 +1169,7 @@ function storeLanguage(language) {
 /** Language of this page view; sets <html lang>, the [data-i18n] texts, the footer and the
  * switch. */
 export function setUpLanguage() {
-  const language = pickLanguage(storedLanguage());
+  const language = pathLanguage(window.location.pathname) ?? pickLanguage(storedLanguage());
   const t = translator(language);
   document.documentElement.lang = language;
   for (const element of document.querySelectorAll("[data-i18n]")) {
@@ -1193,8 +1204,12 @@ export function setUpLanguage() {
     button.addEventListener("click", () => {
       if (button.dataset.lang === language) return;
       storeLanguage(button.dataset.lang);
-      // a reload keeps the URL and hash; the page script reads the stored choice
-      window.location.reload();
+      const { pathname, search, hash } = window.location;
+      const to = languagePath(pathname, button.dataset.lang);
+      // the built site has the English twin under /en/ (the dev server does not): go there;
+      // otherwise a reload keeps the URL and hash, and the page script reads the stored choice
+      if (import.meta.env?.PROD && to !== pathname) window.location.assign(`${to}${search}${hash}`);
+      else window.location.reload();
     });
   }
   setUpTheme(t);
