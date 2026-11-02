@@ -1,8 +1,8 @@
 # Registrace webu ve vyhledávačích (pokyny pro majitele)
 
 Nic z toho se neděje automaticky; je to jednorázová práce majitele domény `meteoverdict.cz`.
-Sitemapa je `https://meteoverdict.cz/sitemap.xml` (index: `sitemap-pages.xml`, `sitemap-okresy.xml`,
-`sitemap-obce.xml`; obce s méně než 500 obyvateli jsou `noindex` a v sitemapě nejsou).
+Sitemapa je `https://meteoverdict.cz/sitemap.xml` (index: `sitemap-pages.xml` a `sitemap-okresy.xml`;
+stránky okresů vznikají jen při deployi, když je k dispozici `outlook.json`).
 
 ## Google Search Console
 1. https://search.google.com/search-console → Přidat vlastnost → **Doména** `meteoverdict.cz`.
@@ -20,5 +20,4 @@ Sitemapa je `https://meteoverdict.cz/sitemap.xml` (index: `sitemap-pages.xml`, `
 2. Odeslat `sitemap.xml`. Seznam hůř vykresluje JavaScript, proto jsou stránky okresů a obcí čisté HTML.
 
 ## Po spuštění sledovat
-- GSC → Stránky: „Odeslané a indexované“ má růst na ~3 000 (okresy + obce od 500 obyvatel); „Vyloučeno značkou noindex“ jsou malé obce, záměrně.
-- Až bude většina velkých obcí indexovaná a bude mít zobrazení, snížit `INDEX_MIN_POPULATION` v `web/scripts/places.mjs`.
+- GSC → Stránky: „Odeslané a indexované“ má růst k ~170 URL (hlavní stránky ×2 jazyky a 77 okresů ×2).

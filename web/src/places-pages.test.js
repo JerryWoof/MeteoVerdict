@@ -2,64 +2,52 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { languagePath, pathLanguage } from "./i18n.js";
 import { addresses, toEnglish } from "../scripts/en-pages.mjs";
-import { INDEX_MIN_POPULATION, buildPlaces, indexPage, obecPage, okresPage, parseCsv, path, placeSitemaps, sitemapIndex, slugify } from "../scripts/places.mjs";
+import { buildPlaces, forecastDays, indexPage, okresPage, parseCsv, path, placeSitemaps, sitemapIndex, slugify } from "../scripts/places.mjs";
 
 const CSV = `okres,name,lat,lon,elevation,population
 CZ0423,Bohušovice nad Ohří,50.4932,14.1505,153,2393
-CZ0423,Lhota,50.5,14.2,200,120
-CZ0423,Lhota,50.6,14.3,210,900
 CZ0423,Terezín,50.51,14.15,150,2000
 CZ0100,Praha,50.08,14.41,202,1407084`;
 const OKRESY = [{ code: "CZ0423", name: "Litoměřice" }, { code: "CZ0100", name: "Hlavní město Praha" }];
 const places = buildPlaces(OKRESY, parseCsv(CSV));
-const [litomerice, praha] = places.okresy;
+const [litomerice, praha] = places;
+const ROWS = { "2026-11-03|day": { tmax: 9.4, precipitation: 1.2, wind: 3 }, "2026-11-03|night": { tmin: 2.1 }, "2026-11-04|day": { tmax: 7, precipitation: 0, wind: 4.5 }, "2026-11-04|night": { tmin: null }, "2026-11-05|night": { tmin: 1 } };
+const days = forecastDays(["2026-11-03", "2026-11-04", "2026-11-05"], (d, p) => ROWS[`${d}|${p}`]);
 
-test("slugs: no diacritics, same-named obce of an okres numbered by size, Prague named Praha", () => {
+test("okres slugs have no diacritics; Prague is Praha; obce are only counted", () => {
   assert.equal(slugify("Bohušovice nad Ohří"), "bohusovice-nad-ohri");
   assert.equal(praha.slug, "praha");
-  assert.deepEqual(litomerice.obce.map((o) => [o.name, o.slug]).filter(([n]) => n === "Lhota"), [["Lhota", "lhota"], ["Lhota", "lhota-2"]]);
-  assert.equal(places.count, 5);
-  assert.equal(new Set(litomerice.obce.map((o) => o.slug)).size, litomerice.obce.length);
+  assert.deepEqual([litomerice.obce, litomerice.population], [2, 4393]);
 });
 
-test("small obce are noindex and stay out of the sitemap and the English site", () => {
-  const small = litomerice.obce.find((o) => o.population < INDEX_MIN_POPULATION);
-  const big = litomerice.obce.find((o) => o.name === "Terezín");
-  assert.match(obecPage("cs", litomerice, small, ""), /content="noindex,follow"/);
-  assert.match(obecPage("cs", litomerice, big, ""), /content="index,follow"/);
-  const maps = placeSitemaps(places);
-  assert.ok(maps["sitemap-obce.xml"].includes("/predpoved/litomerice/terezin/"));
-  assert.ok(!maps["sitemap-obce.xml"].includes(`/predpoved/litomerice/${small.slug}/`));
-  assert.ok(maps["sitemap-okresy.xml"].includes("/predpoved/litomerice/") && maps["sitemap-okresy.xml"].includes('hreflang="en" href="https://meteoverdict.cz/en/forecast/litomerice/"'));
+test("forecastDays keeps the days that have a day row", () => {
+  assert.equal(days.length, 2);
+  assert.deepEqual(days[1], { day: "2026-11-04", tmax: 7, tmin: null, rain: 0, wind: 4.5 });
 });
 
-test("an obec page: title, description, canonical, hreflang, JSON-LD, link into the forecast", () => {
-  const obec = litomerice.obce.find((o) => o.name === "Bohušovice nad Ohří");
-  const html = obecPage("cs", litomerice, obec, '<link rel="stylesheet" href="/a.css">');
-  assert.match(html, /<title>Počasí Bohušovice nad Ohří \(okres Litoměřice\)/);
-  assert.match(html, /rel="canonical" href="https:\/\/meteoverdict\.cz\/predpoved\/litomerice\/bohusovice-nad-ohri\/"/);
-  assert.match(html, /hreflang="en" href="https:\/\/meteoverdict\.cz\/en\/forecast\/litomerice\/bohusovice-nad-ohri\/"/);
-  assert.match(html, /href="\/#CZ0423\/Bohu%C5%A1ovice%20nad%20Oh%C5%99%C3%AD"/);
-  assert.match(html, /<h2 class="page-title">Počasí Bohušovice nad Ohří<\/h2>/);
+test("an okres page has the numbers of the days, canonical, hreflang, JSON-LD and the link into the forecast", () => {
+  const html = okresPage("cs", litomerice, days, "3. 11. 2026", '<link rel="stylesheet" href="/a.css">');
+  assert.match(html, /<title>Počasí v okrese Litoměřice/);
+  assert.match(html, /rel="canonical" href="https:\/\/meteoverdict\.cz\/predpoved\/litomerice\/"/);
+  assert.match(html, /hreflang="en" href="https:\/\/meteoverdict\.cz\/en\/forecast\/litomerice\/"/);
+  assert.match(html, /<td>9,4<\/td><td>2,1<\/td><td>1,2<\/td><td>3,0<\/td>/);
+  assert.match(html, /<td>–<\/td>/);
+  assert.match(html, /href="\/#CZ0423"/);
+  assert.match(html, /name="description" content="Předpověď počasí v okrese Litoměřice na další dny: /);
   const ld = JSON.parse(html.match(/ld\+json">(.*?)<\/script>/)[1]);
-  assert.deepEqual(ld["@graph"][0].itemListElement.map((i) => i.position), [1, 2, 3]);
-  assert.equal(ld["@graph"][1].about.geo.elevation, 153);
-  const en = obecPage("en", litomerice, obec, "");
+  assert.deepEqual(ld["@graph"][0].itemListElement.map((i) => i.position), [1, 2]);
+  const en = okresPage("en", litomerice, days, "2026-11-03", "");
   assert.match(en, /<html lang="en">/);
-  assert.match(en, /<h2 class="page-title">Weather in Bohušovice nad Ohří<\/h2>/);
-  assert.match(en, /href="\/en\/#CZ0423\//);
+  assert.match(en, /<td>9\.4<\/td>/);
+  assert.match(en, /href="\/en\/#CZ0423"/);
+  assert.equal(path("en", litomerice), "/en/forecast/litomerice/");
 });
 
-test("okres and index pages list their obce / okresy; every page names one description and no raw '<'", () => {
-  const okres = okresPage("cs", litomerice, "");
-  assert.match(okres, /href="\/predpoved\/litomerice\/terezin\/"/);
-  assert.match(okres, /href="\/#CZ0423"/);
-  assert.match(indexPage("cs", places.okresy, ""), /href="\/predpoved\/praha\/"/);
-  // the English okres page links to a small obec's Czech page (it has no English twin)
-  const en = okresPage("en", litomerice, "");
-  assert.match(en, /href="\/predpoved\/litomerice\/lhota-2\/"/);
-  assert.match(en, /href="\/en\/forecast\/litomerice\/terezin\/"/);
-  assert.equal(path("en", litomerice), "/en/forecast/litomerice/");
+test("index page and sitemap list the okresy that have a page", () => {
+  assert.match(indexPage("cs", places, ""), /href="\/predpoved\/praha\/"/);
+  const map = placeSitemaps([litomerice])["sitemap-okresy.xml"];
+  assert.ok(map.includes("/predpoved/litomerice/") && map.includes("/predpoved/</loc>"));
+  assert.ok(map.includes('hreflang="en" href="https://meteoverdict.cz/en/forecast/litomerice/"'));
 });
 
 test("sitemap index names the files; the English copy of a page has canonical, hreflang, base and English text", () => {

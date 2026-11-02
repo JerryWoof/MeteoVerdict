@@ -1,16 +1,11 @@
-// Static pages for every okres and obec: /predpoved/<okres>/ and /predpoved/<okres>/<obec>/
-// (English: /en/forecast/...). Built after `vite build` (scripts/build-places.mjs) from the
-// ČÚZK/ČSÚ places list in the repository, so a crawler without JavaScript reads a headline, a few
-// sentences about the place, links to its neighbours and a link into the interactive forecast.
+// Static pages of the 77 okresy: /predpoved/<okres>/ (English: /en/forecast/<okres>/), built after
+// `vite build` (scripts/build-places.mjs) only when the deploy has the forecast (outlook.json):
+// a crawler without JavaScript reads the real numbers of the next days, not just a link. No pages
+// for the 6 258 obce (decided against: too many near-identical pages).
 // Pure functions: the file work is in build-places.mjs.
 import { fold } from "../src/places.js";
 
 export const SITE = "https://meteoverdict.cz";
-// obce under this many people get the page (reachable by links) but `noindex,follow` and no
-// sitemap entry, so ~3 400 near-identical village pages cannot read as thin content; widen it
-// when Search Console shows the bigger ones are indexed and wanted
-export const INDEX_MIN_POPULATION = 500;
-export const NEIGHBOURS = 6;
 
 export const slugify = (name) => fold(name).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "x";
 
@@ -27,102 +22,70 @@ export function parseCsv(text) {
   });
 }
 
-/**
- * okresy: [{code, name}], rows: parseCsv() → {okresy: [{code, name, slug, obce}], count}.
- * An obec's slug is its folded name; a second obec of the same name in an okres gets -2, -3 …
- * in order of size (then position), so the slugs do not move when other places are added.
- */
+/** okresy: [{code, name}], rows: parseCsv() → [{code, name, slug, obce, population}] by name. */
 export function buildPlaces(okresy, rows) {
-  const byCode = new Map(okresy.map((o) => [o.code, { code: o.code, name: o.name === "Hlavní město Praha" ? "Praha" : o.name, slug: slugify(o.name === "Hlavní město Praha" ? "Praha" : o.name), obce: [] }]));
+  const byCode = new Map(okresy.map((o) => {
+    const name = o.name === "Hlavní město Praha" ? "Praha" : o.name;
+    return [o.code, { code: o.code, name, slug: slugify(name), obce: 0, population: 0 }];
+  }));
   for (const r of rows) {
     const okres = byCode.get(r.okres);
     if (!okres) continue;
-    okres.obce.push({ name: r.name, lat: Number(r.lat), lon: Number(r.lon), elevation: Number(r.elevation), population: Number(r.population) || 0 });
+    okres.obce += 1;
+    okres.population += Number(r.population) || 0;
   }
-  for (const okres of byCode.values()) {
-    okres.obce.sort((a, b) => a.name.localeCompare(b.name, "cs") || b.population - a.population || a.lat - b.lat || a.lon - b.lon);
-    const seen = new Map();
-    for (const o of okres.obce) {
-      const base = slugify(o.name);
-      const n = (seen.get(base) ?? 0) + 1;
-      seen.set(base, n);
-      o.slug = n === 1 ? base : `${base}-${n}`;
-      o.indexable = o.population >= INDEX_MIN_POPULATION;
-    }
-  }
-  const list = [...byCode.values()].filter((o) => o.obce.length).sort((a, b) => a.name.localeCompare(b.name, "cs"));
-  return { okresy: list, count: list.reduce((n, o) => n + o.obce.length, 0) };
+  return [...byCode.values()].sort((a, b) => a.name.localeCompare(b.name, "cs"));
 }
 
-const near = (a, b) => (a.lat - b.lat) ** 2 + ((a.lon - b.lon) * Math.cos((a.lat * Math.PI) / 180)) ** 2;
-export const nearest = (obec, okres) =>
-  okres.obce.filter((o) => o !== obec).sort((a, b) => near(a, obec) - near(b, obec)).slice(0, NEIGHBOURS);
-
 // --- addresses ---------------------------------------------------------------------------------
-export const path = (lang, okres, obec) =>
-  `${lang === "en" ? "/en/forecast/" : "/predpoved/"}${okres ? `${okres.slug}/` : ""}${obec ? `${obec.slug}/` : ""}`;
-const url = (lang, okres, obec) => SITE + path(lang, okres, obec);
+export const path = (lang, okres) => `${lang === "en" ? "/en/forecast/" : "/predpoved/"}${okres ? `${okres.slug}/` : ""}`;
+const url = (lang, okres) => SITE + path(lang, okres);
 const other = (lang) => (lang === "en" ? "cs" : "en");
-/** Whether the English twin exists: every okres, and the obce that are indexed. */
-export const hasEnglish = (obec) => !obec || obec.indexable;
-/** The interactive forecast of the place (obec.name in the hash opens its obec panel). */
-export const appLink = (lang, okres, obec) =>
-  `${lang === "en" ? "/en/" : "/"}#${okres.code}${obec ? `/${encodeURIComponent(obec.name)}` : ""}`;
+/** The interactive forecast of the okres. */
+export const appLink = (lang, okres) => `${lang === "en" ? "/en/" : "/"}#${okres.code}`;
 
 // --- texts -------------------------------------------------------------------------------------
-const fmt = (n, lang) => Number(n).toLocaleString(lang === "en" ? "en-GB" : "cs-CZ").replace(/ /g, " ");
+const fmt = (n, lang) => Number(n).toLocaleString(lang === "en" ? "en-GB" : "cs-CZ").replace(/\u00a0/g, " ");
 const people = (n, lang) => (lang === "en" ? `${fmt(n, lang)} inhabitants` : `${fmt(n, lang)} obyvatel`);
 
 const T = {
   cs: {
-    home: "Předpověď", forecast: "Předpověď počasí", radar: "Radar", heatmap: "Heatmapa", compare: "Porovnání modelů",
+    forecast: "Předpověď počasí",
     nav: [["/", "Předpověď"], ["/radar.html", "Radar"], ["/heatmap.html", "Heatmapa"], ["/compare-models.html", "Porovnání modelů"]],
-    obecTitle: (o, k) => `Počasí ${o.name} (okres ${k.name}): předpověď | MeteoVerdict`,
-    obecH1: (o) => `Počasí ${o.name}`,
-    obecDescription: (o, k) => `Předpověď počasí pro obec ${o.name} v okrese ${k.name} na další dny, složená z modelů podle toho, který se v okrese osvědčil nejlépe. Měřeno proti stanicím ČHMÚ.`,
-    obecLead: (o, k) => `Obec ${o.name} leží v okrese ${k.name}, v nadmořské výšce ${Math.round(o.elevation)} m, a žije v ní ${people(o.population, "cs")}.`,
-    obecBody: (o, k) => `MeteoVerdict skládá předpověď pro ${o.name} z více meteorologických modelů (ALADIN, ICON, ECMWF a dalších) tak, aby každý měl váhu podle toho, jak přesně v okrese ${k.name} v poslední době předpovídal proti měření stanic ČHMÚ. Pro obec ukazuje teplotu, srážky, vítr a další veličiny na příští dny, v interaktivní předpovědi i s tím, který model v okrese právě vede.`,
-    open: (o) => `Otevřít předpověď pro ${o.name}`,
-    nearby: "Obce poblíž",
-    okresLink: (k) => `Všechny obce okresu ${k.name}`,
-    okresTitle: (k) => `Počasí v okrese ${k.name}: předpověď pro obce | MeteoVerdict`,
+    okresTitle: (k) => `Počasí v okrese ${k.name}: předpověď na týden | MeteoVerdict`,
     okresH1: (k) => `Počasí v okrese ${k.name}`,
-    okresDescription: (k, n) => `Předpověď počasí v okrese ${k.name} na další dny a odkazy na ${n} obcí okresu; předpověď je složená z modelů podle toho, který se v okrese osvědčil nejlépe.`,
-    okresLead: (k, n, pop) => `Okres ${k.name} má ${n} obcí a ${people(pop, "cs")}. Předpověď pro okres i pro každou jeho obec skládáme z modelů podle toho, jak přesně se v okrese osvědčily proti měření stanic ČHMÚ.`,
-    openOkres: (k) => `Otevřít předpověď pro okres ${k.name}`,
-    obceOf: (k) => `Obce okresu ${k.name}`,
+    okresDescription: (k, first) => `Předpověď počasí v okrese ${k.name} na další dny${first ? `: ${first}` : ""}. Složená z modelů podle toho, který se v okrese osvědčil nejlépe.`,
+    okresLead: (k, pop, updated) => `Okres ${k.name} má ${k.obce} obcí a ${people(pop, "cs")}. Předpověď je složená z meteorologických modelů podle toho, jak přesně se v okrese osvědčily proti měření stanic ČHMÚ${updated ? `; stav z ${updated}` : ""}.`,
+    cols: ["Den", "Nejvyšší", "Nejnižší", "Srážky", "Vítr"],
+    units: ["°C", "°C", "mm", "m/s"],
+    first: (d, max, min) => `${d} ${max} °C ve dne, ${min} °C v noci`,
+    openOkres: (k) => `Otevřít podrobnou předpověď pro okres ${k.name}`,
     allOkresy: "Všechny okresy",
-    indexTitle: "Počasí podle okresů a obcí: předpověď pro celé Česko | MeteoVerdict",
-    indexH1: "Počasí podle okresů a obcí",
-    indexDescription: "Předpověď počasí pro 77 okresů a 6 258 obcí v Česku. Skládáme ji z modelů podle toho, který se v kterém okrese osvědčil, a měříme ji proti stanicím ČHMÚ.",
-    indexLead: "Vyberte okres a v něm obec. Předpověď je složená z meteorologických modelů podle toho, jak přesně se v okrese osvědčily proti měření stanic ČHMÚ.",
+    indexTitle: "Počasí podle okresů: předpověď pro celé Česko | MeteoVerdict",
+    indexH1: "Počasí podle okresů",
+    indexDescription: "Předpověď počasí pro okresy v Česku. Skládáme ji z modelů podle toho, který se v kterém okrese osvědčil, a měříme ji proti stanicím ČHMÚ.",
+    indexLead: "Vyberte okres. Předpověď je složená z meteorologických modelů podle toho, jak přesně se v okrese osvědčily proti měření stanic ČHMÚ.",
     note: "Nejde o oficiální předpověď; oficiální výstrahy vydává ČHMÚ.",
-    locale: "cs_CZ", ogLocale: "cs_CZ", switchLabel: "English", home2: "MeteoVerdict",
+    ogLocale: "cs_CZ", switchLabel: "English",
   },
   en: {
-    home: "Forecast", forecast: "Weather forecast", radar: "Radar", heatmap: "Heatmap", compare: "Model comparison",
+    forecast: "Weather forecast",
     nav: [["/en/", "Forecast"], ["/en/radar.html", "Radar"], ["/en/heatmap.html", "Heatmap"], ["/en/compare-models.html", "Model comparison"]],
-    obecTitle: (o, k) => `Weather ${o.name} (${k.name} district): forecast | MeteoVerdict`,
-    obecH1: (o) => `Weather in ${o.name}`,
-    obecDescription: (o, k) => `Weather forecast for ${o.name} in the ${k.name} district (Czechia) for the next days, combined from the models by which did best in the district. Checked against ČHMÚ stations.`,
-    obecLead: (o, k) => `${o.name} is a municipality in the ${k.name} district, ${Math.round(o.elevation)} m above sea level, with ${people(o.population, "en")}.`,
-    obecBody: (o, k) => `MeteoVerdict builds the forecast for ${o.name} from several weather models (ALADIN, ICON, ECMWF and others), weighting each by how accurately it forecast in the ${k.name} district lately, measured against ČHMÚ station readings. It shows temperature, precipitation, wind and more for the next days, and in the interactive forecast also which model currently leads in the district.`,
-    open: (o) => `Open the forecast for ${o.name}`,
-    nearby: "Nearby municipalities",
-    okresLink: (k) => `All municipalities of ${k.name} district`,
-    okresTitle: (k) => `Weather in ${k.name} district: forecast for its municipalities | MeteoVerdict`,
+    okresTitle: (k) => `Weather in ${k.name} district: week forecast | MeteoVerdict`,
     okresH1: (k) => `Weather in ${k.name} district`,
-    okresDescription: (k, n) => `Weather forecast for the ${k.name} district for the next days and links to its ${n} municipalities; combined from the models by which did best in the district.`,
-    okresLead: (k, n, pop) => `The ${k.name} district has ${n} municipalities and ${people(pop, "en")}. The forecast for the district and for each municipality is combined from the models by how accurately they did in the district against ČHMÚ station measurements.`,
-    openOkres: (k) => `Open the forecast for ${k.name} district`,
-    obceOf: (k) => `Municipalities of ${k.name} district`,
+    okresDescription: (k, first) => `Weather forecast for the ${k.name} district for the next days${first ? `: ${first}` : ""}. Combined from the models by which did best in the district.`,
+    okresLead: (k, pop, updated) => `The ${k.name} district has ${k.obce} municipalities and ${people(pop, "en")}. The forecast is combined from weather models by how accurately they did in the district against ČHMÚ station measurements${updated ? `; as of ${updated}` : ""}.`,
+    cols: ["Day", "High", "Low", "Rain", "Wind"],
+    units: ["°C", "°C", "mm", "m/s"],
+    first: (d, max, min) => `${d} high ${max} °C, low ${min} °C`,
+    openOkres: (k) => `Open the detailed forecast for ${k.name} district`,
     allOkresy: "All districts",
-    indexTitle: "Weather by district and municipality: forecast for all of Czechia | MeteoVerdict",
-    indexH1: "Weather by district and municipality",
-    indexDescription: "Weather forecast for 77 districts and 6 258 municipalities in Czechia, combined from the models by which did best where, and checked against ČHMÚ stations.",
-    indexLead: "Pick a district and a municipality in it. The forecast is combined from weather models by how accurately they did in the district against ČHMÚ station measurements.",
+    indexTitle: "Weather by district: forecast for all of Czechia | MeteoVerdict",
+    indexH1: "Weather by district",
+    indexDescription: "Weather forecast for the districts of Czechia, combined from the models by which did best where, and checked against ČHMÚ stations.",
+    indexLead: "Pick a district. The forecast is combined from weather models by how accurately they did in the district against ČHMÚ station measurements.",
     note: "Not an official forecast; official warnings are issued by ČHMÚ.",
-    locale: "en", ogLocale: "en_GB", switchLabel: "Čeština", home2: "MeteoVerdict",
+    ogLocale: "en_GB", switchLabel: "Čeština",
   },
 };
 
@@ -204,47 +167,34 @@ const breadcrumbLd = (crumbs) => ({
 const list = (items) => `<ul class="cols">${items.map(([label, href]) => `<li><a href="${href}">${esc(label)}</a></li>`).join("")}</ul>`;
 
 // --- pages -------------------------------------------------------------------------------------
-export function obecPage(lang, okres, obec, assets) {
-  const t = T[lang];
-  const homeCrumb = [t.forecast, lang === "en" ? "/en/forecast/" : "/predpoved/"];
-  const crumbs = [homeCrumb, [okres.name, path(lang, okres)], [obec.name, path(lang, okres, obec)]];
-  const english = hasEnglish(obec);
-  const alternates = english ? { cs: url("cs", okres, obec), en: url("en", okres, obec) } : null;
-  const description = t.obecDescription(obec, okres);
-  const near6 = nearest(obec, okres).map((o) => [o.name, path(lang, okres, o)]);
-  const body = `      <p class="lead">${esc(t.obecLead(obec, okres))}</p>
-      <p>${esc(t.obecBody(obec, okres))}</p>
-      <p><a class="cta" href="${appLink(lang, okres, obec)}">${esc(t.open(obec))}</a></p>
-      <h3>${t.nearby}</h3>
-      ${list(near6)}
-      <p><a href="${path(lang, okres)}">${esc(t.okresLink(okres))}</a></p>`;
-  const ld = {
-    "@context": "https://schema.org",
-    "@graph": [
-      breadcrumbLd(crumbs),
-      {
-        "@type": "WebPage", name: t.obecH1(obec), description, url: url(lang, okres, obec), inLanguage: lang,
-        isPartOf: { "@id": `${SITE}/#website` },
-        about: { "@type": "Place", name: obec.name, geo: { "@type": "GeoCoordinates", latitude: obec.lat, longitude: obec.lon, elevation: Math.round(obec.elevation) }, containedInPlace: { "@type": "AdministrativeArea", name: `okres ${okres.name}`, containedInPlace: { "@type": "Country", name: lang === "en" ? "Czechia" : "Česko" } } },
-      },
-    ],
-  };
-  return shell({
-    lang, title: t.obecTitle(obec, okres), description, canonical: url(lang, okres, obec),
-    robots: obec.indexable ? "index,follow" : "noindex,follow", alternates, crumbs, h1: t.obecH1(obec), ld, bodyHtml: body,
-  }, assets);
+const oneDecimal = (v, lang) => Number(v).toLocaleString(lang === "en" ? "en-GB" : "cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const dayLabel = (iso, lang) => new Intl.DateTimeFormat(lang === "en" ? "en-GB" : "cs-CZ", { weekday: "short", day: "numeric", month: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T12:00:00Z`));
+
+/**
+ * The days of an okres from outlook.json's rows: rows(day, part) → row | undefined. A day without
+ * a "day" row is left out. → [{day, tmax, tmin, rain, wind}]
+ */
+export function forecastDays(days, rowFor) {
+  return days.map((day) => {
+    const d = rowFor(day, "day");
+    const n = rowFor(day, "night");
+    return d && Number.isFinite(d.tmax) ? { day, tmax: d.tmax, tmin: Number.isFinite(n?.tmin) ? n.tmin : null, rain: d.precipitation ?? null, wind: d.wind ?? null } : null;
+  }).filter(Boolean);
 }
 
-export function okresPage(lang, okres, assets) {
+const cell = (v, lang) => (v == null || !Number.isFinite(v) ? "–" : oneDecimal(v, lang));
+
+export function okresPage(lang, okres, days, updated, assets) {
   const t = T[lang];
-  const crumbs = [[t.forecast, lang === "en" ? "/en/forecast/" : "/predpoved/"], [okres.name, path(lang, okres)]];
-  const pop = okres.obce.reduce((n, o) => n + o.population, 0);
-  const description = t.okresDescription(okres, okres.obce.length);
-  const body = `      <p class="lead">${esc(t.okresLead(okres, okres.obce.length, pop))}</p>
+  const crumbs = [[t.forecast, path(lang)], [okres.name, path(lang, okres)]];
+  const first = days[0] ? t.first(dayLabel(days[0].day, lang), Math.round(days[0].tmax), Math.round(days[0].tmin ?? days[0].tmax)) : "";
+  const description = t.okresDescription(okres, days[0]?.tmin == null ? "" : first);
+  const head = t.cols.map((c, i) => `<th>${c}${i ? ` (${t.units[i - 1]})` : ""}</th>`).join("");
+  const rows = days.map((d) => `<tr><td>${dayLabel(d.day, lang)}</td><td>${cell(d.tmax, lang)}</td><td>${cell(d.tmin, lang)}</td><td>${cell(d.rain, lang)}</td><td>${cell(d.wind, lang)}</td></tr>`).join("");
+  const body = `      <p class="lead">${esc(t.okresLead(okres, okres.population, updated))}</p>
+      <div class="scroll"><table class="doc-table data-table"><tr>${head}</tr>${rows}</table></div>
       <p><a class="cta" href="${appLink(lang, okres)}">${esc(t.openOkres(okres))}</a></p>
-      <h3>${esc(t.obceOf(okres))}</h3>
-      ${list(okres.obce.map((o) => [o.name, path(hasEnglish(o) ? lang : "cs", okres, o)]))}
-      <p><a href="${lang === "en" ? "/en/forecast/" : "/predpoved/"}">${t.allOkresy}</a></p>`;
+      <p><a href="${path(lang)}">${t.allOkresy}</a></p>`;
   const ld = { "@context": "https://schema.org", "@graph": [breadcrumbLd(crumbs), { "@type": "WebPage", name: t.okresH1(okres), description, url: url(lang, okres), inLanguage: lang, isPartOf: { "@id": `${SITE}/#website` } }] };
   return shell({
     lang, title: t.okresTitle(okres), description, canonical: url(lang, okres), robots: "index,follow",
@@ -254,7 +204,7 @@ export function okresPage(lang, okres, assets) {
 
 export function indexPage(lang, okresy, assets) {
   const t = T[lang];
-  const crumbs = [[t.forecast, lang === "en" ? "/en/forecast/" : "/predpoved/"]];
+  const crumbs = [[t.forecast, path(lang)]];
   const body = `      <p class="lead">${esc(t.indexLead)}</p>
       ${list(okresy.map((k) => [k.name, path(lang, k)]))}`;
   const ld = { "@context": "https://schema.org", "@graph": [breadcrumbLd(crumbs), { "@type": "CollectionPage", name: t.indexH1, description: t.indexDescription, url: url(lang), inLanguage: lang }] };
@@ -283,11 +233,8 @@ export function sitemapIndex(names) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${rows.join("\n")}\n</sitemapindex>\n`;
 }
 
-/** The sitemaps of the places: okresy (with the index page) and the indexable obce, each in
- * their own file, with the English twin as alternate. */
-export function placeSitemaps({ okresy }) {
-  const pair = (okres, obec) => ({ loc: url("cs", okres, obec), alternates: { cs: url("cs", okres, obec), en: url("en", okres, obec) } });
-  const okresEntries = [{ loc: url("cs"), alternates: { cs: url("cs"), en: url("en") } }, ...okresy.map((k) => pair(k))];
-  const obceEntries = okresy.flatMap((k) => k.obce.filter((o) => o.indexable).map((o) => pair(k, o)));
-  return { "sitemap-okresy.xml": urlset(okresEntries), "sitemap-obce.xml": urlset(obceEntries) };
+/** The sitemap of the okres pages (with the index page), English twins as alternates. */
+export function placeSitemaps(okresy) {
+  const pair = (okres) => ({ loc: url("cs", okres), alternates: { cs: url("cs", okres), en: url("en", okres) } });
+  return { "sitemap-okresy.xml": urlset([pair(), ...okresy.map(pair)]) };
 }
