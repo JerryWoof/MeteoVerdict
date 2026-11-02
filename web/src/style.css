@@ -3,19 +3,19 @@
    palette.js / radar-palette.js)
    --------------------------------------------------------------------------------------- */
 :root {
-  --ink: #1d2329;
-  --ink-soft: #3d4a55;
-  --muted: #5b6670;
-  --muted-strong: #4b5863;
-  --faint: #8a949c;
-  --paper: #f4f1ea;
+  --ink: #1f1e1c;
+  --ink-soft: #46433e;
+  --muted: #6b6760;
+  --muted-strong: #55524c;
+  --faint: #8f8b83;
+  --paper: #fbfaf7;
   --surface: #ffffff;
-  --surface-warm: #fffdf8;
-  --surface-hover: #f8f6f1;
-  --line: #ddd8cc;
-  --line-strong: #9aa7b1;
-  --map-edge: #c9cfd4;
-  --link: #1f5fa8;
+  --surface-warm: #fdfcf9;
+  --surface-hover: #f5f3ee;
+  --line: #ebe8e1;
+  --line-strong: #cdc8bd;
+  --map-edge: #e4e0d8;
+  --link: #2a5d9f;
   --model: #2b7bd1;
   --accent: #c0392b;
   --danger: #a3191e;
@@ -24,14 +24,14 @@
   --measured-bg: #e6f2f0;
   --measured-line: #b9d7d2;
   /* the control strip above a map or a table (neutral; teal on the Measured page) */
-  --strip-bg: #ffffff;
-  --strip-line: #ddd8cc;
-  --strip-edge: #9aa7b1;
-  --radius: 6px;
-  --radius-sm: 4px;
-  --shadow: 0 1px 4px rgba(29, 35, 41, 0.18);
-  --shadow-soft: 0 1px 4px rgba(29, 35, 41, 0.12);
-  --box-bg: rgba(255, 255, 255, 0.95);
+  --strip-bg: transparent;
+  --strip-line: #ebe8e1;
+  --strip-edge: transparent;
+  --radius: 8px;
+  --radius-sm: 5px;
+  --shadow: 0 1px 2px rgba(31, 30, 28, 0.04), 0 6px 20px rgba(31, 30, 28, 0.07);
+  --shadow-soft: 0 1px 2px rgba(31, 30, 28, 0.04), 0 2px 8px rgba(31, 30, 28, 0.04);
+  --box-bg: rgba(255, 255, 255, 0.94);
   --on-ink: #ffffff;
   --on-ink-soft: #c9ced3;
   --on-measured: #ffffff;
@@ -62,7 +62,7 @@
   --past-b: #e3f0ed;
   --past-edge: #8fbab3;
   --missing: #7b8791;
-  --hover-bg: #ece8de;
+  --hover-bg: #f0ede6;
   --option-hover: #e8eef5;
   --swatch-outline: rgba(0, 0, 0, 0.12);
   --locate-ink: #333333;
@@ -73,9 +73,9 @@
   --bar: #9aa7b3;
   --bar-tied: #5f87ad;
   --bar-best: #1d4f7c;
-  --neutral-bg: #f1eee6;
-  --leader-bg: #f6f2e8;
-  --badge-line: #c9c2b2;
+  --neutral-bg: #f4f2ec;
+  --leader-bg: #f7f4ec;
+  --badge-line: #d8d3c7;
   --fs-ui: 0.85rem;
   --fs-small: 0.75rem;
   --fs-title: 1.2rem;
@@ -110,18 +110,18 @@ select {
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --ink: #ece7df;
-  --ink-soft: #d3ccc1;
-  --muted: #a69c90;
-  --muted-strong: #bcb2a5;
-  --faint: #8a8076;
-  --paper: #151412;
-  --surface: #1e1c19;
-  --surface-warm: #211f1b;
-  --surface-hover: #262320;
-  --line: #36312b;
-  --line-strong: #6a665f;
-  --map-edge: #4a453e;
+  --ink: #ebe8e2;
+  --ink-soft: #d0ccc4;
+  --muted: #a29d94;
+  --muted-strong: #b9b4aa;
+  --faint: #86827a;
+  --paper: #141413;
+  --surface: #1b1a18;
+  --surface-warm: #1d1c1a;
+  --surface-hover: #232220;
+  --line: #2b2926;
+  --line-strong: #4c4943;
+  --map-edge: #34322e;
   --link: #6fc3dc;
   --model: #6cb8ff;
   --accent: #f07a6c;
@@ -130,12 +130,12 @@ select {
   --measured-ink: #a5e0d7;
   --measured-bg: #15302c;
   --measured-line: #2b4f49;
-  --strip-bg: #1e1c19;
-  --strip-line: #36312b;
-  --strip-edge: #6a665f;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.4);
-  --shadow-soft: 0 1px 4px rgba(0, 0, 0, 0.4);
-  --box-bg: rgba(30, 28, 25, 0.95);
+  --strip-bg: transparent;
+  --strip-line: #2b2926;
+  --strip-edge: transparent;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --box-bg: rgba(27, 26, 24, 0.94);
   --glyph-temperature: #ef6a50;
   --glyph-precipitation: #5aa0ee;
   --glyph-wind: #4fb36a;
@@ -144,12 +144,12 @@ select {
   --glyph-sunshine: #e6a23a;
   --glyph-sunrise: #e6a23a;
   --glyph-sunset: #e0834a;
-  --on-ink: #151412;
+  --on-ink: #141413;
   --on-ink-soft: #5b544c;
   --on-measured: #0e1f1c;
-  --halo: #151412;
-  --chip-bg: rgba(30, 28, 25, 0.9);
-  --box-bg-strong: rgba(30, 28, 25, 0.97);
+  --halo: #141413;
+  --chip-bg: rgba(27, 26, 24, 0.9);
+  --box-bg-strong: rgba(27, 26, 24, 0.97);
   --info-bg: #1b2532;
   --info-ink: #bcd5f3;
   --bad-bg: #33201d;
@@ -174,7 +174,7 @@ select {
   --past-b: #1b3a35;
   --past-edge: #3d6a63;
   --missing: #8a8076;
-  --hover-bg: #2d2a26;
+  --hover-bg: #292825;
   --option-hover: #1b2532;
   --swatch-outline: rgba(255, 255, 255, 0.28);
   --locate-ink: #ece7df;
@@ -185,9 +185,9 @@ select {
   --bar: #6b7480;
   --bar-tied: #6f9cc4;
   --bar-best: #6cb8ff;
-  --neutral-bg: #262320;
+  --neutral-bg: #232220;
   --leader-bg: #2a2619;
-  --badge-line: #4a453e;
+  --badge-line: #3d3a35;
 }
 /* the button shows the current theme: a sun in light, a moon in dark */
 .iconbtn {
@@ -215,27 +215,20 @@ select {
   display: none;
 }
 /* ---------------------------------------------------------------------------------------
-   Page colours: each section has a pastel tint for its control strip and tabs and a stronger
-   accent for the active tab and the menu (the Measured page's teal, one per section). All
-   text on the tints keeps at least 4.5:1. Data colours (palette.js) and map fills are apart.
+   Page colours: one calm accent (the ink itself) for the active tab and the menu on every
+   page, no tint per section (the Measured page keeps its teal). Text keeps at least 4.5:1.
+   Data colours (palette.js) and map fills are apart.
    --------------------------------------------------------------------------------------- */
-body.theme-map {
-  --theme-bg: #e7eff9;
-  --theme-line: #c4d5ec;
-  --theme-accent: #2662a6;
-  --theme-ink: #1d4a7c;
-}
-body.theme-forecast {
-  --theme-bg: #fbefda;
-  --theme-line: #efd3a2;
-  --theme-accent: #a8580a;
-  --theme-ink: #6e3c06;
-}
-body.theme-radar {
-  --theme-bg: #eeebfa;
-  --theme-line: #d4ccf0;
-  --theme-accent: #5a44b5;
-  --theme-ink: #3d2f8c;
+body.theme-map,
+body.theme-forecast,
+body.theme-radar,
+body.theme-compare,
+body.theme-data,
+body.theme-ai {
+  --theme-bg: var(--neutral-bg);
+  --theme-line: var(--line);
+  --theme-accent: var(--ink);
+  --theme-ink: var(--ink);
 }
 body.theme-measured {
   --theme-bg: var(--measured-bg);
@@ -243,45 +236,23 @@ body.theme-measured {
   --theme-accent: var(--measured);
   --theme-ink: var(--measured-ink);
 }
-body.theme-compare {
-  --theme-bg: #fbe9e6;
-  --theme-line: #f1c7c0;
-  --theme-accent: #b23f35;
-  --theme-ink: #842a22;
-}
-body.theme-data {
-  --theme-bg: #e8edf2;
-  --theme-line: #c8d1dc;
-  --theme-accent: #486078;
-  --theme-ink: #30465b;
-}
-body.theme-ai {
-  --theme-bg: #eeeaf8;
-  --theme-line: #d6cdef;
-  --theme-accent: #6a4fb3;
-  --theme-ink: #4a3585;
-}
-/* the same section tints in dark: deep tinted backgrounds, light text (4.5:1 or more) */
-:root[data-theme="dark"] body.theme-map { --theme-bg: #1b2532; --theme-line: #2f4058; --theme-accent: #7fb0ea; --theme-ink: #bcd5f3; }
-:root[data-theme="dark"] body.theme-forecast { --theme-bg: #2d2214; --theme-line: #4d3a1f; --theme-accent: #e9a65a; --theme-ink: #f3d3a8; }
-:root[data-theme="dark"] body.theme-radar { --theme-bg: #221f33; --theme-line: #3a3456; --theme-accent: #a99af0; --theme-ink: #d6cef8; }
-:root[data-theme="dark"] body.theme-compare { --theme-bg: #2e1c1a; --theme-line: #4f2e2a; --theme-accent: #ee8a7f; --theme-ink: #f6c9c2; }
-:root[data-theme="dark"] body.theme-data { --theme-bg: #1c2229; --theme-line: #323d49; --theme-accent: #9db4cc; --theme-ink: #ccd8e5; }
-:root[data-theme="dark"] body.theme-ai { --theme-bg: #231f31; --theme-line: #3b3452; --theme-accent: #b19ff0; --theme-ink: #d9cff7; }
 body[class*="theme-"] {
-  --strip-bg: var(--theme-bg);
+  --strip-bg: transparent;
   --strip-line: var(--theme-line);
+  --strip-edge: transparent;
+}
+body.theme-measured {
+  --strip-bg: var(--theme-bg);
   --strip-edge: var(--theme-accent);
 }
-/* the menu: the current section in its colour (the detailed forecast is in Forecast's) */
+/* the menu: the current section in the ink, the others quiet (the detailed forecast is in Forecast's) */
 .site-nav a[aria-current="page"],
 .site-nav a.current-section {
-  margin: 0 -0.4rem;
-  padding: 0.05rem 0.4rem;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  background: var(--theme-bg, transparent);
-  box-shadow: inset 0 -2px 0 var(--theme-accent, var(--ink));
   color: var(--theme-ink, var(--ink));
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.35em;
+  text-decoration-color: var(--theme-accent, var(--ink));
 }
 /* ---------------------------------------------------------------------------------------
    Shared components: every page is built from these (the Measured page's look)
@@ -920,8 +891,8 @@ body.tv {
   font: inherit;
   font-weight: 400;
   padding: 0.3rem 1.5rem 0.3rem 0.4rem;
-  border: 1px solid var(--model);
-  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
   background-color: var(--surface);
 }
 /* the forecast map's "Find a place" (test, obce): in the row like "Forecast", its list
@@ -955,7 +926,7 @@ body.tv {
   margin: 0;
   z-index: 20;
   font-weight: 400;
-  box-shadow: 0 4px 14px rgba(29, 35, 41, 0.18);
+  box-shadow: var(--shadow);
 }
 @media (max-width: 700px) {
   #obce-search {
@@ -994,8 +965,8 @@ body.tv {
 /* a single model on the map: marked so it is not taken for ours */
 #headline.single {
   box-shadow:
-    inset 4px 0 0 var(--model),
-    0 1px 4px rgba(29, 35, 41, 0.18);
+    inset 2px 0 0 var(--model),
+    var(--shadow);
 }
 #headline .model-banner {
   margin: 0 0 0.4rem;
@@ -1131,8 +1102,8 @@ body.tv {
 #station-panel.single ,
 #okres-panel.single {
   box-shadow:
-    inset 4px 0 0 var(--model),
-    0 1px 4px rgba(29, 35, 41, 0.18);
+    inset 2px 0 0 var(--model),
+    var(--shadow);
 }
 #station-panel .now ,
 #okres-panel .now {
@@ -1427,8 +1398,8 @@ body.tv.past #ribbon {
 #okres-panel.past,
 #station-panel.past {
   box-shadow:
-    inset 4px 0 0 var(--measured),
-    0 1px 4px rgba(29, 35, 41, 0.18);
+    inset 2px 0 0 var(--measured),
+    var(--shadow);
 }
 .past-banner {
   display: flex;
@@ -1761,7 +1732,7 @@ button.legend-item[aria-pressed="true"]:hover {
   padding: 0.35rem 0.55rem;
   background: var(--box-bg-strong);
   border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(29, 35, 41, 0.25);
+  box-shadow: var(--shadow-soft);
   font-size: 0.8rem;
 }
 #hover[hidden] {
@@ -3863,4 +3834,167 @@ svg[class^="plot-"],
   display: flex;
   align-items: center;
   gap: 0.4em;
+}
+
+/* ---------------------------------------------------------------------------------------
+   Calm look (prototype): the tokens above plus these rules, nothing else. Rules taken from
+   the restraint of benji.org: a warm almost-white page, grey meta text, small quiet type with
+   gentle weights, air instead of boxes and borders, one accent (the ink), no heavy shadows,
+   and state shown by a soft fill or a hairline instead of a black block. Only the chrome
+   changes; data colours (palette.js, radar-palette.js) and the maps are untouched.
+   --------------------------------------------------------------------------------------- */
+body {
+  -webkit-font-smoothing: antialiased;
+}
+/* header: the name and the menu in one quiet line, only the current page in the ink */
+header h1 {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.site-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: var(--fs-ui);
+}
+.site-nav a:hover {
+  color: var(--ink);
+}
+.site-nav a[aria-current="page"],
+.site-nav a.current-section {
+  font-weight: 500;
+}
+header p {
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+/* titles: small and light, the page's one line of explanation grey */
+.content .page-head h2,
+.page-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.page-intro {
+  font-size: var(--fs-small);
+  margin-bottom: 0.75rem;
+}
+.content h2 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.field {
+  font-weight: 500;
+  color: var(--muted-strong);
+}
+/* the control strip: no box, no coloured edge, a hairline under the day tabs only */
+.strip {
+  padding: 0.2rem 0 0.5rem;
+  border-radius: 0;
+}
+.strip.attached {
+  border-radius: 0;
+}
+.strip.measured {
+  padding: 0.35rem 0.6rem 0.5rem;
+  border-radius: var(--radius);
+}
+.day-row {
+  border-bottom-width: 1px;
+}
+.daytab {
+  border-bottom-width: 2px;
+  padding-left: 0.7rem;
+  padding-right: 0.7rem;
+  min-width: 6.5rem;
+}
+.daytab strong {
+  font-weight: 500;
+}
+.daytab[aria-pressed="true"] {
+  background: none;
+  border-bottom-color: var(--ink);
+}
+.daytab[aria-pressed="false"] strong {
+  color: var(--muted-strong);
+}
+.strip.attached + .map-wrap .map-frame,
+.strip.attached + .map-frame {
+  border-top: 1px solid var(--map-edge);
+  border-radius: var(--radius);
+}
+/* a pressed button is a soft fill with a firmer weight, not a black block */
+.btn[aria-pressed="true"],
+.segmented button[aria-pressed="true"],
+.play[aria-pressed="true"],
+.langsw button[aria-pressed="true"],
+.legend-item[aria-pressed="true"],
+.heat-options .seg-buttons button[aria-pressed="true"],
+button.legend-item[aria-pressed="true"]:hover {
+  background: var(--hover-bg);
+  color: var(--ink);
+  font-weight: 600;
+}
+.segmented button[aria-pressed="true"] small,
+.legend-item[aria-pressed="true"] .count {
+  color: var(--muted-strong);
+}
+.segmented,
+.langsw,
+.iconbtn,
+.btn,
+.play,
+select,
+input[type="date"],
+input[type="search"],
+input[type="text"] {
+  border-color: var(--line-strong);
+}
+.segmented button {
+  border-left-color: var(--line);
+}
+/* the small labels (Measured, Experiment, now playing): a soft pill, not a black one */
+#when .badge,
+#headline .badge,
+#headline .playing,
+.ai-badge {
+  background: var(--hover-bg);
+  color: var(--ink);
+  font-weight: 500;
+}
+#when .badge.forecast,
+#headline .badge.forecast {
+  background: var(--forecast-badge);
+  color: var(--on-ink);
+}
+/* boxes on the map: soft, no edge, the small grey labels in sentence case */
+.box-label,
+.map-box fieldset > legend {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.map-box,
+.card,
+.legend-card {
+  border: 1px solid var(--line);
+}
+.map-box summary,
+.box-title {
+  font-weight: 600;
+}
+.data-table th {
+  font-weight: 500;
+  color: var(--muted-strong);
+}
+/* the footer: one grey line, links grey until pointed at */
+footer {
+  border-top-color: var(--line);
+}
+footer a {
+  color: var(--muted);
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 0.2em;
+}
+footer a:hover {
+  color: var(--ink);
 }
