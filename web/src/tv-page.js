@@ -26,7 +26,7 @@ import {
   placeMarkers, playSteps, rampKey, rangeText, rowFor, startIndex, sunFor, sunRange, switchColours, summary,
   today, viewHash, gustOver, gustOverText, chmiNotice, CAPITALS, historyMode, leaveFor,
 } from "./tv.js";
-import { keepRoomForPanels, panelRoom, scrollToPanel, userMoved } from "./panel-room.js";
+import { keepLegendClear, keepRoomForPanels, panelRoom, scrollToPanel, userMoved } from "./panel-room.js";
 import { aiPath } from "./ai-source.js";
 import { seatOkres } from "./seats.js";
 import { AI_MODEL, aiMapView, aiPeriods, hasAi, loadAi, withAi } from "./ai-model.js";
@@ -76,6 +76,7 @@ const map = new MapLibreMap({
 // the map grows with a long okres panel (it shares a grid cell with it): keep it drawn
 new ResizeObserver(() => map.resize()).observe(map.getContainer());
 keepRoomForPanels(map.getContainer().parentElement, map.getContainer(), [document.getElementById("okres-panel")]);
+keepLegendClear(document.getElementById("headline"), document.getElementById("show-box"));
 map.addControl(new NavigationControl({ showCompass: false }));
 const applyTheme = themeMap(map, {
   ...BASEMAP_SPEC,

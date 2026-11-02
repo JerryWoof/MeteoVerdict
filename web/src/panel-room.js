@@ -21,6 +21,36 @@ export function keepRoomForPanels(wrap, frame, panels) {
   return fit;
 }
 
+/** The legend sits at the map's bottom-left and the headline card at its top-left: on a short map
+ * (a laptop, a tablet) both fit only when the legend is not too tall. Gives the legend a
+ * max-height down to the card's bottom (it then scrolls) so it never covers the card's text. */
+export function keepLegendClear(info, legend) {
+  if (!info || !legend) return () => {};
+  const fit = () => {
+    const floating = (box) => box.offsetParent && !box.hidden && getComputedStyle(box).position === "absolute";
+    legend.style.maxHeight = "";
+    legend.style.overflowY = "";
+    legend.style.boxSizing = "";
+    if (!floating(info) || !floating(legend)) return;
+    // screen positions: the legend is placed from the bottom (or translated up), so offsetTop lies
+    const top = info.getBoundingClientRect().bottom + 8;
+    const box = legend.getBoundingClientRect();
+    // the legend's bottom edge stays; only its top moves down to the card
+    const room = box.bottom - top;
+    if (box.top >= top || room < 96) return;
+    legend.style.maxHeight = `${room}px`;
+    legend.style.overflowY = "auto";
+    legend.style.boxSizing = "border-box";
+  };
+  const observer = new ResizeObserver(fit);
+  observer.observe(info);
+  observer.observe(legend.parentElement);
+  window.addEventListener("resize", fit);
+  legend.addEventListener("toggle", fit, true);
+  fit();
+  return fit;
+}
+
 /** The room a map leaves on the right for an open okres panel (its CSS width, 21rem by default, plus
  * the zoom buttons): fixed, so choosing another okres never moves the map. */
 export function panelRoom(widthRem = 21, share = 0, wrapWidth = 0, maxRem = 0) {
