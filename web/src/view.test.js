@@ -23,7 +23,7 @@ const LONG = {
 };
 
 test("the URL hash round-trips", () => {
-  const view = { variable: "wind_speed_10m", leadDay: 3, window: "jja" };
+  const view = { variable: "wind_speed_10m", leadDay: 3, window: "son" };
   assert.deepEqual(parseHash(toHash(view)), view);
 });
 
@@ -31,6 +31,14 @@ test("unknown parts of the hash fall back to the default", () => {
   assert.deepEqual(parseHash(""), DEFAULT_VIEW);
   assert.deepEqual(parseHash("#nonsense/9/forever"), DEFAULT_VIEW);
   assert.equal(parseHash("#precipitation_24h/x/all").leadDay, 1);
+});
+
+test("older variable links open their group: temperature, wind or precipitation", () => {
+  assert.equal(parseHash("#temperature_max/2/90d").variable, "temperature_2m");
+  assert.equal(parseHash("#temperature_2m_06utc/2/90d").variable, "temperature_2m");
+  assert.equal(parseHash("#wind_speed_10m_hourly/1/all").variable, "wind_speed_10m");
+  assert.equal(parseHash("#precipitation_daily/1/all").variable, "precipitation_24h");
+  assert.equal(parseHash("#precipitation_24h/4/all").leadDay, 4);
 });
 
 test("variables follow meta.json", () => {
@@ -96,12 +104,17 @@ test("window labels show the range, the days and duplicates of the 90-day window
 });
 
 test("only windows with scored days are offered, never an empty default", () => {
-  assert.deepEqual(availableWindows(SHORT), ["90d", "season", "all", "jja", "son"]);
-  assert.deepEqual(availableWindows(LONG), ["90d", "all", "djf"]);
+  // jja has 9 days: too few; season has the days of son: only one of them
+  assert.deepEqual(availableWindows(SHORT), ["all", "90d", "son"]);
+  assert.deepEqual(availableWindows(LONG), ["all", "90d", "djf"]);
+  // "this season" stays once it differs from the seasonal window
+  const LATER = { ...LONG, season: { from: "2026-12-01", to: "2027-01-20" }, djf: { from: "2024-01-01", to: "2027-01-20" } };
+  assert.ok(availableWindows(LATER).includes("season"));
   assert.deepEqual(availableWindows({ "90d": { from: "2026-08-23", to: "2026-09-30" }, djf: { from: "2026-08-23", to: "2026-09-30" } }), ["90d"]);
   assert.equal(availableWindows(null).length, 7);
-  assert.equal(pickWindow("mam", availableWindows(SHORT)), "90d");
-  assert.equal(pickWindow("jja", availableWindows(SHORT)), "jja");
+  assert.equal(pickWindow("mam", availableWindows(SHORT)), "all");
+  assert.equal(pickWindow("jja", availableWindows(SHORT)), "all"); // 9 days: not offered
+  assert.equal(pickWindow("son", availableWindows(SHORT)), "son");
   assert.equal(pickWindow("mam", ["all", "son"]), "all");
 });
 

@@ -1,28 +1,28 @@
 // What the map shows (variable, lead day, window) and how it is written in the URL.
 
-// in the order of the selects; labels are in i18n.js ("variable.<key>", "window.<key>")
-export const VARIABLES = [
-  "temperature_2m",
-  "temperature_2m_06utc",
-  "temperature_2m_12utc",
-  "temperature_max",
-  "temperature_2m_hourly",
-  "wind_speed_10m",
-  "wind_speed_10m_hourly",
-  "precipitation_24h",
-  "precipitation_daily",
-];
+// in the order of the select; labels are in i18n.js ("variable.<key>", "window.<key>"). Only what people ask
+// for: temperature, wind and precipitation. The hourly and synoptic-hour files stay in the data (the okres
+// panel reads them), they are just not a choice
+export const VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitation_24h"];
 
-export const WINDOWS = ["90d", "season", "all", "djf", "mam", "jja", "son"];
+export const WINDOWS = ["all", "90d", "season", "djf", "mam", "jja", "son"];
 
-export const DEFAULT_VIEW = { variable: "temperature_2m", leadDay: 1, window: "90d" };
+export const DEFAULT_VIEW = { variable: "temperature_2m", leadDay: 1, window: "all" };
 
-/** "#temperature_2m/1/90d" → view; anything unknown falls back to the default */
+/** The more specific variables of older links (maximum, 06 UTC, hourly, daily precipitation …) open their group. */
+export function groupVariable(variable) {
+  if (variable?.startsWith("temperature")) return "temperature_2m";
+  if (variable?.startsWith("wind")) return "wind_speed_10m";
+  if (variable?.startsWith("precipitation")) return "precipitation_24h";
+  return DEFAULT_VIEW.variable;
+}
+
+/** "#temperature_2m/1/all" → view; anything unknown falls back to the default */
 export function parseHash(hash) {
   const [variable, lead, window] = hash.replace(/^#/, "").split("/");
   const leadDay = Number.parseInt(lead, 10);
   return {
-    variable: VARIABLES.includes(variable) ? variable : DEFAULT_VIEW.variable,
+    variable: groupVariable(variable),
     leadDay: leadDay >= 1 && leadDay <= 5 ? leadDay : DEFAULT_VIEW.leadDay,
     window: WINDOWS.includes(window) ? window : DEFAULT_VIEW.window,
   };
@@ -73,13 +73,23 @@ export function windowSpan(key, windows) {
   return days ? { from, to, days } : null;
 }
 
+/** a window is offered from this many scored days (the map's own "small sample" limit) */
+const MIN_WINDOW_DAYS = 30;
+
 /**
- * Windows worth offering: those with at least one scored day in meta.json (all of them
- * before meta.json exists, so the select is never empty).
+ * Windows worth offering: those with at least MIN_WINDOW_DAYS scored days in meta.json (all of them before
+ * meta.json exists, so the select is never empty), and "this season" only while it differs from the
+ * seasonal window of the same days.
  */
 export function availableWindows(windows) {
   if (!windows) return [...WINDOWS];
-  const listed = WINDOWS.filter((key) => windowSpan(key, windows));
+  const spans = Object.fromEntries(WINDOWS.map((key) => [key, windowSpan(key, windows)]));
+  const same = (a, b) => a && b && a.from === b.from && a.to === b.to && a.days === b.days;
+  const listed = WINDOWS.filter((key) => {
+    const span = spans[key];
+    if (!span || span.days < MIN_WINDOW_DAYS) return false;
+    return key !== "season" || !WINDOWS.some((other) => other !== "season" && same(spans[other], span));
+  });
   return listed.length ? listed : [DEFAULT_VIEW.window];
 }
 
