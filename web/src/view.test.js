@@ -23,7 +23,7 @@ const LONG = {
 };
 
 test("the URL hash round-trips", () => {
-  const view = { variable: "wind_speed_10m", leadDay: 3, window: "son" };
+  const view = { variable: "wind_speed_10m", leadDay: 3, window: "90d" };
   assert.deepEqual(parseHash(toHash(view)), view);
 });
 
@@ -103,19 +103,13 @@ test("window labels show the range, the days and duplicates of the 90-day window
   assert.equal(windowLabel("all", LONG, en, "en"), "All time: 1 Jan 2024 – 30 Sep 2026 (1004 days)");
 });
 
-test("only windows with scored days are offered, never an empty default", () => {
-  // jja has 9 days: too few; season has the days of son: only one of them
-  assert.deepEqual(availableWindows(SHORT), ["all", "90d", "son"]);
-  assert.deepEqual(availableWindows(LONG), ["all", "90d", "djf"]);
-  // "this season" stays once it differs from the seasonal window
-  const LATER = { ...LONG, season: { from: "2026-12-01", to: "2027-01-20" }, djf: { from: "2024-01-01", to: "2027-01-20" } };
-  assert.ok(availableWindows(LATER).includes("season"));
-  assert.deepEqual(availableWindows({ "90d": { from: "2026-08-23", to: "2026-09-30" }, djf: { from: "2026-08-23", to: "2026-09-30" } }), ["90d"]);
-  assert.equal(availableWindows(null).length, 7);
-  assert.equal(pickWindow("mam", availableWindows(SHORT)), "all");
-  assert.equal(pickWindow("jja", availableWindows(SHORT)), "all"); // 9 days: not offered
-  assert.equal(pickWindow("son", availableWindows(SHORT)), "son");
-  assert.equal(pickWindow("mam", ["all", "son"]), "all");
+test("only the whole history and the last 90 days, each with at least 30 scored days", () => {
+  assert.deepEqual(availableWindows(SHORT), ["all", "90d"]);
+  assert.deepEqual(availableWindows(LONG), ["all", "90d"]);
+  assert.deepEqual(availableWindows({ all: { from: "2026-10-20", to: "2026-11-03" }, "90d": { from: "2026-10-20", to: "2026-11-03" } }), ["all"]);
+  assert.equal(availableWindows(null).length, 2);
+  assert.equal(pickWindow("jja", availableWindows(SHORT)), "all"); // seasons are not offered
+  assert.equal(pickWindow("90d", availableWindows(SHORT)), "90d");
 });
 
 test("filesWindow reads a left-out window from the one meta.json names", () => {

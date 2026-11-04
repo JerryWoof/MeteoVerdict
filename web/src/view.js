@@ -5,7 +5,8 @@
 // panel reads them), they are just not a choice
 export const VARIABLES = ["temperature_2m", "wind_speed_10m", "precipitation_24h"];
 
-export const WINDOWS = ["all", "90d", "season", "djf", "mam", "jja", "son"];
+// the whole history and the last 90 days: seasons are not offered (their score files are still built)
+export const WINDOWS = ["all", "90d"];
 
 export const DEFAULT_VIEW = { variable: "temperature_2m", leadDay: 1, window: "all" };
 
@@ -76,20 +77,10 @@ export function windowSpan(key, windows) {
 /** a window is offered from this many scored days (the map's own "small sample" limit) */
 const MIN_WINDOW_DAYS = 30;
 
-/**
- * Windows worth offering: those with at least MIN_WINDOW_DAYS scored days in meta.json (all of them before
- * meta.json exists, so the select is never empty), and "this season" only while it differs from the
- * seasonal window of the same days.
- */
+/** Windows worth offering: those with at least MIN_WINDOW_DAYS scored days in meta.json (both before meta.json exists). */
 export function availableWindows(windows) {
   if (!windows) return [...WINDOWS];
-  const spans = Object.fromEntries(WINDOWS.map((key) => [key, windowSpan(key, windows)]));
-  const same = (a, b) => a && b && a.from === b.from && a.to === b.to && a.days === b.days;
-  const listed = WINDOWS.filter((key) => {
-    const span = spans[key];
-    if (!span || span.days < MIN_WINDOW_DAYS) return false;
-    return key !== "season" || !WINDOWS.some((other) => other !== "season" && same(spans[other], span));
-  });
+  const listed = WINDOWS.filter((key) => (windowSpan(key, windows)?.days ?? 0) >= MIN_WINDOW_DAYS);
   return listed.length ? listed : [DEFAULT_VIEW.window];
 }
 
