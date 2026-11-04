@@ -66,13 +66,14 @@ async function getJson(path) {
   }
 }
 
-// "Include MeteoVerdict models" (mv-compare.js): on by default, `?mv=0` turns it off. It applies to
+// The same-sample comparison with the MeteoVerdict models (mv-compare.js) is always on, there is no switch: the
+// periods without our models (90 days, the seasons) are not offered where it applies. It applies to
 // the variables the engine's same-sample files cover (temperature, wind), where the map ranks every
 // model, ours and the AI on the same days; the station dots then do not apply. Its periods are the
 // last week (the default, where MeteoVerdict AI has enough days) and the last 60 days (without it);
 // `?period=60d` picks the second
 const query = new URLSearchParams(window.location.search);
-const mvOn = query.get("mv") !== "0";
+const mvOn = true;
 const MV_PERIODS = ["week", "60d"];
 let mvPeriod = query.get("period") === "60d" ? "60d" : "week";
 const mvPath = (period, level, variable) => `data/scores/mv/${period}/${level}/${variable}.json`;
@@ -598,17 +599,6 @@ map.on("load", async () => {
     }
     select.disabled = false;
   }
-  // the choice itself, only where the files exist (the engine's run has written them)
-  const mvBox = document.getElementById("mv-box");
-  const mvInput = document.getElementById("mv");
-  mvInput.checked = mvOn;
-  if ((await Promise.all(MV_PERIODS.map((p) => hasMv("okres", "temperature_2m", p)))).some(Boolean)) mvBox.hidden = false;
-  mvInput.addEventListener("change", () => {
-    const url = new URL(window.location.href);
-    if (mvInput.checked) url.searchParams.delete("mv");
-    else url.searchParams.set("mv", "0");
-    window.location.href = url.toString();
-  });
   for (const [id, key, parse] of [
     ["variable", "variable", String],
     ["lead", "leadDay", Number],
