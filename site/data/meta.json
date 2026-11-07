@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-07T06:01:07+00:00",
+ "generated": "2026-11-07T12:19:11+00:00",
  "as_of": "2026-11-06",
  "windows": {
   "90d": {
@@ -91,7 +91,7 @@
  "short_record": {
   "all": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.702,
+    "coverage": 0.634,
     "days": 91,
     "variables": [
      "wind_speed_10m",
@@ -99,7 +99,7 @@
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.702,
+    "coverage": 0.634,
     "days": 91,
     "variables": [
      "wind_speed_10m",
@@ -109,7 +109,7 @@
   },
   "jja": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.391,
+    "coverage": 0.321,
     "days": 25,
     "variables": [
      "wind_speed_10m",
@@ -117,7 +117,7 @@
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.391,
+    "coverage": 0.321,
     "days": 25,
     "variables": [
      "wind_speed_10m",
