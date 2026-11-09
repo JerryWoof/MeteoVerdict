@@ -145,6 +145,8 @@ class FakeGitHub:
         if url.host == "github.com":
             self.storage.append(url.path)
             assert "Authorization" not in request.headers
+            if getattr(self, "storage_errors", None):
+                return httpx.Response(self.storage_errors.pop(0))
             if not self.public:
                 return httpx.Response(404)
             return httpx.Response(200, content=b"file")
@@ -258,6 +260,15 @@ def test_listing_paginates_once_and_downloads_cost_no_api_requests(tmp_path):
     assert len(gh.storage) == 50
     assert (tmp_path / names[0]).read_bytes() == b"file"
     assert store.api_calls == 4
+
+
+def test_a_download_waits_out_a_storage_outage_of_a_few_minutes(tmp_path):
+    gh = FakeGitHub({"data-latest": ["x.json"]})
+    store = gh.store()
+    gh.storage_errors = [504, 504, 504, 504]
+    store.download("data-latest", "x.json", tmp_path / "x.json")
+    assert (tmp_path / "x.json").read_bytes() == b"file"
+    assert gh.waits == list(rel.DOWNLOAD_WAITS)  # 150 s in all, not 14 s
 
 
 def test_download_falls_back_to_the_api_for_a_private_repository(tmp_path):
