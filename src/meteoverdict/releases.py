@@ -48,8 +48,10 @@ IDEMPOTENT = {"GET", "DELETE", "PATCH"}  # an upload (POST) is not repeated blin
 MAX_WAIT = 3700.0  # the primary limit resets within an hour
 #: first wait for a secondary rate limit without a retry-after (doubles each time)
 SECONDARY_WAIT = 60.0
-#: retries of a download that failed with a server error
-DOWNLOAD_RETRIES = 3
+#: seconds before each retry of a download that failed with a server error (GitHub storage has
+#: 504'd for minutes at a time: 8 and 9 Nov 2026 failed a cycle and the daily at 2/4/8 s)
+DOWNLOAD_WAITS = (5.0, 15.0, 45.0, 90.0)
+DOWNLOAD_RETRIES = len(DOWNLOAD_WAITS)
 _OVERFLOW_RE = re.compile(r"\.(\d+)$")
 #: suffix of a replacement uploaded but not yet renamed to its final name
 PENDING = ".new"
@@ -437,7 +439,7 @@ class GitHubReleaseStore:
                     return False
                 wait = rate_limit_wait(r, self.clock(), attempt) if api else None
                 if wait is None and r.status_code >= 500:
-                    wait = 2.0 * 2**attempt
+                    wait = DOWNLOAD_WAITS[min(attempt, DOWNLOAD_RETRIES - 1)]
                 if wait is not None and attempt < DOWNLOAD_RETRIES and wait <= self.max_wait:
                     r.read()
                 else:
