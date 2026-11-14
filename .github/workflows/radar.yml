@@ -12,27 +12,21 @@ name: Radar
 #   is always running. GitHub's schedules are too irregular for this (a `*/10` cron ran
 #   about every 2 hours); the hourly schedule below is only a safety net that starts a
 #   loop when none is running (the "Live loop running?" job checks).
-# - "Archive" (every 6 hours): pack every complete UTC day not archived yet into the
-#   monthly releases radar-YYYY-MM (one tar per product and day, plus MERGE at the
-#   stations and the page's frames for that day) and satellite-YYYY-MM (one tar per
-#   product, region and day). Days already there are skipped, so a missed run catches up
-#   on the next one.
+# - Archive: no longer here. Since 2026-11 the DGX Spark packs every complete UTC day (raw
+#   composites and Meteosat images go to a private archive; the page's frames
+#   `web-YYYYMMDD.tar` go to the rolling release radar-web, nine days) with the same code
+#   (`mvd archive-radar`, `mvd archive-satellite` run with --out-dir work the same).
 #
 # See docs/data-sources.md#radar-archive and #live-loop.
 on:
   schedule:
     - cron: "7 * * * *" # live: start a loop if none is running
-    - cron: "37 */6 * * *" # archive
   workflow_dispatch:
     inputs:
       live:
         description: Start the live loop (if none is running)
         type: boolean
         default: true
-      archive:
-        description: Archive complete days into the releases
-        type: boolean
-        default: false
       handover:
         description: Started by the previous live loop (wait for it instead of checking)
         type: boolean
@@ -105,41 +99,3 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LOOP_MINUTES: 340
         run: scripts/radar_live_loop.sh
-
-  archive:
-    name: Archive complete days
-    if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.archive) ||
-      github.event.schedule == '37 */6 * * *'
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    permissions:
-      contents: write # create releases and upload assets
-    concurrency:
-      group: radar-archive
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@v10.3.0
-        with:
-          enable-cache: true
-      - name: Install project
-        run: uv sync --frozen
-      - name: Station table
-        run: uv run --frozen mvd stations --out data/stations.parquet
-      - name: Archive radar days
-        # the observed products (~14 GB a year); the nowcasts (~50 GB a year) are left
-        # to a local disk: `mvd archive-radar --products forecast --out-dir …`
-        run: >-
-          uv run --frozen mvd archive-radar --products observed
-          --stations data/stations.parquet --github-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Archive satellite days
-        # all products and regions (~11 GB a year; `--regions ce` alone ~4 GB)
-        if: ${{ !cancelled() }}
-        run: uv run --frozen mvd archive-satellite --github-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
