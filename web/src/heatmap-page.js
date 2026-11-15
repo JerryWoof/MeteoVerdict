@@ -22,6 +22,7 @@ import {
   heatRampGradient, heatRampLut, heatSeriesAt, heatTemperatures, heatTimeAt, heatTimeText, heatValueAt, loadHeatModel, parseHeatIndex,
   heatHash, heatParseHash, heatStepAt,
 } from "./ai-heat.js";
+import { IDLE_DELAY, wantFullImages } from "./heat-fullres.js";
 import { hashHistory } from "./hash-history.js";
 import { heatStatus } from "./status.js";
 
@@ -102,6 +103,7 @@ let marker = null;
 let tip = null;
 let current = null; // the loaded map of the selected time
 let shownToken = 0;
+let requestFull = null; // set when the hourly page runs on the coarse images: asks for the full-size ones
 const loadPlaces = placesLoader(placesUrl);
 
 const partName = (part) => t(`part.${part}`).toLowerCase();
@@ -345,6 +347,7 @@ function setPoint(lng, lat, name = null, own = false) {
   marker.setLngLat([lng, lat]).addTo(map);
   if (heatIndex && !heat) return;
   if (heat) {
+    requestFull?.("point"); // the panel's value wants the full-size images (it is redrawn when they arrive)
     point.series = heatSeriesAt(heat.model, lng, lat);
     return renderPanel();
   }
@@ -589,7 +592,6 @@ async function startHourly() {
       heat = null; // the full-size set below, as without a coarse one
     }
   }
-  if (heat) sharpening = 0;
   const loadFull = async () => {
     const model = await loadHeatModel(heatIndex, (done, total) => {
       if (!heat) label.textContent = t("heat.loadingMap", { pct: percent(done, total) });
@@ -601,20 +603,32 @@ async function startHourly() {
     setModel(model, pictureShrink(heatIndex.width));
   };
   if (heat) {
-    // the full-size images load in the background; the page works with the coarse ones meanwhile
+    // the page works with the coarse images; the full-size ones load when needed (see wantFullImages)
     renderHourly();
     renderOptions();
     if (options.colours === "all") await ensureAllRange();
     showHeat();
-    if (point) setPoint(point.lng, point.lat, point.name, point.own);
-    try {
-      await loadFull();
-    } catch {
-      // the coarse picture stays
-    }
-    sharpening = null;
-    renderHourly();
-    showHeat();
+    let fullPromise = null;
+    requestFull = (reason) => {
+      if (fullPromise || !wantFullImages({ reason, zoom: map.getZoom(), coarse, connection: navigator.connection })) return;
+      sharpening = 0;
+      renderHourly();
+      fullPromise = (async () => {
+        try {
+          await loadFull();
+        } catch {
+          // the coarse picture stays
+        }
+        sharpening = null;
+        renderHourly();
+        showHeat();
+        if (point) setPoint(point.lng, point.lat, point.name, point.own);
+      })();
+    };
+    map.on("zoomend", () => requestFull("zoom"));
+    // nothing needed them: fetch them after the page has settled (not on a slow or Save-Data connection)
+    setTimeout(() => ("requestIdleCallback" in window ? requestIdleCallback(() => requestFull("idle")) : requestFull("idle")), IDLE_DELAY);
+    requestFull("zoom"); // a link may open zoomed in
     if (point) setPoint(point.lng, point.lat, point.name, point.own);
     return;
   }
