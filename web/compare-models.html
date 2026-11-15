@@ -35,8 +35,10 @@
           <label class="field"><span data-i18n="control.okres">Okres</span> <select id="find"></select></label>
           <label class="field"><span data-i18n="control.variable">Variable</span> <select id="variable"></select></label>
           <label class="field"><span data-i18n="control.lead">Lead time</span> <select id="lead"></select></label>
-          <label class="field"><span data-i18n="control.window">Period</span> <select id="window"></select>
-            <span class="help" tabindex="0" role="note" data-i18n-title="window.help">?</span></label>
+          <label class="field"><span data-i18n="control.window">Period</span> <select id="window"></select></label>
+          <!-- "?": the periods explained in a popover (opens on click, tap or Enter; Escape or a click outside closes it) -->
+          <button type="button" class="help" popovertarget="window-help" aria-label="Co znamenají období" data-i18n-aria="window.helpLabel">?</button>
+          <div id="window-help" class="help-pop" popover data-i18n="window.help"></div>
         </div>
       </form>
       <div class="map-wrap">

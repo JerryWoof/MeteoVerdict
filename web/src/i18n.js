@@ -428,6 +428,7 @@ export const STRINGS = {
     "window.days.one": "{n} den",
     "window.days.few": "{n} dny",
     "window.days.many": "{n} dní",
+    "window.helpLabel": "Co znamenají období",
     "window.help":
       "Každé období končí posledním vyhodnoceným dnem. Celé období začíná nejstarším dnem, který je zatím vyhodnocený, a roste, jak se doplňuje historie až do ledna 2024 (ALADIN až od června 2026). Dokud je historie krátká, některá období pokrývají stejné dny. Období, pro která zatím nejsou vyhodnocené dny, se nenabízejí.",
     "legend.title": "Nejlepší model (počet okresů)",
@@ -974,6 +975,7 @@ export const STRINGS = {
     "window.days.one": "{n} day",
     "window.days.few": "{n} days",
     "window.days.many": "{n} days",
+    "window.helpLabel": "What the periods mean",
     "window.help":
       "Every period ends on the last scored day. All time starts with the oldest day scored so far and grows as the backfill fills in history back to January 2024 (ALADIN only from June 2026). While the history is short, some periods cover the same days. Periods with no scored days yet are not offered.",
     "legend.title": "Best model (number of okresy)",
