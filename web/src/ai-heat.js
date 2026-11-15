@@ -3,6 +3,7 @@
 // Everything here is plain arithmetic on the published files; image rows are in the map's
 // (Web-Mercator) spacing.
 
+import { decodeHeatBlob } from "./heat-decode-client.js";
 import { temp100mPixel } from "./ai-temp100m.js";
 import { parseStamp, toStamp } from "./radar.js";
 
@@ -172,19 +173,7 @@ export function heatGrid(index, step = Math.max(1, Math.round(GRID_STEP / (index
 
 // --- decoding the PNGs --------------------------------------------------------------------
 
-/** Elevation in metres from RGBA pixels (R·256 + G); alpha 0 (outside Czechia) is 65535. */
-export function heatDecodeElev(rgba) {
-  const out = new Uint16Array(rgba.length / 4);
-  for (let i = 0; i < out.length; i++) out[i] = rgba[i * 4 + 3] ? rgba[i * 4] * 256 + rgba[i * 4 + 1] : 65535;
-  return out;
-}
-
-/** Gray values from RGBA pixels (alpha 0 is 0: no data). */
-export function heatDecodeGray(rgba) {
-  const out = new Uint8Array(rgba.length / 4);
-  for (let i = 0; i < out.length; i++) out[i] = rgba[i * 4 + 3] ? rgba[i * 4] : 0;
-  return out;
-}
+export { heatDecodeElev, heatDecodeGray } from "./heat-decode.js";
 
 /** A field's value from its gray value: offset + (v - 1)·scale; null for 0 (no data). */
 export const heatFieldValue = (v, offset, scale) => (v >= 1 ? offset + (v - 1) * scale : null);
@@ -606,16 +595,6 @@ async function fetchBlob(url, onBytes) {
   return new Blob(chunks, { type: response.headers.get("content-type") ?? "image/png" });
 }
 
-/** A PNG's RGBA pixels exactly as stored (no colour conversion, no premultiplying). */
-async function decodePng(blob) {
-  const bitmap = await createImageBitmap(blob, { colorSpaceConversion: "none", premultiplyAlpha: "none" });
-  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  ctx.drawImage(bitmap, 0, 0);
-  bitmap.close();
-  return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-}
-
 /**
  * Downloads and decodes the index's PNGs: resolves with the model. `onProgress(done, total)`
  * counts downloaded bytes (total from the index; 0 when it does not say).
@@ -627,11 +606,8 @@ export async function loadHeatModel(index, onProgress = () => {}) {
   const count = (n) => onProgress((done += n), total);
   const blobs = parts.map((p) => fetchBlob(p.url, count));
   const decoded = [];
-  // one decoded image at a time keeps the memory low
-  for (const [k, blob] of blobs.entries()) {
-    const rgba = await decodePng(await blob);
-    decoded.push(k === 0 ? heatDecodeElev(rgba) : heatDecodeGray(rgba));
-  }
+  // one decoded image at a time keeps the memory low (the decoding runs in a worker when there is one)
+  for (const [k, blob] of blobs.entries()) decoded.push(await decodeHeatBlob(await blob, k === 0 ? "elev" : "gray"));
   const [elev, ...gray] = decoded;
   if (elev.length !== index.width * index.height) throw new Error("the elevation image does not match the index");
   return heatModel(index, elev, gray);
