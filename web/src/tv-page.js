@@ -903,7 +903,41 @@ function update(change = {}, { fromPlay = false, replace = false } = {}) {
   paintMarkers(view);
   renderHeadline(view);
   renderPanel(outlook);
+  renderTable(view);
   fitView();
+}
+
+// --- the okresy as a table (below the map): the same values as the markers, for screen
+// readers and keyboards; drawn only while the table is open
+function renderTable(view) {
+  const box = document.getElementById("okres-list");
+  if (!box?.open || !view) return;
+  const table = element("table", null, "okres-table");
+  table.append(element("caption", t("tv.tableCaption", { when: `${dayText(state.day)}, ${t(`part.${state.part}`).toLowerCase()}` })));
+  const head = element("tr");
+  head.append(element("th", t("tv.tableOkres")), ...LAYERS.map((layer) => element("th", t(`layer.${layer}`))));
+  head.querySelectorAll("th").forEach((th) => th.setAttribute("scope", "col"));
+  const body = element("tbody");
+  const okresy = [...view.okresy].sort((a, b) => displayName(a.name).localeCompare(displayName(b.name), language));
+  for (const o of okresy) {
+    const row = rowFor(view, o.code, state.day, state.part);
+    const tr = element("tr");
+    const th = element("th");
+    th.setAttribute("scope", "row");
+    const open = element("button", displayName(o.name), "linklike");
+    open.type = "button";
+    open.addEventListener("click", () => {
+      update({ okres: o.code });
+      scrollToPanel(document.getElementById("okres-panel"), true);
+    });
+    th.append(open);
+    tr.append(th, ...LAYERS.map((layer) => element("td", row ? labelFor(row, layer, state.part) || "–" : "–")));
+    body.append(tr);
+  }
+  const thead = element("thead");
+  thead.append(head);
+  table.append(thead, body);
+  document.getElementById("okres-table").replaceChildren(table);
 }
 
 // --- play: smooth transitions through the parts of a day (or of every day), each
@@ -1231,6 +1265,7 @@ async function main() {
     : "";
   state = viewOf(window.location.hash);
   // phones: the box starts folded so the map stays visible
+  document.getElementById("okres-list").addEventListener("toggle", () => renderTable(shownView()));
   const show = document.getElementById("show");
   if (window.innerWidth <= 700) show.open = false;
   document.getElementById("play-day").addEventListener("click", () => togglePlay("day"));

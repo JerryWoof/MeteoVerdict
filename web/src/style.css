@@ -568,6 +568,26 @@ header #controls input {
   line-height: 1.1rem;
   text-align: center;
   cursor: help;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.75rem;
+  align-self: center;
+}
+/* its text: a popover in the top layer (centred, light dismiss) */
+.help-pop {
+  max-width: min(24rem, calc(100vw - 32px));
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  font-size: var(--fs-ui);
+  line-height: 1.4;
+}
+.help-pop::backdrop {
+  background: transparent;
 }
 header .site-name {
   font-size: 1.25rem;
@@ -4040,4 +4060,64 @@ h3 {
 p,
 li {
   text-wrap: pretty;
+}
+
+/* keyboard: a link past the map markers, seen only when it has the focus */
+.skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: 0.5rem;
+  z-index: 5;
+  padding: 0.3rem 0.6rem;
+  background: var(--paper);
+  border: 1px solid var(--map-edge);
+  border-radius: var(--radius);
+}
+.skip-link:not(:focus) {
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0;
+  border: 0;
+}
+/* the okresy as a table, below the map */
+.okres-list {
+  margin: 0.8rem 0 0;
+  font-size: var(--fs-ui);
+}
+.okres-list summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.okres-table {
+  border-collapse: collapse;
+  margin-top: 0.4rem;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+#okres-table {
+  overflow-x: auto;
+}
+.okres-table caption {
+  text-align: left;
+  color: var(--muted);
+  padding-bottom: 0.3rem;
+}
+.okres-table th,
+.okres-table td {
+  text-align: left;
+  padding: 0.2rem 0.6rem 0.2rem 0;
+  border-bottom: 1px solid var(--map-edge);
+}
+.okres-table .linklike {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
 }

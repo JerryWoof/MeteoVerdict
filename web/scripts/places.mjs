@@ -6,7 +6,8 @@
 import { fold } from "../src/places.js";
 import { translator } from "../src/i18n.js";
 import { SITE_LINKS } from "../src/footer.js";
-import { CSP, SPECULATION } from "./seo.mjs";
+import { SPECULATION } from "./seo.mjs";
+import { THEME_HEAD_META, THEME_HEAD_SCRIPT } from "../src/theme.js";
 
 export const SITE = "https://meteoverdict.cz";
 
@@ -122,6 +123,8 @@ export function shell(spec, assets) {
 <html lang="${spec.lang}">
   <head>
     <meta charset="UTF-8" />
+    ${THEME_HEAD_META}
+    ${THEME_HEAD_SCRIPT}
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${esc(spec.title)}</title>
     <meta name="description" content="${esc(spec.description)}" />
@@ -130,7 +133,7 @@ export function shell(spec, assets) {
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="theme-color" content="#1d2329" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="MeteoVerdict" />
     <meta property="og:locale" content="${t.ogLocale}" />
@@ -142,7 +145,6 @@ export function shell(spec, assets) {
     <script type="application/ld+json">${json(spec.ld)}</script>
     ${assets}
     ${STYLE}
-    <meta http-equiv="Content-Security-Policy" content="${CSP}" />
     ${SPECULATION}
   </head>
   <body class="page place-page">

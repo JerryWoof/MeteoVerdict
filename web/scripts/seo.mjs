@@ -5,7 +5,6 @@ import { STRINGS } from "../src/i18n.js";
 import { blocksHtml, inlineHtml } from "../src/blocks-html.js";
 import { PAGES as TEXTS } from "../src/pages-text.js";
 
-export const CSP = "object-src 'none'; base-uri 'self'; form-action 'self'";
 // the map pages open their connections to the tile host (and the radar to its data) at once,
 // not after the map script has run
 const PRECONNECT = {
@@ -79,10 +78,8 @@ export function injectSeo(html, file) {
     `<meta name="twitter:title" content="${title}" />`,
     `<meta name="twitter:description" content="${esc(cs)}" />`,
     `<meta name="twitter:image" content="${SITE}og-image.png" />`,
-    `<meta name="theme-color" content="#1d2329" />`,
-    // only the directives that cannot break a page (no script/connect/img rules: the map and the data load from several hosts)
-    `<meta http-equiv="Content-Security-Policy" content="${CSP}" />`,
     `<link rel="apple-touch-icon" href="/apple-touch-icon.png" />`,
+    `<link rel="manifest" href="/manifest.webmanifest" />`,
     ...(PRECONNECT[file] ?? []).map((origin) => `<link rel="preconnect" href="${origin}" crossorigin />`),
     SPECULATION,
   ].map((t) => `    ${t}\n`).join("");
