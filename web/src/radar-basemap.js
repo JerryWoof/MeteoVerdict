@@ -16,8 +16,8 @@ const TERRAIN = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}
 // OpenFreeMap's TileJSON adds "OpenFreeMap © OpenMapTiles Data from OpenStreetMap" (with
 // links) to the attribution control itself; we add the wording ODbL asks for and the relief
 export const BASEMAP_ATTRIBUTION = [
-  `<a href="${OSM_COPYRIGHT}" target="_blank">© OpenStreetMap contributors</a>`,
-  `<a href="${TERRAIN_ATTRIBUTION}" target="_blank">Relief: Terrain Tiles (EU-DEM, SRTM, …)</a>`,
+  `<a href="${OSM_COPYRIGHT}" target="_blank" rel="noopener">© OpenStreetMap contributors</a>`,
+  `<a href="${TERRAIN_ATTRIBUTION}" target="_blank" rel="noopener">Relief: Terrain Tiles (EU-DEM, SRTM, …)</a>`,
 ].join(" · ");
 
 export const LAND = "#f3f1ec";

@@ -1,4 +1,5 @@
 import { Map as MapLibreMap, Marker, NavigationControl, setWorkerUrl } from "maplibre-gl";
+import { foldAttribution } from "./attribution.js";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
@@ -99,9 +100,7 @@ addLocateControl(map, {
 // registered at once: the map may finish loading while the forecast is still on its way
 const mapLoaded = new Promise((resolve) => map.on("load", resolve));
 // on a phone the attribution (compact there) starts open and covers half the map: fold it
-mapLoaded.then(() => {
-  if (window.innerWidth <= 700) map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
-});
+if (window.innerWidth <= 700) foldAttribution(map);
 
 async function fetchJson(path) {
   try {
@@ -280,6 +279,9 @@ function markerElement(o) {
   el.title = displayName(o.name);
   const top = element("span", null, "wx-top");
   const canvas = iconCanvas("", 30);
+  // the symbol is decoration: the button's name (setMarker) says the okres and its values
+  canvas.removeAttribute("role");
+  canvas.setAttribute("aria-hidden", "true");
   const temp = element("span", "", "wx-temp");
   top.append(canvas, temp);
   const chipBox = element("span", null, "wx-chips");
@@ -297,7 +299,7 @@ function markerElement(o) {
     update({ okres: o.code });
     scrollToPanel(document.getElementById("okres-panel"), true);
   });
-  return { el, canvas, temp, chips, chipBox, icon: null };
+  return { el, canvas, temp, chips, chipBox, icon: null, name: displayName(o.name) };
 }
 
 /** Show a row (possibly between two states) in a marker. */
@@ -321,6 +323,10 @@ function setMarker(entry, row, part, shown) {
     any ||= !chip.hidden;
   }
   entry.chipBox.hidden = !any;
+  // screen readers: the title alone is not the name (the content wins), so name it in full
+  const values = [entry.temp, ...Object.values(entry.chips).map((c) => c.chip)]
+    .filter((n) => !n.hidden && n.textContent).map((n) => n.textContent);
+  entry.el.setAttribute("aria-label", [entry.name, ...values].join(", "));
 }
 
 function buildMarkers(outlook) {
@@ -910,10 +916,17 @@ let playToken = 0;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// while playing, the headline and the panel change every second: screen readers would read
+// each change, so they are quiet then and say the state where play stopped
+function quiet(on) {
+  for (const id of ["headline", "okres-panel"]) document.getElementById(id)?.setAttribute("aria-live", on ? "off" : "polite");
+}
+
 function stopPlay() {
   if (!playing) return;
   playing = null;
   playToken += 1;
+  quiet(false);
   renderWhen(outlook);
   renderHeadline(shownView());
 }
@@ -961,6 +974,7 @@ async function transition(target, token) {
 async function play(scope) {
   stopPlay();
   playing = scope;
+  quiet(true);
   const token = ++playToken;
   // a single model: only the parts it covers
   const steps = playSteps(shownView(), scope, state.day);
@@ -975,6 +989,16 @@ async function play(scope) {
     if (!(await transition(steps[i % steps.length], token))) return;
   }
 }
+
+// Escape closes the okres panel and puts the focus back on its marker (the search box closes
+// its own list with Escape first)
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.defaultPrevented || !state.okres) return;
+  if (event.target.closest?.("#obce-search")) return;
+  const code = state.okres;
+  update({ okres: null });
+  markers.get(code)?.el.focus();
+});
 
 function togglePlay(scope) {
   if (playing === scope) stopPlay();

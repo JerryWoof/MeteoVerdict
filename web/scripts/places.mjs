@@ -6,7 +6,7 @@
 import { fold } from "../src/places.js";
 import { translator } from "../src/i18n.js";
 import { SITE_LINKS } from "../src/footer.js";
-import { CSP } from "./seo.mjs";
+import { CSP, SPECULATION } from "./seo.mjs";
 
 export const SITE = "https://meteoverdict.cz";
 
@@ -143,6 +143,7 @@ export function shell(spec, assets) {
     ${assets}
     ${STYLE}
     <meta http-equiv="Content-Security-Policy" content="${CSP}" />
+    ${SPECULATION}
   </head>
   <body class="page place-page">
     <header>

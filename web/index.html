@@ -32,15 +32,17 @@
       </div>
       <p class="page-intro" data-i18n="page.tvIntro">The weather of the next days in every okres.</p>
       <!-- shown while MeteoVerdict AI is the map's model: issue time and status -->
+      <!-- the parts and the play buttons are drawn here already (the same as tv-page.js renderWhen
+           draws them), so the map below does not move when the script fills the strip -->
       <nav id="ribbon" class="strip attached" data-i18n-aria="tv.when">
         <div class="when">
           <div class="day-row">
             <div id="days" class="daytabs"></div>
-            <button type="button" id="play-week" class="play">▶</button>
+            <button type="button" id="play-week" class="play" data-i18n="tv.play.week">▶ Play the week</button>
           </div>
           <div class="when-row">
-            <div id="parts" class="segmented"></div>
-            <button type="button" id="play-day" class="play">▶</button>
+            <div id="parts" class="segmented"><button type="button"><span data-i18n="part.night">Night</span><small>0–6</small></button><button type="button"><span data-i18n="part.morning">Morning</span><small>6–12</small></button><button type="button"><span data-i18n="part.afternoon">Afternoon</span><small>12–18</small></button><button type="button"><span data-i18n="part.evening">Evening</span><small>18–24</small></button><button type="button"><span data-i18n="part.day">Whole day</span><small>0–24</small></button></div>
+            <button type="button" id="play-day" class="play" data-i18n="tv.play.day">▶ Play the day</button>
             <!-- which forecast the whole map shows (not remembered: every load starts on ours) -->
             <label id="map-model" class="map-model">
               <span data-i18n="forecast.pick">Forecast</span>
@@ -52,9 +54,9 @@
         </div>
       </nav>
       <div class="map-wrap">
-        <aside id="headline" class="map-box info" aria-live="polite"></aside>
+        <aside id="headline" class="map-box info" aria-live="polite" aria-label="Shrnutí" data-i18n-aria="aria.summary"></aside>
         <div id="map" class="map-frame" role="region" aria-label="Weather map of Czechia"></div>
-        <aside id="show-box" class="map-box legend">
+        <aside id="show-box" class="map-box legend" aria-label="Co ukazuje mapa" data-i18n-aria="tv.onMap">
           <details id="show" open>
             <summary data-i18n="tv.onMap">On the map</summary>
             <fieldset>
@@ -69,7 +71,7 @@
             </fieldset>
           </details>
         </aside>
-        <aside id="okres-panel" class="map-box panel" aria-live="polite"></aside>
+        <aside id="okres-panel" class="map-box panel" aria-live="polite" aria-label="Podrobnosti místa" data-i18n-aria="aria.detail"></aside>
       </div>
     </main>
     <footer data-footer>
