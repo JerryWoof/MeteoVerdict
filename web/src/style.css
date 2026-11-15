@@ -4007,6 +4007,10 @@ footer a:hover {
 body.theme-forecast #ribbon {
   min-height: 91px;
 }
+/* the day tabs come with the forecast (two lines each): their row keeps that height from the start */
+body.theme-forecast .day-row {
+  min-height: 46px;
+}
 body.radar nav.strip {
   min-height: 133px;
 }
@@ -4017,9 +4021,6 @@ body.radar nav.strip {
   body.radar nav.strip {
     min-height: 150px;
   }
-  body.radar #show-box {
-    min-height: 158px;
-  }
 }
 
 /* phones: the status line ("Forecast of …") always gets a row of its own. Before, "Loading…" fitted
@@ -4028,4 +4029,15 @@ body.radar nav.strip {
   header #status {
     flex: 0 0 100%;
   }
+}
+
+/* headings break into even lines, paragraphs avoid a lone last word (no layout cost elsewhere) */
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+p,
+li {
+  text-wrap: pretty;
 }

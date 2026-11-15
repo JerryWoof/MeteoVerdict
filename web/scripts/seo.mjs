@@ -6,6 +6,24 @@ import { blocksHtml, inlineHtml } from "../src/blocks-html.js";
 import { PAGES as TEXTS } from "../src/pages-text.js";
 
 export const CSP = "object-src 'none'; base-uri 'self'; form-action 'self'";
+// the map pages open their connections to the tile host (and the radar to its data) at once,
+// not after the map script has run
+const PRECONNECT = {
+  "index.html": ["https://tiles.openfreemap.org"],
+  "compare-models.html": ["https://tiles.openfreemap.org"],
+  "heatmap.html": ["https://tiles.openfreemap.org"],
+  "radar.html": ["https://tiles.openfreemap.org", "https://raw.githubusercontent.com"],
+};
+
+// the next page from the menu starts loading while the pointer rests on its link (not prerender:
+// the map pages are heavy and poll); data files and downloads are never fetched ahead
+export const SPECULATION = `<script type="speculationrules">${JSON.stringify({
+  prefetch: [{
+    where: { and: [{ href_matches: "/*" }, { not: { href_matches: "/data/*" } }, { not: { href_matches: "/api/*" } }, { not: { href_matches: "/*.json" } }, { not: { href_matches: "/*.zip" } }] },
+    eagerness: "moderate",
+  }],
+})}</script>`;
+
 export const SITE = "https://meteoverdict.cz/";
 
 // file -> [path on the site, Czech description, English description, Czech title when the page has none]
@@ -65,6 +83,8 @@ export function injectSeo(html, file) {
     // only the directives that cannot break a page (no script/connect/img rules: the map and the data load from several hosts)
     `<meta http-equiv="Content-Security-Policy" content="${CSP}" />`,
     `<link rel="apple-touch-icon" href="/apple-touch-icon.png" />`,
+    ...(PRECONNECT[file] ?? []).map((origin) => `<link rel="preconnect" href="${origin}" crossorigin />`),
+    SPECULATION,
   ].map((t) => `    ${t}\n`).join("");
   out = out.replace("</head>", `${tags}  </head>`);
   // English readers: the description (the title is swapped by src/i18n.js, the Czech one stays in the HTML)

@@ -1,4 +1,5 @@
 import { Map as MapLibreMap, Marker, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
+import { foldAttribution } from "./attribution.js";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
@@ -74,6 +75,9 @@ const map = new MapLibreMap({
   fitBoundsOptions: { padding: 20 },
   attributionControl: { compact: true, customAttribution: `Radar: ČHMÚ (CC BY 4.0) · Satellite: contains modified EUMETSAT Meteosat data ${new Date().getFullYear()} (CC BY 4.0), processed by ČHMÚ · Boundaries, places: ČÚZK (CC BY 4.0) · ${BASEMAP_ATTRIBUTION}` },
 });
+// the credits folded behind (i) at every width (in full in the footer too): open they wrap to two
+// lines up to ~1100 px and run under the legend and the point panel, on phones they cover a third of the map
+foldAttribution(map);
 map.addControl(new NavigationControl({ showCompass: false }));
 const myDot = locationDot(map);
 const applyTheme = themeMap(map, {
@@ -561,10 +565,17 @@ function tick(now) {
   rafId = requestAnimationFrame(tick);
 }
 
+// while playing, the headline and the point panel change with every frame: screen readers would
+// read each change, so they are quiet then (the slider's value text says the time)
+function quiet(on) {
+  for (const id of ["headline", "point-panel"]) document.getElementById(id)?.setAttribute("aria-live", on ? "off" : "polite");
+}
+
 function play() {
   if (playing) return stop();
   if (steps.length < 2) return;
   playing = true;
+  quiet(true);
   clockState = { ms: shownMs >= lastTime() ? firstTime() : shownMs, hold: 0 };
   shownMs = quantize(clockState.ms);
   lastTick = null;
@@ -580,6 +591,7 @@ function stop() {
   rafId = null;
   if (playing) {
     playing = false;
+    quiet(false);
     renderPlay();
     writeHash();
     refreshPoint();
@@ -696,6 +708,12 @@ function closePoint() {
   document.getElementById("point-panel").hidden = true;
   scrollToPanel(document.getElementById("point-panel"), false);
 }
+
+// Escape closes the point panel
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.defaultPrevented || event.target.closest?.("input")) return;
+  if (!document.getElementById("point-panel").hidden) closePoint();
+});
 
 async function refreshPoint() {
   if (!point) return;
@@ -1315,16 +1333,12 @@ setInterval(() => {
 }, 30000);
 
 async function main() {
+  // phones: the box starts folded so the map stays visible (at once: folded later, the map jumped up)
+  if (window.innerWidth <= 700) document.getElementById("show").open = false;
   renderSpeed();
   renderPointHint();
   const [, daysJson] = await Promise.all([mapLoaded, getJson("radar/days.json")]);
   days = Array.isArray(daysJson) ? daysJson : [];
-  // phones: the box starts folded so the map stays visible
-  if (window.innerWidth <= 700) document.getElementById("show").open = false;
-  // the credits folded behind (i) at every width (they are in full in the footer too), as on
-  // the heatmap: open they wrap to two lines up to ~1100 px and run under the legend and the
-  // point panel, and on phones they cover a third of the map
-  map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
   addLayers();
   await update({ day: view.day });
   window.addEventListener("resize", () => renderTimeline());

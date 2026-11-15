@@ -58,7 +58,7 @@ h+=`<text x="${X(cur.lon)+11}" y="${Y(cur.lat)-9}" font-size="11" fill="var(--in
 const m=document.getElementById("map");m.innerHTML=h;m.querySelectorAll(".stn").forEach(e=>e.onclick=()=>{cur=S.find(s=>s.id==e.dataset.id);draw()})}
 function line(a,px,py,c,w){let d="",pen=false;a.forEach((v,i)=>{if(v==null){pen=false;return}d+=(pen?"L":"M")+px(i).toFixed(1)+","+py(v).toFixed(1);pen=true});return d?`<path d="${d}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linejoin="round"/>`:""}
 function draw(){const unit=VARS[vr][1],r=key(cur);
-document.getElementById("nm").innerHTML=`<span class="chmu">ČHMÚ stanice</span>${cur.name}`;
+document.getElementById("nm").innerHTML=`<span class="chmu">ČHMÚ stanice</span>${esc(cur.name)}`;
 document.getElementById("meta").textContent=`WMO ${cur.id.split("-").pop()} · okres ${cur.okres} · ${cur.elev} m n. m.`;
 drawMap();
 const sv=document.getElementById("chart");
@@ -71,14 +71,14 @@ const t0=new Date(r.t0);for(let i=0;i<H;i+=12){const t=new Date(t0.getTime()+i*3
 h+=`<text x="40" y="12" font-size="11" fill="var(--mut)">${unit}, čas UTC</text>`;
 r.top.forEach((t,i)=>h+=line(t.v,px,py,COL[i],1.6));if(r.blend)h+=line(r.blend,px,py,"var(--bl)",1.8);h+=line(r.ai,px,py,"var(--ai)",2.6);h+=line(r.obs,px,py,"var(--obs)",2.4);
 sv.innerHTML=h;
-document.getElementById("leg").innerHTML=`<span><i style="background:var(--obs)"></i>naměřeno (ČHMÚ)</span><span><i style="background:var(--ai)"></i>MeteoVerdict AI</span>`+(r.blend?`<span><i style="background:var(--bl)"></i>MeteoVerdict blend</span>`:"")+r.top.map((t,i)=>`<span><i style="background:${COL[i]}"></i>${t.n}</span>`).join("");
+document.getElementById("leg").innerHTML=`<span><i style="background:var(--obs)"></i>naměřeno (ČHMÚ)</span><span><i style="background:var(--ai)"></i>MeteoVerdict AI</span>`+(r.blend?`<span><i style="background:var(--bl)"></i>MeteoVerdict blend</span>`:"")+r.top.map((t,i)=>`<span><i style="background:${COL[i]}"></i>${esc(t.n)}</span>`).join("");
 table(r,unit);
 document.getElementById("note").textContent="Statistika: všechny ověřené snímky, hodiny s předpovědí D+"+lead+" ("+24*lead+"–"+(24*lead+23)+" h předem), jen společné páry (pravidlo R3). Tři modely jsou ty s nejnižší chybou na této stanici; při malém vzorku jde o výběr, ne o vlastnost modelů. Graf: pro každou hodinu snímek 24·"+lead+" až 24·"+lead+"+5 h před ní."+(r.obs?"":" Pro tuto veličinu graf zatím není.");
 }
 function table(r,unit){
 document.getElementById("th").textContent=`Série (MAE v ${unit}, D+${lead}, ${r.n} srovnatelných hodin)`;
 const best=Math.min(...r.stats.map(x=>x.mae));
-document.getElementById("tb").innerHTML=r.stats.map(x=>`<tr><td><span class="dot" style="background:${x.k=="ai"?"var(--ai)":x.k=="blend"?"var(--bl)":COL[r.stats.filter(y=>y.k!="ai"&&y.k!="blend").findIndex(y=>y.n==x.n)]}"></span>${x.n}</td><td class="${x.mae==best?"best":""}">${x.mae.toFixed(2)}</td><td>${x.bias>0?"+":""}${x.bias.toFixed(2)}</td></tr>`).join("")+(r.stats.some(x=>x.k=="blend")?"":`<tr class="na"><td><span class="dot" style="background:var(--bl)"></span>MeteoVerdict blend</td><td colspan="2">v těchto snímcích po stanicích není (nebo nemá pro tuto veličinu hodnotu)</td></tr>`);
+document.getElementById("tb").innerHTML=r.stats.map(x=>`<tr><td><span class="dot" style="background:${x.k=="ai"?"var(--ai)":x.k=="blend"?"var(--bl)":COL[r.stats.filter(y=>y.k!="ai"&&y.k!="blend").findIndex(y=>y.n==x.n)]}"></span>${esc(x.n)}</td><td class="${x.mae==best?"best":""}">${x.mae.toFixed(2)}</td><td>${x.bias>0?"+":""}${x.bias.toFixed(2)}</td></tr>`).join("")+(r.stats.some(x=>x.k=="blend")?"":`<tr class="na"><td><span class="dot" style="background:var(--bl)"></span>MeteoVerdict blend</td><td colspan="2">v těchto snímcích po stanicích není (nebo nemá pro tuto veličinu hodnotu)</td></tr>`);
 }
 function gaps(){const r=key(cur),el=document.getElementById("gap"),P=D.provenance.snapshots;
 if(!r)el.innerHTML=`<div class="gap">Pro D+${lead} zatím nejsou srovnatelná data (ověřené snímky ${P.first?P.first.slice(0,10)+" až "+P.last.slice(0,10):"zatím žádné"}, měření do ${D.asof?D.asof.slice(0,10):"–"}).</div>`;
@@ -90,7 +90,7 @@ const sh=h=>h?h.slice(0,12)+"…"+h.slice(-8):"–";
 function allBox(){const o=D.overall[VARS[vr][0]+"|"+lead],el=document.getElementById("allbox");
 if(!o){el.innerHTML='<div class="sub">Pro tuto veličinu a D+'+lead+' zatím nejsou data.</div>';return}
 const dr=Object.entries(o.dropped_run_unavailable||{}).map(([k,v])=>(D.names[k]||k)+" "+v).join(", ");
-el.innerHTML=`<div class="sub">${o.ai_pairs} párů AI s měřením; ${o.n} společných pro AI a tři nejlepší modely (vyřazeno ${o.dropped_not_common}). Vyřazeno kvůli nedostupnému běhu modelu (R1): ${dr||"nic"}.</div><table><thead><tr><th>Model</th><th>párů s AI</th><th>MAE</th><th>bias</th><th>MAE AI na stejných párech</th></tr></thead><tbody>`+o.models.map(m=>`<tr><td>${m.n}</td><td>${m.pairs}</td><td class="${m.mae<m.ai_mae?"best":""}">${m.mae.toFixed(2)}</td><td>${m.bias>0?"+":""}${m.bias.toFixed(2)}</td><td>${m.ai_mae.toFixed(2)}</td></tr>`).join("")+"</tbody></table>"}
+el.innerHTML=`<div class="sub">${o.ai_pairs} párů AI s měřením; ${o.n} společných pro AI a tři nejlepší modely (vyřazeno ${o.dropped_not_common}). Vyřazeno kvůli nedostupnému běhu modelu (R1): ${esc(dr||"nic")}.</div><table><thead><tr><th>Model</th><th>párů s AI</th><th>MAE</th><th>bias</th><th>MAE AI na stejných párech</th></tr></thead><tbody>`+o.models.map(m=>`<tr><td>${esc(m.n)}</td><td>${m.pairs}</td><td class="${m.mae<m.ai_mae?"best":""}">${m.mae.toFixed(2)}</td><td>${m.bias>0?"+":""}${m.bias.toFixed(2)}</td><td>${m.ai_mae.toFixed(2)}</td></tr>`).join("")+"</tbody></table>"}
 function prov(){const P=D.provenance,t=D.kind=="test",L=P.snapshots.last_assets.slice(-1)[0];
 document.getElementById("banner").innerHTML=t?"<b>TESTOVACÍ DATA.</b> Veřejný log předpovědí zatím neběží ostrý; čísla jsou z ověřovacího nanečisto (několik zkušebních snímků z 20.–22. 10. 2026, skutečné předpovědi a skutečná měření ČHMÚ, ale jen málo hodin). Stránka není v menu a není hotová.":"<b>Stránka není v menu a není hotová.</b> Data se každý den přepočítávají z veřejného logu.";
 document.getElementById("prov").innerHTML=`<span class="pill">${t?"test":"ověřeno"}</span><span class="sub">${t?"Takto vypadá původ čísel; je to zkušební snímkový log, ne ostrý.":"Původ čísel na této stránce:"}</span>

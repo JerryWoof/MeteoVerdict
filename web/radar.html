@@ -25,23 +25,25 @@
       </div>
       <p class="page-intro" data-i18n="page.radarIntro">ČHMÚ's radar: the last hours and the next hour.</p>
       <nav id="ribbon" class="strip attached" aria-label="Time">
+        <!-- the buttons are drawn here already (the same as radar-page.js renderSource/renderSpeed draw
+             them), so the map below does not move when the script fills the strip -->
         <div class="radar-when">
           <div class="when-row source-row">
-            <div id="source" class="segmented" role="group" data-i18n-aria="radar.sourceLabel"></div>
-            <span id="day-pick">
+            <div id="source" class="segmented" role="group" data-i18n-aria="radar.sourceLabel"><button type="button" aria-pressed="true" data-i18n="radar.live">Live</button><button type="button" aria-pressed="false" data-i18n="radar.archive">Pick a day</button></div>
+            <span id="day-pick" hidden>
               <input type="date" id="day" data-i18n-title="radar.dayLabel" />
               <small id="day-range" class="hint"></small>
             </span>
             <span id="window">
               <span id="window-label" data-i18n="radar.hoursLabel">Replay the last</span>
-              <span id="hours" class="segmented" role="group"></span>
-              <small id="window-hint" class="hint"></small>
+              <span id="hours" class="segmented" role="group"><button type="button">1 h</button><button type="button">3 h</button><button type="button">6 h</button><button type="button">24 h</button></span>
+              <small id="window-hint" class="hint" data-i18n="radar.hoursHint">how far back the animation starts; it ends with the nowcast for the next hour</small>
             </span>
           </div>
           <div class="when-row now-row">
             <button type="button" id="play" class="play" aria-keyshortcuts="Space">▶</button>
-            <div id="speed" class="segmented speed" role="group"></div>
-            <div id="when" role="status">
+            <div id="speed" class="segmented speed" role="group"><button type="button">&gt;</button><button type="button">&gt;&gt;</button><button type="button">&gt;&gt;&gt;</button></div>
+            <div id="when">
               <strong id="clock"></strong>
               <span id="date"></span>
               <span id="rel"></span>
@@ -58,9 +60,9 @@
         </div>
       </nav>
       <div class="map-wrap">
-        <aside id="headline" class="map-box info" aria-live="polite"></aside>
+        <aside id="headline" class="map-box info" aria-live="polite" aria-label="Shrnutí" data-i18n-aria="aria.summary"></aside>
         <div id="map" class="map-frame" role="region" aria-label="Radar map of Czechia" data-i18n-aria="radar.mapAria"></div>
-        <aside id="show-box" class="map-box legend">
+        <aside id="show-box" class="map-box legend" aria-label="Co ukazuje mapa" data-i18n-aria="tv.onMap">
           <details id="show" open>
             <summary data-i18n="radar.onMap">On the map</summary>
             <div id="point-hint"></div>
@@ -68,7 +70,7 @@
             <div id="radar-legend"></div>
           </details>
         </aside>
-        <aside id="point-panel" class="map-box panel" hidden aria-live="polite"></aside>
+        <aside id="point-panel" class="map-box panel" hidden aria-live="polite" aria-label="Podrobnosti místa" data-i18n-aria="aria.detail"></aside>
       </div>
     </main>
     <footer data-footer>
