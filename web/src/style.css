@@ -4021,3 +4021,11 @@ body.radar nav.strip {
     min-height: 142px;
   }
 }
+
+/* phones: the status line ("Forecast of …") always gets a row of its own. Before, "Loading…" fitted
+   beside the menu and the longer text then wrapped below it, pushing the whole page down 22 px */
+@media (max-width: 700px) {
+  header #status {
+    flex: 0 0 100%;
+  }
+}
