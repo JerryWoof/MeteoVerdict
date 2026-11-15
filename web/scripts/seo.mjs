@@ -5,6 +5,7 @@ import { STRINGS } from "../src/i18n.js";
 import { blocksHtml, inlineHtml } from "../src/blocks-html.js";
 import { PAGES as TEXTS } from "../src/pages-text.js";
 
+export const CSP = "object-src 'none'; base-uri 'self'; form-action 'self'";
 export const SITE = "https://meteoverdict.cz/";
 
 // file -> [path on the site, Czech description, English description, Czech title when the page has none]
@@ -23,7 +24,8 @@ export const PAGES = {
   "zdroje.html": ["zdroje.html", "Zdroje dat MeteoVerdictu a jejich licence: ČHMÚ, Open-Meteo, modely, ČÚZK, OpenStreetMap a další.", "Data sources of MeteoVerdict and their licences: ČHMÚ, Open-Meteo, the models, ČÚZK, OpenStreetMap and others."],
 };
 
-const ANALYTICS = `<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "bfd729fcbbdf4e3094786a0ff9e359c8"}'></script>`;
+// loaded after the page and an idle moment: the beacon costs about 250 ms of script time
+const ANALYTICS = `<script>addEventListener("load",function(){(window.requestIdleCallback||setTimeout)(function(){var s=document.createElement("script");s.type="module";s.src="https://static.cloudflareinsights.com/beacon.min.js";s.setAttribute("data-cf-beacon",'{"token": "bfd729fcbbdf4e3094786a0ff9e359c8"}');document.body.appendChild(s)})})</script>`;
 
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
@@ -60,6 +62,8 @@ export function injectSeo(html, file) {
     `<meta name="twitter:description" content="${esc(cs)}" />`,
     `<meta name="twitter:image" content="${SITE}og-image.png" />`,
     `<meta name="theme-color" content="#1d2329" />`,
+    // only the directives that cannot break a page (no script/connect/img rules: the map and the data load from several hosts)
+    `<meta http-equiv="Content-Security-Policy" content="${CSP}" />`,
     `<link rel="apple-touch-icon" href="/apple-touch-icon.png" />`,
   ].map((t) => `    ${t}\n`).join("");
   out = out.replace("</head>", `${tags}  </head>`);
