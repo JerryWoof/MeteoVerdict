@@ -79,7 +79,6 @@ export function injectSeo(html, file) {
     `<meta name="twitter:title" content="${title}" />`,
     `<meta name="twitter:description" content="${esc(cs)}" />`,
     `<meta name="twitter:image" content="${SITE}og-image.png" />`,
-    `<meta name="theme-color" content="#1d2329" />`,
     // only the directives that cannot break a page (no script/connect/img rules: the map and the data load from several hosts)
     `<meta http-equiv="Content-Security-Policy" content="${CSP}" />`,
     `<link rel="apple-touch-icon" href="/apple-touch-icon.png" />`,

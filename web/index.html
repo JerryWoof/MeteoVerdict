@@ -54,6 +54,8 @@
         </div>
       </nav>
       <div class="map-wrap">
+        <!-- keyboard: past the 77 markers to the okresy as a table (below the map) -->
+        <a class="skip-link" href="#okres-list" data-i18n="tv.skipMap">Skip the map markers</a>
         <aside id="headline" class="map-box info" aria-live="polite" aria-label="Shrnutí" data-i18n-aria="aria.summary"></aside>
         <div id="map" class="map-frame" role="region" aria-label="Weather map of Czechia"></div>
         <aside id="show-box" class="map-box legend" aria-label="Co ukazuje mapa" data-i18n-aria="tv.onMap">
@@ -73,6 +75,12 @@
         </aside>
         <aside id="okres-panel" class="map-box panel" aria-live="polite" aria-label="Podrobnosti místa" data-i18n-aria="aria.detail"></aside>
       </div>
+      <!-- the map's forecast as a table, for screen readers and keyboards (tv-page.js renderTable;
+           drawn only while open) -->
+      <details id="okres-list" class="okres-list">
+        <summary data-i18n="tv.table">The okresy as a table</summary>
+        <div id="okres-table"></div>
+      </details>
     </main>
     <footer data-footer>
       <nav class="site-links" aria-label="O projektu"><a href="about.html">O projektu</a> · <a href="methodology.html">Metodika</a> · <a href="data.html">Data</a> · <a href="https://verify.meteoverdict.cz/" target="_blank" rel="noopener">Nezávislá verifikace měření</a> · <a href="collaboration.html">Kontakt</a> · <a href="soukromi.html">Soukromí</a> · <a href="zdroje.html">Zdroje a licence</a> · <a href="https://pudomer.cz/">Půdoměr</a></nav> · © MeteoVerdict, data <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>
