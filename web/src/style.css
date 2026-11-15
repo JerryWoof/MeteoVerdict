@@ -4005,20 +4005,20 @@ footer a:hover {
 /* the map pages' controls are filled by script after the first paint: their usual height is kept
    from the start, so the map under them does not jump (layout shift, measured by Lighthouse) */
 body.theme-forecast #ribbon {
-  min-height: 80px;
+  min-height: 91px;
 }
 body.radar nav.strip {
   min-height: 133px;
 }
 @media (max-width: 700px) {
   body.theme-forecast #ribbon {
-    min-height: 128px;
+    min-height: 250px;
   }
   body.radar nav.strip {
-    min-height: 138px;
+    min-height: 150px;
   }
   body.radar #show-box {
-    min-height: 142px;
+    min-height: 158px;
   }
 }
 
