@@ -25,7 +25,8 @@
       </div>
       <p class="page-intro" data-i18n="heat.intro">Experimental 100 m temperature from MeteoVerdict AI.</p>
       <p id="heat-empty" class="ai-banner" hidden data-i18n="heat.empty"></p>
-      <nav id="ribbon" class="strip attached" data-i18n-aria="heat.when" hidden>
+      <!-- shown from the start (hidden only when there is no map, heatmap-page.js): shown later they pushed the page down -->
+      <nav id="ribbon" class="strip attached" data-i18n-aria="heat.when">
         <div class="when">
           <div class="when-row heat-when">
             <button type="button" id="heat-prev" class="play" data-i18n-title="heat.prev">‹</button>
@@ -45,7 +46,7 @@
           <p id="heat-single" class="note" hidden></p>
         </div>
       </nav>
-      <div class="map-wrap" id="heat-wrap" hidden>
+      <div class="map-wrap" id="heat-wrap">
         <div id="map" class="map-frame" role="region" data-i18n-aria="heat.map"></div>
         <aside id="show-box" class="map-box legend">
           <div id="scale"></div>
@@ -53,7 +54,7 @@
         </aside>
         <aside id="heat-panel" class="map-box panel" hidden aria-live="polite"></aside>
       </div>
-      <p id="heat-note" class="note" hidden data-i18n="heat.note"></p>
+      <p id="heat-note" class="note" data-i18n="heat.note"></p>
     </main>
     <footer data-footer>
       <nav class="site-links" aria-label="O projektu"><a href="about.html">O projektu</a> · <a href="methodology.html">Metodika</a> · <a href="data.html">Data</a> · <a href="https://verify.meteoverdict.cz/" target="_blank" rel="noopener">Nezávislá verifikace měření</a> · <a href="collaboration.html">Kontakt</a> · <a href="soukromi.html">Soukromí</a> · <a href="zdroje.html">Zdroje a licence</a> · <a href="https://pudomer.cz/">Půdoměr</a></nav> · © MeteoVerdict, data <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>

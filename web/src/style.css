@@ -4041,6 +4041,12 @@ body.radar nav.strip {
   body.radar nav.strip {
     min-height: 150px;
   }
+  body.heatmap #ribbon {
+    min-height: 157px;
+  }
+  body.heatmap #show-box {
+    min-height: 117px;
+  }
 }
 
 /* phones: the status line ("Forecast of …") always gets a row of its own. Before, "Loading…" fitted
