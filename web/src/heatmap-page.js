@@ -1,4 +1,5 @@
 import { Map as MapLibreMap, Marker, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
+import { foldAttribution } from "./attribution.js";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "./style.css";
@@ -118,7 +119,7 @@ function makeMap() {
     attributionControl: { compact: true, customAttribution: `Boundaries: ČÚZK (CC BY 4.0) · ${BASEMAP_ATTRIBUTION}` },
   });
   // the credits start folded (their open box would cover a phone's small map)
-  m.once("load", () => m.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show"));
+  foldAttribution(m);
   m.addControl(new NavigationControl({ showCompass: false }));
   const myDot = locationDot(m);
   applyTheme = themeMap(m, { ...BASEMAP_SPEC, "okresy-line": { "line-color": ["#ffffff", "#151412"] } });
@@ -667,6 +668,7 @@ async function main() {
   const single = index ? null : parseTemp100m(await fetchJson(TEMP100M_JSON));
   source = index ? { index } : single ? { single } : null;
   if (!source) {
+    for (const id of ["ribbon", "heat-wrap", "heat-note"]) $(id).hidden = true;
     $("heat-empty").hidden = false;
     return;
   }
