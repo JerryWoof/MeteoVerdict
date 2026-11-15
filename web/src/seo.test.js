@@ -31,7 +31,7 @@ test("every page entry has both descriptions", () => {
 import { injectInfoText } from "../scripts/seo.mjs";
 
 test("a text page carries its Czech text in the HTML, the About page also FAQPage data", () => {
-  const page = `<head></head><main id="info" data-page="about"><h2 id="info-title" class="page-title">O projektu</h2></main>`;
+  const page = `<head></head><main id="info" data-page="about"><h1 id="info-title" class="page-title">O projektu</h1></main>`;
   const out = injectInfoText(page);
   assert.match(out, /<div data-prerender>[\s\S]*MeteoVerdict je český web[\s\S]*<h3>Který model/);
   const ld = JSON.parse(out.match(/ld\+json">(.*?)<\/script>/)[1]);

@@ -144,7 +144,7 @@ export function shell(spec, assets) {
   </head>
   <body class="page place-page">
     <header>
-      <h1 class="logo"><a href="${spec.lang === "en" ? "/en/" : "/"}">MeteoVerdict</a></h1>
+      <p class="logo site-name"><a href="${spec.lang === "en" ? "/en/" : "/"}">MeteoVerdict</a></p>
       <nav class="site-nav" aria-label="MeteoVerdict">
         ${nav}
       </nav>
@@ -152,7 +152,7 @@ export function shell(spec, assets) {
     </header>
     <main class="content">
       <nav class="crumbs" aria-label="breadcrumb">${crumbs}</nav>
-      <h2 class="page-title">${esc(spec.h1)}</h2>
+      <h1 class="page-title">${esc(spec.h1)}</h1>
 ${spec.bodyHtml}
       <p class="note">${t.note}</p>
     </main>

@@ -47,7 +47,7 @@ export function toEnglish(html, file) {
   const text = key && TEXTS[key];
   if (text) {
     out = out.replace(blocksHtml(text.cs.blocks), blocksHtml(text.en.blocks))
-      .replace(/(<h2 id="info-title"[^>]*>)[^<]*(<\/h2>)/, `$1${esc(text.en.title)}$2`)
+      .replace(/(<h1 id="info-title"[^>]*>)[^<]*(<\/h1>)/, `$1${esc(text.en.title)}$2`)
       .replace(/\s*<script type="application\/ld\+json">\{"@context":"https:\/\/schema.org","@type":"FAQPage".*?<\/script>/s, "");
   }
   // the page's own menu and footer links stay inside /en/

@@ -34,7 +34,10 @@ export function injectSeo(html, file) {
   const url = SITE + path;
   let out = html;
   const titleKey = out.match(/<title\b[^>]*\bdata-i18n-page="([^"]+)"/)?.[1];
-  if (titleKey && STRINGS.cs[titleKey]) {
+  if (file === "index.html") {
+    // the home page is what people search for: the topic first, not the site name
+    out = out.replace(/(<title\b[^>]*>)[^<]*(<\/title>)/, "$1Předpověď počasí pro obce a okresy ČR | MeteoVerdict$2");
+  } else if (titleKey && STRINGS.cs[titleKey]) {
     out = out.replace(/(<title\b[^>]*>)[^<]*(<\/title>)/, `$1MeteoVerdict: ${esc(STRINGS.cs[titleKey])}$2`);
   } else if (csTitle) {
     out = out.replace(/(<title\b[^>]*>)[^<]*(<\/title>)/, `$1MeteoVerdict: ${esc(csTitle)}$2`);
@@ -75,7 +78,7 @@ export function injectInfoText(html) {
   const key = html.match(/<main\b[^>]*\bdata-page="([^"]+)"/)?.[1];
   const text = key && TEXTS[key]?.cs;
   if (!text) return html;
-  let out = html.replace(/(<h2 id="info-title"[^>]*>)[^<]*(<\/h2>)/, `$1${esc(text.title)}$2\n        <div data-prerender>\n${blocksHtml(text.blocks)}        </div>`);
+  let out = html.replace(/(<h1 id="info-title"[^>]*>)[^<]*(<\/h1>)/, `$1${esc(text.title)}$2\n        <div data-prerender>\n${blocksHtml(text.blocks)}        </div>`);
   const faq = [];
   text.blocks.forEach(([kind, body], i) => {
     if (kind === "h3" && text.blocks[i + 1]?.[0] === "p") {
