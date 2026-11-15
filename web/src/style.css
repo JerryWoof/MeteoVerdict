@@ -318,6 +318,7 @@ select:disabled {
   gap: 0.5rem 1rem;
   margin: 0.5rem 0 0.25rem;
 }
+.content .page-head h1,
 .content .page-head h2,
 .page-title {
   margin: 0;
@@ -523,7 +524,7 @@ header {
 }
 /* the menu always right after the title, in the same place on every page; the page's
    status line ("Scores up to …", "Forecast of …") after it, so its length never moves it */
-header h1 {
+header .site-name {
   order: -2;
 }
 .site-nav {
@@ -568,7 +569,7 @@ header #controls input {
   text-align: center;
   cursor: help;
 }
-header h1 {
+header .site-name {
   font-size: 1.25rem;
   margin: 0;
 }
@@ -617,7 +618,7 @@ footer {
     background: var(--paper);
   }
 }
-header h1 a {
+header .site-name a {
   color: inherit;
   text-decoration: none;
 }
@@ -3144,6 +3145,7 @@ footer .site-links {
   margin: 1.6rem 0 0.4rem;
   font-size: 1.15rem;
 }
+.info-page .page-head h1,
 .info-page .page-head h2 {
   margin: 0;
   font-size: var(--fs-title);
@@ -3847,7 +3849,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 /* header: the name and the menu in one quiet line, only the current page in the ink */
-header h1 {
+header .site-name {
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -3869,6 +3871,7 @@ header p {
   color: var(--muted);
 }
 /* titles: small and light, the page's one line of explanation grey */
+.content .page-head h1,
 .content .page-head h2,
 .page-title {
   font-size: 1.05rem;
