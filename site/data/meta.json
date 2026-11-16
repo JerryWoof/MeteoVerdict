@@ -1,14 +1,14 @@
 {
- "generated": "2026-11-14T12:54:00+00:00",
- "as_of": "2026-11-13",
+ "generated": "2026-11-16T14:22:24+00:00",
+ "as_of": "2026-11-15",
  "windows": {
   "90d": {
-   "from": "2026-08-16",
-   "to": "2026-11-13"
+   "from": "2026-08-18",
+   "to": "2026-11-15"
   },
   "all": {
    "from": "2026-05-31",
-   "to": "2026-11-13"
+   "to": "2026-11-15"
   },
   "jja": {
    "from": "2026-06-01",
@@ -20,11 +20,11 @@
   },
   "season": {
    "from": "2026-09-01",
-   "to": "2026-11-13"
+   "to": "2026-11-15"
   },
   "son": {
    "from": "2026-09-01",
-   "to": "2026-11-13"
+   "to": "2026-11-15"
   }
  },
  "levels": [
@@ -95,19 +95,26 @@
  "short_record": {
   "all": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.596,
-    "days": 97,
+    "coverage": 0.601,
+    "days": 100,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.596,
-    "days": 97,
+    "coverage": 0.601,
+    "days": 100,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
+    ]
+   },
+   "ncep_aigfs025": {
+    "coverage": 0.796,
+    "days": 133,
+    "variables": [
+     "precipitation_24h"
     ]
    }
   },
@@ -186,11 +193,11 @@
  "sources": {
   "previous_runs": {
    "from": "2026-05-31",
-   "to": "2026-11-01"
+   "to": "2026-11-15"
   },
   "single_runs": {
    "from": "2026-10-18",
-   "to": "2026-11-13"
+   "to": "2026-11-15"
   }
  }
 }
