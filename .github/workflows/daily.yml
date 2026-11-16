@@ -37,6 +37,21 @@ jobs:
         run: uv sync --frozen
       - name: Station table
         run: uv run --frozen mvd stations --out data/stations.parquet
+      - name: Swap space
+        # `mvd daily` peaks at ~22 GB (scoring ~19 GB, aggregate ~21 GB, measured on the
+        # 2026-11-15 data) and the runner has 16 GB: without swap the OOM killer takes the
+        # runner agent ("The hosted runner lost communication with the server")
+        # best effort: without swap the step below still runs (and may die as before)
+        continue-on-error: true
+        run: |
+          df -h / /mnt || true
+          # /mnt is the runner's larger scratch disk when it exists
+          dir=/mnt; [ -d /mnt ] && sudo test -w /mnt || dir=/
+          sudo fallocate -l 16G "$dir/swapfile-mvd"
+          sudo chmod 600 "$dir/swapfile-mvd"
+          sudo mkswap "$dir/swapfile-mvd"
+          sudo swapon "$dir/swapfile-mvd"
+          free -h
       - name: Daily pipeline
         run: uv run --frozen mvd daily --github-release
         env:
