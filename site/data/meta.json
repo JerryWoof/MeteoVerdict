@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-17T06:08:47+00:00",
+ "generated": "2026-11-17T15:14:52+00:00",
  "as_of": "2026-11-16",
  "windows": {
   "90d": {
@@ -108,14 +108,6 @@
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
-    ]
-   },
-   "ncep_aigfs025": {
-    "coverage": 0.798,
-    "days": 134,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
     ]
    }
   },
