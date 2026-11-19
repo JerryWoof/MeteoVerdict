@@ -544,6 +544,7 @@ export const STRINGS = {
     "home.modelsLink": "Jak si vedou jednotlivé modely mezi sebou →",
     "home.bestModel": "„Nejlepší model“ je ten, který se za zvolené období nejméně lišil od měření stanic ČHMÚ v okrese (stejné dny a stanice pro všechny modely); když rozdíl není statisticky jistý, píšeme „≈“.",
     "home.mapTitle": "Který model předpovídá nejlépe",
+    "site.okresy": "Předpověď pro okresy",
     "site.about": "O projektu",
     "site.method": "Metodika",
     "site.contact": "Kontakt",
@@ -1091,6 +1092,7 @@ export const STRINGS = {
     "home.modelsLink": "How the individual models compare →",
     "home.bestModel": "“Best model” is the one whose forecast differed least from the ČHMÚ stations’ measurements in the okres over the chosen period (same days and stations for every model); where the difference is not statistically certain we write “≈”.",
     "home.mapTitle": "Which model forecasts best",
+    "site.okresy": "District forecasts",
     "site.about": "About",
     "site.method": "Methodology",
     "site.contact": "Contact",
@@ -1212,7 +1214,7 @@ export function setUpLanguage() {
   const title = document.querySelector("title[data-i18n-page]");
   if (title) document.title = `MeteoVerdict: ${t(title.dataset.i18nPage)}`;
   for (const footer of document.querySelectorAll("footer[data-footer]")) {
-    renderFooter(footer, t);
+    renderFooter(footer, t, language);
   }
   for (const button of document.querySelectorAll("#language [data-lang]")) {
     button.setAttribute("aria-pressed", String(button.dataset.lang === language));

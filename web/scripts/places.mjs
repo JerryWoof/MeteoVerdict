@@ -171,9 +171,10 @@ ${spec.bodyHtml}
 function footer(lang) {
   const t = translator(lang);
   const prefix = lang === "en" ? "/en/" : "/";
-  const links = SITE_LINKS.map(([key, href]) => {
+  const links = SITE_LINKS.map(([key, cs, en]) => {
+    const href = (lang === "en" && en) || cs;
     const external = /^https:/.test(href);
-    return `<a href="${external ? href : prefix + href}"${/^https:\/\/verify\./.test(href) ? ' target="_blank" rel="noopener"' : ""}>${esc(t(key))}</a>`;
+    return `<a href="${external || href.startsWith("/") ? href : prefix + href}"${/^https:\/\/verify\./.test(href) ? ' target="_blank" rel="noopener"' : ""}>${esc(t(key))}</a>`;
   }).join(" · ");
   return `<footer><nav class="site-links" aria-label="${esc(t("site.about"))}">${links}</nav> · © MeteoVerdict, ${esc(t("footer.data"))} <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></footer>`;
 }
