@@ -9,17 +9,19 @@ export const OSM_COPYRIGHT = "https://www.openstreetmap.org/copyright";
 export const TERRAIN_ATTRIBUTION = "https://github.com/tilezen/joerd/blob/master/docs/attribution.md";
 
 /** Fill a <footer data-footer> in the page's language. */
-export function renderFooter(footer, t) {
+export function renderFooter(footer, t, language = "cs") {
   const licence = document.createElement("a");
   licence.href = CC_BY_SA;
   licence.textContent = "CC BY-SA 4.0";
-  footer.replaceChildren(siteLinks(t), ` · © MeteoVerdict, ${t("footer.data")} `, licence);
+  footer.replaceChildren(siteLinks(t, language), ` · © MeteoVerdict, ${t("footer.data")} `, licence);
 }
 
-/** The links on every page: About, Methodology, Data, the independent verification of the
+/** The links on every page: the forecast pages of the okresy (/predpoved/, in English
+ * /en/forecast/; the plain link that leads search engines to them), About, Methodology, Data, the independent verification of the
  * measurements (verify.meteoverdict.cz, opens in a new tab), Contact (with the collaboration), Privacy,
  * Sources and licences, and the sister site Půdoměr (soil temperature and moisture). */
 export const SITE_LINKS = [
+  ["site.okresy", "/predpoved/", "/en/forecast/"],
   ["site.about", "about.html"],
   ["site.method", "methodology.html"],
   ["page.api", "data.html"],
@@ -30,11 +32,12 @@ export const SITE_LINKS = [
   ["site.pudomer", "https://pudomer.cz/"],
 ];
 
-function siteLinks(t) {
+function siteLinks(t, language) {
   const nav = document.createElement("nav");
   nav.className = "site-links";
   nav.setAttribute("aria-label", t("site.about"));
-  SITE_LINKS.forEach(([key, href], k) => {
+  SITE_LINKS.forEach(([key, cs, en], k) => {
+    const href = (language === "en" && en) || cs;
     if (k) nav.append(" · ");
     const a = document.createElement("a");
     a.href = href;
