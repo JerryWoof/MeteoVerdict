@@ -1,14 +1,14 @@
 {
- "generated": "2026-11-19T15:02:38+00:00",
- "as_of": "2026-11-18",
+ "generated": "2026-11-20T06:03:37+00:00",
+ "as_of": "2026-11-19",
  "windows": {
   "90d": {
-   "from": "2026-08-21",
-   "to": "2026-11-18"
+   "from": "2026-08-22",
+   "to": "2026-11-19"
   },
   "all": {
    "from": "2026-05-31",
-   "to": "2026-11-18"
+   "to": "2026-11-19"
   },
   "jja": {
    "from": "2026-06-01",
@@ -20,11 +20,11 @@
   },
   "season": {
    "from": "2026-09-01",
-   "to": "2026-11-18"
+   "to": "2026-11-19"
   },
   "son": {
    "from": "2026-09-01",
-   "to": "2026-11-18"
+   "to": "2026-11-19"
   }
  },
  "levels": [
@@ -95,16 +95,16 @@
  "short_record": {
   "all": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.608,
-    "days": 103,
+    "coverage": 0.61,
+    "days": 104,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.608,
-    "days": 103,
+    "coverage": 0.61,
+    "days": 104,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
@@ -190,7 +190,7 @@
   },
   "single_runs": {
    "from": "2026-10-18",
-   "to": "2026-11-18"
+   "to": "2026-11-19"
   }
  }
 }
