@@ -124,7 +124,7 @@ Commands, data store, workflows and the web pages: [docs/development.md](docs/de
 - ČHMÚ station data archive (release assets `chmi-*`, every element of every station,
   [inventory](docs/chmi-data.md)): CC BY 4.0, values unchanged.
 - Weather radar: ČHMÚ, [opendata.chmi.cz](https://opendata.chmi.cz/meteorology/weather/radar/),
-  CC BY 4.0; archived per day in the release assets `radar-YYYY-MM` (CC BY 4.0), PNG frames
+  CC BY 4.0; the page's frames of the last days in the release `radar-web` (CC BY 4.0), PNG frames
   cropped to the data area for the radar page.
 - Population of the obce: [ČSÚ](https://data.csu.gov.cz/datastat/data/SADA/OBY02A)
   (1 January); obce and their positions: ČÚZK RÚIAN, CC BY 4.0.
