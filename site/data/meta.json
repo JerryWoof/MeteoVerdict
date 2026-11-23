@@ -1,14 +1,14 @@
 {
- "generated": "2026-11-22T14:01:54+00:00",
- "as_of": "2026-11-21",
+ "generated": "2026-11-23T06:04:02+00:00",
+ "as_of": "2026-11-22",
  "windows": {
   "90d": {
-   "from": "2026-08-24",
-   "to": "2026-11-21"
+   "from": "2026-08-25",
+   "to": "2026-11-22"
   },
   "all": {
    "from": "2026-05-31",
-   "to": "2026-11-21"
+   "to": "2026-11-22"
   },
   "jja": {
    "from": "2026-06-01",
@@ -20,11 +20,11 @@
   },
   "season": {
    "from": "2026-09-01",
-   "to": "2026-11-21"
+   "to": "2026-11-22"
   },
   "son": {
    "from": "2026-09-01",
-   "to": "2026-11-21"
+   "to": "2026-11-22"
   }
  },
  "levels": [
@@ -95,16 +95,16 @@
  "short_record": {
   "all": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.615,
-    "days": 106,
+    "coverage": 0.617,
+    "days": 107,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.615,
-    "days": 106,
+    "coverage": 0.617,
+    "days": 107,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
@@ -172,6 +172,26 @@
      "wind_speed_10m_hourly"
     ]
    }
+  },
+  "season": {
+   "geosphere_arome_austria": {
+    "coverage": 0.795,
+    "days": 66,
+    "variables": [
+     "temperature_2m_18utc",
+     "temperature_max"
+    ]
+   }
+  },
+  "son": {
+   "geosphere_arome_austria": {
+    "coverage": 0.795,
+    "days": 66,
+    "variables": [
+     "temperature_2m_18utc",
+     "temperature_max"
+    ]
+   }
   }
  },
  "ranking": "by MAE; 95 % moving-block bootstrap interval of the MAE difference to the best model (blocks of 4 consecutive days); tied_with_best unless that interval excludes 0 and the Diebold-Mariano test (Newey-West variance, 3 lags) gives dm_p < 0.05; clear_winner when nobody is tied; p_best: share of the resamples in which the model has the lowest MAE, the map names a winner only from 0.6; small_sample: fewer than 30 days; the blend (mean of all models) is not ranked, its difference and interval are relative to the best single model",
@@ -190,7 +210,7 @@
   },
   "single_runs": {
    "from": "2026-10-18",
-   "to": "2026-11-21"
+   "to": "2026-11-22"
   }
  }
 }
