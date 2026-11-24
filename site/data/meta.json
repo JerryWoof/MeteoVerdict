@@ -1,30 +1,30 @@
 {
- "generated": "2026-11-23T16:45:10+00:00",
- "as_of": "2026-11-22",
+ "generated": "2026-11-24T16:41:12+00:00",
+ "as_of": "2026-11-23",
  "windows": {
   "90d": {
-   "from": "2026-08-25",
-   "to": "2026-11-22"
+   "from": "2026-08-26",
+   "to": "2026-11-23"
   },
   "all": {
-   "from": "2026-05-31",
-   "to": "2026-11-22"
+   "from": "2026-05-18",
+   "to": "2026-11-23"
   },
   "jja": {
    "from": "2026-06-01",
    "to": "2026-08-31"
   },
   "mam": {
-   "from": "2026-05-31",
+   "from": "2026-05-18",
    "to": "2026-05-31"
   },
   "season": {
    "from": "2026-09-01",
-   "to": "2026-11-22"
+   "to": "2026-11-23"
   },
   "son": {
    "from": "2026-09-01",
-   "to": "2026-11-22"
+   "to": "2026-11-23"
   }
  },
  "levels": [
@@ -94,17 +94,33 @@
  "bias_corrected": "mae_bc: MAE after removing each model's own bias at the station and synoptic hour, estimated on the 30 days before the forecast was made (at least 10); only pairs where every compared model has one",
  "short_record": {
   "all": {
+   "chmi_aladin_central_europe_2km": {
+    "coverage": 0.799,
+    "days": 148,
+    "variables": [
+     "precipitation_24h",
+     "precipitation_daily"
+    ]
+   },
+   "chmi_aladin_cz_1km": {
+    "coverage": 0.799,
+    "days": 148,
+    "variables": [
+     "precipitation_24h",
+     "precipitation_daily"
+    ]
+   },
    "meteofrance_arpege_europe": {
-    "coverage": 0.617,
-    "days": 107,
+    "coverage": 0.574,
+    "days": 108,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.617,
-    "days": 107,
+    "coverage": 0.574,
+    "days": 108,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
@@ -173,23 +189,84 @@
     ]
    }
   },
+  "mam": {
+   "geosphere_arome_austria": {
+    "coverage": 0.214,
+    "days": 3,
+    "variables": [
+     "precipitation_24h",
+     "precipitation_daily"
+    ]
+   },
+   "ncep_aigfs025": {
+    "coverage": 0.714,
+    "days": 10,
+    "variables": [
+     "precipitation_24h",
+     "precipitation_daily",
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
+     "temperature_2m_18utc",
+     "temperature_2m_hourly",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
+    ]
+   },
+   "ukmo_global_deterministic_10km": {
+    "coverage": 0.786,
+    "days": 11,
+    "variables": [
+     "precipitation_24h",
+     "precipitation_daily",
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
+     "temperature_2m_18utc",
+     "temperature_2m_hourly",
+     "temperature_max",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
+    ]
+   }
+  },
   "season": {
    "geosphere_arome_austria": {
-    "coverage": 0.795,
-    "days": 66,
+    "coverage": 0.798,
+    "days": 67,
     "variables": [
+     "precipitation_24h",
+     "precipitation_daily",
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
      "temperature_2m_18utc",
-     "temperature_max"
+     "temperature_2m_hourly",
+     "temperature_max",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
     ]
    }
   },
   "son": {
    "geosphere_arome_austria": {
-    "coverage": 0.795,
-    "days": 66,
+    "coverage": 0.798,
+    "days": 67,
     "variables": [
+     "precipitation_24h",
+     "precipitation_daily",
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
      "temperature_2m_18utc",
-     "temperature_max"
+     "temperature_2m_hourly",
+     "temperature_max",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
     ]
    }
   }
@@ -205,12 +282,12 @@
  "attribution": "Observations: ČHMÚ (opendata.chmi.cz, CC BY 4.0). Forecasts: Open-Meteo.com (CC BY 4.0) from DWD, ECMWF, NOAA, Météo-France, GeoSphere Austria, KNMI, DMI, ČHMÚ, Environment and Climate Change Canada, the Japan Meteorological Agency, the China Meteorological Administration and the UK Met Office (CC BY-SA 4.0). Boundaries: ČÚZK (CC BY 4.0).",
  "sources": {
   "previous_runs": {
-   "from": "2026-05-31",
+   "from": "2026-05-18",
    "to": "2026-11-15"
   },
   "single_runs": {
    "from": "2026-10-18",
-   "to": "2026-11-22"
+   "to": "2026-11-23"
   }
  }
 }
