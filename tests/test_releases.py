@@ -124,7 +124,8 @@ class FakeGitHub:
         self.storage: list[str] = []
         self.limited: list[httpx.Response] = []  # answered before the real answer
         self.next_asset = 1000
-        self.fail_uploads = False
+        self.fail_uploads: bool | int = False  # True: always; n: the next n uploads
+        self.stored_then_502 = 0
 
     def _by_id(self, release_id: int) -> str:
         return next(t for t, r in self.releases.items() if r["id"] == release_id)
@@ -188,6 +189,12 @@ class FakeGitHub:
             tag = self._by_id(int(path.split("/")[2]))
             names = self.releases[tag]["assets"]
             if self.fail_uploads:
+                if isinstance(self.fail_uploads, int) and self.fail_uploads is not True:
+                    self.fail_uploads -= 1
+                return httpx.Response(502)
+            if self.stored_then_502:  # GitHub kept the file but answered 502
+                self.stored_then_502 -= 1
+                names.append(url.params["name"])
                 return httpx.Response(502)
             if sum(n is not None for n in names) >= rel.MAX_ASSETS:
                 return httpx.Response(422, json={"message": "too many assets"})
@@ -378,6 +385,30 @@ def test_a_failed_upload_leaves_the_old_asset(tmp_path):
     assert not any(m == "DELETE" for m, _ in gh.api)
     assert live(gh, "data-2026-10") == ["obs-2026-10.parquet"]
     assert "obs-2026-10.parquet" in gh.store().names("data-2026-10")
+
+
+def test_an_upload_that_fails_once_is_tried_again(tmp_path):
+    gh = FakeGitHub({"latest": ["outlook.json"]})
+    store = gh.store()
+    path = tmp_path / "f"
+    path.write_bytes(b"x")
+    gh.fail_uploads = 1
+    store.put("latest", "outlook.json", path)
+    assert gh.waits == [rel.UPLOAD_WAITS[0]]
+    assert live(gh, "latest") == ["outlook.json"]
+
+
+def test_an_upload_stored_despite_a_502_is_not_doubled(tmp_path):
+    gh = FakeGitHub({"latest": ["outlook.json"]})
+    store = gh.store()
+    path = tmp_path / "f"
+    path.write_bytes(b"x")
+    gh.stored_then_502 = 1
+    store.put("latest", "outlook.json", path)
+    assert live(gh, "latest") == ["outlook.json"]
+    gh.stored_then_502 = 1
+    store.put("latest", "new.json", path)
+    assert sorted(live(gh, "latest")) == ["new.json", "outlook.json"]
 
 
 def test_a_leftover_new_asset_is_hidden_and_cleaned_up(tmp_path):

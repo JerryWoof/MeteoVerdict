@@ -45,6 +45,9 @@ MAX_ASSETS = 1000
 RATE_LIMIT_RETRIES = 6
 SERVER_ERROR_WAITS = (2.0, 10.0, 30.0)  # seconds before each retry of a 5xx
 IDEMPOTENT = {"GET", "DELETE", "PATCH"}  # an upload (POST) is not repeated blindly
+# a put that failed on a 5xx or a broken connection is tried again after these waits, from a
+# fresh asset listing (a 502 can come after GitHub stored the upload: the listing then shows it)
+UPLOAD_WAITS = (30.0, 120.0)
 MAX_WAIT = 3700.0  # the primary limit resets within an hour
 #: first wait for a secondary rate limit without a retry-after (doubles each time)
 SECONDARY_WAIT = 60.0
@@ -312,6 +315,20 @@ class GitHubReleaseStore:
             self._pending.pop(tag, None)
 
     def put(self, tag: str, name: str, path: Path, label: str = "") -> None:
+        """``_put``, tried again (``UPLOAD_WAITS``) when GitHub answers a 5xx or the
+        connection breaks."""
+        for attempt in range(len(UPLOAD_WAITS) + 1):
+            try:
+                return self._put(tag, name, path, label)
+            except (httpx.HTTPStatusError, httpx.TransportError) as error:
+                status = getattr(getattr(error, "response", None), "status_code", None)
+                if attempt == len(UPLOAD_WAITS) or (status is not None and status < 500):
+                    raise
+                self.log(f"upload of {tag}/{name} failed ({error!r}); retrying")
+                self.sleep(UPLOAD_WAITS[attempt])
+                self.forget(tag)
+
+    def _put(self, tag: str, name: str, path: Path, label: str = "") -> None:
         """Upload ``path`` as ``name``, replacing an existing asset of that name; a new
         asset goes to the first release of ``tag`` with room (``MAX_ASSETS``), a new
         overflow release when all are full. The old asset is deleted only after the new
