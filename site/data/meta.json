@@ -1,14 +1,14 @@
 {
- "generated": "2026-11-24T16:41:12+00:00",
- "as_of": "2026-11-23",
+ "generated": "2026-11-25T06:09:09+00:00",
+ "as_of": "2026-11-24",
  "windows": {
   "90d": {
-   "from": "2026-08-26",
-   "to": "2026-11-23"
+   "from": "2026-08-27",
+   "to": "2026-11-24"
   },
   "all": {
    "from": "2026-05-18",
-   "to": "2026-11-23"
+   "to": "2026-11-24"
   },
   "jja": {
    "from": "2026-06-01",
@@ -20,11 +20,11 @@
   },
   "season": {
    "from": "2026-09-01",
-   "to": "2026-11-23"
+   "to": "2026-11-24"
   },
   "son": {
    "from": "2026-09-01",
-   "to": "2026-11-23"
+   "to": "2026-11-24"
   }
  },
  "levels": [
@@ -93,34 +93,30 @@
  },
  "bias_corrected": "mae_bc: MAE after removing each model's own bias at the station and synoptic hour, estimated on the 30 days before the forecast was made (at least 10); only pairs where every compared model has one",
  "short_record": {
+  "90d": {
+   "geosphere_arome_austria": {
+    "coverage": 0.798,
+    "days": 71,
+    "variables": [
+     "precipitation_24h",
+     "precipitation_daily",
+     "temperature_2m_18utc",
+     "temperature_max"
+    ]
+   }
+  },
   "all": {
-   "chmi_aladin_central_europe_2km": {
-    "coverage": 0.799,
-    "days": 148,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
-    ]
-   },
-   "chmi_aladin_cz_1km": {
-    "coverage": 0.799,
-    "days": 148,
-    "variables": [
-     "precipitation_24h",
-     "precipitation_daily"
-    ]
-   },
    "meteofrance_arpege_europe": {
-    "coverage": 0.574,
-    "days": 108,
+    "coverage": 0.576,
+    "days": 109,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.574,
-    "days": 108,
+    "coverage": 0.576,
+    "days": 109,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
@@ -234,7 +230,7 @@
   },
   "season": {
    "geosphere_arome_austria": {
-    "coverage": 0.798,
+    "coverage": 0.788,
     "days": 67,
     "variables": [
      "precipitation_24h",
@@ -253,7 +249,7 @@
   },
   "son": {
    "geosphere_arome_austria": {
-    "coverage": 0.798,
+    "coverage": 0.788,
     "days": 67,
     "variables": [
      "precipitation_24h",
@@ -287,7 +283,7 @@
   },
   "single_runs": {
    "from": "2026-10-18",
-   "to": "2026-11-23"
+   "to": "2026-11-24"
   }
  }
 }
