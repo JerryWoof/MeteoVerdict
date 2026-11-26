@@ -1,14 +1,14 @@
 {
- "generated": "2026-11-25T18:33:06+00:00",
- "as_of": "2026-11-24",
+ "generated": "2026-11-26T06:14:20+00:00",
+ "as_of": "2026-11-25",
  "windows": {
   "90d": {
-   "from": "2026-08-27",
-   "to": "2026-11-24"
+   "from": "2026-08-28",
+   "to": "2026-11-25"
   },
   "all": {
    "from": "2026-05-18",
-   "to": "2026-11-24"
+   "to": "2026-11-25"
   },
   "jja": {
    "from": "2026-06-01",
@@ -20,11 +20,11 @@
   },
   "season": {
    "from": "2026-09-01",
-   "to": "2026-11-24"
+   "to": "2026-11-25"
   },
   "son": {
    "from": "2026-09-01",
-   "to": "2026-11-24"
+   "to": "2026-11-25"
   }
  },
  "levels": [
@@ -95,28 +95,35 @@
  "short_record": {
   "90d": {
    "geosphere_arome_austria": {
-    "coverage": 0.798,
+    "coverage": 0.789,
     "days": 71,
     "variables": [
      "precipitation_24h",
      "precipitation_daily",
+     "temperature_2m",
+     "temperature_2m_00utc",
+     "temperature_2m_06utc",
+     "temperature_2m_12utc",
      "temperature_2m_18utc",
-     "temperature_max"
+     "temperature_2m_hourly",
+     "temperature_max",
+     "wind_speed_10m",
+     "wind_speed_10m_hourly"
     ]
    }
   },
   "all": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.576,
-    "days": 109,
+    "coverage": 0.578,
+    "days": 110,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.576,
-    "days": 109,
+    "coverage": 0.578,
+    "days": 110,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
@@ -230,7 +237,7 @@
   },
   "season": {
    "geosphere_arome_austria": {
-    "coverage": 0.788,
+    "coverage": 0.779,
     "days": 67,
     "variables": [
      "precipitation_24h",
@@ -249,7 +256,7 @@
   },
   "son": {
    "geosphere_arome_austria": {
-    "coverage": 0.788,
+    "coverage": 0.779,
     "days": 67,
     "variables": [
      "precipitation_24h",
@@ -283,7 +290,7 @@
   },
   "single_runs": {
    "from": "2026-10-18",
-   "to": "2026-11-24"
+   "to": "2026-11-25"
   }
  }
 }
