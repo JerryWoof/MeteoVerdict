@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import polars as pl
 import pytest
+from polars.testing import assert_frame_equal
 
 from meteoverdict import blend, forecasts, fresh, runs, scoring
 from meteoverdict.models import load_models
@@ -237,3 +238,75 @@ def test_spread_keeps_api_rows_from_before_as_they_are():
     assert spread["lead_h"].to_list() == list(range(1, 121))
     assert spread["precipitation"].to_list() == pytest.approx([0.1] * 120)
     assert spread["temperature_2m"].null_count() == 100  # only at the 20 native hours
+
+
+def test_d_plus_n_in_groups_of_stations_is_the_same():
+    frame = pl.concat(
+        [single_runs(ICON_EU, every_run(utc(9), utc(14, 18)), station=s) for s in ("a", "b", "c")]
+    )
+    whole = rebuilt(frame, [ICON_EU])
+    present = fresh.present_runs(frame, [ICON_EU])
+    parts = [
+        fresh.previous_days(
+            frame, [ICON_EU], utc(14), utc(14, 23), stations=ids, present=present
+        ).collect()
+        for ids in (["a"], ["b", "c"])
+    ]
+    got = pl.concat(parts).sort("model", "lead_day", "time", "station_id")
+    assert got.equals(whole)
+    with pytest.raises(ValueError):
+        fresh.previous_days(frame, [ICON_EU], utc(14), utc(14, 23), stations=["a"])
+
+
+def test_a_run_missing_at_one_station_is_missing_for_all_groups():
+    # the 13 Oct 06 UTC run exists at station b only: group a must not see it as "ours"
+    full = single_runs(ICON_EU, every_run(utc(9), utc(14, 18)), station="a")
+    other = single_runs(ICON_EU, every_run(utc(9), utc(14, 18)), station="b")
+    frame = pl.concat([full.filter(pl.col("run") != utc(13, 6)), other])
+    present = fresh.present_runs(frame, [ICON_EU])
+    assert present.filter(pl.col("_expected") == utc(13, 6)).height == 1
+    whole = rebuilt(frame, [ICON_EU])
+    got = (
+        fresh.previous_days(frame, [ICON_EU], utc(14), utc(14, 23), stations=["a"], present=present)
+        .collect()
+        .sort("model", "lead_day", "time", "station_id")
+    )
+    assert got.equals(whole.filter(pl.col("station_id") == "a"))
+
+
+def test_fill_looks_only_at_the_hours_given():
+    derived = rebuilt(single_runs(ICON_EU, every_run(utc(9), utc(14, 18))), [ICON_EU])
+    have = derived.filter(pl.col("lead_day") == 1, pl.col("time") < utc(14, 12))
+    # a forecast hour far outside the window changes nothing
+    far = have.with_columns((pl.col("time") + timedelta(days=30)).alias("time"))
+    merged, added = fresh.fill(pl.concat([have, far]), derived, (utc(14), utc(14, 23)))
+    plain, expected = fresh.fill(have, derived)
+    assert added.equals(expected)
+    assert merged.collect().height == plain.collect().height + far.height
+
+
+def test_comparisons_of_groups_of_stations_add_up_to_the_whole():
+    frame = pl.concat(
+        [single_runs(ICON_EU, every_run(utc(9), utc(14, 18)), station=s) for s in ("a", "b")]
+    )
+    derived = rebuilt(frame, [ICON_EU])
+    previous = derived.with_columns(
+        (pl.col("temperature_2m") + pl.col("time").dt.hour() / 10).alias("temperature_2m")
+    )
+    obs = derived.select(
+        "station_id", "time", pl.lit("temperature_2m").alias("variable"),
+        (pl.col("temperature_2m") - 1).alias("value"),
+    ).filter(pl.col("station_id") == "a")  # fmt: skip
+    whole = fresh.compare(previous, derived, obs, [ICON_EU])
+    parts = [
+        fresh.compare(
+            previous.filter(pl.col("station_id") == s),
+            derived.filter(pl.col("station_id") == s),
+            obs.filter(pl.col("station_id") == s),
+            [ICON_EU],
+        )
+        for s in ("a", "b")
+    ]
+    got = fresh.combine_comparisons(parts)
+    assert_frame_equal(got, whole, check_exact=False, rel_tol=1e-6, check_dtypes=False)
+    assert fresh.summary(got) == fresh.summary(whole)

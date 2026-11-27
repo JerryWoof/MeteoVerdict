@@ -527,6 +527,41 @@ def test_a_high_site_is_left_out_only_of_okresy_it_stands_high_above():
     assert info.filter(pl.col("station_id") == "protivanov")["high_site"].item()
 
 
+def test_one_variable_at_a_time_uses_the_okres_medians_of_all_variables():
+    # as above, but the wind is measured only at Blansko's stations: Prostějov has no wind
+    # station, yet B3 is still too high for it (``window_facts`` has the medians of all)
+    stations = pl.DataFrame(
+        {
+            "id": ["p1", "p2", "p3", "b1", "b2", "b3"],
+            "name": ["P1", "P2", "P3", "B1", "B2", "B3"],
+            "okres_code": ["CZ0713"] * 3 + ["CZ0641"] * 3,
+            "okres": ["Prostějov"] * 3 + ["Blansko"] * 3,
+            "kraj_code": ["CZ071"] * 3 + ["CZ064"] * 3,
+            "kraj": ["Olomoucký kraj"] * 3 + ["Jihomoravský kraj"] * 3,
+            "elevation_class": ["lowland"] * 3 + ["upland"] * 3,
+            "elevation": [200.0, 220.0, 230.0, 300.0, 430.0, 540.0],
+        }
+    )
+    info = agg.station_info(stations).collect()
+    rows = [("temperature_2m", s, 1) for s in info["station_id"]]
+    rows += [("wind_speed_10m", s, 2) for s in ("b1", "b2", "b3")]
+    in_window = pl.DataFrame(rows, schema=["variable", "station_id", "lead_day"], orient="row")
+    in_window = in_window.join(info, on="station_id").lazy()
+    own = {"p": "CZ0713", "b": "CZ0641"}
+    distance = pl.DataFrame(
+        [(s, r, 0.0 if own[s[0]] == r else 20.0) for s in info["station_id"] for r in own.values()],
+        schema=["station_id", "region", "distance_km"], orient="row",
+    )  # fmt: skip
+    whole = agg.high_pairs(in_window, distance)
+    wind = in_window.filter(pl.col("variable") == "wind_speed_10m")
+    facts = agg.window_facts(in_window)
+    assert facts.first_lead == 1
+    got = agg.high_pairs(wind, distance, facts.medians)
+    assert sorted(got.rows()) == sorted(whole.filter(pl.col("variable") == "wind_speed_10m").rows())
+    assert ("wind_speed_10m", "CZ0713", "b3") in got.rows()
+    assert ("wind_speed_10m", "CZ0713", "b3") not in agg.high_pairs(wind, distance).rows()
+
+
 def test_wind_atypical_stations_are_left_out_of_okres_wind_only(monkeypatch):
     monkeypatch.setattr(agg, "WIND_ATYPICAL", frozenset({"low3"}))
     ids = ["low1", "low2", "low3", "low4"]

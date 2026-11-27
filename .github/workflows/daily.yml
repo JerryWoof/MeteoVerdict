@@ -38,10 +38,12 @@ jobs:
       - name: Station table
         run: uv run --frozen mvd stations --out data/stations.parquet
       - name: Swap space
-        # `mvd daily` peaks at ~22 GB (scoring ~19 GB, aggregate ~21 GB, measured on the
-        # 2026-11-15 data) and the runner has 16 GB: without swap the OOM killer takes the
-        # runner agent ("The hosted runner lost communication with the server")
-        # best effort: without swap the step below still runs (and may die as before)
+        # `mvd daily` used to peak at ~22 GB (scoring ~19 GB, aggregate ~21 GB, measured on
+        # the 2026-11-15 data) on the runner's 16 GB, and the OOM killer took the runner
+        # agent ("The hosted runner lost communication with the server"). Scoring and the
+        # aggregation now work in pieces (a month and a group of stations, a variable) and
+        # peak at ~8 GB; the swap file is only a safety margin, for a growing history.
+        # best effort: without swap the step below still runs
         continue-on-error: true
         run: |
           df -h / /mnt || true
