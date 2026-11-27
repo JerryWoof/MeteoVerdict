@@ -1,14 +1,14 @@
 {
- "generated": "2026-11-26T16:16:40+00:00",
- "as_of": "2026-11-25",
+ "generated": "2026-11-27T09:39:17+00:00",
+ "as_of": "2026-11-26",
  "windows": {
   "90d": {
-   "from": "2026-08-28",
-   "to": "2026-11-25"
+   "from": "2026-08-29",
+   "to": "2026-11-26"
   },
   "all": {
    "from": "2026-05-18",
-   "to": "2026-11-25"
+   "to": "2026-11-26"
   },
   "jja": {
    "from": "2026-06-01",
@@ -20,11 +20,11 @@
   },
   "season": {
    "from": "2026-09-01",
-   "to": "2026-11-25"
+   "to": "2026-11-26"
   },
   "son": {
    "from": "2026-09-01",
-   "to": "2026-11-25"
+   "to": "2026-11-26"
   }
  },
  "levels": [
@@ -95,8 +95,8 @@
  "short_record": {
   "90d": {
    "geosphere_arome_austria": {
-    "coverage": 0.789,
-    "days": 71,
+    "coverage": 0.778,
+    "days": 70,
     "variables": [
      "precipitation_24h",
      "precipitation_daily",
@@ -114,16 +114,16 @@
   },
   "all": {
    "meteofrance_arpege_europe": {
-    "coverage": 0.578,
-    "days": 110,
+    "coverage": 0.58,
+    "days": 111,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
     ]
    },
    "meteofrance_arpege_world": {
-    "coverage": 0.578,
-    "days": 110,
+    "coverage": 0.58,
+    "days": 111,
     "variables": [
      "wind_speed_10m",
      "wind_speed_10m_hourly"
@@ -237,7 +237,7 @@
   },
   "season": {
    "geosphere_arome_austria": {
-    "coverage": 0.779,
+    "coverage": 0.77,
     "days": 67,
     "variables": [
      "precipitation_24h",
@@ -256,7 +256,7 @@
   },
   "son": {
    "geosphere_arome_austria": {
-    "coverage": 0.779,
+    "coverage": 0.77,
     "days": 67,
     "variables": [
      "precipitation_24h",
@@ -290,7 +290,7 @@
   },
   "single_runs": {
    "from": "2026-10-18",
-   "to": "2026-11-25"
+   "to": "2026-11-26"
   }
  }
 }
