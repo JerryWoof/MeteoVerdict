@@ -60,6 +60,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import NamedTuple
 
 import polars as pl
 
@@ -224,17 +225,26 @@ def with_high_sites(stations: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def high_pairs(in_window: pl.LazyFrame, distance: pl.DataFrame) -> pl.DataFrame | None:
+def high_pairs(
+    in_window: pl.LazyFrame, distance: pl.DataFrame, medians: pl.DataFrame | None = None
+) -> pl.DataFrame | None:
     """``variable``, ``region``, ``station_id``: the stations more than
     ``HIGH_SITE_ABOVE_M`` above the median elevation of an okres whose pool they could
     join (its own, or one within reach that would borrow them), so they are left out of
-    that okres only. None without the elevations (``station_info``)."""
+    that okres only. None without the elevations (``station_info``).
+
+    ``medians`` (``region``, ``okres_median_m``; default: of the okresy with rows in
+    ``in_window``): to work on one variable at a time, give those of all the variables
+    (``window_facts``), as an okres counts for a variable even when its stations have
+    none of it."""
     names = in_window.collect_schema().names()
     if not {"elevation", "okres_median_m"} <= set(names):
         return None
     rows = in_window.select("variable", "station_id", "elevation", "okres_code", "okres_median_m")
     rows = rows.unique().collect()
-    medians = rows.select(pl.col("okres_code").alias("region"), "okres_median_m").unique("region")
+    if medians is None:
+        medians = rows.select(pl.col("okres_code").alias("region"), "okres_median_m")
+        medians = medians.unique("region")
     return (
         rows.select("variable", "station_id", "elevation")
         .unique()
@@ -244,6 +254,40 @@ def high_pairs(in_window: pl.LazyFrame, distance: pl.DataFrame) -> pl.DataFrame 
         .select("variable", "region", "station_id")
         .cast(pl.String)
     )
+
+
+class WindowFacts(NamedTuple):
+    """What a window's rows of all variables say that ``with_regions`` needs when it works
+    on one variable at a time: the lowest lead day (``okres_pools``) and the okres medians
+    (``high_pairs``)."""
+
+    first_lead: int | None
+    medians: pl.DataFrame | None
+
+
+def without_atypical_wind(in_window: pl.LazyFrame) -> pl.LazyFrame:
+    """``in_window`` without the wind rows of the wind-atypical stations (they are in no
+    okres's wind pool)."""
+    if "wind_atypical" not in in_window.collect_schema().names():
+        return in_window
+    wind = pl.col("variable").str.starts_with("wind_speed_10m")
+    return in_window.filter(~(wind & pl.col("wind_atypical")))
+
+
+def window_facts(in_window: pl.LazyFrame) -> WindowFacts:
+    """``WindowFacts`` of ``in_window`` (the rows of all variables of a window, joined
+    with ``station_info``), as ``with_regions`` finds them at the okres level."""
+    frame = without_atypical_wind(in_window)
+    names = frame.collect_schema().names()
+    lead = frame.select(pl.col("lead_day").min()).collect().item()
+    medians = None
+    if {"elevation", "okres_median_m"} <= set(names):
+        medians = (
+            frame.select(pl.col("okres_code").alias("region"), "okres_median_m")
+            .unique("region")
+            .collect()
+        )
+    return WindowFacts(lead, medians)
 
 
 def station_info(stations: pl.DataFrame) -> pl.LazyFrame:
@@ -287,7 +331,10 @@ POOL_ROUNDS = 3
 
 
 def okres_pools(
-    in_window: pl.LazyFrame, distance: pl.DataFrame, exclude: pl.DataFrame | None = None
+    in_window: pl.LazyFrame,
+    distance: pl.DataFrame,
+    exclude: pl.DataFrame | None = None,
+    first_lead: int | None = None,
 ) -> pl.DataFrame:
     """``neighbours.pools`` for the stations with scores in ``in_window``.
 
@@ -297,7 +344,8 @@ def okres_pools(
     gauge, ICON-D2 in the far east) would otherwise fill a place in the pool and then be
     dropped. Such stations are excluded from that okres and replaced by the next nearest
     ones. ``exclude`` (``variable``, ``region``, ``station_id``) leaves stations out of
-    single okresy from the start (``high_pairs``).
+    single okresy from the start (``high_pairs``). ``first_lead``: the lead day it looks
+    at (default: the lowest in ``in_window``; give it to work on one variable at a time).
     """
     available = in_window.select("variable", "station_id").unique().collect()
     keys = ["variable", "region", "station_id"]
@@ -307,7 +355,8 @@ def okres_pools(
     pool = neighbours.pools(distance, available, MIN_STATIONS, exclude=excluded)
     # the models compared (``covered_only``): a model with a short record must not drop
     # the stations it lacks from every okres
-    first = covered_only(in_window.filter(pl.col("lead_day") == pl.col("lead_day").min()))
+    lead = pl.col("lead_day").min() if first_lead is None else pl.lit(first_lead)
+    first = covered_only(in_window.filter(pl.col("lead_day") == lead))
     for _ in range(POOL_ROUNDS):
         joined = first.drop("okres_code", "okres").join(
             pool.lazy(), on=["variable", "station_id"], how="inner"
@@ -336,6 +385,7 @@ def with_regions(
     level: str,
     distance: pl.DataFrame | None,
     high_sites_in_okres: bool = False,
+    facts: WindowFacts | None = None,
 ) -> pl.LazyFrame:
     """Rows of ``in_window`` with ``region``, ``region_name`` and ``borrowed``.
 
@@ -346,17 +396,14 @@ def with_regions(
     (which keeps them); the level
     ``high_sites`` has only them. The wind-atypical stations (``wind_atypical``) are in no
     okres's wind pool, on the same terms (and they are in the pools of other variables).
+    ``facts``: ``window_facts`` of all the variables, when ``in_window`` has only some.
     """
-    if (
-        level == "okres"
-        and not high_sites_in_okres
-        and "wind_atypical" in in_window.collect_schema().names()
-    ):
-        wind = pl.col("variable").str.starts_with("wind_speed_10m")
-        in_window = in_window.filter(~(wind & pl.col("wind_atypical")))
+    facts = facts or WindowFacts(None, None)
+    if level == "okres" and not high_sites_in_okres:
+        in_window = without_atypical_wind(in_window)
     pairs = None
     if level == "okres" and not high_sites_in_okres and distance is not None:
-        pairs = high_pairs(in_window, distance)
+        pairs = high_pairs(in_window, distance, facts.medians)
     if "high_site" in in_window.collect_schema().names():
         if level == "okres" and not high_sites_in_okres and pairs is None:
             in_window = in_window.filter(~pl.col("high_site"))
@@ -365,7 +412,7 @@ def with_regions(
     elif level == "high_sites":
         in_window = in_window.filter(pl.lit(False))
     if level == "okres" and distance is not None:
-        pool = okres_pools(in_window, distance, pairs)
+        pool = okres_pools(in_window, distance, pairs, facts.first_lead)
         return in_window.drop("okres_code", "okres").join(
             pool.lazy(), on=["variable", "station_id"], how="inner"
         )
@@ -380,9 +427,13 @@ def date_span(scores: pl.LazyFrame) -> tuple[date, date]:
     return first_day, last_day
 
 
-def _sum_columns(columns: list[str]) -> list[pl.Expr]:
+def _sum_columns_names(columns: list[str]) -> list[str]:
     counts = [c for t in metrics.THRESHOLDS for c in metrics.counts_columns(t)]
-    return [metrics.total(c) for c in (*metrics.SUMS, *counts) if c in columns]
+    return [c for c in (*metrics.SUMS, *counts) if c in columns]
+
+
+def _sum_columns(columns: list[str]) -> list[pl.Expr]:
+    return [metrics.total(c) for c in _sum_columns_names(columns)]
 
 
 def _metrics(frame: pl.LazyFrame) -> pl.LazyFrame:
@@ -408,15 +459,14 @@ def _summary(frame: pl.LazyFrame, columns: list[str]) -> pl.LazyFrame:
     )
 
 
-def slot_errors(scores: pl.LazyFrame | pl.DataFrame) -> pl.LazyFrame:
+def slot_errors(
+    scores: pl.LazyFrame | pl.DataFrame, variables: tuple[str, ...] = CORRECTED_VARIABLES
+) -> pl.LazyFrame:
     """The error of every pair at a synoptic hour: ``station_id``, ``date``, ``model``,
-    ``lead_day``, ``variable`` (of ``CORRECTED_VARIABLES``), ``slot`` (UTC hour) and
-    ``error`` (forecast - observed), from the per-hour score rows (one pair each)."""
-    names = {
-        scoring.slot_variable(v, h): (v, h)
-        for v in CORRECTED_VARIABLES
-        for h in scoring.SYNOPTIC_HOURS
-    }
+    ``lead_day``, ``variable`` (of ``variables``, default ``CORRECTED_VARIABLES``),
+    ``slot`` (UTC hour) and ``error`` (forecast - observed), from the per-hour score
+    rows (one pair each)."""
+    names = {scoring.slot_variable(v, h): (v, h) for v in variables for h in scoring.SYNOPTIC_HOURS}
     variable = pl.col("variable")
     return (
         scores.lazy()
@@ -446,7 +496,16 @@ def bias_corrected(
     were all known when the D+N forecast was made), null with fewer than ``min_days``.
     """
     group = ["station_id", "model", "lead_day", "variable", "slot"]
-    errors = slot_errors(scores).collect()
+    # one variable at a time (the groups never mix them): half the memory
+    parts = [
+        _bias_corrected(slot_errors(scores, (variable,)).collect(), training_days, min_days)
+        for variable in CORRECTED_VARIABLES
+    ]
+    return pl.concat(parts, how="vertical_relaxed").sort([*group, "date"])
+
+
+def _bias_corrected(errors: pl.DataFrame, training_days: int, min_days: int) -> pl.DataFrame:
+    group = ["station_id", "model", "lead_day", "variable", "slot"]
     cumulative = (
         errors.sort([*group, "date"])
         .with_columns(
@@ -474,7 +533,6 @@ def bias_corrected(
         frame.with_columns(bias.alias("bias"))
         .with_columns((pl.col("error") - pl.col("bias")).abs().alias("abs_err_bc"))
         .select(*group, "date", "error", "bias", "abs_err_bc")
-        .sort([*group, "date"])
     )
 
 
@@ -532,49 +590,68 @@ def aggregate(
     if corrected is not None and not corrected.select(pl.len()).collect().item():
         corrected = None
     scores = scores.filter(~pl.col("variable").is_in(SLOT_ONLY))
-    frames = []
+    # what the aggregation reads: the keys and the sums (``source``, ``period_h`` are not)
+    wanted = ["date", "station_id", "model", "lead_day", "variable", *_sum_columns_names(columns)]
+    scores = scores.select([c for c in columns if c in wanted])
+    variables = scores.select(pl.col("variable").unique().sort()).collect().to_series().to_list()
+    # per window: what spans variables (the days it covers, ``window_facts``)
+    stamps, facts = {}, {}
     for window in windows:
         start, days = window_days(window, as_of, first_day)
         in_window = scores.filter(days).join(info, on="station_id", how="inner")
-        cover = coverage(in_window)
-        short = short_records(cover).select(COVERAGE_KEYS)
+        span = in_window.select(
+            pl.col("date").min().alias("from"), pl.col("date").max().alias("to")
+        )
+        span = span.collect().row(0)
         # the window may start before the first scored day
-        span = (max(start, first_day), as_of)
+        first, last = (max(start, first_day), as_of)
         if window in SEASONS:  # e.g. jja in October: its last scored day is 31 Aug
-            dates = pl.col("date")
-            span = in_window.select(dates.min().alias("from"), dates.max().alias("to"))
-            span = span.collect().row(0)
-        stamp = [
+            first, last = span
+        stamps[window] = [
             pl.lit(window).alias("window"),
-            pl.lit(span[0], pl.Date).alias("from"),
-            pl.lit(span[1], pl.Date).alias("to"),
+            pl.lit(first, pl.Date).alias("from"),
+            pl.lit(last, pl.Date).alias("to"),
         ]
-        share = cover.lazy().select(*COVERAGE_KEYS, "coverage")
-        for level in levels:
-            regions = with_regions(in_window, level, distance)
-            fair = common_days(covered_only(regions, cover), by="region")
-            summary = _summary(fair, columns)
-            if corrected is not None and level in CORRECTED_LEVELS:
-                sums = _corrected_sums(fair, corrected)
-                summary = summary.join(
-                    sums, on=["region", "variable", "lead_day", "model"], how="left"
-                )
-            parts = [summary.with_columns(pl.lit(False).alias("short_record"))]
-            if short.height:  # each on its own station-days among the fair ones
-                keys = ["variable", "lead_day", "region", "station_id", "date"]
-                own = regions.join(short.lazy(), on=COVERAGE_KEYS, how="semi").join(
-                    fair.select(keys).unique(), on=keys, how="semi"
-                )
-                parts.append(
-                    _summary(own, columns).with_columns(pl.lit(True).alias("short_record"))
-                )
-            frames += [
-                part.join(share, on=COVERAGE_KEYS, how="left").with_columns(
-                    pl.lit(level).alias("level"), *stamp
-                )
-                for part in parts
-            ]
-    out = _metrics(pl.concat(frames, how="diagonal_relaxed")).with_columns(
+        facts[window] = window_facts(in_window)
+    # one variable at a time: every step compares and sums within a variable (the models
+    # and stations compared, the okres pools), and all of them at once did not fit in
+    # memory (21 GB on the 16 GB runner of the Daily workflow)
+    frames = []
+    for variable in variables:
+        by_variable = scores.filter(pl.col("variable") == variable).collect().lazy()
+        for window in windows:
+            _, days = window_days(window, as_of, first_day)
+            in_window = by_variable.filter(days).join(info, on="station_id", how="inner")
+            cover = coverage(in_window)
+            short = short_records(cover).select(COVERAGE_KEYS)
+            share = cover.lazy().select(*COVERAGE_KEYS, "coverage")
+            levelled = []
+            for level in levels:
+                regions = with_regions(in_window, level, distance, facts=facts[window])
+                fair = common_days(covered_only(regions, cover), by="region")
+                summary = _summary(fair, columns)
+                if corrected is not None and level in CORRECTED_LEVELS:
+                    sums = _corrected_sums(fair, corrected.filter(pl.col("variable") == variable))
+                    summary = summary.join(
+                        sums, on=["region", "variable", "lead_day", "model"], how="left"
+                    )
+                parts = [summary.with_columns(pl.lit(False).alias("short_record"))]
+                if short.height:  # each on its own station-days among the fair ones
+                    keys = ["variable", "lead_day", "region", "station_id", "date"]
+                    own = regions.join(short.lazy(), on=COVERAGE_KEYS, how="semi").join(
+                        fair.select(keys).unique(), on=keys, how="semi"
+                    )
+                    parts.append(
+                        _summary(own, columns).with_columns(pl.lit(True).alias("short_record"))
+                    )
+                levelled += [
+                    part.join(share, on=COVERAGE_KEYS, how="left").with_columns(
+                        pl.lit(level).alias("level"), *stamps[window]
+                    )
+                    for part in parts
+                ]
+            frames.append(pl.concat(levelled, how="diagonal_relaxed").collect())
+    out = _metrics(pl.concat(frames, how="diagonal_relaxed").lazy()).with_columns(
         ((pl.col("level") == "station") | (pl.col("stations") >= MIN_STATIONS)).alias(
             "enough_stations"
         )

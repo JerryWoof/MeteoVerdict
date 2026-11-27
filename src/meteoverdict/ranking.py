@@ -236,53 +236,78 @@ def rank(
     as_of = as_of or last_day
     info = aggregate.station_info(stations)
     distance = aggregate.okres_distances(stations)
-    rows = []
+    # what the ranking reads (``source``, ``period_h`` and the counts are not)
+    scores = scores.select(
+        "date", "station_id", "model", "lead_day", "variable", "n", "sum_abs_err"
+    )
+    # per window, what spans variables (the lowest lead day, the okres medians)
+    facts = {}
     for window in windows:
         _, days = aggregate.window_days(window, as_of, first_day)
-        in_window = scores.filter(days).join(info, on="station_id", how="inner")
-        in_window = aggregate.covered_only(in_window)
-        for level in levels:
-            regions = aggregate.with_regions(in_window, level, distance)
-            daily = (
-                aggregate.common_days(regions, by="region")
-                .group_by("region", "variable", "lead_day", "date", "model")
-                .agg(metrics.total("sum_abs_err"), metrics.total("n"))
-                .collect()
-            )
-            for (region, variable, lead_day), part in daily.partition_by(
-                ["region", "variable", "lead_day"], as_dict=True
-            ).items():
-                abs_err = part.pivot(on="model", index="date", values="sum_abs_err").sort("date")
-                n = part.pivot(on="model", index="date", values="n").sort("date")
-                models = [c for c in abs_err.columns if c != "date"]
-                ranked = np.array([m != blend.ID for m in models])
-                if not ranked.any():
-                    continue
-                a = abs_err.select(models).to_numpy().astype(float)
-                m = n.select(models).to_numpy().astype(float)
-                if len(models) == 1:
-                    order, diff, bounds = np.array([0]), np.array([0.0]), np.zeros((2, 1))
-                    p_best = np.ones(1)
-                else:
-                    # a group's resamples depend only on the seed and the group itself
-                    key = f"{level}|{region}|{window}|{variable}|{lead_day}".encode()
-                    rng = np.random.default_rng([seed, zlib.crc32(key)])
-                    order, diff, bounds, p_best = bootstrap_best(a, m, rng, resamples, ranked)
-                # worse than the best only when the interval of (model - best) excludes 0
-                # and the Diebold-Mariano test agrees
-                tied, stat, p_value = ties(a, m, order, bounds)
-                clear = ranked.sum() > 1 and not (tied & ranked).any()
-                small = a.shape[0] < SMALL_SAMPLE_DAYS
-                for position, index in enumerate(order):
-                    rows.append(
-                        (
-                            level, region, window, variable, lead_day, models[index],
-                            position + 1 if ranked[index] else None, float(diff[index]),
-                            float(bounds[0][index]), float(bounds[1][index]),
-                            bool(tied[index]), bool(position == 0 and clear),
-                            float(p_best[index]) if ranked[index] else None,
-                            _finite(stat[index]), _finite(p_value[index]), small,
-                        )
-                    )  # fmt: skip
+        facts[window] = aggregate.window_facts(
+            scores.filter(days).join(info, on="station_id", how="inner")
+        )
+    rows = []
+    # one variable at a time: the comparison never mixes variables, and all of them at once
+    # needed 11 GB (the Daily workflow's runner has 16)
+    variables = scores.select(pl.col("variable").unique().sort()).collect().to_series().to_list()
+    for variable_name in variables:
+        by_variable = scores.filter(pl.col("variable") == variable_name).collect().lazy()
+        for window in windows:
+            _, days = aggregate.window_days(window, as_of, first_day)
+            in_window = by_variable.filter(days).join(info, on="station_id", how="inner")
+            in_window = aggregate.covered_only(in_window)
+            for level in levels:
+                regions = aggregate.with_regions(in_window, level, distance, facts=facts[window])
+                daily = (
+                    aggregate.common_days(regions, by="region")
+                    .group_by("region", "variable", "lead_day", "date", "model")
+                    .agg(metrics.total("sum_abs_err"), metrics.total("n"))
+                    .collect()
+                )
+                rows += _rank_groups(daily, level, window, resamples, seed)
     table = pl.DataFrame(rows, schema=RANK_SCHEMA, orient="row")
     return table.sort([*GROUP, "rank"], nulls_last=True)
+
+
+def _rank_groups(
+    daily: pl.DataFrame, level: str, window: str, resamples: int, seed: int
+) -> list[tuple]:
+    """The rows of ``rank`` for the groups (region, variable, lead day) of ``daily``."""
+    rows = []
+    for (region, variable, lead_day), part in daily.partition_by(
+        ["region", "variable", "lead_day"], as_dict=True
+    ).items():
+        abs_err = part.pivot(on="model", index="date", values="sum_abs_err").sort("date")
+        n = part.pivot(on="model", index="date", values="n").sort("date")
+        models = [c for c in abs_err.columns if c != "date"]
+        ranked = np.array([m != blend.ID for m in models])
+        if not ranked.any():
+            continue
+        a = abs_err.select(models).to_numpy().astype(float)
+        m = n.select(models).to_numpy().astype(float)
+        if len(models) == 1:
+            order, diff, bounds = np.array([0]), np.array([0.0]), np.zeros((2, 1))
+            p_best = np.ones(1)
+        else:
+            # a group's resamples depend only on the seed and the group itself
+            key = f"{level}|{region}|{window}|{variable}|{lead_day}".encode()
+            rng = np.random.default_rng([seed, zlib.crc32(key)])
+            order, diff, bounds, p_best = bootstrap_best(a, m, rng, resamples, ranked)
+        # worse than the best only when the interval of (model - best) excludes 0
+        # and the Diebold-Mariano test agrees
+        tied, stat, p_value = ties(a, m, order, bounds)
+        clear = ranked.sum() > 1 and not (tied & ranked).any()
+        small = a.shape[0] < SMALL_SAMPLE_DAYS
+        for position, index in enumerate(order):
+            rows.append(
+                (
+                    level, region, window, variable, lead_day, models[index],
+                    position + 1 if ranked[index] else None, float(diff[index]),
+                    float(bounds[0][index]), float(bounds[1][index]),
+                    bool(tied[index]), bool(position == 0 and clear),
+                    float(p_best[index]) if ranked[index] else None,
+                    _finite(stat[index]), _finite(p_value[index]), small,
+                )
+            )  # fmt: skip
+    return rows

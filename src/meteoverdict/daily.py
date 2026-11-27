@@ -33,6 +33,7 @@ from meteoverdict.models import MAX_LEAD_DAY, Model
 
 RESCORE_DAYS = 100  # covers the 90-day window and the publication delay of ČHMÚ data
 CAPTURE_DAYS = 3  # what now/ still has
+FRESH_STATIONS = 80  # stations whose D+N is rebuilt at a time (``add_fresh``)
 
 
 def run(
@@ -72,12 +73,16 @@ def run(
     if obs_scan is None or fc_scan is None:
         log("nothing to score yet")
         return partitions.months(first, day)
-    table = scoring.daily_scores(obs_scan, fc_scan, models, first, day)
-    if added is not None:
-        table = fresh.mark(table, added)
-    partitions.write_monthly(table, data_dir / "scores", scoring.KEYS, "date")
-    last_scored = table["date"].max() if table.height else None
-    log(f"re-scored {first}..{day}: {table.height} rows, last scored day {last_scored}")
+    # one month at a time: scored, marked and written before the next (memory, scoring.py)
+    rows, last_scored = 0, None
+    for table in scoring.score_months(obs_scan, fc_scan, models, first, day):
+        if added is not None:
+            table = fresh.mark(table, added)
+        partitions.write_monthly(table, data_dir / "scores", scoring.KEYS, "date")
+        rows += table.height
+        if table.height:
+            last_scored = table["date"].max()
+    log(f"re-scored {first}..{day}: {rows} rows, last scored day {last_scored}")
     if last_scored is None or last_scored < day:
         after = last_scored or first - timedelta(days=1)
         log(f"nothing scored after {after}: {coverage(obs_scan, fc_scan, after, day)}")
@@ -125,17 +130,33 @@ def add_fresh(
     if single is None:
         log("no single runs to rebuild the recent days from")
         return fc, None
-    derived = fresh.previous_days(single, models, start, end).collect()
-    if derived.height == 0:
+    # the stations in groups: the D+N of all of them at once peaks at ~6 GB
+    present = fresh.present_runs(single, models)
+    stations = single.select("station_id").unique().sort("station_id").collect().to_series()
+    derived, compared = [], []
+    for i in range(0, stations.len(), FRESH_STATIONS):
+        ids = stations.slice(i, FRESH_STATIONS).to_list()
+        part = fresh.previous_days(single, models, start, end, stations=ids, present=present)
+        part = part.collect()
+        if part.height == 0:
+            continue
+        derived.append(part)
+        if fc is not None:
+            in_window = fc.filter(
+                pl.col("time").is_between(start, end), pl.col("station_id").is_in(ids)
+            )
+            seen = obs if obs is None else obs.filter(pl.col("station_id").is_in(ids))
+            compared.append(fresh.compare(in_window, part, seen, models))
+    if not derived:
         log("no D+N could be rebuilt from the single runs")
         return fc, None
+    derived = pl.concat(derived, how="vertical_relaxed")
     if fc is None:
         added = derived
         fc = derived.lazy()
     else:
-        in_window = fc.filter(pl.col("time").is_between(start, end))
-        log(fresh.summary(fresh.compare(in_window, derived, obs, models)))
-        fc, added = fresh.fill(fc, derived)
+        log(fresh.summary(fresh.combine_comparisons(compared)))
+        fc, added = fresh.fill(fc, derived, (start, end))
     if added.height:
         log(
             f"rebuilt D+N from the single runs for {added['station_id'].n_unique()} stations "

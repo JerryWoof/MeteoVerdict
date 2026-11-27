@@ -110,24 +110,52 @@ def spread(
     return pl.concat([frame.filter(pl.col("source").is_null()), hourly])
 
 
+def present_runs(
+    single_runs: pl.LazyFrame | pl.DataFrame,
+    models: list[Model],
+    variables: tuple[str, ...] | None = None,
+) -> pl.DataFrame:
+    """``model`` and ``_expected``: the runs we have (at any station), the ones
+    ``previous_days`` may expect. Compute it once to call ``previous_days`` for groups of
+    stations with ``present``, as these must all see the runs of every station."""
+    runs = spread(
+        single_runs.lazy().filter(pl.col("model").is_in([m.id for m in models])),
+        models,
+        None if variables is None else list(variables),
+    )
+    return runs.select("model", pl.col("run").alias("_expected")).unique().collect()
+
+
 def previous_days(
     single_runs: pl.LazyFrame | pl.DataFrame,
     models: list[Model],
     first: datetime,
     last: datetime,
     variables: tuple[str, ...] | None = None,
+    stations: list[str] | None = None,
+    present: pl.DataFrame | None = None,
 ) -> pl.LazyFrame:
     """D+N rows (``forecasts.SCHEMA``) for valid hours ``first`` to ``last`` (UTC) from
     the single runs (``runs.SCHEMA``), as the Previous Runs API defines them.
 
     ``variables``: instead of ``models.VARIABLES`` these columns of the runs (instant
     values such as the further variables of ``runs.EXTRA_VARIABLES``); the rows then
-    have no ``forecasts.SCHEMA`` cast."""
+    have no ``forecasts.SCHEMA`` cast.
+
+    ``stations``: only the rows of these stations (the rows of a station do not depend
+    on the others), to build the D+N in groups of stations that fit in memory; then also
+    pass ``present`` (``present_runs`` of all the single runs)."""
+    if stations is not None and present is None:
+        raise ValueError("pass present_runs(...) with stations")
     runs = spread(
         single_runs.lazy().filter(pl.col("model").is_in([m.id for m in models])),
         models,
         None if variables is None else list(variables),
     )
+    if present is None:
+        present = runs.select("model", pl.col("run").alias("_expected")).unique()
+    if stations is not None:
+        runs = runs.filter(pl.col("station_id").is_in(stations))
     lead_days = pl.LazyFrame(
         [(m.id, n) for m in models for n in m.lead_days],
         schema={"model": pl.String, "lead_day": pl.Int8},
@@ -143,7 +171,6 @@ def previous_days(
         schema={"model": pl.String, "_step": pl.Int64},
         orient="row",
     )
-    present = runs.select("model", pl.col("run").alias("_expected")).unique()
     # runs that the Previous Runs archive keeps for fewer hours (UKMO 06/18 UTC)
     capped = (
         runs.filter(pl.col("lead_h") <= MAX_LEAD_H)
@@ -170,7 +197,7 @@ def previous_days(
         .with_columns(pl.col("_base").dt.hour().cast(pl.Int8).alias("_base_hour"))
         .join(_expected_run_offsets(models), on=["model", "_base_hour"], how="inner")
         .with_columns((pl.col("_base") - pl.duration(hours=pl.col("_back"))).alias("_expected"))
-        .join(present, on=["model", "_expected"], how="semi")
+        .join(present.lazy(), on=["model", "_expected"], how="semi")
         .join(reach, on=["model", "station_id", "_expected"], how="left")
         .filter((pl.col("run") == pl.col("_expected")) | (from_expected > pl.col("_reach")))
         # models with runs in between in the archive: only where no such run is newer
@@ -188,12 +215,20 @@ def previous_days(
 
 
 def fill(
-    forecasts: pl.LazyFrame | pl.DataFrame, derived: pl.LazyFrame | pl.DataFrame
+    forecasts: pl.LazyFrame | pl.DataFrame,
+    derived: pl.LazyFrame | pl.DataFrame,
+    hours: tuple[datetime, datetime] | None = None,
 ) -> tuple[pl.LazyFrame, pl.DataFrame]:
     """``(forecasts with the derived rows added, the derived rows added)``: derived rows
-    only for the model, lead day and hour that the Previous Runs forecasts lack."""
+    only for the model, lead day and hour that the Previous Runs forecasts lack.
+
+    ``hours``: the first and last valid hour of ``derived``; only the forecasts of those
+    hours are looked at (a third of the rows of the 100 days scored)."""
     fc = forecasts.lazy()
-    have = fc.select("model", "lead_day", "time").unique()
+    have = fc.select("model", "lead_day", "time")
+    if hours is not None:
+        have = have.filter(pl.col("time").is_between(*hours))
+    have = have.unique()
     added = derived.lazy().join(have, on=["model", "lead_day", "time"], how="anti").collect()
     return pl.concat([fc.select(list(SCHEMA)), added.lazy()], how="vertical_relaxed"), added
 
@@ -303,6 +338,33 @@ def compare(
             (pl.col("mae_single") - pl.col("mae_previous")).alias("mae_diff")
         )
     return table.collect()
+
+
+def combine_comparisons(tables: list[pl.DataFrame]) -> pl.DataFrame:
+    """One ``compare`` table from the tables of groups of stations (each group's rows
+    weighted by its ``n`` or ``n_obs``)."""
+    keys = ["model", "lead_day", "variable"]
+    table = pl.concat(tables, how="diagonal_relaxed")
+    n = pl.col("n")
+    stats = [
+        n.sum().alias("n"),
+        ((pl.col("mean_abs_diff") * n).sum() / n.sum()).alias("mean_abs_diff"),
+        pl.col("max_abs_diff").max(),
+    ]
+    if "n_obs" in table.columns:
+        seen = pl.col("n_obs")
+
+        def mae(name: str) -> pl.Expr:
+            total = (pl.col(name).fill_null(0.0) * seen).sum()
+            return pl.when(seen.sum() > 0).then(total / seen.sum()).alias(name)
+
+        stats += [seen.sum().alias("n_obs"), mae("mae_previous"), mae("mae_single")]
+    combined = table.group_by(keys).agg(stats).sort(keys)
+    if "n_obs" in table.columns:
+        combined = combined.with_columns(
+            (pl.col("mae_single") - pl.col("mae_previous")).alias("mae_diff")
+        )
+    return combined
 
 
 def summary(table: pl.DataFrame) -> str:

@@ -40,7 +40,8 @@ written before 2026-10-16 lack the column: Previous Runs).
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from collections.abc import Iterator
+from datetime import UTC, date, datetime, timedelta
 
 import polars as pl
 
@@ -64,6 +65,70 @@ def slot_variable(variable: str, hour: int) -> str:
     return f"{variable}_{hour:02d}utc"
 
 
+#: Stations scored together by ``score_months``. The pairs of 100 days at ~300 stations
+#: and ~30 models do not fit in memory at once (~19 GB; the 16 GB runner of the Daily
+#: workflow ran out of it), so every month is scored in groups of stations.
+STATION_CHUNK = 100
+
+
+def month_spans(start: date, end: date) -> list[tuple[date, date]]:
+    """The calendar months from ``start`` to ``end`` as ``(first day, last day)``, cut to
+    that range."""
+    spans = []
+    first = start
+    while first <= end:
+        following = date(first.year + first.month // 12, first.month % 12 + 1, 1)
+        last = min(end, following - timedelta(days=1))
+        spans.append((first, last))
+        first = following
+    return spans
+
+
+def score_months(
+    observations: pl.LazyFrame | pl.DataFrame,
+    forecasts: pl.LazyFrame | pl.DataFrame,
+    models: list[Model],
+    start: date,
+    end: date,
+    exclude_estimated: bool = False,
+    with_blend: bool = True,
+    chunk: int | None = STATION_CHUNK,
+) -> Iterator[pl.DataFrame]:
+    """The scores of ``daily_scores`` one calendar month at a time (each sorted by
+    ``KEYS``, in date order), so the caller can write a month and drop it.
+
+    A score row needs only the hours of its own day (the 06-06 UTC total and the hourly
+    precipitation of 24:00 reach into the next one) and one station, so a month is scored
+    from its hours (with a day of margin) in groups of ``chunk`` stations (None: all at
+    once), and the rows are the same as when scoring everything at once.
+    """
+    obs, fc = observations.lazy(), forecasts.lazy()
+    stations = fc.select("station_id").unique().sort("station_id").collect().to_series()
+    size = chunk or max(stations.len(), 1)
+    for first, last in month_spans(start, end):
+        low = datetime.combine(first - timedelta(days=1), datetime.min.time(), UTC)
+        high = datetime.combine(last + timedelta(days=2), datetime.min.time(), UTC)
+        month_obs = obs.filter(pl.col("time").is_between(low, high))
+        month_fc = fc.filter(pl.col("time").is_between(low, high))
+        parts = []
+        for i in range(0, max(stations.len(), 1), size):
+            ids = stations.slice(i, size).to_list()
+            parts.append(
+                _daily_scores(
+                    month_obs.filter(pl.col("station_id").is_in(ids)),
+                    month_fc.filter(pl.col("station_id").is_in(ids)),
+                    models,
+                    first,
+                    last,
+                    exclude_estimated,
+                    with_blend,
+                )
+            )
+        table = pl.concat(parts, how="diagonal_relaxed").sort(KEYS)
+        del parts
+        yield table
+
+
 def daily_scores(
     observations: pl.LazyFrame | pl.DataFrame,
     forecasts: pl.LazyFrame | pl.DataFrame,
@@ -72,8 +137,32 @@ def daily_scores(
     end: date,
     exclude_estimated: bool = False,
     with_blend: bool = True,
+    chunk: int | None = STATION_CHUNK,
 ) -> pl.DataFrame:
-    """Scores of ``models`` and, with ``with_blend``, of their mean (``blend``)."""
+    """Scores of ``models`` and, with ``with_blend``, of their mean (``blend``), sorted
+    by ``KEYS`` (``score_months`` puts them together)."""
+    months = list(
+        score_months(
+            observations, forecasts, models, start, end, exclude_estimated, with_blend, chunk
+        )
+    )
+    if not months:  # no days: the empty table
+        return _daily_scores(
+            observations.lazy(), forecasts.lazy(), models, start, end, exclude_estimated, with_blend
+        )
+    return pl.concat(months, how="diagonal_relaxed", rechunk=False)
+
+
+def _daily_scores(
+    observations: pl.LazyFrame,
+    forecasts: pl.LazyFrame,
+    models: list[Model],
+    start: date,
+    end: date,
+    exclude_estimated: bool,
+    with_blend: bool,
+) -> pl.DataFrame:
+    """Scores of the stations in ``observations`` and ``forecasts`` for ``start``..``end``."""
     if with_blend:
         forecasts = pl.concat([forecasts.lazy(), blend.forecasts(forecasts, models)])
         models = [*models, blend.MODEL]
@@ -144,7 +233,6 @@ def daily_scores(
         pl.concat([hourly, fair, synoptic, daily, climatological, maximum], how="diagonal_relaxed")
         .filter(pl.col("date").is_between(start, end))
         .with_columns(pl.lit(PREVIOUS_RUNS).alias("source"))
-        .sort(KEYS)
         .collect()
     )
     return table.cast(metrics.compact(table.columns))

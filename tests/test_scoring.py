@@ -171,3 +171,45 @@ def test_ranked_temperature_and_wind_use_the_same_hours_for_every_model():
     assert n[(ICON_D2, "temperature_2m")] == n[(aifs.id, "temperature_2m")] == 4
     assert n[(ICON_D2, "wind_speed_10m")] == n[(aifs.id, "wind_speed_10m")] == 4
     assert (n[(ICON_D2, "temperature_2m_hourly")], n[(aifs.id, "temperature_2m_hourly")]) == (24, 4)
+
+
+def test_scoring_in_groups_of_stations_and_by_month_gives_the_same_scores():
+    # 30 Sep 00:00 … 2 Oct 06:00 (a month boundary inside the 06-06 UTC window), three
+    # stations, sums of the day over the boundary included
+    times = hours(55, datetime(2026, 9, 30, tzinfo=UTC))
+    obs = pl.concat(
+        [
+            observations(times, rain=lambda t: float(t.hour % 4)).with_columns(
+                pl.lit(s).alias("station_id")
+            )
+            for s in ("a", "b", "c")
+        ]
+    )
+    fc = pl.concat(
+        [
+            forecasts(times, temperature=11.0 + i, rain=0.5).with_columns(
+                pl.lit(s).alias("station_id")
+            )
+            for i, s in enumerate(("a", "b", "c"))
+        ]
+    )
+    first, last = date(2026, 9, 29), date(2026, 10, 2)
+    whole = scoring.daily_scores(obs, fc, MODELS, first, last, chunk=None)
+    assert set(whole["date"]) >= {date(2026, 9, 30), date(2026, 10, 1)}
+    assert whole.equals(whole.sort(scoring.KEYS))
+    grouped = scoring.daily_scores(obs, fc, MODELS, first, last, chunk=1)
+    assert grouped.equals(whole)
+    months = list(scoring.score_months(obs, fc, MODELS, first, last, chunk=2))
+    assert [t["date"].dt.month().unique().to_list() for t in months] == [[9], [10]]
+    assert pl.concat(months).equals(whole)
+
+
+def test_month_spans_cut_the_range():
+    assert scoring.month_spans(date(2026, 11, 20), date(2027, 1, 3)) == [
+        (date(2026, 11, 20), date(2026, 11, 30)),
+        (date(2026, 12, 1), date(2026, 12, 31)),
+        (date(2027, 1, 1), date(2027, 1, 3)),
+    ]
+    assert scoring.month_spans(date(2026, 2, 3), date(2026, 2, 3)) == [
+        (date(2026, 2, 3), date(2026, 2, 3))
+    ]
