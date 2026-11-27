@@ -5,6 +5,7 @@ import { STRINGS } from "../src/i18n.js";
 import { PAGES as TEXTS } from "../src/pages-text.js";
 import { blocksHtml } from "../src/blocks-html.js";
 import { PAGES, SITE } from "./seo.mjs";
+import { footerInner } from "./footer-html.mjs";
 
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 const TEXT_ELEMENT = /<(\w+)\b([^>]*?\bdata-i18n="([^"]+)"[^>]*)>([^<]*)<\/\1>/g;
@@ -50,6 +51,9 @@ export function toEnglish(html, file) {
       .replace(/(<h1 id="info-title"[^>]*>)[^<]*(<\/h1>)/, `$1${esc(text.en.title)}$2`)
       .replace(/\s*<script type="application\/ld\+json">\{"@context":"https:\/\/schema.org","@type":"FAQPage".*?<\/script>/s, "");
   }
+  out = out.replace('<p id="status">Načítám…</p>', '<p id="status">Loading…</p>');
+  // the footer written in Czech in the sources: English (links under /en/) until JS runs
+  out = out.replace(/(<footer data-footer>)[\s\S]*?(<\/footer>)/, (m, a, z) => `${a}${footerInner("en")}${z}`);
   // the page's own menu and footer links stay inside /en/
   const names = new Set(Object.keys(PAGES));
   out = out.replace(/(<a\b[^>]*\bhref=")([^"#]*)(")/g, (m, a, href, z) => {

@@ -14,10 +14,7 @@ import { colorFor, renderScale } from "./palette.js";
 import { keepRoomForPanels, scrollToPanel, userMoved } from "./panel-room.js";
 import { BASEMAP_ATTRIBUTION, BASEMAP_SPEC, GLYPHS, baseLayers, basemapSources, topLayers } from "./radar-basemap.js";
 import { themeMap } from "./map-theme.js";
-import {
-  TEMP100M_INDEX, TEMP100M_JSON, nearestPlaceOf, parseTemp100m, parseTemp100mIndex, temp100mDefaultIndex,
-  temp100mFormat, temp100mGradient, temp100mLoader, temp100mSlot, temp100mSlotText,
-} from "./ai-temp100m.js";
+import { nearestPlaceOf, temp100mFormat } from "./ai-temp100m.js";
 import {
   FROST_RISK_C, HEAT_INDEX, heatAllRange, heatFrostLevel, heatReadOptions, heatRiskRuns, heatRiskText, heatBlend, heatColourLut, heatDayMarks, heatFixedLut, heatHourRange, heatNearestHour, heatPaint,
   heatRampGradient, heatRampLut, heatSeriesAt, heatTemperatures, heatTimeAt, heatTimeText, heatValueAt, loadHeatModel, parseHeatIndex,
@@ -70,10 +67,6 @@ async function fetchJson(path) {
   }
 }
 
-let slots = []; // [{ day, part, time }] in time order
-let selected = 0;
-let loader = null;
-let source = null; // { index } or { single }
 let heat = null; // the hourly map: { index, model, fixedLut, shrink, temps, allRange } once its images are loaded
 const OPTIONS_KEY = "heat-options";
 const COLOUR_MODES = ["hour", "all", "fixed"];
@@ -102,13 +95,9 @@ let applyTheme = () => {};
 let point = null; // { lng, lat, name }
 let marker = null;
 let tip = null;
-let current = null; // the loaded map of the selected time
-let shownToken = 0;
 let requestFull = null; // set when the hourly page runs on the coarse images: asks for the full-size ones
 const loadPlaces = placesLoader(placesUrl);
 
-const partName = (part) => t(`part.${part}`).toLowerCase();
-const slotLabel = (slot) => temp100mSlotText(slot.time, language, partName(slot.part));
 
 function makeMap() {
   const m = new MapLibreMap({
@@ -186,30 +175,8 @@ function showHeat() {
   });
 }
 
-/** The selected time's image over the base map (below the borders and labels). */
-async function showImage() {
-  if (heatIndex) return showHeat();
-  const token = ++shownToken;
-  const slot = slots[selected];
-  const loaded = await loader.load(slot.day, slot.part);
-  if (token !== shownToken) return;
-  const image = loaded ? await loaded.image() : null;
-  if (token !== shownToken) return;
-  current = loaded;
-  if (image) {
-    if (!map.getSource("heat")) map.addSource("heat", { type: "image", ...image });
-    else map.getSource("heat").updateImage(image);
-    if (!map.getLayer("heat")) {
-      map.addLayer({ id: "heat", type: "raster", source: "heat", paint: { "raster-opacity": 0.8, "raster-fade-duration": 0 } }, "okresy-line");
-    }
-  }
-  if (map.getLayer("heat")) map.setLayoutProperty("heat", "visibility", image ? "visible" : "none");
-  if (!loaded) tip?.remove();
-  renderPanel();
-}
-
 function showTip(event) {
-  const value = heat ? heatValueAt(heat.model, event.lngLat.lng, event.lngLat.lat, step / 2) : current?.at(event.lngLat.lng, event.lngLat.lat);
+  const value = heat ? heatValueAt(heat.model, event.lngLat.lng, event.lngLat.lat, step / 2) : null;
   if (value == null) return tip?.remove();
   tip ??= new Popup({ closeButton: false, closeOnClick: false, className: "temp-tip", offset: 12, anchor: "top-left", maxWidth: "none" });
   tip.setLngLat(event.lngLat).setText(temp100mFormat(value, language, unit)).addTo(map);
@@ -237,34 +204,10 @@ function renderHourlyLegend(range) {
 function renderLegend(range) {
   const box = $("scale");
   if (heatIndex && heat) return renderHourlyLegend(range);
-  if (!source?.single) return renderScale(box, "temperature", t("heat.legend"));
-  // the old single image has its own colours: its own legend
-  const { min, max } = source.single;
-  const bar = element("div", null, "bar");
-  bar.style.background = temp100mGradient(source.single);
-  box.replaceChildren(element("div", t("heat.legend"), "scale-title"), bar, element("div", `${degrees(min)} … ${degrees(max)}`, "scale-ends"));
+  renderScale(box, "temperature", t("heat.legend"));
 }
 
 // --- the time control ----------------------------------------------------------------------
-function renderTimes() {
-  if (heatIndex) return renderHourly();
-  const select = $("heat-time");
-  select.replaceChildren(
-    ...slots.map((slot, k) => {
-      const option = element("option", slotLabel(slot));
-      option.value = String(k);
-      return option;
-    }),
-  );
-  select.value = String(selected);
-  select.disabled = slots.length < 2;
-  $("heat-prev").disabled = selected <= 0;
-  $("heat-next").disabled = selected >= slots.length - 1;
-  const single = $("heat-single");
-  single.hidden = slots.length > 1 || !source?.single;
-  if (!single.hidden) single.textContent = t("heat.single", { time: slotLabel(slots[0]) });
-}
-
 /** The slider, its buttons and the label at the selected half hour. */
 function renderHourly() {
   const hours = heatIndex.hours;
@@ -332,29 +275,16 @@ function applyHash(hash) {
   if (map) readHash(hash);
 }
 
-function choose(k) {
-  if (heatIndex) return chooseStep(k);
-  if (k < 0 || k >= slots.length) return;
-  selected = k;
-  renderTimes();
-  showImage();
-}
-
 // --- the point: where someone clicked or searched -----------------------------------------
 // `own`: my location, kept out of the address (links share clicked places, not where someone is)
 function setPoint(lng, lat, name = null, own = false) {
   point = { lng, lat, name, own };
   marker ??= new Marker({ color: "#6a4fb3" });
   marker.setLngLat([lng, lat]).addTo(map);
-  if (heatIndex && !heat) return;
-  if (heat) {
-    requestFull?.("point"); // the panel's value wants the full-size images (it is redrawn when they arrive)
-    point.series = heatSeriesAt(heat.model, lng, lat);
-    return renderPanel();
-  }
-  // every time's map is loaded in the background; the panel fills in as they arrive
-  renderPanel();
-  for (const slot of slots) loader.load(slot.day, slot.part).then(() => renderPanel());
+  if (!heat) return; // before the images arrive the panel waits
+  requestFull?.("point"); // the panel's value wants the full-size images (it is redrawn when they arrive)
+  point.series = heatSeriesAt(heat.model, lng, lat);
+  return renderPanel();
 }
 
 function closePoint(write = true) {
@@ -457,54 +387,13 @@ async function renderHourlyPanel() {
   panel.replaceChildren(...lines);
 }
 
-async function renderPanel() {
+function renderPanel() {
   const panel = $("heat-panel");
-  const at = point;
-  if (!at) {
+  if (!point) {
     panel.hidden = true;
     return;
   }
-  if (heatIndex) return heat ? renderHourlyPanel() : undefined; // before the images arrive the panel waits
-  panel.hidden = false;
-  // a time whose map has not arrived yet is `undefined`, one without data there `null`
-  const values = slots.map((s) => {
-    const m = loader.peek(s.day, s.part);
-    return m === undefined ? undefined : m ? m.at(at.lng, at.lat) : null;
-  });
-  const name = at.name ?? (await placeName(at));
-  if (at !== point) return;
-  const title = element("div", null, "heat-title");
-  const close = element("button", "×", "close");
-  close.type = "button";
-  close.setAttribute("aria-label", t("heat.close"));
-  close.addEventListener("click", () => {
-    closePoint();
-    scrollToPanel($("heat-panel"), false);
-  });
-  title.append(element("strong", name ?? t("heat.coords", { lat: at.lat.toFixed(2), lon: at.lng.toFixed(2) })), close);
-  const value = values[selected];
-  const lines = [
-    title,
-    element("div", typeof value === "number" ? temp100mFormat(value, language, unit) : "–", "heat-big"),
-    element("div", slotLabel(slots[selected]), "heat-when-label"),
-  ];
-  if (values.every((v) => v === null)) lines.push(element("p", t("heat.outside"), "muted"));
-  else {
-    lines.push(element("div", t("heat.all"), "box-label"));
-    const list = element("ul", null, "heat-list");
-    slots.forEach((slot, k) => {
-      const li = element("li", null, k === selected ? "current" : "");
-      const button = element("button");
-      button.type = "button";
-      const text = values[k] === undefined ? t("heat.loading") : values[k] === null ? t("heat.noData") : temp100mFormat(values[k], language, unit);
-      button.append(element("span", slotLabel(slot)), element("strong", text));
-      button.addEventListener("click", () => choose(k));
-      li.append(button);
-      list.append(li);
-    });
-    lines.push(list);
-  }
-  panel.replaceChildren(...lines);
+  return heat ? renderHourlyPanel() : undefined; // before the images arrive the panel waits
 }
 
 // --- find a place -------------------------------------------------------------------------
@@ -562,7 +451,6 @@ async function startHourly() {
   step = heatNearestHour(hours, Date.now()) * 2;
   readHash(window.location.hash, false); // a link's time, colours and place
   for (const id of ["ribbon", "heat-wrap", "heat-note"]) $(id).hidden = false;
-  $("heat-time").hidden = true;
   $("heat-range").hidden = false;
   $("heat-label").hidden = false;
   renderLegend();
@@ -662,37 +550,11 @@ async function main() {
     showStatus();
     return startHourly();
   }
-  $("status").textContent = ""; // the older day-part maps have no run time to show
+  // no hourly map: nothing to show (the older day-part maps and the single 100 m image are gone)
+  for (const id of ["ribbon", "heat-wrap", "heat-note"]) $(id).hidden = true;
+  $("heat-empty").hidden = false;
+  $("status").textContent = "";
   $("status").classList.remove("placeholder");
-  const index = parseTemp100mIndex(await fetchJson(TEMP100M_INDEX));
-  const single = index ? null : parseTemp100m(await fetchJson(TEMP100M_JSON));
-  source = index ? { index } : single ? { single } : null;
-  if (!source) {
-    for (const id of ["ribbon", "heat-wrap", "heat-note"]) $(id).hidden = true;
-    $("heat-empty").hidden = false;
-    return;
-  }
-  loader = temp100mLoader(source, (v) => colorFor(v, "temperature"));
-  if (index) {
-    unit = index.unit;
-    slots = index.maps.map((m) => ({ day: m.day, part: m.part, time: m.time })).sort((a, b) => a.time - b.time);
-  } else {
-    unit = single.unit;
-    const slot = temp100mSlot(single.time);
-    slots = [{ day: slot.day, part: slot.part, time: single.time }];
-  }
-  selected = Math.max(0, temp100mDefaultIndex(slots, Date.now()));
-  for (const id of ["ribbon", "heat-wrap", "heat-note"]) $(id).hidden = false;
-  renderTimes();
-  renderLegend();
-  map = makeMap();
-  await new Promise((resolve) => map.once("style.load", resolve));
-  addLayers();
-  $("heat-time").addEventListener("change", (e) => choose(Number(e.target.value)));
-  $("heat-prev").addEventListener("click", () => choose(selected - 1));
-  $("heat-next").addEventListener("click", () => choose(selected + 1));
-  $("obce-search").replaceChildren(placeSearch({ t, load: loadPlaces, choose: choosePlace }));
-  showImage();
 }
 
 main();

@@ -78,6 +78,7 @@ def test_run_reports_each_check_and_an_unreachable_file():
     results = {r.name: r for r in watch.run(["index", "outlook", "observed-zip"], fetch, NOW)}
     assert results["index"].ok
     assert not results["outlook"].ok and "cannot be read" in results["outlook"].detail
+    assert results["outlook"].error and not results["observed-zip"].error
     assert not results["observed-zip"].ok
 
 
@@ -89,3 +90,60 @@ def test_main_exit_code(monkeypatch, capsys):
     )
     assert watch.main([]) == 1
     assert "STALE b: y" in capsys.readouterr().out
+    # an unreadable file alone is unknown (2); a really stale one wins (1)
+    err = watch.Result("c", False, "z", error=True)
+    monkeypatch.setattr(watch, "run", lambda names: [watch.Result("a", True, "x"), err])
+    assert watch.main([]) == 2
+    assert "ERROR c: z" in capsys.readouterr().out
+    monkeypatch.setattr(watch, "run", lambda names: [err, watch.Result("b", False, "y")])
+    assert watch.main([]) == 1
+
+
+class FakeResponse:
+    def __init__(self, body=b"{}"):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self, *a):
+        return self.body
+
+
+def http_error(code):
+    import urllib.error
+
+    return urllib.error.HTTPError("u", code, "x", {}, None)
+
+
+def test_fetch_retries_rate_limit_and_5xx_with_backoff(monkeypatch):
+    calls = iter([http_error(403), http_error(429), http_error(502), FakeResponse(b'{"a": 1}')])
+    pauses = []
+
+    def fake_urlopen(request, timeout):
+        item = next(calls)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr(watch.urllib.request, "urlopen", fake_urlopen)
+    assert watch.fetch_json("https://x.test/a", "tok", sleep=pauses.append) == {"a": 1}
+    assert pauses == [5, 15, 45]
+
+
+def test_fetch_does_not_retry_a_404(monkeypatch):
+    n = []
+
+    def fake_urlopen(request, timeout):
+        n.append(1)
+        raise http_error(404)
+
+    monkeypatch.setattr(watch.urllib.request, "urlopen", fake_urlopen)
+    try:
+        watch.fetch_json("https://x.test/a", sleep=lambda s: None)
+    except RuntimeError as exc:
+        assert "404" in str(exc)
+    assert len(n) == 1

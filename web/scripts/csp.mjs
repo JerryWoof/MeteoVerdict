@@ -18,6 +18,9 @@ export const HOSTS = {
   script: ["https://static.cloudflareinsights.com"],
 };
 
+// the only header-like hardening a page can set itself: no path or query leaves the site
+export const REFERRER = '<meta name="referrer" content="strict-origin-when-cross-origin" />';
+
 const INLINE = /<script\b([^>]*)>([\s\S]*?)<\/script>/g;
 
 /** The hashes of a page's inline scripts (not JSON-LD, which is data, nor external ones). */
@@ -49,9 +52,11 @@ export function policy(hashes) {
 /** The page with its policy: any earlier CSP meta removed, the new one first in <head>. */
 export function withPolicy(html) {
   if (!/<meta charset="[^"]*"\s*\/?>/i.test(html)) return html;
-  const clean = html.replace(/\s*<meta http-equiv="Content-Security-Policy"[^>]*>/gi, "");
+  const clean = html
+    .replace(/\s*<meta http-equiv="Content-Security-Policy"[^>]*>/gi, "")
+    .replace(/\s*<meta name="referrer"[^>]*>/gi, "");
   const meta = `<meta http-equiv="Content-Security-Policy" content="${policy(inlineHashes(clean))}" />`;
-  return clean.replace(/(<meta charset="[^"]*"\s*\/?>)/i, `$1\n    ${meta}`);
+  return clean.replace(/(<meta charset="[^"]*"\s*\/?>)/i, `$1\n    ${meta}\n    ${REFERRER}`);
 }
 
 function pages(dir) {
