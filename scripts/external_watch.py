@@ -2,11 +2,12 @@
 through the Spark): what a visitor of meteoverdict.cz would get, and the release asset the measured
 page stands on. Standard library only, so the workflow needs no install.
 
-``python scripts/external_watch.py`` runs every check and exits 1 when any is stale or unreachable,
-printing one line per check (``--only NAME`` runs one: ``index``, ``outlook``, ``ai``,
-``observed-zip``). The workflow ``external-watch.yml`` runs it every 30 minutes and opens (or
-comments on) an issue; ``chmi-archive.yml`` runs ``--only observed-zip`` after its optional
-observed-map step, so that a silent failure of that step turns the run red.
+``python scripts/external_watch.py`` runs every check and exits 1 when any is stale and 2 when
+one could not be read (unknown, never reported as stale). It prints one line per check
+(``--only NAME`` runs one: ``index``, ``outlook``, ``ai``, ``observed-zip``). The workflow
+``external-watch.yml`` runs it every 30 minutes and opens (or comments on) an issue;
+``chmi-archive.yml`` runs ``--only observed-zip`` after its optional observed-map step, so that a
+silent failure of that step turns the run red.
 
 The limits follow the schedule: the fast cycle runs every 2 hours (the Spark tolerates two missed
 cycles, MAX_STALENESS_H = 6), the observed map is rebuilt twice a day by chmi-archive.
@@ -18,6 +19,8 @@ import argparse
 import json
 import os
 import sys
+import time
+import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -33,6 +36,7 @@ class Result:
     name: str
     ok: bool
     detail: str
+    error: bool = False  # could not be read: unknown, not stale
 
 
 def age_hours(stamp: str, now: datetime | None = None) -> float:
@@ -43,18 +47,40 @@ def age_hours(stamp: str, now: datetime | None = None) -> float:
     return ((now or datetime.now(UTC)) - then).total_seconds() / 3600
 
 
-def fetch_json(url: str, token: str | None = None, timeout: int = 60, tries: int = 3):
-    """The JSON at ``url``; a few tries, because one dropped connection is not an outage."""
+RETRY_STATUS = {403, 429}  # 403: GitHub's rate limit; 5xx are retried too
+
+
+def _retryable(exc: Exception) -> bool:
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code in RETRY_STATUS or exc.code >= 500
+    return isinstance(exc, OSError)  # dropped connection, timeout, DNS
+
+
+def fetch_json(
+    url: str,
+    token: str | None = None,
+    timeout: int = 60,
+    tries: int = 4,
+    sleep: Callable[[float], None] = time.sleep,
+):
+    """The JSON at ``url``; retried with a growing pause on 403, 429, 5xx and dropped connections,
+    because a rate limit or one bad moment is not an outage."""
     last: Exception | None = None
-    for _ in range(tries):
+    for attempt in range(tries):
         request = urllib.request.Request(url, headers={"User-Agent": "meteoverdict-external-watch"})
         if token:
             request.add_header("Authorization", f"Bearer {token}")
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 return json.load(response)
-        except (OSError, ValueError) as exc:
+        except ValueError as exc:
             last = exc
+        except OSError as exc:
+            last = exc
+            if not _retryable(exc):
+                break
+        if attempt < tries - 1:
+            sleep(5 * 3**attempt)  # 5, 15, 45 s
     raise RuntimeError(f"{url}: {last}")
 
 
@@ -111,7 +137,7 @@ def run(
         try:
             doc = fetch(url, token if "api.github.com" in url else None)
         except RuntimeError as exc:
-            results.append(Result(name, False, f"cannot be read: {exc}"))
+            results.append(Result(name, False, f"cannot be read: {exc}", error=True))
             continue
         results.append(check(doc, now))
     return results
@@ -123,8 +149,11 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     results = run(args.only or list(CHECKS))
     for r in results:
-        print(f"{'ok   ' if r.ok else 'STALE'} {r.name}: {r.detail}")
-    return 0 if all(r.ok for r in results) else 1
+        label = "ERROR" if r.error else "ok   " if r.ok else "STALE"
+        print(f"{label} {r.name}: {r.detail}")
+    if any(not r.ok and not r.error for r in results):
+        return 1  # something really is old
+    return 2 if any(r.error for r in results) else 0  # unknown: could not be checked
 
 
 if __name__ == "__main__":

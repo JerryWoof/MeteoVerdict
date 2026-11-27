@@ -5,7 +5,7 @@
 // Pure functions: the file work is in build-places.mjs.
 import { fold } from "../src/places.js";
 import { translator } from "../src/i18n.js";
-import { SITE_LINKS } from "../src/footer.js";
+import { footerInner } from "./footer-html.mjs";
 import { SPECULATION } from "./seo.mjs";
 import { THEME_HEAD_META, THEME_HEAD_SCRIPT } from "../src/theme.js";
 
@@ -161,23 +161,12 @@ export function shell(spec, assets) {
 ${spec.bodyHtml}
       <p class="note">${t.note}</p>
     </main>
-    ${footer(spec.lang)}
+    <footer>${footerInner(spec.lang)}</footer>
   </body>
 </html>
 `;
 }
 
-/** The footer of the app pages without JavaScript: the same links (src/footer.js), under /en/ in English. */
-function footer(lang) {
-  const t = translator(lang);
-  const prefix = lang === "en" ? "/en/" : "/";
-  const links = SITE_LINKS.map(([key, cs, en]) => {
-    const href = (lang === "en" && en) || cs;
-    const external = /^https:/.test(href);
-    return `<a href="${external || href.startsWith("/") ? href : prefix + href}"${/^https:\/\/verify\./.test(href) ? ' target="_blank" rel="noopener"' : ""}>${esc(t(key))}</a>`;
-  }).join(" · ");
-  return `<footer><nav class="site-links" aria-label="${esc(t("site.about"))}">${links}</nav> · © MeteoVerdict, ${esc(t("footer.data"))} <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></footer>`;
-}
 
 const breadcrumbLd = (crumbs) => ({
   "@type": "BreadcrumbList",

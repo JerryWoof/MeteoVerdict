@@ -5,7 +5,8 @@ name: External watch
 # what a visitor of meteoverdict.cz gets and the release asset the measured page stands on, and
 # compares their ages with the limits of scripts/external_watch.py (index and outlook 6 h, AI 8 h,
 # observed-data.zip 36 h; 77 okresy in the index).
-# When something is stale it opens one issue "Monitoring: public data is stale" (e-mail to the
+# When something is stale (older than the limit; a file that could not be read, e.g. an API rate
+# limit, is unknown and only turns the run red) it opens one issue "Monitoring: public data is stale" (e-mail to the
 # watchers of the repository), reminds at most every 12 hours and closes it when all is fresh again;
 # the run itself also ends red, which GitHub mails to the person who last changed the schedule.
 # No secrets, no paid service; GitHub's cron may be late by several minutes, which the limits absorb.
@@ -29,6 +30,7 @@ jobs:
     timeout-minutes: 5
     env:
       GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }} # scripts/external_watch.py: the API's rate limit is per token
       TITLE: "Monitoring: public data is stale"
     steps:
       - uses: actions/checkout@v5
@@ -36,14 +38,22 @@ jobs:
           persist-credentials: false
       - name: Check the ages
         id: check
-        continue-on-error: true
-        run: python3 scripts/external_watch.py | tee watch.txt; exit "${PIPESTATUS[0]}"
+        # exit code 0 = fresh, 1 = really stale, 2 = could not be read (unknown: no issue opened)
+        run: |
+          set +e
+          python3 scripts/external_watch.py | tee watch.txt
+          echo "code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
       - name: Open, remind or close the issue
         if: ${{ !cancelled() }}
         run: |
           number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" \
             --json number,title,updatedAt --jq "map(select(.title == \"$TITLE\"))[0].number // empty")
-          if [ "${{ steps.check.outcome }}" = success ]; then
+          code="${{ steps.check.outputs.code }}"
+          if [ "$code" = 2 ]; then
+            echo "::warning::The data could not be read, so it is neither fresh nor stale; no issue touched."
+            exit 0
+          fi
+          if [ "$code" = 0 ]; then
             [ -n "$number" ] && gh issue close "$number" --repo "$GITHUB_REPOSITORY" \
               --comment "Fresh again ($(date -u +%FT%TZ)): $(tr '\n' ' ' < watch.txt)"
             exit 0
@@ -59,5 +69,5 @@ jobs:
           fi
           exit 0
       - name: Fail the run when something is stale
-        if: ${{ steps.check.outcome == 'failure' }}
+        if: ${{ steps.check.outputs.code != '0' }}
         run: exit 1

@@ -10,7 +10,7 @@
   <body class="page heatmap map-page theme-ai">
     <header>
       <p class="site-name"><a href="./">MeteoVerdict</a></p>
-      <p id="status" class="placeholder" data-i18n="status.heatLoading">Vygenerováno: 00. 00. 0000 00:00 · mapa na 00.–00. 00.</p>
+      <p id="status" class="placeholder" data-i18n="status.heatLoading">—</p>
       <nav class="site-nav" aria-label="MeteoVerdict">
         <a href="./" data-i18n="page.tv">Předpověď</a>
         <a href="radar.html" data-i18n="page.radar">Radar</a>
@@ -32,7 +32,6 @@
             <button type="button" id="heat-prev" class="play" data-i18n-title="heat.prev">‹</button>
             <label class="heat-pick">
               <span class="sr-only" data-i18n="heat.when">Forecast time</span>
-              <select id="heat-time"></select>
               <!-- with the hourly map: a slider in half hours and the time in words -->
               <input type="range" id="heat-range" min="0" max="0" step="1" value="0" hidden />
             </label>
@@ -43,7 +42,6 @@
           </div>
           <!-- with the hourly map: colours, frost overlays (heatmap-page.js) -->
           <div id="heat-options" class="heat-options" role="group" data-i18n-aria="heat.options" hidden></div>
-          <p id="heat-single" class="note" hidden></p>
         </div>
       </nav>
       <div class="map-wrap" id="heat-wrap">

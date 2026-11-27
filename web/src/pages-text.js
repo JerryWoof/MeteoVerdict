@@ -9,7 +9,7 @@ export const PAGES = {
     cs: {
       title: "O projektu",
       blocks: [
-        ["p", "MeteoVerdict je český web o počasí s jednou nezvyklou otázkou: **kterému předpovědnímu modelu v Česku věřit a trefil se?** Každý den porovnáváme předpovědi desítek modelů (ALADIN, ICON, ECMWF a další) s tím, co naměřily stanice ČHMÚ, a výsledek ukazujeme na mapě po okresech."],
+        ["p", "MeteoVerdict je český web o počasí s jednou nezvyklou otázkou: **kterému předpovědnímu modelu v Česku věřit – a který se opravdu trefil?** Každý den porovnáváme předpovědi desítek modelů (ALADIN, ICON, ECMWF a další) s tím, co naměřily stanice ČHMÚ, a výsledek ukazujeme na mapě po okresech."],
         ["h", "Co tu najdete"],
         ["ul", [
           "**[Předpověď](./)** pro každý okres a pro 6 258 obcí. Skládáme ji z modelů podle toho, jak přesně v daném okrese v poslední době předpovídaly.",
